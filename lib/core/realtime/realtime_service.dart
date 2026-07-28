@@ -1,0 +1,98 @@
+import 'dart:async';
+
+import '../../features/auth/data/auth_repository.dart';
+import 'realtime_event.dart';
+import 'realtime_transport.dart';
+
+/// The single shared hub connection for the whole app — mirrors Alpine's
+/// `RealtimeConnectionService`. Dumb typed re-broadcast only: it knows
+/// nothing about blocs or domain rules, it just turns hub methods into a
+/// broadcast [Stream<RealtimeEvent>] that feature repositories subscribe to
+/// and interpret.
+class RealtimeService {
+  RealtimeService({required this.transport, required this.authRepository});
+
+  final RealtimeTransport transport;
+  final AuthRepository authRepository;
+  bool _configured = false;
+
+  static const _watchedEvents = [
+    'conversation.MessageCreated',
+    'conversation.MessageUpdated',
+    'conversation.MessageDeleted',
+    'conversation.ConversationCreated',
+    'conversation.ConversationDeleted',
+    'conversation.MemberLeft',
+    'conversation.UserTyping',
+    'conversation.ReactionCreated',
+    'conversation.ReactionRemoved',
+    'conversation.FriendRequestReceived',
+    'conversation.FriendRequestAccepted',
+    'conversation.Welcome',
+    'presence.UserOnline',
+    'presence.UserOffline',
+    'guild.MessageCreated',
+    'guild.MessageUpdated',
+    'guild.MessageDeleted',
+    'guild.UserTyping',
+    'guild.ChannelCreated',
+    'guild.ChannelDeleted',
+    'guild.ChannelUpdated',
+    'guild.CategoryCreated',
+    'guild.CategoryDeleted',
+    'guild.GuildDeleted',
+    'guild.GuildUpdated',
+    'guild.MemberJoined',
+    'guild.MemberLeft',
+    'guild.PresenceChanged',
+    'guild.ReactionCreated',
+    'guild.ReactionRemoved',
+    'call.IncomingCall',
+    'call.ParticipantJoined',
+    'call.ParticipantLeft',
+    'call.MuteChanged',
+    'call.CallEnded',
+    'guild.voice.UserJoinedVoice',
+    'guild.voice.UserLeftVoice',
+    'guild.voice.ParticipantJoined',
+    'guild.voice.TrackPublished',
+    'guild.voice.TrackClosed',
+    'guild.voice.MuteChanged',
+    'guild.voice.DeafenChanged',
+    'guild.voice.CameraChanged',
+    'guild.voice.ScreenShareStarted',
+    'guild.voice.ScreenShareStopped',
+    'guild.voice.MovedToChannel',
+  ];
+
+  final _eventsController = StreamController<RealtimeEvent>.broadcast();
+
+  /// Every watched hub method, tagged by name — repositories filter with
+  /// `.where((e) => e.name == '...')`.
+  Stream<RealtimeEvent> get events => _eventsController.stream;
+
+  Stream<RealtimeConnectionStatus> get connectionStatus => transport.connectionStatus;
+
+  /// Idempotent: call once per authenticated session (login, or app cold
+  /// start with a restored session). Safe to call again after [stop].
+  Future<void> start() async {
+    if (!_configured) {
+      transport.configure(
+        hubUrl: '${authRepository.baseUrl}/api/v1/ws/hub',
+        accessTokenFactory: () => authRepository.ensureValidToken(),
+      );
+      for (final event in _watchedEvents) {
+        transport.on(event, (args) => _eventsController.add(RealtimeEvent(event, args)));
+      }
+      _configured = true;
+    }
+    await transport.start();
+  }
+
+  Future<void> stop() async {
+    await transport.stop();
+    _configured = false;
+  }
+
+  Future<void> invoke(String method, {List<Object>? args}) => transport.invoke(method, args: args);
+}
