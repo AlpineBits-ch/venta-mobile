@@ -147,6 +147,23 @@ jobs:
           </plist>
           PLIST
 
+      # The archive step (`flutter build ipa` runs `xcodebuild archive`
+      # before it ever looks at ExportOptions.plist) reads signing settings
+      # straight from the Xcode project, not from ExportOptions.plist —
+      # that file only governs the later export step. Without this, Xcode
+      # tries to negotiate automatic signing (needs a logged-in Apple ID)
+      # and ignores the identity that's actually sitting in the CI
+      # keychain, which is what "No valid code signing certificates were
+      # found" actually means here.
+      - name: Configure Xcode manual signing
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          sed -i '' \
+            -e "s#CI_DEVELOPMENT_TEAM_PLACEHOLDER#${APPLE_TEAM_ID}#" \
+            -e "s#CI_PROVISIONING_PROFILE_PLACEHOLDER#${PROFILE_NAME}#" \
+            ios/Runner.xcodeproj/project.pbxproj
+
       # `flutter build ipa` generates `ios/Podfile` (if missing, as it
       # currently is — iOS has never been built on this Windows dev
       # machine) and runs `pod install` itself as part of the archive step,
