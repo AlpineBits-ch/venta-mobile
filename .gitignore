@@ -42,4 +42,12 @@ app.*.map.json
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
+
+# Signing material — generated at CI time from secrets, never committed.
+ios/ExportOptions.plist
+*.p12
+*.p8
+*.mobileprovision
+/ios/fastlane/report.xml
+/ios/vendor/
 /android/app/release

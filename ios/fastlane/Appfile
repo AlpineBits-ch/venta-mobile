@@ -1,0 +1,2 @@
+app_identifier("gg.venta.mobile")
+team_id(ENV["APPLE_TEAM_ID"])

@@ -1,4 +1,4 @@
-package com.example.venta_mobile
+package gg.venta.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 

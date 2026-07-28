@@ -1,0 +1,24 @@
+default_platform(:ios)
+
+# The .ipa itself is built by `flutter build ipa` in the GitHub Actions
+# workflow (Flutter already knows how to archive/export a Flutter+Xcode
+# project correctly) — fastlane's only job here is the TestFlight upload,
+# authenticated via an App Store Connect API key so no Apple ID/2FA prompt
+# is ever needed in CI.
+platform :ios do
+  desc "Upload a pre-built .ipa to TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+      issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+      key_filepath: ENV.fetch("APP_STORE_CONNECT_API_KEY_PATH"),
+      in_house: false
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ENV.fetch("IPA_PATH"),
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
