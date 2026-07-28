@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -96,13 +95,14 @@ class PushNotificationService {
     if (initialMessage != null) _handleTap(initialMessage);
   }
 
-  /// iOS registers its raw APNs device token (the backend sends iOS pushes
-  /// directly via APNs, not through FCM — see `PushNotifiaction.cs`);
-  /// Android registers its FCM registration token. Both land in the same
-  /// generic `/device-token` field server-side.
+  /// Both platforms register their FCM registration token — the backend
+  /// sends all regular push through FCM (see `PushNotifiaction.cs`), which
+  /// relays to APNs internally for iOS. Both land in the same generic
+  /// `/device-token` field server-side. VoIP/CallKit push is the one
+  /// exception and uses a separate PushKit token — see `call_kit_service.dart`.
   Future<void> _registerToken() async {
     final messaging = FirebaseMessaging.instance;
-    final token = Platform.isIOS ? await messaging.getAPNSToken() : await messaging.getToken();
+    final token = await messaging.getToken();
     if (token == null) return;
     await api.registerDeviceToken(token);
   }
