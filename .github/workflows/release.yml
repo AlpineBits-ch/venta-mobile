@@ -147,28 +147,22 @@ jobs:
           </plist>
           PLIST
 
-      # The archive step (`flutter build ipa` runs `xcodebuild archive`
-      # before it ever looks at ExportOptions.plist) reads signing settings
-      # straight from the Xcode project, not from ExportOptions.plist —
-      # that file only governs the later export step. Without this, Xcode
-      # tries to negotiate automatic signing (needs a logged-in Apple ID)
-      # and ignores the identity that's actually sitting in the CI
-      # keychain, which is what "No valid code signing certificates were
-      # found" actually means here.
-      - name: Configure Xcode manual signing
-        env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          python3 - <<'PY'
-          import os
-          path = "ios/Runner.xcodeproj/project.pbxproj"
-          with open(path, "r", encoding="utf-8") as f:
-              content = f.read()
-          content = content.replace("CI_DEVELOPMENT_TEAM_PLACEHOLDER", os.environ["APPLE_TEAM_ID"])
-          content = content.replace("CI_PROVISIONING_PROFILE_PLACEHOLDER", os.environ["PROFILE_NAME"])
-          with open(path, "w", encoding="utf-8") as f:
-              f.write(content)
-          PY
+      # NOTE: ios/Runner.xcodeproj/project.pbxproj currently has no signing
+      # configuration at all (still Flutter's default `CODE_SIGN_STYLE =
+      # Automatic`, no team) — it's never been opened in real Xcode. A
+      # previous attempt to patch in manual signing settings blind, from a
+      # non-Mac machine, produced a project file that xcodebuild refused to
+      # even parse ("damaged... parse error") twice in a row for reasons
+      # that were never fully diagnosed. That edit has been reverted.
+      #
+      # Do not repeat that: configure signing once via Xcode's Signing &
+      # Capabilities UI on a real Mac (Runner target > Signing & Capabilities
+      # > pick the team > either enable "Automatically manage signing", or
+      # disable it and select the App Store provisioning profile manually),
+      # then commit the resulting project.pbxproj. Xcode writes well-formed
+      # entries; hand-editing this file blind is what broke it. Once that's
+      # committed, this job's cert/profile import steps above should be
+      # sufficient on their own — no CI-side pbxproj patching needed.
 
       # `flutter build ipa` generates `ios/Podfile` (if missing, as it
       # currently is — iOS has never been built on this Windows dev
