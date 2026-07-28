@@ -93,9 +93,24 @@ jobs:
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Apple's intermediate CAs — without these, `security find-identity
+          # -v` can't build a full trust chain for the imported cert and
+          # silently filters it out of the "valid" list, which is what
+          # produces Flutter's "No valid code signing certificates were
+          # found" even though the .p12 itself imported fine. Importing a
+          # few generations covers whichever one the cert actually chains to.
+          for WWDR in AppleWWDRCAG3 AppleWWDRCAG4 AppleWWDRCAG5 AppleWWDRCAG6; do
+            curl -fsSL "https://www.apple.com/certificateauthority/${WWDR}.cer" -o "$RUNNER_TEMP/${WWDR}.cer"
+            security import "$RUNNER_TEMP/${WWDR}.cer" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security
+          done
+
           security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+
+          echo "Valid codesigning identities in the CI keychain:"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
 
           # Read the profile's own name/UUID instead of hardcoding them, so
           # this doesn't break if the profile gets renamed/regenerated later.
