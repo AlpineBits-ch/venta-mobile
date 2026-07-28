@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import 'message_api.dart';
+import 'models/attachment_dto.dart';
 import 'models/message_dto.dart';
 
 sealed class MessageRepositoryEvent {
@@ -87,6 +88,13 @@ class MessageRepository {
               createdAt: DateTime.now(),
               inReplyTo: payload['inReplyTo'] as String?,
               mentions: (payload['mentions'] as List?)?.cast<String>() ?? const [],
+              attachments: (payload['attachments'] as List?)
+                      ?.map((a) => AttachmentDto.fromJson((a as Map).cast<String, dynamic>()))
+                      .toList() ??
+                  const [],
+              authorIdType: payload['authorIdType'] == 'Bot'
+                  ? MessageAuthorType.bot
+                  : MessageAuthorType.standard,
             ),
           ),
         );
@@ -113,13 +121,27 @@ class MessageRepository {
   /// messaging debug session), so the client sends raw plaintext here and
   /// only ever decodes, never encodes, for the wire. `MessageContentCodec`
   /// stays the single seam for both, ready for MLS ciphertext later.
-  Future<MessageDto> send({required String plaintextContent, String? inReplyTo}) {
+  Future<MessageDto> send({
+    required String plaintextContent,
+    String? inReplyTo,
+    List<AttachmentDto> attachments = const [],
+  }) {
     return api.create(
       content: plaintextContent,
       conversationId: conversationId,
       channelId: channelId,
       inReplyTo: inReplyTo,
+      attachments: attachments.map((a) => a.id).toList(),
     );
+  }
+
+  /// Uploads and waits for processing on one file, for the composer's
+  /// attachment picker — the returned [AttachmentDto] already has its final
+  /// `url`, so it can be used directly both in the optimistic local message
+  /// and as the id passed to [send].
+  Future<AttachmentDto> uploadAttachment({required List<int> bytes, required String fileName}) async {
+    final id = await api.uploadAttachment(bytes: bytes, fileName: fileName);
+    return api.pollAttachment(id);
   }
 
   /// Builds the optimistic local entry with the right context id filled in
@@ -129,6 +151,7 @@ class MessageRepository {
     required String id,
     required String authorId,
     required String encodedContent,
+    List<AttachmentDto> attachments = const [],
   }) {
     return MessageDto(
       id: id,
@@ -138,6 +161,7 @@ class MessageRepository {
       authorId: authorId,
       createdAt: DateTime.now(),
       isPending: true,
+      attachments: attachments,
     );
   }
 

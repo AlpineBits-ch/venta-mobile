@@ -21,6 +21,11 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
   mentions:
       (json['mentions'] as List<dynamic>?)?.map((e) => e as String).toList() ??
       const <String>[],
+  attachments:
+      (json['attachments'] as List<dynamic>?)
+          ?.map((e) => AttachmentDto.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const <AttachmentDto>[],
   encryptionState:
       $enumDecodeNullable(
         _$MessageEncryptionStateEnumMap,
@@ -30,6 +35,13 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
   type:
       $enumDecodeNullable(_$MessageTypeEnumMap, json['type']) ??
       MessageType.message,
+  authorIdType:
+      $enumDecodeNullable(
+        _$MessageAuthorTypeEnumMap,
+        json['authorIdType'],
+        unknownValue: MessageAuthorType.standard,
+      ) ??
+      MessageAuthorType.standard,
 );
 
 Map<String, dynamic> _$MessageDtoToJson(
@@ -45,8 +57,10 @@ Map<String, dynamic> _$MessageDtoToJson(
   'isFailed': instance.isFailed,
   'inReplyTo': instance.inReplyTo,
   'mentions': instance.mentions,
+  'attachments': instance.attachments,
   'encryptionState': _$MessageEncryptionStateEnumMap[instance.encryptionState]!,
   'type': _$MessageTypeEnumMap[instance.type]!,
+  'authorIdType': _$MessageAuthorTypeEnumMap[instance.authorIdType]!,
 };
 
 const _$MessageEncryptionStateEnumMap = {
@@ -60,4 +74,9 @@ const _$MessageTypeEnumMap = {
   MessageType.invite: 'Invite',
   MessageType.guildMemberJoin: 'GuildMemberJoin',
   MessageType.guildMemberLeave: 'GuildMemberLeave',
+};
+
+const _$MessageAuthorTypeEnumMap = {
+  MessageAuthorType.standard: 'Default',
+  MessageAuthorType.bot: 'Bot',
 };

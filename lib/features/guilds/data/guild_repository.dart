@@ -3,11 +3,16 @@ import 'dart:async';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import 'guild_api.dart';
+import 'models/audit_log_entry_dto.dart';
+import 'models/ban_dto.dart';
 import 'models/category_dto.dart';
 import 'models/channel_dto.dart';
 import 'models/guild_dto.dart';
 import 'models/guild_member_dto.dart';
+import 'models/guild_permissions.dart';
+import 'models/guild_self_permissions.dart';
 import 'models/invite_dto.dart';
+import 'models/role_dto.dart';
 
 /// REST joined-guilds list merged with realtime structural events
 /// (`guild.GuildDeleted/Updated`, `guild.ChannelCreated/Deleted/Updated`,
@@ -152,8 +157,138 @@ class GuildRepository {
   Future<List<GuildMemberDto>> getMembers(String guildId, {int skip = 0, int take = 50}) =>
       api.getMembers(guildId, skip: skip, take: take);
 
-  Future<InviteDto> createInvite(String guildId, {String? channelId}) =>
-      api.createInvite(guildId: guildId, channelId: channelId);
+  Future<GuildSelfPermissions> getOwnMember(String guildId) => api.getOwnMember(guildId);
+
+  Future<List<GuildMemberDto>> searchMembers(String guildId, String search) =>
+      api.searchMembers(guildId, search);
+
+  Future<void> kickMember(String guildId, String memberId) => api.kickMember(guildId, memberId);
+
+  Future<GuildDto> updateGuild(
+    String guildId, {
+    String? name,
+    String? description,
+    String? systemChannelId,
+  }) async {
+    final updated = await api.updateGuild(
+      guildId,
+      name: name,
+      description: description,
+      systemChannelId: systemChannelId,
+    );
+    _replaceCached(updated);
+    return updated;
+  }
+
+  Future<GuildDto> uploadGuildIcon(
+    String guildId, {
+    required List<int> bytes,
+    required String fileName,
+  }) async {
+    final updated = await api.uploadGuildIcon(guildId, bytes: bytes, fileName: fileName);
+    _replaceCached(updated);
+    return updated;
+  }
+
+  Future<GuildDto> deleteGuildIcon(String guildId) async {
+    final updated = await api.deleteGuildIcon(guildId);
+    _replaceCached(updated);
+    return updated;
+  }
+
+  Future<void> deleteGuild(String guildId) async {
+    await api.deleteGuild(guildId);
+    _guilds.removeWhere((g) => g.id == guildId);
+    _guildsController.add(List.unmodifiable(_guilds));
+  }
+
+  String guildIconUrl(String guildId) => api.guildIconUrl(guildId);
+
+  Future<RoleDto> createRole({
+    required String guildId,
+    required String name,
+    String? description,
+    String? color,
+    GuildPermissions? permissions,
+  }) async {
+    final role = await api.createRole(
+      guildId: guildId,
+      name: name,
+      description: description,
+      color: color,
+      permissions: permissions,
+    );
+    await _refreshGuild(guildId);
+    return role;
+  }
+
+  Future<RoleDto> updateRole({
+    required String guildId,
+    required String roleId,
+    required String name,
+    String? description,
+    String? color,
+    required GuildPermissions permissions,
+  }) async {
+    final role = await api.updateRole(
+      roleId: roleId,
+      name: name,
+      description: description,
+      color: color,
+      permissions: permissions,
+    );
+    await _refreshGuild(guildId);
+    return role;
+  }
+
+  Future<void> deleteRole(String guildId, String roleId) async {
+    await api.deleteRole(roleId);
+    await _refreshGuild(guildId);
+  }
+
+  Future<void> reorderRoles(String guildId, List<({String roleId, int position})> positions) async {
+    await api.reorderRoles(guildId, positions);
+    await _refreshGuild(guildId);
+  }
+
+  Future<List<GuildMemberDto>> getRoleMembers(String roleId, {int skip = 0, int take = 30}) =>
+      api.getRoleMembers(roleId, skip: skip, take: take);
+
+  Future<void> addRoleMember(String roleId, String memberId) => api.addRoleMember(roleId, memberId);
+
+  Future<void> removeRoleMember(String roleId, String memberId) =>
+      api.removeRoleMember(roleId, memberId);
+
+  Future<List<BanDto>> getBans(String guildId) => api.getBans(guildId);
+
+  Future<void> createBan(String guildId, {required String userId, String? reason}) =>
+      api.createBan(guildId, userId: userId, reason: reason);
+
+  Future<void> deleteBan(String guildId, String bannedUserId) => api.deleteBan(guildId, bannedUserId);
+
+  Future<List<AuditLogEntryDto>> getAuditLog(String guildId, {int skip = 0, int take = 50}) =>
+      api.getAuditLog(guildId, skip: skip, take: take);
+
+  Future<List<InviteDto>> getInvites(String guildId) => api.getInvites(guildId);
+
+  Future<void> deleteInvite(String inviteId) => api.deleteInvite(inviteId);
+
+  void _replaceCached(GuildDto updated) {
+    final index = _guilds.indexWhere((g) => g.id == updated.id);
+    if (index == -1) {
+      _guilds.add(updated);
+    } else {
+      _guilds[index] = updated;
+    }
+    _guildsController.add(List.unmodifiable(_guilds));
+  }
+
+  Future<InviteDto> createInvite(
+    String guildId, {
+    String? channelId,
+    InviteType type = InviteType.permanent,
+  }) =>
+      api.createInvite(guildId: guildId, channelId: channelId, type: type);
 
   Future<InviteDto> previewInvite(String code) => api.getInviteByCode(code);
 

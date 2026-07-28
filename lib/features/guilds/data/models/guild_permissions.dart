@@ -55,6 +55,13 @@ class GuildPermissions {
   static final GuildPermissions none = GuildPermissions(BigInt.zero);
   static final GuildPermissions superadmin = _bit(63);
 
+  /// Every flag name except `Superadmin` — used to render the role
+  /// permission-editor's checkbox list. Declaration order matches the
+  /// server's own grouping (channel/messages, voice, threads, moderation,
+  /// wiki), not bit position.
+  static List<String> get grantableFlagNames =>
+      _flags.keys.where((k) => k != 'Superadmin').toList();
+
   static GuildPermissions _bit(int position) => GuildPermissions(BigInt.one << position);
 
   static GuildPermissions parse(String? serialized) {
@@ -80,6 +87,15 @@ class GuildPermissions {
   bool get isSuperadmin => value & (BigInt.one << 63) != BigInt.zero;
 
   GuildPermissions operator |(GuildPermissions other) => GuildPermissions(value | other.value);
+
+  /// Sets or clears one named flag — the building block for a permission
+  /// checkbox list.
+  GuildPermissions withFlag(String flagName, bool enabled) {
+    final bit = _flags[flagName];
+    if (bit == null) return this;
+    final mask = BigInt.one << bit;
+    return GuildPermissions(enabled ? (value | mask) : (value & ~mask));
+  }
 
   /// `perms` with `deny` bits cleared then `allow` bits set — matches the
   /// standard "deny wins over role default, allow wins over deny" override

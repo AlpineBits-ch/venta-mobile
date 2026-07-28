@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'attachment_dto.dart';
+
 part 'message_dto.freezed.dart';
 part 'message_dto.g.dart';
 
@@ -23,6 +25,15 @@ enum MessageType {
   guildMemberLeave,
 }
 
+/// Mirrors `MemberType` — bots and humans are both just users, distinguished
+/// by this field on the message so the bubble can show a "BOT" badge.
+enum MessageAuthorType {
+  @JsonValue('Default')
+  standard,
+  @JsonValue('Bot')
+  bot,
+}
+
 @freezed
 sealed class MessageDto with _$MessageDto {
   const factory MessageDto({
@@ -38,8 +49,18 @@ sealed class MessageDto with _$MessageDto {
     @Default(false) bool isFailed,
     String? inReplyTo,
     @Default(<String>[]) List<String> mentions,
+    @Default(<AttachmentDto>[]) List<AttachmentDto> attachments,
     @Default(MessageEncryptionState.plain) MessageEncryptionState encryptionState,
     @Default(MessageType.message) MessageType type,
+    @Default(MessageAuthorType.standard)
+    @JsonKey(unknownEnumValue: MessageAuthorType.standard)
+    MessageAuthorType authorIdType,
+    /// Client-only: a synthetic placeholder for an in-flight/failed bot
+    /// command invocation, never sent or received over the wire — see
+    /// `ThreadBotPlaceholderAdded` in `MessageThreadBloc`.
+    @JsonKey(includeFromJson: false, includeToJson: false)
+    @Default(false)
+    bool isBotCommandPlaceholder,
   }) = _MessageDto;
 
   factory MessageDto.fromJson(Map<String, dynamic> json) => _$MessageDtoFromJson(json);

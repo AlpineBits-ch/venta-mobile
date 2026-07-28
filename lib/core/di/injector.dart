@@ -12,6 +12,7 @@ import '../../features/guild_voice/data/guild_voice_repository.dart';
 import '../../features/guild_voice/webrtc/guild_voice_webrtc_service.dart';
 import '../../features/guilds/data/guild_api.dart';
 import '../../features/guilds/data/guild_repository.dart';
+import '../../features/messaging/data/bot_command_api.dart';
 import '../../features/messaging/data/message_api.dart';
 import '../../features/profile/data/profile_api.dart';
 import '../../features/profile/data/profile_repository.dart';
@@ -62,6 +63,7 @@ Future<void> configureDependencies() async {
     () => ConversationRepository(api: getIt(), realtimeService: getIt()),
   );
   getIt.registerLazySingleton<MessageApi>(() => MessageApi(client: getIt()));
+  getIt.registerLazySingleton<BotCommandApi>(() => BotCommandApi(client: getIt()));
   getIt.registerLazySingleton<GuildApi>(() => GuildApi(client: getIt()));
   getIt.registerLazySingleton<GuildRepository>(
     () => GuildRepository(

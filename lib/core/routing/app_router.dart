@@ -15,7 +15,7 @@ import '../../features/friends/presentation/screens/friends_screen.dart';
 import '../../features/guilds/presentation/screens/channel_screen.dart';
 import '../../features/guilds/presentation/screens/guild_detail_screen.dart';
 import '../../features/guilds/presentation/screens/guild_members_screen.dart';
-import '../../features/invites/presentation/screens/invite_preview_screen.dart';
+import '../../features/guilds/presentation/screens/guild_settings/guild_settings_screen.dart';
 import '../../features/messaging/presentation/screens/conversation_screen.dart';
 import '../../features/profile/bloc/self_profile_cubit.dart';
 import '../../features/profile/presentation/screens/profile_settings_screen.dart';
@@ -133,9 +133,9 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         ),
       ),
       GoRoute(
-        path: RoutePaths.invite,
-        builder: (context, state) => InvitePreviewScreen(
-          code: state.pathParameters['code']!,
+        path: RoutePaths.serverSettings,
+        builder: (context, state) => GuildSettingsScreen(
+          guildId: state.pathParameters['guildId']!,
         ),
       ),
       GoRoute(

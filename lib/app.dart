@@ -14,6 +14,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/theme_cubit.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/guild_voice/bloc/guild_voice_cubit.dart';
+import 'features/invites/presentation/widgets/invite_dialog.dart';
 import 'features/voice/bloc/call_cubit.dart';
 
 class App extends StatefulWidget {
@@ -47,8 +48,20 @@ class _AppState extends State<App> {
   }
 
   void _handleUri(Uri uri) {
-    final path = DeepLinkHandler.resolve(uri);
-    if (path != null) _router.push(path);
+    switch (DeepLinkHandler.resolve(uri)) {
+      case RouteTarget(:final path):
+        _router.push(path);
+      case InviteTarget(:final code):
+        _showInviteDialog(code);
+      case null:
+        break;
+    }
+  }
+
+  void _showInviteDialog(String code) {
+    final context = _router.routerDelegate.navigatorKey.currentContext;
+    if (context == null) return;
+    showDialog<void>(context: context, builder: (_) => InviteDialog(code: code));
   }
 
   @override

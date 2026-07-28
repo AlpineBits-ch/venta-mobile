@@ -37,7 +37,7 @@ class ChannelScreen extends StatelessWidget {
         ),
         myUserId: myUserId,
       ),
-      child: ThreadView(title: _title(), myUserId: myUserId),
+      child: ThreadView(title: _title(), myUserId: myUserId, guildId: guildId),
     );
   }
 }

@@ -166,7 +166,7 @@ class GuildVoiceWebRtcService {
       await pc.setRemoteDescription(_toSessionDescription(reneg.sessionDescription));
     }
 
-    return response.tracks.map((t) => {'mid': t.mid, 'trackName': t.trackName}).toList();
+    return response.tracks.map((t) => <String, dynamic>{'mid': t.mid, 'trackName': t.trackName}).toList();
   }
 
   RTCSessionDescription _toSessionDescription(Map<String, dynamic> map) =>

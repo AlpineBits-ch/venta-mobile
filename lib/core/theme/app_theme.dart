@@ -110,6 +110,9 @@ abstract final class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: statusColors.hover,
+        hintStyle: textTheme.bodyMedium?.copyWith(
+          color: colorScheme.onSurface.withValues(alpha: 0.5),
+        ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         border: OutlineInputBorder(

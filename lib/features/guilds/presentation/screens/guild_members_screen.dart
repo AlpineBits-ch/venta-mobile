@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../profile/data/models/profile_dto.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/guild_member_dto.dart';
 import '../../data/models/role_dto.dart';
 
-/// Read-only member list — nickname/username, roles, presence. Full member
-/// management (kick/ban/mute/role assignment) is a fast-follow; this pass
-/// covers browsing who's in the server.
+/// Member sidebar — grouped by highest colored role (Discord convention),
+/// then an Online/Offline fallback for members with no significant role.
+/// Bots are flagged with a badge and treated as always-active for grouping.
+/// Full member management (kick/ban/mute/role assignment) lives in the
+/// server settings screen.
 class GuildMembersScreen extends StatefulWidget {
   const GuildMembersScreen({super.key, required this.guildId});
 
@@ -39,44 +43,172 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
     }
   }
 
+  static bool _isBot(GuildMemberDto member) => member.type == MemberType.bot;
+
+  static bool _isActive(GuildMemberDto member) =>
+      _isBot(member) ||
+      (member.status != OnlineStatus.offline && member.status != OnlineStatus.hidden);
+
+  static RoleDto? _highestRole(GuildMemberDto member) {
+    RoleDto? highest;
+    for (final membership in member.roleMembers) {
+      final role = membership.role;
+      if (role.type == RoleType.everyone) continue;
+      if (highest == null || role.position > highest.position) highest = role;
+    }
+    return highest;
+  }
+
+  static Color? _nameColor(GuildMemberDto member) {
+    final accent = member.profile?.accentColor;
+    if (accent != null && accent.isNotEmpty) return parseHexColor(accent);
+    final roleColor = _highestRole(member)?.color;
+    if (roleColor != null && roleColor.isNotEmpty) return parseHexColor(roleColor);
+    return null;
+  }
+
+  List<_MemberSection> _buildSections(List<GuildMemberDto> members) {
+    final roleGroups = <String, (RoleDto, List<GuildMemberDto>)>{};
+    final onlineNoRole = <GuildMemberDto>[];
+    final offlineNoRole = <GuildMemberDto>[];
+
+    for (final member in members) {
+      final role = _highestRole(member);
+      if (role != null) {
+        final entry = roleGroups.putIfAbsent(role.id, () => (role, <GuildMemberDto>[]));
+        entry.$2.add(member);
+      } else if (_isActive(member)) {
+        onlineNoRole.add(member);
+      } else {
+        offlineNoRole.add(member);
+      }
+    }
+
+    int activeFirst(GuildMemberDto a, GuildMemberDto b) =>
+        (_isActive(b) ? 1 : 0) - (_isActive(a) ? 1 : 0);
+
+    final groups = roleGroups.values.toList()
+      ..sort((a, b) => b.$1.position.compareTo(a.$1.position));
+
+    final sections = <_MemberSection>[];
+    for (final (role, roleMembers) in groups) {
+      roleMembers.sort(activeFirst);
+      sections.add(_MemberSection('${role.name} — ${roleMembers.length}', roleMembers));
+    }
+    if (onlineNoRole.isNotEmpty) {
+      sections.add(_MemberSection('Online — ${onlineNoRole.length}', onlineNoRole));
+    }
+    if (offlineNoRole.isNotEmpty) {
+      sections.add(
+        _MemberSection('Offline — ${offlineNoRole.length}', offlineNoRole, dimmed: true),
+      );
+    }
+    return sections;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final members = _members;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Members')),
-      body: _error != null
-          ? Center(child: Text(_error!))
-          : members == null
-              ? const Center(child: CircularProgressIndicator())
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
-                  itemCount: members.length,
-                  itemBuilder: (context, index) {
-                    final member = members[index];
-                    final displayName = member.nickname ?? member.profile?.userName ?? 'Unknown';
-                    final roleNames = member.roleMembers
-                        .map((rm) => rm.role)
-                        .where((role) => role.type != RoleType.everyone)
-                        .map((role) => role.name)
-                        .join(', ');
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: context.statusColors.hover,
-                        backgroundImage: member.profile?.avatarUrl != null
-                            ? NetworkImage(member.profile!.avatarUrl!)
-                            : null,
-                        child: member.profile?.avatarUrl == null
-                            ? Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')
-                            : null,
-                      ),
-                      title: Text(displayName),
-                      subtitle: roleNames.isNotEmpty
-                          ? Text(roleNames, style: theme.textTheme.labelSmall)
-                          : null,
-                    );
-                  },
+    Widget body;
+    if (_error != null) {
+      body = Center(child: Text(_error!));
+    } else if (members == null) {
+      body = const Center(child: CircularProgressIndicator());
+    } else {
+      final sections = _buildSections(members);
+      body = ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+        itemCount: sections.length,
+        itemBuilder: (context, sectionIndex) {
+          final section = sections[sectionIndex];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(AppSpacing.m, AppSpacing.m, AppSpacing.m, 4),
+                child: Text(
+                  section.title.toUpperCase(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
                 ),
+              ),
+              for (final member in section.members) _MemberTile(member: member, dimmed: section.dimmed),
+            ],
+          );
+        },
+      );
+    }
+    return Scaffold(appBar: AppBar(title: const Text('Members')), body: body);
+  }
+}
+
+class _MemberSection {
+  _MemberSection(this.title, this.members, {this.dimmed = false});
+
+  final String title;
+  final List<GuildMemberDto> members;
+  final bool dimmed;
+}
+
+class _MemberTile extends StatelessWidget {
+  const _MemberTile({required this.member, required this.dimmed});
+
+  final GuildMemberDto member;
+  final bool dimmed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isBot = member.type == MemberType.bot;
+    final displayName = member.nickname ?? member.profile?.userName ?? 'Unknown';
+    final nameColor = _GuildMembersScreenState._nameColor(member);
+    final baseColor = dimmed ? theme.colorScheme.onSurface.withValues(alpha: 0.5) : null;
+
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: context.statusColors.hover,
+        backgroundImage: member.profile?.avatarUrl != null
+            ? NetworkImage(member.profile!.avatarUrl!)
+            : null,
+        child: member.profile?.avatarUrl == null
+            ? Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')
+            : null,
+      ),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              displayName,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(color: nameColor ?? baseColor),
+            ),
+          ),
+          if (isBot) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Text(
+                'BOT',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 9,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

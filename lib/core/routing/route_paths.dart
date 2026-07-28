@@ -10,8 +10,8 @@ abstract final class RoutePaths {
   static const server = '/server/:guildId';
   static const serverChannel = '/server/:guildId/channel/:channelId';
   static const serverMembers = '/server/:guildId/members';
+  static const serverSettings = '/server/:guildId/settings';
 
-  static const invite = '/invite/:code';
   static const profileSettings = '/profile-settings';
   static const userProfile = '/user/:userId';
 
@@ -27,5 +27,5 @@ abstract final class RoutePaths {
 
   static String serverMembersPath(String guildId) => '/server/$guildId/members';
 
-  static String invitePath(String code) => '/invite/$code';
+  static String serverSettingsPath(String guildId) => '/server/$guildId/settings';
 }

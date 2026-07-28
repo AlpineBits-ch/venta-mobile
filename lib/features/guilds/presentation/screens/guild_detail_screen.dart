@@ -32,11 +32,23 @@ class GuildDetailScreen extends StatefulWidget {
 
 class _GuildDetailScreenState extends State<GuildDetailScreen> {
   GuildDto? _guild;
+  bool _canManageGuild = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _loadOwnPermissions(String ownerId) async {
+    try {
+      final self = await getIt<GuildRepository>().getOwnMember(widget.guildId);
+      if (!mounted) return;
+      setState(() => _canManageGuild = self.effectivePermissions(ownerId).has('ManageGuild'));
+    } catch (_) {
+      // Leave the settings entry hidden — the tab itself is still
+      // permission-checked server-side on every write regardless.
+    }
   }
 
   @override
@@ -49,11 +61,15 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     final repository = getIt<GuildRepository>();
     final cached = repository.cachedById(widget.guildId);
     if (cached != null && mounted) setState(() => _guild = cached);
-    if (cached != null) _hydrateVoiceRosters(cached);
+    if (cached != null) {
+      _hydrateVoiceRosters(cached);
+      unawaited(_loadOwnPermissions(cached.ownerId));
+    }
     try {
       final guild = await repository.fetchGuild(widget.guildId);
       if (mounted) setState(() => _guild = guild);
       _hydrateVoiceRosters(guild);
+      unawaited(_loadOwnPermissions(guild.ownerId));
     } catch (_) {
       // Keep whatever was cached; the realtime-driven refetch will retry.
     }
@@ -125,6 +141,11 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
             icon: const Icon(Icons.people_outline),
             onPressed: () => context.push(RoutePaths.serverMembersPath(guild.id)),
           ),
+          if (_canManageGuild)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => context.push(RoutePaths.serverSettingsPath(guild.id)),
+            ),
         ],
       ),
       body: ListView(

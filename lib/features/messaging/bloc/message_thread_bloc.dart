@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../data/message_content_codec.dart';
 import '../data/message_repository.dart';
+import '../data/models/attachment_dto.dart';
 import '../data/models/message_dto.dart';
 
 sealed class ThreadEvent extends Equatable {
@@ -23,15 +24,50 @@ class ThreadLoadMoreRequested extends ThreadEvent {
 }
 
 class ThreadMessageSubmitted extends ThreadEvent {
-  const ThreadMessageSubmitted(this.text);
+  const ThreadMessageSubmitted(this.text, {this.attachments = const []});
   final String text;
+  final List<AttachmentDto> attachments;
 
   @override
-  List<Object?> get props => [text];
+  List<Object?> get props => [text, attachments];
 }
 
 class ThreadTypingNotified extends ThreadEvent {
   const ThreadTypingNotified();
+}
+
+/// Registers a synthetic "the bot is working on it" row while a slash
+/// command invocation is in flight — the caller (the composer) has already
+/// fired the HTTP invoke; this just reserves the placeholder + starts the
+/// await-with-timeout. The real reply resolves it via the normal
+/// `guild.MessageCreated` realtime path in [_onMessageReceived] once the bot
+/// posts (there's no correlation id from the server — see `BotCommandApi`).
+class ThreadBotPlaceholderAdded extends ThreadEvent {
+  const ThreadBotPlaceholderAdded({required this.tempId, required this.botUserId});
+  final String tempId;
+  final String botUserId;
+
+  @override
+  List<Object?> get props => [tempId, botUserId];
+}
+
+/// The invoke HTTP call itself failed before the server could even accept
+/// it — resolves the placeholder as failed immediately rather than waiting
+/// out the full timeout.
+class ThreadBotPlaceholderFailed extends ThreadEvent {
+  const ThreadBotPlaceholderFailed(this.tempId);
+  final String tempId;
+
+  @override
+  List<Object?> get props => [tempId];
+}
+
+class _BotPlaceholderTimedOut extends ThreadEvent {
+  const _BotPlaceholderTimedOut(this.tempId);
+  final String tempId;
+
+  @override
+  List<Object?> get props => [tempId];
 }
 
 class _MessageReceived extends ThreadEvent {
@@ -142,6 +178,9 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<ThreadLoadMoreRequested>(_onLoadMoreRequested);
     on<ThreadMessageSubmitted>(_onMessageSubmitted);
     on<ThreadTypingNotified>(_onTypingNotified);
+    on<ThreadBotPlaceholderAdded>(_onBotPlaceholderAdded);
+    on<ThreadBotPlaceholderFailed>(_onBotPlaceholderFailed);
+    on<_BotPlaceholderTimedOut>(_onBotPlaceholderTimedOut);
     on<_MessageReceived>(_onMessageReceived);
     on<_MessageUpdatedRemote>(_onMessageUpdatedRemote);
     on<_MessageDeletedRemote>(_onMessageDeletedRemote);
@@ -169,6 +208,11 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   late final StreamSubscription<MessageRepositoryEvent> _repoSub;
   final Map<String, Timer> _typingTimers = {};
   int _tempIdCounter = 0;
+
+  /// FIFO queue of pending placeholder temp-ids per bot user id — a bot's
+  /// next `MessageCreated` resolves its oldest still-pending placeholder.
+  final Map<String, List<String>> _pendingBotTempIdsByBot = {};
+  final Map<String, Timer> _botTimeoutTimers = {};
 
   Future<void> _onOpened(ThreadOpened event, Emitter<ThreadState> emit) async {
     try {
@@ -209,13 +253,14 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     Emitter<ThreadState> emit,
   ) async {
     final text = event.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && event.attachments.isEmpty) return;
 
     final tempId = 'pending-${_tempIdCounter++}';
     final optimistic = repository.buildOptimistic(
       id: tempId,
       authorId: myUserId,
       encodedContent: MessageContentCodec.encode(text),
+      attachments: event.attachments,
     );
     emit(
       state.copyWith(
@@ -225,7 +270,10 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     );
 
     try {
-      final sent = await repository.send(plaintextContent: text);
+      final sent = await repository.send(
+        plaintextContent: text,
+        attachments: event.attachments,
+      );
       emit(
         state.copyWith(
           messages: [for (final m in state.messages) if (m.id == tempId) sent else m],
@@ -246,10 +294,74 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     await repository.sendTypingIndicator();
   }
 
+  void _onBotPlaceholderAdded(ThreadBotPlaceholderAdded event, Emitter<ThreadState> emit) {
+    final placeholder = MessageDto(
+      id: event.tempId,
+      content: '',
+      conversationId: repository.conversationId,
+      channelId: repository.channelId,
+      authorId: event.botUserId,
+      createdAt: DateTime.now(),
+      isPending: true,
+      isBotCommandPlaceholder: true,
+      authorIdType: MessageAuthorType.bot,
+    );
+    emit(
+      state.copyWith(
+        messages: [placeholder, ...state.messages],
+        pendingSendIds: {...state.pendingSendIds, event.tempId},
+      ),
+    );
+    _pendingBotTempIdsByBot.putIfAbsent(event.botUserId, () => []).add(event.tempId);
+    _botTimeoutTimers[event.tempId] = Timer(
+      const Duration(seconds: 10),
+      () => add(_BotPlaceholderTimedOut(event.tempId)),
+    );
+  }
+
+  void _onBotPlaceholderFailed(ThreadBotPlaceholderFailed event, Emitter<ThreadState> emit) {
+    _failBotPlaceholder(event.tempId, emit);
+  }
+
+  void _onBotPlaceholderTimedOut(_BotPlaceholderTimedOut event, Emitter<ThreadState> emit) {
+    _failBotPlaceholder(event.tempId, emit);
+  }
+
+  void _failBotPlaceholder(String tempId, Emitter<ThreadState> emit) {
+    if (!state.pendingSendIds.contains(tempId)) return;
+    _botTimeoutTimers.remove(tempId)?.cancel();
+    for (final queue in _pendingBotTempIdsByBot.values) {
+      queue.remove(tempId);
+    }
+    emit(
+      state.copyWith(
+        pendingSendIds: {...state.pendingSendIds}..remove(tempId),
+        failedSendIds: {...state.failedSendIds, tempId},
+      ),
+    );
+  }
+
   void _onMessageReceived(_MessageReceived event, Emitter<ThreadState> emit) {
     // Our own message already landed via the REST response in
     // _onMessageSubmitted — the hub echo just needs to be ignored.
     if (state.messages.any((m) => m.id == event.message.id)) return;
+
+    final botQueue = _pendingBotTempIdsByBot[event.message.authorId];
+    if (botQueue != null && botQueue.isNotEmpty) {
+      final tempId = botQueue.removeAt(0);
+      _botTimeoutTimers.remove(tempId)?.cancel();
+      emit(
+        state.copyWith(
+          messages: [
+            event.message,
+            for (final m in state.messages) if (m.id != tempId) m,
+          ],
+          pendingSendIds: {...state.pendingSendIds}..remove(tempId),
+        ),
+      );
+      return;
+    }
+
     emit(state.copyWith(messages: [event.message, ...state.messages]));
     if (event.message.authorId != myUserId) {
       unawaited(_markRead());
@@ -304,6 +416,9 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   Future<void> close() {
     unawaited(_repoSub.cancel());
     for (final timer in _typingTimers.values) {
+      timer.cancel();
+    }
+    for (final timer in _botTimeoutTimers.values) {
       timer.cancel();
     }
     repository.dispose();
