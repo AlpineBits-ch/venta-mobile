@@ -50,6 +50,14 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
+// Push notifications (firebase_messaging) need this applied, which in turn
+// needs google-services.json — see docs/native-call-push-backend-spec.md.
+// Applied conditionally so the build stays green (no FCM push, but otherwise
+// unaffected) for anyone who hasn't dropped that file in yet.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 flutter {
     source = "../.."
 }

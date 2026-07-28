@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/di/injector.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/session/session_cubit.dart';
 import '../data/auth_repository.dart';
@@ -79,6 +80,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await authRepository.login(event.input, event.password);
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
+      unawaited(startPushServices());
       emit(state.copyWith(status: AuthStatus.success));
     } catch (e) {
       emit(state.copyWith(status: AuthStatus.failure, errorMessage: _describeError(e)));
@@ -96,6 +98,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
+      unawaited(startPushServices());
       emit(state.copyWith(status: AuthStatus.success));
     } catch (e) {
       emit(state.copyWith(status: AuthStatus.failure, errorMessage: _describeError(e)));

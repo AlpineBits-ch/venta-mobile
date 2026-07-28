@@ -126,6 +126,47 @@ class CallCubit extends Cubit<CallState> {
     }
   }
 
+  /// [acceptIncomingCall]'s counterpart for calls answered from the native
+  /// CallKit UI before this app instance ever saw a `call.IncomingCall`
+  /// websocket event — e.g. a cold start from a VoIP push, where [state.call]
+  /// was never populated. Guards on [CallPhase.idle] rather than
+  /// [CallPhase.incoming] for that reason; `CallKitService` picks whichever
+  /// of this or [acceptIncomingCall] applies based on current state.
+  Future<void> acceptIncomingCallById(String callId) async {
+    if (state.phase != CallPhase.idle) return;
+    emit(state.copyWith(phase: CallPhase.connecting));
+    try {
+      final accepted = await repository.acceptCall(callId);
+      await _connect(accepted);
+    } catch (_) {
+      emit(const CallState(errorMessage: 'Could not join the call.'));
+    }
+  }
+
+  /// [declineIncomingCall]'s by-id counterpart — see [acceptIncomingCallById].
+  Future<void> declineIncomingCallById(String callId) async {
+    if (state.phase != CallPhase.idle) return;
+    try {
+      await repository.declineCall(callId);
+    } catch (_) {
+      // Best-effort — CallKit's UI is already dismissed locally.
+    }
+  }
+
+  /// Ends a call by id regardless of whether it was ever loaded into
+  /// [state.call] — the native CallKit "end" action carries only the id.
+  Future<void> endCallById(String callId) async {
+    if (state.call?.id == callId) {
+      await endCall();
+      return;
+    }
+    try {
+      await repository.endCall(callId);
+    } catch (_) {
+      // Best-effort — nothing local to tear down for a call we never loaded.
+    }
+  }
+
   Future<void> endCall() async {
     final call = state.call;
     if (call == null) return;

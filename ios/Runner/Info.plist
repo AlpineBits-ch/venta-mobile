@@ -55,6 +55,16 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<!-- Wakes the app for incoming-call VoIP pushes (PushKit) so CallKit
+		     can be shown before the OS kills the app for taking too long. -->
+		<string>voip</string>
+		<!-- Regular message push notifications while backgrounded. -->
+		<string>remote-notification</string>
+		<!-- Keeps an active call's audio session alive while backgrounded. -->
+		<string>audio</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/di/injector.dart';
+import 'core/push/push_notification_service.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/deep_link_handler.dart';
 import 'core/session/session_cubit.dart';
@@ -27,6 +28,7 @@ class _AppState extends State<App> {
   late final GoRouter _router;
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSub;
+  StreamSubscription<String>? _notificationTapSub;
 
   @override
   void initState() {
@@ -34,6 +36,8 @@ class _AppState extends State<App> {
     _sessionCubit = SessionCubit(authRepository: getIt<AuthRepository>())..restore();
     _router = buildAppRouter(_sessionCubit);
     _initDeepLinks();
+    _notificationTapSub =
+        getIt<PushNotificationService>().onNotificationTap.listen(_router.push);
   }
 
   Future<void> _initDeepLinks() async {
@@ -50,6 +54,7 @@ class _AppState extends State<App> {
   @override
   void dispose() {
     _linkSub?.cancel();
+    _notificationTapSub?.cancel();
     _sessionCubit.close();
     super.dispose();
   }

@@ -20,6 +20,9 @@ import '../../features/voice/data/voice_api.dart';
 import '../../features/voice/data/voice_repository.dart';
 import '../../features/voice/webrtc/call_webrtc_service.dart';
 import '../network/api_client.dart';
+import '../push/call_kit_service.dart';
+import '../push/push_notification_service.dart';
+import '../push/push_token_api.dart';
 import '../realtime/realtime_service.dart';
 import '../realtime/realtime_transport.dart';
 import '../realtime/signalr_netcore_transport.dart';
@@ -89,4 +92,24 @@ Future<void> configureDependencies() async {
       webRtcServiceFactory: () => GuildVoiceWebRtcService(api: getIt()),
     ),
   );
+  getIt.registerLazySingleton<PushTokenApi>(() => PushTokenApi(client: getIt()));
+  getIt.registerLazySingleton<PushNotificationService>(
+    () => PushNotificationService(api: getIt()),
+  );
+  getIt.registerLazySingleton<CallKitService>(
+    () => CallKitService(
+      callCubit: getIt(),
+      authRepository: getIt(),
+      profileRepository: getIt(),
+      pushTokenApi: getIt(),
+    ),
+  );
+}
+
+/// Starts the push-notification and native-call-UI services — call once per
+/// authenticated session (cold start with a restored session, or right after
+/// login/register), mirroring [RealtimeService.start]'s own call sites.
+Future<void> startPushServices() async {
+  await getIt<PushNotificationService>().start();
+  await getIt<CallKitService>().start();
 }
