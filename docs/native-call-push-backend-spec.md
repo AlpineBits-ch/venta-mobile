@@ -91,7 +91,9 @@ Mirror the existing device-token endpoint
 
 - New entity `UserVoipToken { Id, Token, UserId }` on `ApplicationUser`,
   same shape as `UserDeviceToken`.
-- `POST api/v1/users/self/voip-token`, `[Authorize]`, body
+- `POST api/v1/identity/users/self/voip-token` (the `/identity` segment is the
+  YARP gateway prefix that routes to the Identity microservice — same as the
+  existing device-token endpoint), `[Authorize]`, body
   `CreateDeviceTokenDto`-shaped (`{ "token": string }`), same
   duplicate-returns-202/new-returns-201 semantics.
 - A corresponding `GetVoipTokenForUserIdRequest`/`...Handler` (mirroring

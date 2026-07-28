@@ -99,7 +99,7 @@ import flutter_callkit_incoming
     }
 
     let nameCaller = payload.dictionaryPayload["callerName"] as? String ?? "Unknown"
-    let avatar = payload.dictionaryPayload["callerAvatarUrl"] as? String
+    let avatar = payload.dictionaryPayload["callerAvatarUrl"] as? String ?? ""
     let conversationId = payload.dictionaryPayload["conversationId"] as? String ?? ""
 
     let data = flutter_callkit_incoming.Data(id: id, nameCaller: nameCaller, handle: nameCaller, type: 0)

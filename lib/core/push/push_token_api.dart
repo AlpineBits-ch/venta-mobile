@@ -12,14 +12,14 @@ class PushTokenApi {
 
   Future<void> registerDeviceToken(String token) async {
     await client.dio.post<void>(
-      client.url('/api/v1/users/self/device-token'),
+      client.url('/api/v1/identity/users/self/device-token'),
       data: {'token': token},
     );
   }
 
   Future<void> registerVoipToken(String token) async {
     await client.dio.post<void>(
-      client.url('/api/v1/users/self/voip-token'),
+      client.url('/api/v1/identity/users/self/voip-token'),
       data: {'token': token},
     );
   }
