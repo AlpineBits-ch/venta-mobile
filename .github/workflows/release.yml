@@ -159,10 +159,16 @@ jobs:
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          sed -i '' \
-            -e "s#CI_DEVELOPMENT_TEAM_PLACEHOLDER#${APPLE_TEAM_ID}#" \
-            -e "s#CI_PROVISIONING_PROFILE_PLACEHOLDER#${PROFILE_NAME}#" \
-            ios/Runner.xcodeproj/project.pbxproj
+          python3 - <<'PY'
+          import os
+          path = "ios/Runner.xcodeproj/project.pbxproj"
+          with open(path, "r", encoding="utf-8") as f:
+              content = f.read()
+          content = content.replace("CI_DEVELOPMENT_TEAM_PLACEHOLDER", os.environ["APPLE_TEAM_ID"])
+          content = content.replace("CI_PROVISIONING_PROFILE_PLACEHOLDER", os.environ["PROFILE_NAME"])
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(content)
+          PY
 
       # `flutter build ipa` generates `ios/Podfile` (if missing, as it
       # currently is — iOS has never been built on this Windows dev
