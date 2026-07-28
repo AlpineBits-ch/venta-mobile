@@ -32,6 +32,8 @@
 	<string>Venta needs microphone access for voice calls.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Venta needs photo library access so you can choose a profile picture or server banner.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Venta needs notification access to alert you about new messages and incoming calls.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
