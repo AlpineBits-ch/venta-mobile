@@ -9,6 +9,7 @@ import '../../features/profile/data/profile_repository.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/data/models/call_dto.dart';
 import '../storage/secure_storage_service.dart';
+import 'ios_call_kit_bridge.dart';
 import 'push_token_api.dart';
 
 /// Marks a push as call-signaling — see `PushNotificationService`'s matching
@@ -69,14 +70,20 @@ Future<void> callKitBackgroundMessageHandler(CallEvent event) async {
   await SecureStorageService().writePendingCallAction(callId: callId, action: action);
 }
 
-/// Bridges the native CallKit/Android-incoming-call UI (`flutter_callkit_incoming`)
-/// to [CallCubit] — the single source of truth for actual call state. This
-/// service never decides call state itself; it only forwards native UI
-/// actions into the cubit and mirrors the cubit's own transitions back out
-/// to the native UI, picking whichever of [CallCubit]'s "normal" or "by id"
-/// methods applies depending on whether this app instance already knows
-/// about the call (foreground/live-socket path) or is hearing about it for
-/// the first time via CallKit itself (cold start from a VoIP push).
+/// Bridges the native CallKit/Android-incoming-call UI to [CallCubit] — the
+/// single source of truth for actual call state. This service never decides
+/// call state itself; it only forwards native UI actions into the cubit and
+/// mirrors the cubit's own transitions back out to the native UI, picking
+/// whichever of [CallCubit]'s "normal" or "by id" methods applies depending
+/// on whether this app instance already knows about the call
+/// (foreground/live-socket path) or is hearing about it for the first time
+/// via CallKit itself (cold start from a VoIP push).
+///
+/// iOS and Android take genuinely different native paths: iOS owns a
+/// `CXProvider` directly in `AppDelegate.swift` (see [IosCallKitBridge] for
+/// why — in short, going through a plugin that needs a live Flutter engine
+/// was the root cause of a PushKit crash), Android still goes through
+/// `flutter_callkit_incoming`.
 class CallKitService {
   CallKitService({
     required this.callCubit,
@@ -92,20 +99,24 @@ class CallKitService {
   final PushTokenApi pushTokenApi;
   final SecureStorageService secureStorage;
 
-  StreamSubscription<CallEvent?>? _eventSub;
+  final IosCallKitBridge? _iosBridge = Platform.isIOS ? IosCallKitBridge() : null;
+  StreamSubscription<CallEvent?>? _androidEventSub;
+  StreamSubscription<IosCallKitEvent>? _iosEventSub;
   StreamSubscription<CallState>? _callCubitSub;
   String? _shownForCallId;
   String? _connectedForCallId;
 
   Future<void> start() async {
-    _eventSub = FlutterCallkitIncoming.onEvent.listen(_handleEvent);
     _callCubitSub = callCubit.stream.listen(_handleCallCubitState);
-    if (Platform.isIOS) {
+    final iosBridge = _iosBridge;
+    if (iosBridge != null) {
+      _iosEventSub = iosBridge.events.listen(_handleIosEvent);
       await _registerVoipToken();
     } else {
-      // iOS's PushKit contract forces the Dart engine to boot (and this
-      // listener to attach) before the system CallKit UI can even be shown
-      // — see AppDelegate.swift — so only Android needs the background
+      _androidEventSub = FlutterCallkitIncoming.onEvent.listen(_handleAndroidEvent);
+      // iOS's own CXProvider relays accept/decline/end natively regardless
+      // of whether any Dart engine was already running (AppDelegate.swift
+      // eagerly boots one if not) — only Android needs this background
       // hand-off registered/consumed. See callKitBackgroundMessageHandler.
       await FlutterCallkitIncoming.onBackgroundMessage(callKitBackgroundMessageHandler);
       await _resumePendingCallAction();
@@ -113,7 +124,7 @@ class CallKitService {
   }
 
   /// Finishes handling an accept/decline that [callKitBackgroundMessageHandler]
-  /// caught while this engine wasn't running yet.
+  /// caught while this engine wasn't running yet. Android only — see [start].
   Future<void> _resumePendingCallAction() async {
     final pending = await secureStorage.readPendingCallAction();
     if (pending == null) return;
@@ -127,7 +138,9 @@ class CallKitService {
   }
 
   Future<void> _registerVoipToken() async {
-    final token = await FlutterCallkitIncoming.getDevicePushTokenVoIP();
+    final iosBridge = _iosBridge;
+    final token =
+        iosBridge != null ? await iosBridge.getVoipToken() : await FlutterCallkitIncoming.getDevicePushTokenVoIP();
     if (token == null || token.isEmpty) return;
     await pushTokenApi.registerVoipToken(token);
   }
@@ -135,8 +148,8 @@ class CallKitService {
   /// Foreground/live-socket path: [CallCubit] already learned about the call
   /// over the websocket, so this is the one place that shows the native UI
   /// for it (the push-driven cold-start path shows it natively before any
-  /// Dart code runs at all — see [showCallKitFromPushData] and the iOS
-  /// PushKit delegate in `AppDelegate.swift`).
+  /// Dart code runs at all — see [showCallKitFromPushData] on Android, and
+  /// the PushKit delegate in `AppDelegate.swift` on iOS).
   Future<void> _handleCallCubitState(CallState state) async {
     if (state.phase == CallPhase.incoming && state.call != null && _shownForCallId != state.call!.id) {
       _shownForCallId = state.call!.id;
@@ -146,32 +159,38 @@ class CallKitService {
         _connectedForCallId != state.call!.id) {
       // Answering from this app's own in-call UI (as opposed to the native
       // CallKit banner/lock-screen button) never performs a `CXAnswerCallAction`
-      // — nothing tells CallKit the call was picked up, so its session stays
-      // "ringing" forever and iOS never grants the audio route, leaving
+      // on iOS — nothing tells CallKit the call was picked up, so its session
+      // stays "ringing" forever and iOS never grants the audio route, leaving
       // WebRTC signaling fully connected but silent in both directions (see
-      // AppDelegate.swift's didActivateAudioSession for the other half of
-      // this). setCallConnected drives a real CXAnswerCallAction through
-      // CallManager.connectedCall, which is what actually triggers
-      // provider(_:didActivate:). Harmless no-op if the native button
-      // already answered it.
+      // AppDelegate.swift's didActivate handoff for the other half of this).
+      // setCallConnected there drives a real CXAnswerCallAction, which is
+      // what actually triggers it. Harmless no-op if the native button
+      // already answered it (both platforms).
       //
-      // Deliberately NOT gated on `_shownForCallId == state.call!.id` —
-      // that's only ever set by this Dart instance's own _showForIncoming,
-      // but most real calls arrive via PushKit while backgrounded/killed,
-      // where AppDelegate.swift shows the native UI directly and this field
-      // never gets set for that call at all. Gating on it here silently
-      // skipped the fallback CXAnswerCallAction for the majority of real
-      // calls, leaving CallKit's own native-button answer path as the only
-      // thing that could activate audio — and iOS's "no audio" banner is
-      // exactly what shows when that alone doesn't happen in time.
+      // Deliberately NOT gated on `_shownForCallId == state.call!.id` — that's
+      // only ever set by this Dart instance's own _showForIncoming, but most
+      // real calls arrive while backgrounded/killed, where the native side
+      // shows the incoming-call UI directly and this field never gets set
+      // for that call at all. Gating on it here silently skipped the
+      // fallback for the majority of real calls.
       _shownForCallId = state.call!.id;
       _connectedForCallId = state.call!.id;
-      await FlutterCallkitIncoming.setCallConnected(state.call!.id);
+      final iosBridge = _iosBridge;
+      if (iosBridge != null) {
+        await iosBridge.setCallConnected(state.call!.id);
+      } else {
+        await FlutterCallkitIncoming.setCallConnected(state.call!.id);
+      }
     } else if (state.phase == CallPhase.idle && _shownForCallId != null) {
       final id = _shownForCallId!;
       _shownForCallId = null;
       _connectedForCallId = null;
-      await FlutterCallkitIncoming.endCall(id);
+      final iosBridge = _iosBridge;
+      if (iosBridge != null) {
+        await iosBridge.endCall(id);
+      } else {
+        await FlutterCallkitIncoming.endCall(id);
+      }
     }
   }
 
@@ -191,6 +210,11 @@ class CallKitService {
         // Fall through with no name/avatar — still worth ringing.
       }
     }
+    final iosBridge = _iosBridge;
+    if (iosBridge != null) {
+      await iosBridge.reportIncomingCall(callId: call.id, callerName: callerName ?? 'Unknown');
+      return;
+    }
     await FlutterCallkitIncoming.showCallkitIncoming(
       CallKitParams(
         id: call.id,
@@ -202,7 +226,20 @@ class CallKitService {
     );
   }
 
-  void _handleEvent(CallEvent? event) {
+  void _handleIosEvent(IosCallKitEvent event) {
+    switch (event) {
+      case IosCallAccepted(:final callId):
+        _accept(callId);
+      case IosCallDeclined(:final callId):
+        _decline(callId);
+      case IosCallEndedNatively(:final callId):
+        callCubit.endCallById(callId);
+      case IosVoipTokenUpdated():
+        _registerVoipToken();
+    }
+  }
+
+  void _handleAndroidEvent(CallEvent? event) {
     switch (event) {
       case CallEventActionCallAccept(:final callKitParams):
         _accept(callKitParams.id);
@@ -238,7 +275,9 @@ class CallKitService {
   }
 
   Future<void> dispose() async {
-    await _eventSub?.cancel();
+    await _androidEventSub?.cancel();
+    await _iosEventSub?.cancel();
+    await _iosBridge?.dispose();
     await _callCubitSub?.cancel();
   }
 }

@@ -1,25 +1,69 @@
 import AVFAudio
 import CallKit
+import CryptoKit
 import Flutter
 import PushKit
 import UIKit
 import WebRTC
-import flutter_callkit_incoming
 
 // PushKit/CallKit wiring for native incoming-call UI — see
 // docs/native-call-push-backend-spec.md for the payload this expects from
-// the backend's VoIP push, and CallKitService (Dart) for the other half:
-// this delegate only registers the VoIP token and surfaces incoming pushes
-// as a CallKit call; the Dart side (flutter_callkit_incoming's `onEvent`
-// stream, consumed by CallKitService) is what actually calls the
-// accept/decline/end REST endpoints and connects WebRTC. Deliberately does
-// NOT report call actions to any third-party endpoint (unlike the plugin's
-// own example AppDelegate) — accept/decline/end are handled entirely by our
-// own backend via the Flutter side.
+// the backend's VoIP push, and CallKitService (Dart) for the other half.
+//
+// Owns a CXProvider directly rather than going through a third-party plugin
+// (flutter_callkit_incoming, still used on Android). Reporting a call to
+// CallKit now has zero dependency on a Flutter engine, plugin registrar, or
+// any Dart code existing yet — PushKit's report-the-call deadline is strict
+// enough (miss it and the OS SIGKILLs the process with FRONTBOARD
+// 0xbaadca11, then stops delivering future VoIP pushes) that routing it
+// through anything requiring an engine boot is fragile by construction; see
+// the venta_mobile "native call screen crashes on iOS" investigation.
+//
+// Relaying a user action (answer/decline/end) back to Dart has no such
+// deadline, so that path is allowed to lazily boot a real Flutter engine if
+// nothing is running yet — see `ensureEngineForActionRelay`.
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, PKPushRegistryDelegate,
-  CallkitIncomingAppDelegate
+  CXProviderDelegate
 {
+  private static let channelName = "gg.venta.mobile/callkit"
+
+  private lazy var cxProvider: CXProvider = {
+    let config = CXProviderConfiguration(localizedName: "Venta Mobile")
+    config.supportsVideo = false
+    config.maximumCallGroups = 1
+    config.maximumCallsPerCallGroup = 1
+    config.supportedHandleTypes = [.generic]
+    let provider = CXProvider(configuration: config)
+    provider.setDelegate(self, queue: nil)
+    return provider
+  }()
+
+  private let callController = CXCallController()
+
+  // callId (our string, matches the backend Call aggregate's id) <-> UUID
+  // (what CallKit actually deals in) - populated whenever we report a call,
+  // since the UUID<->callId mapping is otherwise one-way (see `uuid(for:)`).
+  private var callIdsByUUID: [UUID: String] = [:]
+  // Whether each reported call has already been answered - CXEndCallAction
+  // is the same action type for both "decline a ringing call" and "hang up
+  // a connected one"; Dart needs to know which happened.
+  private var answeredCalls: Set<UUID> = []
+  // Sidesteps re-relaying an accept to Dart when Dart itself is the one
+  // that triggered it (see `markCallConnected`) - it already knows.
+  private var selfInitiatedAnswers: Set<UUID> = []
+
+  private var voipToken: String?
+  private var callKitChannel: FlutterMethodChannel?
+  private var pendingEvents: [[String: Any]] = []
+  private lazy var actionRelayEngine: FlutterEngine = {
+    let engine = FlutterEngine(name: "venta_call_action_engine")
+    engine.run()
+    GeneratedPluginRegistrant.register(with: engine)
+    attachChannel(messenger: engine.binaryMessenger)
+    return engine
+  }()
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -28,75 +72,144 @@ import flutter_callkit_incoming
     voipRegistry.delegate = self
     voipRegistry.desiredPushTypes = [.voIP]
 
-    if #available(iOS 10.0, *) {
-      UNUserNotificationCenter.current().delegate = self
-    }
-
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    attachChannel(messenger: engineBridge.applicationRegistrar.messenger())
   }
 
-  // The UIScene-based implicit engine (didInitializeImplicitFlutterEngine
-  // above) only gets created once a scene connects
-  // (scene:willConnectToSession:options:) - see Flutter's UIScene migration
-  // guide. A PushKit VoIP relaunch creates this process with no scene/window
-  // at all, so that never fires, GeneratedPluginRegistrant.register never
-  // runs, and SwiftFlutterCallkitIncomingPlugin.sharedInstance stays nil.
-  // That silently no-ops every `sharedInstance?.` call below via optional
-  // chaining - including the completion() inside showCallkitIncoming's
-  // trailing closure, which PushKit requires be called synchronously, every
-  // time, with no exceptions. Skipping it gets the process SIGKILLed by
-  // FrontBoard (0xbaadca11 - "bad call") for violating the VoIP push
-  // contract, which is indistinguishable from "no popup ever appears".
-  // Booting this headless engine first guarantees the plugin is registered
-  // (and sharedInstance non-nil) before we try to report the call, with no
-  // dependency on any scene ever connecting.
-  //
-  // Runs the dedicated `voipHeadlessMain` entrypoint (lib/main.dart), NOT
-  // the app's real `main()` - GeneratedPluginRegistrant.register is a
-  // native-side operation that doesn't need the Dart isolate to have done
-  // anything, but the real main() does Firebase init, HydratedStorage disk
-  // I/O, the full DI graph, and an auth token refresh, which together are
-  // slow enough on a cold headless engine to blow straight past
-  // FrontBoard's watchdog anyway - confirmed by a crash report showing a
-  // fully-booted Dart VM (worker threads and all) still getting
-  // 0xbaadca11'd ~7s in, on the build that first shipped this engine.
-  private lazy var voipEngine: FlutterEngine = {
-    let engine = FlutterEngine(name: "venta_voip_engine")
-    engine.run(withEntrypoint: "voipHeadlessMain")
-    GeneratedPluginRegistrant.register(with: engine)
-    return engine
-  }()
-
-  private func ensureFlutterEngineForCallKitReporting() {
-    if SwiftFlutterCallkitIncomingPlugin.sharedInstance == nil {
-      _ = voipEngine
+  // Answering/declining/ending from the system CallKit UI (lock screen,
+  // banner) normally foregrounds the app on its own, which boots the real
+  // UIScene-driven engine (didInitializeImplicitFlutterEngine above) a
+  // moment later. But a decline in particular doesn't strictly need any app
+  // UI, so iOS can relay it to a relaunched-but-sceneless process the same
+  // way it delivers a PushKit push - falling back to this lazily-booted
+  // engine (running the *real* main(), unlike the old PushKit-report path,
+  // since there's no tight deadline here and the real accept/decline HTTP
+  // call needs the full DI/auth graph anyway) covers that gap.
+  private func ensureEngineForActionRelay() {
+    if callKitChannel == nil {
+      _ = actionRelayEngine
     }
   }
 
-  // Missed-call notification support (shown when the call rings out).
-  override func userNotificationCenter(
-    _ center: UNUserNotificationCenter,
-    willPresent notification: UNNotification,
-    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-  ) {
-    CallkitNotificationManager.shared.userNotificationCenter(
-      center, willPresent: notification, withCompletionHandler: completionHandler)
+  private func attachChannel(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: Self.channelName, binaryMessenger: messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      self?.handleMethodCall(call, result: result)
+    }
+    callKitChannel = channel
   }
 
-  override func userNotificationCenter(
-    _ center: UNUserNotificationCenter,
-    didReceive response: UNNotificationResponse,
-    withCompletionHandler completionHandler: @escaping () -> Void
-  ) {
-    if response.actionIdentifier == CallkitNotificationManager.CALLBACK_ACTION {
-      let data = response.notification.request.content.userInfo as? [String: Any]
-      SwiftFlutterCallkitIncomingPlugin.sharedInstance?.sendCallbackEvent(data)
+  // `pendingEvents` is the single source of truth - relayEvent always
+  // buffers there first, so nothing is ever lost to a race between an
+  // engine merely existing and Dart's IosCallKitBridge actually having
+  // called setMethodCallHandler on its end (native creating a channel
+  // object doesn't imply Dart has registered a handler for it yet). The
+  // "wake" ping is a pure best-effort hint telling an already-listening
+  // Dart side to go drain the buffer now instead of waiting for its next
+  // natural drain point; losing the ping loses nothing but immediacy -
+  // IosCallKitBridge's constructor always drains once up front too, which
+  // is what actually guarantees delivery for the cold-start case (the only
+  // one where a race is realistically possible).
+  private func relayEvent(_ payload: [String: Any]) {
+    pendingEvents.append(payload)
+    callKitChannel?.invokeMethod("wake", arguments: nil)
+  }
+
+  private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "getVoipToken":
+      result(voipToken)
+
+    case "drainPendingEvents":
+      result(pendingEvents)
+      pendingEvents.removeAll()
+
+    case "reportIncomingCall":
+      guard let args = call.arguments as? [String: Any], let id = args["callId"] as? String else {
+        result(FlutterError(code: "bad_args", message: "callId required", details: nil))
+        return
+      }
+      reportIncomingCall(
+        id: id,
+        callerName: args["callerName"] as? String ?? "Unknown",
+        completion: { error in
+          result(error == nil)
+        })
+
+    case "setCallConnected":
+      guard let args = call.arguments as? [String: Any], let id = args["callId"] as? String else {
+        result(FlutterError(code: "bad_args", message: "callId required", details: nil))
+        return
+      }
+      markCallConnected(id: id)
+      result(nil)
+
+    case "endCall":
+      guard let args = call.arguments as? [String: Any], let id = args["callId"] as? String else {
+        result(FlutterError(code: "bad_args", message: "callId required", details: nil))
+        return
+      }
+      endReportedCall(id: id, reason: .remoteEnded)
+      result(nil)
+
+    default:
+      result(FlutterMethodNotImplemented)
     }
-    completionHandler()
+  }
+
+  // Deterministic string->UUID mapping (SHA256-derived) so native and Dart
+  // never need to synchronize an id-generation scheme - the same callId
+  // always yields the same UUID. callIdsByUUID is still needed for the
+  // reverse direction once a CXAction only hands back a UUID.
+  private func uuid(for callId: String) -> UUID {
+    let digest = SHA256.hash(data: Data(callId.utf8))
+    return NSUUID(uuidBytes: Array(digest.prefix(16))) as UUID
+  }
+
+  private func reportIncomingCall(id: String, callerName: String, completion: ((Error?) -> Void)? = nil) {
+    let callUUID = uuid(for: id)
+    callIdsByUUID[callUUID] = id
+    let update = CXCallUpdate()
+    update.remoteHandle = CXHandle(type: .generic, value: callerName)
+    update.localizedCallerName = callerName
+    update.hasVideo = false
+    update.supportsHolding = false
+    update.supportsGrouping = false
+    update.supportsUngrouping = false
+    update.supportsDTMF = false
+    cxProvider.reportNewIncomingCall(with: callUUID, update: update) { error in
+      completion?(error)
+    }
+  }
+
+  private func endReportedCall(id: String, reason: CXCallEndedReason) {
+    let callUUID = uuid(for: id)
+    cxProvider.reportCall(with: callUUID, endedAt: Date(), reason: reason)
+    callIdsByUUID.removeValue(forKey: callUUID)
+    answeredCalls.remove(callUUID)
+    selfInitiatedAnswers.remove(callUUID)
+  }
+
+  // Answering from Dart's own in-app UI (as opposed to the native
+  // CallKit banner/lock-screen button) never performs a CXAnswerCallAction
+  // on its own - nothing tells CallKit the call was picked up, so its
+  // session stays "ringing" forever and iOS never grants the audio route,
+  // leaving WebRTC signaling fully connected but silent in both directions.
+  // Submitting the same action ourselves through CXCallController is what
+  // actually triggers provider(_:didActivate:) below.
+  private func markCallConnected(id: String) {
+    let callUUID = uuid(for: id)
+    selfInitiatedAnswers.insert(callUUID)
+    let action = CXAnswerCallAction(call: callUUID)
+    callController.request(CXTransaction(action: action)) { error in
+      if let error {
+        print("[AppDelegate] markCallConnected failed for \(id): \(error)")
+      }
+    }
   }
 
   // MARK: - PKPushRegistryDelegate
@@ -104,12 +217,13 @@ import flutter_callkit_incoming
   func pushRegistry(
     _ registry: PKPushRegistry, didUpdate credentials: PKPushCredentials, for type: PKPushType
   ) {
-    let deviceToken = credentials.token.map { String(format: "%02x", $0) }.joined()
-    SwiftFlutterCallkitIncomingPlugin.sharedInstance?.setDevicePushTokenVoIP(deviceToken)
+    let token = credentials.token.map { String(format: "%02x", $0) }.joined()
+    voipToken = token
+    relayEvent(["type": "voipTokenUpdated", "token": token])
   }
 
   func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
-    SwiftFlutterCallkitIncomingPlugin.sharedInstance?.setDevicePushTokenVoIP("")
+    voipToken = nil
   }
 
   // Apple requires reporting the call to CallKit synchronously within this
@@ -124,8 +238,6 @@ import flutter_callkit_incoming
       return
     }
 
-    ensureFlutterEngineForCallKitReporting()
-
     let id = payload.dictionaryPayload["callId"] as? String ?? UUID().uuidString
 
     // "end" cancels a ring already shown on this device — sent when the call
@@ -133,60 +245,65 @@ import flutter_callkit_incoming
     // Without this a phantom CallKit ring sits there until its own ~30s
     // timeout. See docs/native-call-push-backend-spec.md.
     //
-    // We still have to report a NEW call via showCallkitIncoming here, even
-    // though we're immediately ending it: PushKit requires every VoIP push
-    // to result in a CallKit report before completion(), with no exceptions
-    // (Apple enforces this with -[PKPushRegistry
-    // _terminateAppIfThereAreUnhandledVoIPPushes], which kills the process).
-    // Calling plugin.endCall() alone only works if this process already has
-    // a call reported for this id (i.e. showCallkitIncoming ran earlier in
-    // this launch) — when PushKit relaunches a killed app for this exact
-    // "end" push, self.data inside the plugin is nil, endCall() silently
-    // no-ops, and the push goes unreported, crashing the app on the next
-    // suspend. Reporting-then-ending guarantees a report always happens.
+    // We still have to report a NEW call here, even though we're
+    // immediately ending it: PushKit requires every VoIP push to result in
+    // an actual reportNewIncomingCall before completion(), with no
+    // exceptions (Apple enforces this with -[PKPushRegistry
+    // _terminateAppIfThereAreUnhandledVoIPPushes], which kills the
+    // process) - reportCall(endedAt:) alone doesn't satisfy that, it only
+    // updates a call CallKit already knows about.
     if payload.dictionaryPayload["type"] as? String == "end" {
-      let endData = flutter_callkit_incoming.Data(id: id, nameCaller: "", handle: "", type: 0)
-      SwiftFlutterCallkitIncomingPlugin.sharedInstance?.showCallkitIncoming(endData, fromPushKit: true) {
-        SwiftFlutterCallkitIncomingPlugin.sharedInstance?.endCall(endData)
+      reportIncomingCall(id: id, callerName: "") { [weak self] _ in
+        self?.endReportedCall(id: id, reason: .remoteEnded)
         completion()
       }
       return
     }
 
-    let nameCaller = payload.dictionaryPayload["callerName"] as? String ?? "Unknown"
-    let avatar = payload.dictionaryPayload["callerAvatarUrl"] as? String ?? ""
+    let callerName = payload.dictionaryPayload["callerName"] as? String ?? "Unknown"
     let conversationId = payload.dictionaryPayload["conversationId"] as? String ?? ""
-
-    let data = flutter_callkit_incoming.Data(id: id, nameCaller: nameCaller, handle: nameCaller, type: 0)
-    data.avatar = avatar
-    data.extra = ["conversationId": conversationId]
-
-    SwiftFlutterCallkitIncomingPlugin.sharedInstance?.showCallkitIncoming(data, fromPushKit: true) {
+    reportIncomingCall(id: id, callerName: callerName) { [weak self] _ in
+      self?.relayEvent([
+        "type": "reported", "callId": id, "conversationId": conversationId,
+      ])
       completion()
     }
   }
 
-  // MARK: - CallkitIncomingAppDelegate
+  // MARK: - CXProviderDelegate
   //
-  // These just fulfill the CXAction promptly, per Apple's requirement. The
-  // actual accept/decline/end REST calls happen in Dart (CallKitService,
-  // listening to FlutterCallkitIncoming.onEvent) — the Flutter engine is
-  // already running by the time these fire, since PushKit relaunches the
-  // app process for every VoIP push.
+  // These fulfill the CXAction promptly, per Apple's requirement, then relay
+  // to Dart over the custom channel (ensureEngineForActionRelay covers the
+  // case where nothing is running yet). The actual accept/decline/end REST
+  // calls happen in Dart (CallKitService, listening for these events) -
+  // mirrors the previous plugin-mediated flow, just without the plugin.
 
-  func onAccept(_ call: Call, _ action: CXAnswerCallAction) {
+  func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+    let wasSelfInitiated = selfInitiatedAnswers.remove(action.callUUID) != nil
+    answeredCalls.insert(action.callUUID)
+    action.fulfill()
+    guard !wasSelfInitiated, let id = callIdsByUUID[action.callUUID] else { return }
+    ensureEngineForActionRelay()
+    relayEvent(["type": "accept", "callId": id])
+  }
+
+  func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
+    let wasAnswered = answeredCalls.remove(action.callUUID) != nil
+    action.fulfill()
+    guard let id = callIdsByUUID[action.callUUID] else { return }
+    ensureEngineForActionRelay()
+    relayEvent(["type": wasAnswered ? "end" : "decline", "callId": id])
+  }
+
+  func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
     action.fulfill()
   }
 
-  func onDecline(_ call: Call, _ action: CXEndCallAction) {
-    action.fulfill()
+  func providerDidReset() {
+    callIdsByUUID.removeAll()
+    answeredCalls.removeAll()
+    selfInitiatedAnswers.removeAll()
   }
-
-  func onEnd(_ call: Call, _ action: CXEndCallAction) {
-    action.fulfill()
-  }
-
-  func onTimeOut(_ call: Call) {}
 
   // WebRTC (flutter_webrtc) manages its own RTCAudioSession independently of
   // CallKit, but per Apple's rules only CallKit may activate/deactivate the
@@ -197,13 +314,11 @@ import flutter_callkit_incoming
   // is what actually starts the audio unit doing mic capture/speaker output.
   // Without this, signaling completes and the call looks connected, but no
   // audio flows in either direction — see venta_mobile's silent-call report.
-  func didActivateAudioSession(_ audioSession: AVAudioSession) {
+  func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
     RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
   }
 
-  func didDeactivateAudioSession(_ audioSession: AVAudioSession) {
+  func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
     RTCAudioSession.sharedInstance().audioSessionDidDeactivate(audioSession)
   }
-
-  func providerDidReset() {}
 }
