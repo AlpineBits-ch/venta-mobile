@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../data/guild_voice_api.dart';
@@ -35,6 +38,37 @@ class GuildVoiceWebRtcService {
 
   bool _deafened = false;
 
+  // TEMPORARY diagnostic — see venta_mobile's "no audio in/out on mobile"
+  // investigation. Polls getStats() to see whether real RTP bytes are
+  // actually flowing (as opposed to the connection merely reaching
+  // `connected` with silent tracks). Remove once the root cause is found.
+  Timer? _statsTimer;
+
+  void _startStatsLogging() {
+    debugPrint('[AudioStats] _startStatsLogging called, arming timer');
+    _statsTimer?.cancel();
+    _statsTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      debugPrint('[AudioStats] timer fired, _pc=$_pc');
+      final pc = _pc;
+      if (pc == null) return;
+      try {
+        final reports = await pc.getStats();
+        debugPrint('[AudioStats] === tick: ${reports.length} reports ===');
+        for (final r in reports) {
+          if (r.type != 'outbound-rtp' &&
+              r.type != 'inbound-rtp' &&
+              r.type != 'media-source' &&
+              r.type != 'track') {
+            continue;
+          }
+          debugPrint('[AudioStats] type=${r.type} values=${r.values}');
+        }
+      } catch (e, st) {
+        debugPrint('[AudioStats] getStats threw: $e\n$st');
+      }
+    });
+  }
+
   Future<void> connect(String guildId, String channelId) async {
     _guildId = guildId;
     _channelId = channelId;
@@ -56,11 +90,15 @@ class GuildVoiceWebRtcService {
       init: RTCRtpTransceiverInit(direction: TransceiverDirection.SendOnly),
     );
 
-    await _offerAnswerCycle(() => [
-          {'location': 'local', 'mid': transceiver.mid, 'trackName': 'audio'},
-        ]);
+    await _offerAnswerCycle((pc) async {
+      final mid = await _resolveMid(pc, transceiver);
+      return [
+        {'location': 'local', 'mid': mid, 'trackName': 'audio'},
+      ];
+    });
 
     await Helper.setSpeakerphoneOnButPreferBluetooth();
+    _startStatsLogging();
   }
 
   Future<void> subscribeToParticipant({
@@ -76,7 +114,7 @@ class GuildVoiceWebRtcService {
       init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
     );
 
-    final results = await _offerAnswerCycle(() => [
+    final results = await _offerAnswerCycle((pc) async => [
           {'location': 'remote', 'sessionId': cfSessionId, 'trackName': trackName},
         ]);
 
@@ -84,9 +122,29 @@ class GuildVoiceWebRtcService {
           (r) => r['trackName'] == trackName,
           orElse: () => const {},
         )['mid'] as String? ??
-        transceiver.mid;
+        await _resolveMid(pc, transceiver) ??
+        '';
     _midToUserId[mid] = userId;
     _processPendingTracks();
+  }
+
+  // flutter_webrtc's RTCRtpTransceiver.mid is a snapshot taken when
+  // addTransceiver() returns — before the SDP that actually assigns mids
+  // exists — and is never refreshed after setLocalDescription() the way a
+  // browser's live `mid` property is (see Alpine's identical-looking
+  // `transceiver.mid` usage, which works there for exactly that reason: a
+  // browser DOES keep it live). Reading it straight off `transceiver` here
+  // always sends an empty mid, which Cloudflare Calls rejects outright
+  // ("Missing mid in track") — see venta_mobile's "no audio in/out"
+  // investigation. getTransceivers() makes a fresh native call and returns
+  // the real, current mid; transceiverId is stable across that call so we
+  // can find the same transceiver again.
+  Future<String?> _resolveMid(RTCPeerConnection pc, RTCRtpTransceiver original) async {
+    final transceivers = await pc.getTransceivers();
+    for (final t in transceivers) {
+      if (t.transceiverId == original.transceiverId) return t.mid;
+    }
+    return original.mid;
   }
 
   void unsubscribeParticipant(String userId) {
@@ -106,6 +164,8 @@ class GuildVoiceWebRtcService {
   }
 
   Future<void> disconnect() async {
+    _statsTimer?.cancel();
+    _statsTimer = null;
     _localAudioTrack?.stop();
     await _localStream?.dispose();
     await _pc?.close();
@@ -125,7 +185,7 @@ class GuildVoiceWebRtcService {
   // ── SDP offer/answer cycle ────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> _offerAnswerCycle(
-    List<Map<String, dynamic>> Function() buildTracks,
+    Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc) buildTracks,
   ) {
     final next = _negotiationChain.catchError((_) {}).then((_) => _doOfferAnswer(buildTracks));
     _negotiationChain = next.catchError((_) => const <Map<String, dynamic>>[]);
@@ -133,7 +193,7 @@ class GuildVoiceWebRtcService {
   }
 
   Future<List<Map<String, dynamic>>> _doOfferAnswer(
-    List<Map<String, dynamic>> Function() buildTracks,
+    Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc) buildTracks,
   ) async {
     final pc = _pc;
     final guildId = _guildId;
@@ -149,7 +209,7 @@ class GuildVoiceWebRtcService {
       channelId: channelId,
       cfSessionId: cfSessionId,
       sessionDescription: {'type': offer.type, 'sdp': offer.sdp},
-      tracks: buildTracks(),
+      tracks: await buildTracks(pc),
     );
 
     await pc.setRemoteDescription(_toSessionDescription(response.sessionDescription));

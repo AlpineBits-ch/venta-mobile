@@ -3,6 +3,7 @@ import CallKit
 import Flutter
 import PushKit
 import UIKit
+import WebRTC
 import flutter_callkit_incoming
 
 // PushKit/CallKit wiring for native incoming-call UI — see
@@ -147,9 +148,22 @@ import flutter_callkit_incoming
 
   func onTimeOut(_ call: Call) {}
 
-  func didActivateAudioSession(_ audioSession: AVAudioSession) {}
+  // WebRTC (flutter_webrtc) manages its own RTCAudioSession independently of
+  // CallKit, but per Apple's rules only CallKit may activate/deactivate the
+  // shared AVAudioSession during a self-managed call — WebRTC calling
+  // setActive itself outside this window is a no-op against a session it
+  // doesn't actually own. These callbacks are the handoff: they tell
+  // RTCAudioSession the OS just granted (or revoked) the audio route, which
+  // is what actually starts the audio unit doing mic capture/speaker output.
+  // Without this, signaling completes and the call looks connected, but no
+  // audio flows in either direction — see venta_mobile's silent-call report.
+  func didActivateAudioSession(_ audioSession: AVAudioSession) {
+    RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
+  }
 
-  func didDeactivateAudioSession(_ audioSession: AVAudioSession) {}
+  func didDeactivateAudioSession(_ audioSession: AVAudioSession) {
+    RTCAudioSession.sharedInstance().audioSessionDidDeactivate(audioSession)
+  }
 
   func providerDidReset() {}
 }

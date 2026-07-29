@@ -95,6 +95,7 @@ class CallKitService {
   StreamSubscription<CallEvent?>? _eventSub;
   StreamSubscription<CallState>? _callCubitSub;
   String? _shownForCallId;
+  String? _connectedForCallId;
 
   Future<void> start() async {
     _eventSub = FlutterCallkitIncoming.onEvent.listen(_handleEvent);
@@ -140,9 +141,26 @@ class CallKitService {
     if (state.phase == CallPhase.incoming && state.call != null && _shownForCallId != state.call!.id) {
       _shownForCallId = state.call!.id;
       await _showForIncoming(state.call!);
+    } else if (state.phase == CallPhase.active &&
+        state.call != null &&
+        _shownForCallId == state.call!.id &&
+        _connectedForCallId != state.call!.id) {
+      // Answering from this app's own in-call UI (as opposed to the native
+      // CallKit banner/lock-screen button) never performs a `CXAnswerCallAction`
+      // — nothing tells CallKit the call was picked up, so its session stays
+      // "ringing" forever and iOS never grants the audio route, leaving
+      // WebRTC signaling fully connected but silent in both directions (see
+      // AppDelegate.swift's didActivateAudioSession for the other half of
+      // this). setCallConnected drives a real CXAnswerCallAction through
+      // CallManager.connectedCall, which is what actually triggers
+      // provider(_:didActivate:). Harmless no-op if the native button
+      // already answered it.
+      _connectedForCallId = state.call!.id;
+      await FlutterCallkitIncoming.setCallConnected(state.call!.id);
     } else if (state.phase == CallPhase.idle && _shownForCallId != null) {
       final id = _shownForCallId!;
       _shownForCallId = null;
+      _connectedForCallId = null;
       await FlutterCallkitIncoming.endCall(id);
     }
   }
