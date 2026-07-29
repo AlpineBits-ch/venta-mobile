@@ -143,7 +143,6 @@ class CallKitService {
       await _showForIncoming(state.call!);
     } else if (state.phase == CallPhase.active &&
         state.call != null &&
-        _shownForCallId == state.call!.id &&
         _connectedForCallId != state.call!.id) {
       // Answering from this app's own in-call UI (as opposed to the native
       // CallKit banner/lock-screen button) never performs a `CXAnswerCallAction`
@@ -155,6 +154,17 @@ class CallKitService {
       // CallManager.connectedCall, which is what actually triggers
       // provider(_:didActivate:). Harmless no-op if the native button
       // already answered it.
+      //
+      // Deliberately NOT gated on `_shownForCallId == state.call!.id` —
+      // that's only ever set by this Dart instance's own _showForIncoming,
+      // but most real calls arrive via PushKit while backgrounded/killed,
+      // where AppDelegate.swift shows the native UI directly and this field
+      // never gets set for that call at all. Gating on it here silently
+      // skipped the fallback CXAnswerCallAction for the majority of real
+      // calls, leaving CallKit's own native-button answer path as the only
+      // thing that could activate audio — and iOS's "no audio" banner is
+      // exactly what shows when that alone doesn't happen in time.
+      _shownForCallId = state.call!.id;
       _connectedForCallId = state.call!.id;
       await FlutterCallkitIncoming.setCallConnected(state.call!.id);
     } else if (state.phase == CallPhase.idle && _shownForCallId != null) {
