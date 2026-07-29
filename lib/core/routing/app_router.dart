@@ -94,21 +94,28 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         builder: (context, state, child) =>
             AppShell(currentLocation: state.matchedLocation, child: child),
         routes: [
+          // These three routes are siblings toggled by the persistent server
+          // rail (AppShell) rather than screens drilled into - the content
+          // pane should swap in place, not slide, unlike every other route
+          // below (opening a conversation/channel/profile keeps the normal
+          // platform push transition).
           GoRoute(
             path: RoutePaths.home,
-            builder: (context, state) => const HomeScreen(),
+            pageBuilder: (context, state) => const NoTransitionPage(child: HomeScreen()),
           ),
           GoRoute(
             path: RoutePaths.homeFriends,
-            builder: (context, state) => BlocProvider(
-              create: (_) => FriendsBloc(repository: getIt()),
-              child: const FriendsScreen(),
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: BlocProvider(
+                create: (_) => FriendsBloc(repository: getIt()),
+                child: const FriendsScreen(),
+              ),
             ),
           ),
           GoRoute(
             path: RoutePaths.server,
-            builder: (context, state) => GuildDetailScreen(
-              guildId: state.pathParameters['guildId']!,
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: GuildDetailScreen(guildId: state.pathParameters['guildId']!),
             ),
           ),
         ],

@@ -145,7 +145,11 @@ class _AppShellState extends State<AppShell> {
     if (shouldShow && !_callScreenShown) {
       _callScreenShown = true;
       Navigator.of(context, rootNavigator: true)
-          .push(MaterialPageRoute(builder: (_) => const CallScreen()))
+          .push(PageRouteBuilder<void>(
+            pageBuilder: (_, _, _) => const CallScreen(),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+          ))
           .then((_) => _callScreenShown = false);
     } else if (!shouldShow && _callScreenShown) {
       _callScreenShown = false;
