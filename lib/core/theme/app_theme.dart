@@ -4,6 +4,24 @@ import 'app_colors.dart';
 import 'app_typography.dart';
 import 'status_colors_extension.dart';
 
+/// Replaces the platform-default push transition (iOS/macOS's Cupertino
+/// slide-in-from-right, applied automatically to every `GoRoute` and
+/// `Navigator.push(MaterialPageRoute(...))` in the app since none of them
+/// specify their own transition) with an instant swap, no animation.
+class _NoTransitionsBuilder extends PageTransitionsBuilder {
+  const _NoTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) =>
+      child;
+}
+
 /// Builds explicit [ThemeData] for both brightness modes.
 ///
 /// Deliberately does NOT use [ColorScheme.fromSeed] — that algorithmically
@@ -145,6 +163,16 @@ abstract final class AppTheme {
         selectedTileColor: statusColors.hover,
       ),
       dividerTheme: DividerThemeData(color: dividerColor, thickness: 1),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: _NoTransitionsBuilder(),
+          TargetPlatform.iOS: _NoTransitionsBuilder(),
+          TargetPlatform.macOS: _NoTransitionsBuilder(),
+          TargetPlatform.linux: _NoTransitionsBuilder(),
+          TargetPlatform.windows: _NoTransitionsBuilder(),
+          TargetPlatform.fuchsia: _NoTransitionsBuilder(),
+        },
+      ),
       extensions: [statusColors],
     );
   }
