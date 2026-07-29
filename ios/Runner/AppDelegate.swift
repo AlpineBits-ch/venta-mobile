@@ -52,7 +52,17 @@ import WebRTC
   // Sidesteps re-relaying an accept to Dart when Dart itself is the one
   // that triggered it (see `markCallConnected`) - it already knows.
   private var selfInitiatedAnswers: Set<UUID> = []
+  // Same idea for ends: when Dart's own in-app "hang up" drives a
+  // CXEndCallAction (see `requestEndCall`), the delegate must not echo that end
+  // back to Dart, which already tore its call state down.
+  private var selfInitiatedEnds: Set<UUID> = []
 
+  // Must be held for the whole app lifetime: PushKit stops delivering the token
+  // update and, crucially, incoming VoIP pushes the moment the registry is
+  // deallocated. As a local in didFinishLaunchingWithOptions it died the
+  // instant that method returned, so a killed app relaunched by a VoIP push had
+  // no live registry to hand the push to — the call never arrived.
+  private var voipRegistry: PKPushRegistry?
   private var voipToken: String?
   private var callKitChannel: FlutterMethodChannel?
   private var pendingEvents: [[String: Any]] = []
@@ -71,6 +81,7 @@ import WebRTC
     let voipRegistry = PKPushRegistry(queue: .main)
     voipRegistry.delegate = self
     voipRegistry.desiredPushTypes = [.voIP]
+    self.voipRegistry = voipRegistry
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -153,7 +164,7 @@ import WebRTC
         result(FlutterError(code: "bad_args", message: "callId required", details: nil))
         return
       }
-      endReportedCall(id: id, reason: .remoteEnded)
+      requestEndCall(id: id)
       result(nil)
 
     default:
@@ -171,6 +182,7 @@ import WebRTC
   }
 
   private func reportIncomingCall(id: String, callerName: String, completion: ((Error?) -> Void)? = nil) {
+    configureAudioSession()
     let callUUID = uuid(for: id)
     callIdsByUUID[callUUID] = id
     let update = CXCallUpdate()
@@ -186,12 +198,41 @@ import WebRTC
     }
   }
 
+  // Out-of-band end: the call ended for a reason outside the user's action on
+  // this device (remote hang-up, answered/declined elsewhere). reportCall(
+  // endedAt:) is exactly the right tool for that and removes the CallKit call.
   private func endReportedCall(id: String, reason: CXCallEndedReason) {
     let callUUID = uuid(for: id)
     cxProvider.reportCall(with: callUUID, endedAt: Date(), reason: reason)
     callIdsByUUID.removeValue(forKey: callUUID)
     answeredCalls.remove(callUUID)
     selfInitiatedAnswers.remove(callUUID)
+    selfInitiatedEnds.remove(callUUID)
+    endManualCallAudio()
+  }
+
+  // User-initiated end from the app's own in-call UI. Unlike the remote case
+  // above, this must go through a CXEndCallAction transaction — that's what
+  // lets CallKit own the teardown: it ends the call *and* deactivates the audio
+  // session (firing provider(_:didDeactivate:)), clearing the "call in
+  // progress" state. reportCall(endedAt:) leaves a self-activated session (see
+  // configureAudioSession) live, so the system keeps showing an active call.
+  // Marked self-initiated so the CXEndCallAction delegate doesn't echo the end
+  // back to Dart, which already tore its own state down. Falls back to the
+  // out-of-band end if CallKit rejects the transaction, so the UI can't wedge.
+  private func requestEndCall(id: String) {
+    let callUUID = uuid(for: id)
+    guard callIdsByUUID[callUUID] != nil else { return }
+    selfInitiatedEnds.insert(callUUID)
+    let action = CXEndCallAction(call: callUUID)
+    callController.request(CXTransaction(action: action)) { [weak self] error in
+      guard let error else { return }
+      print("[AppDelegate] requestEndCall failed for \(id): \(error)")
+      DispatchQueue.main.async {
+        self?.selfInitiatedEnds.remove(callUUID)
+        self?.endReportedCall(id: id, reason: .remoteEnded)
+      }
+    }
   }
 
   // Answering from Dart's own in-app UI (as opposed to the native
@@ -210,6 +251,64 @@ import WebRTC
         print("[AppDelegate] markCallConnected failed for \(id): \(error)")
       }
     }
+  }
+
+  // Put the shared AVAudioSession into a call-capable category *before* CallKit
+  // tries to activate it. When the user answers, CallKit activates the app's
+  // audio session synchronously; if it's still in the default (solo-ambient)
+  // category — which can't record — that activation fails and iOS immediately
+  // tears the call down showing "Call Failed" on the native screen. WebRTC only
+  // switches the category to playAndRecord much later, when it opens the mic
+  // during connect, which is far too late. We set only the category/mode, never
+  // activate: CallKit owns activation (provider(_:didActivate:)). Setting a
+  // category on an inactive session has no audible side effect (no ducking/route
+  // change until activation), so it's safe both while ringing and at answer.
+  private func configureAudioSession() {
+    do {
+      try AVAudioSession.sharedInstance().setCategory(
+        .playAndRecord,
+        mode: .voiceChat,
+        options: [.allowBluetooth, .allowBluetoothA2DP, .allowAirPlay])
+    } catch {
+      print("[AppDelegate] configureAudioSession failed: \(error)")
+    }
+  }
+
+  // The core of getting two-way audio right under CallKit. By default WebRTC
+  // (flutter_webrtc) runs RTCAudioSession in *automatic* mode: it brings its
+  // audio unit up the instant an audio track is ready, activating the session
+  // itself. Under CallKit that's the wrong owner — CallKit, not WebRTC, decides
+  // when the session goes live — and the mismatch produced every symptom we
+  // saw: mic dead on the first call (WebRTC opened the unit before CallKit had
+  // the session, so the record bus never armed), "Call Failed" answering from
+  // the background (WebRTC racing CallKit for activation), and it only "working
+  // the second time" because leftover session state happened to line up.
+  //
+  // Manual mode removes the race entirely: WebRTC won't touch the audio unit on
+  // its own; it starts/stops strictly when we flip isAudioEnabled. We enable
+  // manual mode at answer (isAudioEnabled=false), then let CallKit's
+  // didActivate/didDeactivate be the single source of truth for when audio may
+  // run. The ordering between Dart's getUserMedia and CallKit's activation no
+  // longer matters: whichever happens second, the unit starts once a track
+  // exists AND isAudioEnabled is true. Scoped to CallKit-answered calls and
+  // fully torn down on end, so outgoing calls and guild voice keep WebRTC's
+  // default automatic behavior.
+  private func beginManualCallAudio() {
+    let rtc = RTCAudioSession.sharedInstance()
+    // Capture activation state *before* taking over: on a native CallKit answer
+    // the session isn't active yet (Dart hasn't reached getUserMedia), so audio
+    // stays off until didActivate. But when Dart answered from the app's own UI,
+    // WebRTC already activated the session during connect and CallKit may not
+    // re-fire didActivate — seed from the current state so audio isn't stranded.
+    let wasActive = rtc.isActive
+    rtc.useManualAudio = true
+    rtc.isAudioEnabled = wasActive
+  }
+
+  private func endManualCallAudio() {
+    let rtc = RTCAudioSession.sharedInstance()
+    rtc.isAudioEnabled = false
+    rtc.useManualAudio = false
   }
 
   // MARK: - PKPushRegistryDelegate
@@ -279,6 +378,12 @@ import WebRTC
   // mirrors the previous plugin-mediated flow, just without the plugin.
 
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+    // Set the call category so CallKit's activation succeeds, and hand audio
+    // control to CallKit (manual mode) so WebRTC can't race it — this is what
+    // fixes background "Call Failed" and first-call one-way audio. Both must be
+    // in place before fulfilling, since CallKit activates right after.
+    configureAudioSession()
+    beginManualCallAudio()
     let wasSelfInitiated = selfInitiatedAnswers.remove(action.callUUID) != nil
     answeredCalls.insert(action.callUUID)
     action.fulfill()
@@ -288,9 +393,16 @@ import WebRTC
   }
 
   func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
+    let wasSelfInitiated = selfInitiatedEnds.remove(action.callUUID) != nil
     let wasAnswered = answeredCalls.remove(action.callUUID) != nil
     action.fulfill()
-    guard let id = callIdsByUUID[action.callUUID] else { return }
+    let id = callIdsByUUID.removeValue(forKey: action.callUUID)
+    selfInitiatedAnswers.remove(action.callUUID)
+    endManualCallAudio()
+    // Dart's own hang-up drove this end (requestEndCall) — it already tore its
+    // call state down, so don't relay it back. The map cleanup above also makes
+    // the redundant iosBridge.endCall that follows a *native* end a no-op.
+    guard !wasSelfInitiated, let id else { return }
     ensureEngineForActionRelay()
     relayEvent(["type": wasAnswered ? "end" : "decline", "callId": id])
   }
@@ -299,26 +411,30 @@ import WebRTC
     action.fulfill()
   }
 
-  func providerDidReset() {
+  func providerDidReset(_ provider: CXProvider) {
     callIdsByUUID.removeAll()
     answeredCalls.removeAll()
     selfInitiatedAnswers.removeAll()
+    selfInitiatedEnds.removeAll()
+    endManualCallAudio()
   }
 
-  // WebRTC (flutter_webrtc) manages its own RTCAudioSession independently of
-  // CallKit, but per Apple's rules only CallKit may activate/deactivate the
-  // shared AVAudioSession during a self-managed call — WebRTC calling
-  // setActive itself outside this window is a no-op against a session it
-  // doesn't actually own. These callbacks are the handoff: they tell
-  // RTCAudioSession the OS just granted (or revoked) the audio route, which
-  // is what actually starts the audio unit doing mic capture/speaker output.
-  // Without this, signaling completes and the call looks connected, but no
-  // audio flows in either direction — see venta_mobile's silent-call report.
+  // CallKit is the single source of truth for when audio may run (see
+  // beginManualCallAudio). didActivate = the OS granted the route: tell
+  // RTCAudioSession, then flip isAudioEnabled on to let WebRTC start its unit
+  // (mic + speaker). didDeactivate = the route was revoked (call end, or an
+  // interruption): flip audio off first, then inform RTCAudioSession. In manual
+  // mode this pair alone drives two-way audio, with no ordering dependency on
+  // when Dart's getUserMedia runs.
   func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
-    RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
+    let rtc = RTCAudioSession.sharedInstance()
+    rtc.audioSessionDidActivate(audioSession)
+    rtc.isAudioEnabled = true
   }
 
   func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
-    RTCAudioSession.sharedInstance().audioSessionDidDeactivate(audioSession)
+    let rtc = RTCAudioSession.sharedInstance()
+    rtc.isAudioEnabled = false
+    rtc.audioSessionDidDeactivate(audioSession)
   }
 }

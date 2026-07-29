@@ -28,6 +28,16 @@ const _callPushType = 'call';
 /// docs/native-call-push-backend-spec.md.
 Future<void> showCallKitFromPushData(Map<String, dynamic> data) async {
   if (data['type'] != _callPushType) return;
+  // Android only. iOS drives its CallKit UI exclusively through `AppDelegate`'s
+  // native CXProvider — via PushKit for backgrounded/killed calls and via
+  // SignalR -> CallKitService for foreground ones. Routing an FCM call push
+  // through the plugin here on iOS puts a *second*, competing CallKit call on
+  // screen: its Accept goes to the plugin, whose iOS events nothing listens to
+  // (see CallKitService.start — the plugin's onEvent is wired on Android only),
+  // so the tap is silently dropped, while our own provider never learns of the
+  // call and every answer/end on it fails with UnknownCallUUID. FCM call pushes
+  // on iOS are redundant with PushKit regardless, so just ignore them.
+  if (Platform.isIOS) return;
   final callId = data['callId'] as String;
   if (data['callSubtype'] == 'end') {
     await FlutterCallkitIncoming.endCall(callId);
