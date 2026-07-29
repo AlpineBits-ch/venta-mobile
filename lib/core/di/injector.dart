@@ -1,7 +1,9 @@
 import 'package:get_it/get_it.dart';
 
+import '../../features/auth/data/account_repository.dart';
 import '../../features/auth/data/auth_api.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/auth/data/identity_api.dart';
 import '../../features/conversations/data/conversation_api.dart';
 import '../../features/conversations/data/conversation_repository.dart';
 import '../../features/friends/data/relationship_api.dart';
@@ -30,6 +32,7 @@ import '../push/push_token_api.dart';
 import '../realtime/realtime_service.dart';
 import '../realtime/realtime_transport.dart';
 import '../realtime/signalr_netcore_transport.dart';
+import '../sound/sound_service.dart';
 import '../storage/secure_storage_service.dart';
 
 final getIt = GetIt.instance;
@@ -51,6 +54,12 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<ApiClient>(
     () => ApiClient(authRepository: getIt()),
+  );
+  getIt.registerLazySingleton<IdentityApi>(
+    () => IdentityApi(client: getIt()),
+  );
+  getIt.registerLazySingleton<AccountRepository>(
+    () => AccountRepository(api: getIt()),
   );
   getIt.registerLazySingleton<RealtimeTransport>(
     () => SignalrNetcoreTransport(),
@@ -90,6 +99,7 @@ Future<void> configureDependencies() async {
       myUserId: getIt<AuthRepository>().currentUserId ?? '',
     ),
   );
+  getIt.registerLazySingleton<SoundService>(() => SoundService());
   getIt.registerLazySingleton<VoiceApi>(() => VoiceApi(client: getIt()));
   getIt.registerLazySingleton<VoiceRepository>(
     () => VoiceRepository(
@@ -102,6 +112,7 @@ Future<void> configureDependencies() async {
     () => CallCubit(
       repository: getIt(),
       authRepository: getIt(),
+      soundService: getIt(),
       webRtcServiceFactory: () => CallWebRtcService(api: getIt()),
     ),
   );
@@ -119,6 +130,7 @@ Future<void> configureDependencies() async {
     () => GuildVoiceCubit(
       repository: getIt(),
       authRepository: getIt(),
+      soundService: getIt(),
       webRtcServiceFactory: () => GuildVoiceWebRtcService(api: getIt()),
     ),
   );

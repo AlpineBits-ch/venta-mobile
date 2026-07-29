@@ -40,6 +40,7 @@ class ChannelScreen extends StatelessWidget {
           channelId: channelId,
         ),
         myUserId: myUserId,
+        soundService: getIt(),
       ),
       child: ThreadView(title: _title(), myUserId: myUserId, guildId: guildId),
     );

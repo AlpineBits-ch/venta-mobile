@@ -267,6 +267,27 @@ class GuildApi {
     await client.dio.delete<void>('$_base/channels/$channelId');
   }
 
+  Future<ChannelDto> updateChannel(
+    String channelId, {
+    required String name,
+    String? description,
+    required bool isPrivate,
+    required bool isAgeRestricted,
+    required int slowModeSeconds,
+  }) async {
+    final response = await client.dio.patch<Map<String, dynamic>>(
+      '$_base/channels/$channelId',
+      data: {
+        'name': name,
+        'description': description,
+        'isPrivate': isPrivate,
+        'isAgeRestricted': isAgeRestricted,
+        'slowModeSeconds': slowModeSeconds,
+      },
+    );
+    return ChannelDto.fromJson(response.data!);
+  }
+
   Future<CategoryDto> createCategory({
     required String guildId,
     required String name,
@@ -287,6 +308,20 @@ class GuildApi {
 
   Future<void> deleteCategory(String categoryId) async {
     await client.dio.delete<void>('$_base/categories/$categoryId');
+  }
+
+  /// Singular `/category/{id}` — matches Alpine's `updateCategory` exactly;
+  /// every other category endpoint here is the plural `/categories/...`.
+  Future<CategoryDto> updateCategory(
+    String categoryId, {
+    required String name,
+    String? description,
+  }) async {
+    final response = await client.dio.patch<Map<String, dynamic>>(
+      '$_base/category/$categoryId',
+      data: {'name': name, 'description': description},
+    );
+    return CategoryDto.fromJson(response.data!);
   }
 
   Future<List<GuildMemberDto>> getMembers(

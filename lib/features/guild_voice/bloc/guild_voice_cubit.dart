@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
 
+import '../../../core/sound/sound_service.dart';
+import '../../../core/webrtc/track_kind.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/guild_voice_repository.dart';
 import '../data/models/guild_voice_dto.dart';
@@ -16,26 +19,39 @@ class VoiceParticipantState extends Equatable {
     this.isMuted = false,
     this.isDeafened = false,
     this.isStreaming = false,
+    this.hasCamera = false,
   });
 
   final String userId;
   final bool isMuted;
   final bool isDeafened;
+
+  /// Screen sharing — kept as `isStreaming` for backward compatibility with
+  /// existing UI/roster code; [hasCamera] is the separate camera-on flag.
   final bool isStreaming;
+  final bool hasCamera;
 
   VoiceParticipantState copyWith({
     bool? isMuted,
     bool? isDeafened,
     bool? isStreaming,
+    bool? hasCamera,
   }) => VoiceParticipantState(
     userId: userId,
     isMuted: isMuted ?? this.isMuted,
     isDeafened: isDeafened ?? this.isDeafened,
     isStreaming: isStreaming ?? this.isStreaming,
+    hasCamera: hasCamera ?? this.hasCamera,
   );
 
   @override
-  List<Object?> get props => [userId, isMuted, isDeafened, isStreaming];
+  List<Object?> get props => [
+    userId,
+    isMuted,
+    isDeafened,
+    isStreaming,
+    hasCamera,
+  ];
 }
 
 class GuildVoiceState extends Equatable {
@@ -51,6 +67,7 @@ class GuildVoiceState extends Equatable {
     this.connectedAt,
     this.rosters = const {},
     this.errorMessage,
+    this.videoRevision = 0,
   });
 
   final GuildVoicePhase phase;
@@ -98,6 +115,7 @@ class GuildVoiceState extends Equatable {
     DateTime? connectedAt,
     Map<String, List<VoiceParticipantState>>? rosters,
     String? errorMessage,
+    int? videoRevision,
   }) => GuildVoiceState(
     phase: phase ?? this.phase,
     guildId: guildId ?? this.guildId,
@@ -110,7 +128,15 @@ class GuildVoiceState extends Equatable {
     connectedAt: connectedAt ?? this.connectedAt,
     rosters: rosters ?? this.rosters,
     errorMessage: errorMessage,
+    videoRevision: videoRevision ?? this.videoRevision,
   );
+
+  /// Bumped on every local/remote camera or screen-share track add/remove —
+  /// `MediaStreamTrack`s themselves can't live in this `Equatable` state (not
+  /// comparable/immutable-safe), so `VideoParticipantTile`/`ScreenShareView`
+  /// instead pull the current track imperatively from the webrtc service and
+  /// rely on this counter changing to know when to re-pull and rebuild.
+  final int videoRevision;
 
   @override
   List<Object?> get props => [
@@ -125,6 +151,7 @@ class GuildVoiceState extends Equatable {
     connectedAt,
     rosters,
     errorMessage,
+    videoRevision,
   ];
 }
 
@@ -138,6 +165,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
   GuildVoiceCubit({
     required this.repository,
     required this.authRepository,
+    required this.soundService,
     required GuildVoiceWebRtcService Function() webRtcServiceFactory,
   }) : _webRtcServiceFactory = webRtcServiceFactory,
        super(const GuildVoiceState()) {
@@ -146,6 +174,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
 
   final GuildVoiceRepository repository;
   final AuthRepository authRepository;
+  final SoundService soundService;
   final GuildVoiceWebRtcService Function() _webRtcServiceFactory;
   late final StreamSubscription<GuildVoiceEvent> _sub;
   GuildVoiceWebRtcService? _webRtc;
@@ -204,6 +233,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     final guildId = state.guildId;
     final channelId = state.channelId;
     if (guildId == null || channelId == null) return;
+    unawaited(soundService.playLeaveCall());
     _stopHeartbeat();
     final webRtc = _webRtc;
     _webRtc = null;
@@ -270,6 +300,122 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
   }
 
+  /// Current local camera state — read from the roster rather than a
+  /// separate field, since the self-tile in [state.rosters] is already the
+  /// source of truth other participants' badges read from.
+  bool get isCameraOn {
+    final channelId = state.channelId;
+    if (channelId == null) return false;
+    return state
+        .rosterFor(channelId)
+        .where((p) => p.userId == _myUserId)
+        .firstOrNull
+        ?.hasCamera ??
+        false;
+  }
+
+  Future<void> toggleCamera() async {
+    if (state.phase != GuildVoicePhase.active) return;
+    final channelId = state.channelId;
+    final webRtc = _webRtc;
+    if (channelId == null || webRtc == null) return;
+    final turningOn = !isCameraOn;
+    try {
+      if (turningOn) {
+        await webRtc.publishLocalVideo();
+      } else {
+        await webRtc.stopLocalVideo();
+      }
+    } catch (_) {
+      return; // Capture failed (denied permission, no camera, etc.) — bail.
+    }
+    _updateParticipant(
+      channelId,
+      _myUserId,
+      (p) => p.copyWith(hasCamera: turningOn),
+    );
+    _bumpVideoRevision();
+    await repository.invokeCameraChanged(
+      channelId: channelId,
+      isCameraOn: turningOn,
+    );
+  }
+
+  /// Mirrors [isCameraOn] for screen sharing — Android only (see
+  /// `toggleScreenShare` callers, which gate the button by platform).
+  bool get isScreenSharing {
+    final channelId = state.channelId;
+    if (channelId == null) return false;
+    return state
+            .rosterFor(channelId)
+            .where((p) => p.userId == _myUserId)
+            .firstOrNull
+            ?.isStreaming ??
+        false;
+  }
+
+  String? _myShareId;
+
+  Future<void> toggleScreenShare() async {
+    if (state.phase != GuildVoicePhase.active) return;
+    final channelId = state.channelId;
+    final webRtc = _webRtc;
+    if (channelId == null || webRtc == null) return;
+    if (isScreenSharing) {
+      final shareId = _myShareId;
+      _myShareId = null;
+      try {
+        await webRtc.stopScreenShare();
+      } catch (_) {
+        // Best-effort — fall through to update local state regardless.
+      }
+      _updateParticipant(
+        channelId,
+        _myUserId,
+        (p) => p.copyWith(isStreaming: false),
+      );
+      _bumpVideoRevision();
+      if (shareId != null) {
+        await repository.invokeScreenShareStopped(
+          channelId: channelId,
+          shareId: shareId,
+        );
+      }
+    } else {
+      final shareId =
+          '${DateTime.now().microsecondsSinceEpoch}-${identityHashCode(this)}';
+      try {
+        await webRtc.startScreenShare(shareId);
+      } catch (_) {
+        return; // Permission denied/cancelled the system picker — bail.
+      }
+      _myShareId = shareId;
+      _updateParticipant(
+        channelId,
+        _myUserId,
+        (p) => p.copyWith(isStreaming: true),
+      );
+      _bumpVideoRevision();
+      await repository.invokeScreenShareStarted(
+        channelId: channelId,
+        shareId: shareId,
+        trackName: 'screen-$shareId',
+      );
+    }
+  }
+
+  void _bumpVideoRevision() =>
+      emit(state.copyWith(videoRevision: state.videoRevision + 1));
+
+  /// Track getters for the UI — read imperatively (see [GuildVoiceState.videoRevision]
+  /// doc comment for why `MediaStreamTrack`s can't live in cubit state itself).
+  MediaStreamTrack? get localVideoTrack => _webRtc?.localVideoTrack;
+  MediaStreamTrack? get localScreenTrack => _webRtc?.localScreenTrack;
+  MediaStreamTrack? remoteVideoTrackFor(String userId) =>
+      _webRtc?.remoteVideoTrackFor(userId);
+  MediaStreamTrack? remoteScreenTrackFor(String userId) =>
+      _webRtc?.remoteScreenTrackFor(userId);
+
   Future<void> _connect(
     String guildId,
     String channelId,
@@ -297,6 +443,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
         connectedAt: DateTime.now(),
       ),
     );
+    unawaited(soundService.playJoinCall());
     _startHeartbeat();
 
     try {
@@ -326,9 +473,15 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     switch (event) {
       case UserJoinedVoiceChannel(:final userId, :final channelId):
         if (userId == _myUserId) return;
+        if (channelId == state.channelId) {
+          unawaited(soundService.playJoinCall());
+        }
         _addToRoster(channelId, VoiceParticipantState(userId: userId));
 
       case UserLeftVoiceChannel(:final userId, :final channelId):
+        if (userId != _myUserId && channelId == state.channelId) {
+          unawaited(soundService.playLeaveCall());
+        }
         _removeFromRoster(channelId, userId);
         if (channelId == state.channelId)
           _webRtc?.unsubscribeParticipant(userId);
@@ -353,19 +506,52 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
           ),
         );
 
-      case VoiceTrackPublished(:final userId, :final channelId, :final kind):
-        if (kind == 'screen')
-          _updateParticipant(
-            channelId,
-            userId,
-            (p) => p.copyWith(isStreaming: true),
+      case VoiceTrackPublished(
+        :final userId,
+        :final channelId,
+        :final cfSessionId,
+        :final trackName,
+        :final kind,
+      ):
+        if (userId == _myUserId) return;
+        final trackKind = trackKindFromWire(kind);
+        if (trackKind == null) return; // screenAudio or unknown - ignored
+        if (channelId == state.channelId) {
+          unawaited(
+            _webRtc?.subscribeToTrack(
+              userId: userId,
+              cfSessionId: cfSessionId,
+              trackName: trackName,
+              kind: trackKind,
+            ),
           );
-
-      case VoiceTrackClosed(:final userId, :final channelId):
+          _bumpVideoRevision();
+        }
         _updateParticipant(
           channelId,
           userId,
-          (p) => p.copyWith(isStreaming: false),
+          trackKind == TrackKind.screen
+              ? (p) => p.copyWith(isStreaming: true)
+              : (p) => p.copyWith(hasCamera: true),
+        );
+
+      case VoiceTrackClosed(:final userId, :final channelId, :final trackName):
+        final trackKind = trackName == 'camera'
+            ? TrackKind.video
+            : trackName.startsWith('screen-')
+            ? TrackKind.screen
+            : null;
+        if (trackKind == null) return;
+        if (channelId == state.channelId) {
+          _webRtc?.unsubscribeTrack(userId: userId, kind: trackKind);
+          _bumpVideoRevision();
+        }
+        _updateParticipant(
+          channelId,
+          userId,
+          trackKind == TrackKind.screen
+              ? (p) => p.copyWith(isStreaming: false)
+              : (p) => p.copyWith(hasCamera: false),
         );
 
       case VoiceMuteChanged(:final userId, :final channelId, :final isMuted):
@@ -392,8 +578,13 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
           ),
         );
 
-      case VoiceCameraChanged():
-        break; // Video is out of scope for this audio-only v1.
+      case VoiceCameraChanged(:final userId, :final channelId, :final isCameraOn):
+        if (userId == _myUserId) return;
+        _updateParticipant(
+          channelId,
+          userId,
+          (p) => p.copyWith(hasCamera: isCameraOn),
+        );
 
       case VoiceScreenShareStarted(:final userId, :final channelId):
         _updateParticipant(

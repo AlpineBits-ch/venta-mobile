@@ -162,6 +162,52 @@ class GuildRepository {
     return category;
   }
 
+  Future<ChannelDto> updateChannel(
+    String guildId,
+    String channelId, {
+    required String name,
+    String? description,
+    required bool isPrivate,
+    required bool isAgeRestricted,
+    required int slowModeSeconds,
+  }) async {
+    final channel = await api.updateChannel(
+      channelId,
+      name: name,
+      description: description,
+      isPrivate: isPrivate,
+      isAgeRestricted: isAgeRestricted,
+      slowModeSeconds: slowModeSeconds,
+    );
+    await _refreshGuild(guildId);
+    return channel;
+  }
+
+  Future<void> deleteChannel(String guildId, String channelId) async {
+    await api.deleteChannel(channelId);
+    await _refreshGuild(guildId);
+  }
+
+  Future<CategoryDto> updateCategory(
+    String guildId,
+    String categoryId, {
+    required String name,
+    String? description,
+  }) async {
+    final category = await api.updateCategory(
+      categoryId,
+      name: name,
+      description: description,
+    );
+    await _refreshGuild(guildId);
+    return category;
+  }
+
+  Future<void> deleteCategory(String guildId, String categoryId) async {
+    await api.deleteCategory(categoryId);
+    await _refreshGuild(guildId);
+  }
+
   Future<List<GuildMemberDto>> getMembers(
     String guildId, {
     int skip = 0,

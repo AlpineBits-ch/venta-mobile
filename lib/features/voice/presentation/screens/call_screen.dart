@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -10,7 +12,9 @@ import '../../../../core/widgets/call_participant_tile.dart';
 import '../../../../core/widgets/countdown_label.dart';
 import '../../../../core/widgets/elapsed_time_label.dart';
 import '../../../../core/widgets/profile_resolver.dart';
+import '../../../../core/widgets/screen_share_view.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../../core/widgets/video_participant_tile.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../bloc/call_cubit.dart';
 
@@ -169,6 +173,19 @@ class _ActiveCallView extends StatelessWidget {
             ),
           ],
           const SizedBox(height: AppSpacing.xl),
+          for (final sharer in state.participants.where((p) => p.isStreaming))
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.l),
+              child: ScreenShareView(
+                userId: sharer.userId,
+                isSelf: sharer.userId == myUserId,
+                track: sharer.userId == myUserId
+                    ? context.read<CallCubit>().localScreenTrack
+                    : context.read<CallCubit>().remoteScreenTrackFor(
+                        sharer.userId,
+                      ),
+              ),
+            ),
           Expanded(
             child: Center(
               child: Wrap(
@@ -176,6 +193,11 @@ class _ActiveCallView extends StatelessWidget {
                 runSpacing: AppSpacing.l,
                 alignment: WrapAlignment.center,
                 children: [
+                  if (context.read<CallCubit>().isCameraOn)
+                    VideoParticipantTile(
+                      track: context.read<CallCubit>().localVideoTrack,
+                      mirror: true,
+                    ),
                   if (others.isEmpty)
                     Text(
                       state.aloneDeadline != null
@@ -185,10 +207,17 @@ class _ActiveCallView extends StatelessWidget {
                     )
                   else
                     for (final participant in others)
-                      CallParticipantTile(
-                        userId: participant.userId,
-                        isMuted: participant.isMuted,
-                      ),
+                      if (participant.hasCamera)
+                        VideoParticipantTile(
+                          track: context.read<CallCubit>().remoteVideoTrackFor(
+                            participant.userId,
+                          ),
+                        )
+                      else
+                        CallParticipantTile(
+                          userId: participant.userId,
+                          isMuted: participant.isMuted,
+                        ),
                 ],
               ),
             ),
@@ -217,6 +246,33 @@ class _ActiveCallView extends StatelessWidget {
                 iconColor: state.isSpeakerOn ? Colors.white : Colors.black,
                 onTap: () => context.read<CallCubit>().toggleSpeaker(),
               ),
+              CallActionButton(
+                icon: context.read<CallCubit>().isCameraOn
+                    ? Icons.videocam
+                    : Icons.videocam_off,
+                label: 'Camera',
+                background: context.read<CallCubit>().isCameraOn
+                    ? Colors.white
+                    : Colors.white24,
+                iconColor: context.read<CallCubit>().isCameraOn
+                    ? Colors.black
+                    : Colors.white,
+                onTap: () => context.read<CallCubit>().toggleCamera(),
+              ),
+              if (Platform.isAndroid)
+                CallActionButton(
+                  icon: context.read<CallCubit>().isScreenSharing
+                      ? Icons.stop_screen_share
+                      : Icons.screen_share,
+                  label: 'Share',
+                  background: context.read<CallCubit>().isScreenSharing
+                      ? Colors.white
+                      : Colors.white24,
+                  iconColor: context.read<CallCubit>().isScreenSharing
+                      ? Colors.black
+                      : Colors.white,
+                  onTap: () => context.read<CallCubit>().toggleScreenShare(),
+                ),
               CallActionButton(
                 icon: Icons.call_end,
                 label: 'End',

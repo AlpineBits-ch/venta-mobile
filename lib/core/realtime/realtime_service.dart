@@ -77,6 +77,14 @@ class RealtimeService {
     'call.CallDeviceTakeover',
     'call.CallParticipantLeft',
     'call.CallAlone',
+    // Camera/screenshare — mirrors guild.voice.*'s equivalents (see
+    // GuildVoiceRepository); the backend has always supported these
+    // symmetrically for calls too, the client just never watched them.
+    'call.CameraChanged',
+    'call.TrackPublished',
+    'call.TrackClosed',
+    'call.ScreenShareStarted',
+    'call.ScreenShareStopped',
     'guild.voice.UserJoinedVoice',
     'guild.voice.UserLeftVoice',
     'guild.voice.ParticipantJoined',

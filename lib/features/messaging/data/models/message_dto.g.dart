@@ -21,6 +21,13 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
   mentions:
       (json['mentions'] as List<dynamic>?)?.map((e) => e as String).toList() ??
       const <String>[],
+  roleMentions:
+      (json['roleMentions'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const <String>[],
+  mentionsEveryone: json['mentionsEveryone'] as bool? ?? false,
+  mentionsHere: json['mentionsHere'] as bool? ?? false,
   attachments:
       (json['attachments'] as List<dynamic>?)
           ?.map((e) => AttachmentDto.fromJson(e as Map<String, dynamic>))
@@ -47,6 +54,7 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
         unknownValue: MessageAuthorType.standard,
       ) ??
       MessageAuthorType.standard,
+  systemMessageVariant: (json['systemMessageVariant'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$MessageDtoToJson(
@@ -62,11 +70,15 @@ Map<String, dynamic> _$MessageDtoToJson(
   'isFailed': instance.isFailed,
   'inReplyTo': instance.inReplyTo,
   'mentions': instance.mentions,
+  'roleMentions': instance.roleMentions,
+  'mentionsEveryone': instance.mentionsEveryone,
+  'mentionsHere': instance.mentionsHere,
   'attachments': instance.attachments,
   'reactions': instance.reactions,
   'encryptionState': _$MessageEncryptionStateEnumMap[instance.encryptionState]!,
   'type': _$MessageTypeEnumMap[instance.type]!,
   'authorIdType': _$MessageAuthorTypeEnumMap[instance.authorIdType]!,
+  'systemMessageVariant': instance.systemMessageVariant,
 };
 
 const _$MessageEncryptionStateEnumMap = {

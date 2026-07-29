@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Venta Mobile</string>
+	<string>Venta</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>venta_mobile</string>
+	<string>Venta</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -42,7 +42,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Venta needs camera access so you can take a photo for your profile picture or server banner.</string>
+	<string>Venta needs camera access to take a photo for your profile picture or server banner, and to share your camera in calls.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Venta needs microphone access for voice calls.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -1,9 +1,18 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../../../core/media/camera_permission.dart';
+import '../../../core/media/screen_share_service.dart';
+import '../../../core/webrtc/track_kind.dart';
 import '../data/guild_voice_api.dart';
+
+/// Owner (userId + [TrackKind]) of one negotiated mid — lets a single
+/// `ontrack` callback route audio, camera, and screen-share tracks to the
+/// right per-kind bucket instead of assuming everything is audio.
+typedef _TrackOwner = ({String userId, TrackKind kind});
 
 /// Manages the WebRTC plumbing for one guild voice channel session — mirrors
 /// `CallWebRtcService` (1:1 calling) almost exactly, since a guild voice
@@ -11,13 +20,16 @@ import '../data/guild_voice_api.dart';
 /// scoped to a guild+channel pair, with N participants instead of 2." One
 /// instance is created per joined channel by `GuildVoiceCubit`.
 ///
-/// Audio-only v1: no `<audio>`-element wiring needed — flutter_webrtc's
-/// native engine plays a received audio track through the device's call/
-/// media output as soon as it's part of a live `RTCPeerConnection`.
+/// Audio plays automatically once its track is part of a live
+/// `RTCPeerConnection` (flutter_webrtc routes it to the device's call/media
+/// output natively) — video/screen tracks don't auto-render anywhere; the UI
+/// attaches an `RTCVideoRenderer` to whatever [remoteVideoTrackFor]/
+/// [remoteScreenTrackFor]/[localVideoTrack] currently return.
 class GuildVoiceWebRtcService {
   GuildVoiceWebRtcService({required this.api});
 
   final GuildVoiceApi api;
+  final ScreenShareService _screenShareService = ScreenShareService();
 
   RTCPeerConnection? _pc;
   String? _guildId;
@@ -25,10 +37,22 @@ class GuildVoiceWebRtcService {
   String? _cfSessionId;
   MediaStreamTrack? _localAudioTrack;
   MediaStream? _localStream;
+  MediaStreamTrack? _localVideoTrack;
+  MediaStream? _localVideoStream;
+  MediaStreamTrack? _localScreenTrack;
+  MediaStream? _localScreenStream;
+  String? _activeShareId;
 
-  // MID -> userId, so ontrack can route inbound audio to the right participant.
-  final Map<String, String> _midToUserId = {};
+  // MID -> (userId, kind), so ontrack can route an inbound track to the
+  // right participant and the right per-kind bucket below.
+  final Map<String, _TrackOwner> _midOwners = {};
+  // "userId|kind" keys already subscribed — makes subscribing safe to call
+  // more than once for the same user+kind (e.g. a live event racing a
+  // backfill), mirroring CallWebRtcService's audio-only dedup guard.
+  final Set<String> _subscribedKeys = {};
   final Map<String, MediaStreamTrack> _remoteAudioTracks = {};
+  final Map<String, MediaStreamTrack> _remoteVideoTracks = {};
+  final Map<String, MediaStreamTrack> _remoteScreenTracks = {};
   final List<RTCTrackEvent> _pendingTracks = [];
 
   // RTCPeerConnection only allows one offer/answer exchange at a time —
@@ -88,32 +112,157 @@ class GuildVoiceWebRtcService {
     _localStream = stream;
     _localAudioTrack = track;
 
-    final transceiver = await _pc!.addTransceiver(
-      track: track,
-      init: RTCRtpTransceiverInit(direction: TransceiverDirection.SendOnly),
-    );
-
-    await _offerAnswerCycle((pc) async {
-      final mid = await _resolveMid(pc, transceiver);
-      return [
-        {'location': 'local', 'mid': mid, 'trackName': 'audio'},
-      ];
-    });
+    await _publishTrack(track: track, trackName: 'audio');
 
     await Helper.setSpeakerphoneOnButPreferBluetooth();
     _startStatsLogging();
+  }
+
+  /// Starts local camera capture and publishes it as a `"camera"` track —
+  /// the backend classifies any non-`"audio"`, non-`screen-`-prefixed track
+  /// name as `kind: "video"` purely from the name, so nothing else is needed
+  /// server-side. No-ops if the camera is already on.
+  Future<void> publishLocalVideo() async {
+    if (_localVideoTrack != null) return;
+    if (!await ensureCameraPermission()) {
+      throw StateError('Camera permission denied');
+    }
+    final stream = await navigator.mediaDevices.getUserMedia({
+      'audio': false,
+      'video': true,
+    });
+    final track = stream.getVideoTracks().first;
+    _localVideoStream = stream;
+    _localVideoTrack = track;
+    await _publishTrack(track: track, trackName: 'camera');
+  }
+
+  Future<void> stopLocalVideo() async {
+    final track = _localVideoTrack;
+    if (track == null) return;
+    _localVideoTrack = null;
+    track.stop();
+    await _localVideoStream?.dispose();
+    _localVideoStream = null;
+    await _closeTrack('camera');
+  }
+
+  /// Starts screen capture and publishes it as `"screen-$shareId"` — the
+  /// `screen-` prefix is what makes the backend classify it as `kind:
+  /// "screen"` (vs. `"video"` for the camera) and replay/broadcast it as a
+  /// screen share rather than a regular video track. [shareId] is a
+  /// caller-generated id also passed to `invokeScreenShareStarted`.
+  Future<void> startScreenShare(String shareId) async {
+    if (_localScreenTrack != null) return;
+    if (Platform.isAndroid) await _screenShareService.start();
+    final MediaStream stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        'video': true,
+        'audio': false,
+      });
+    } catch (e) {
+      if (Platform.isAndroid) await _screenShareService.stop();
+      rethrow;
+    }
+    final track = stream.getVideoTracks().first;
+    _localScreenStream = stream;
+    _localScreenTrack = track;
+    _activeShareId = shareId;
+    await _publishTrack(track: track, trackName: 'screen-$shareId');
+  }
+
+  Future<void> stopScreenShare() async {
+    final track = _localScreenTrack;
+    final shareId = _activeShareId;
+    if (track == null || shareId == null) return;
+    _localScreenTrack = null;
+    _activeShareId = null;
+    track.stop();
+    await _localScreenStream?.dispose();
+    _localScreenStream = null;
+    await _closeTrack('screen-$shareId');
+    if (Platform.isAndroid) await _screenShareService.stop();
+  }
+
+  Future<void> _closeTrack(String trackName) async {
+    final guildId = _guildId;
+    final channelId = _channelId;
+    final cfSessionId = _cfSessionId;
+    if (guildId == null || channelId == null || cfSessionId == null) return;
+    try {
+      await api.cfCloseTracks(
+        guildId: guildId,
+        channelId: channelId,
+        cfSessionId: cfSessionId,
+        trackNames: [trackName],
+      );
+    } catch (_) {
+      // Best-effort — the local track is already stopped either way.
+    }
+  }
+
+  /// Publishes one already-captured local track under [trackName] — shared
+  /// by [connect] (audio), [publishLocalVideo] (camera), and
+  /// [startScreenShare] (screen).
+  Future<void> _publishTrack({
+    required MediaStreamTrack track,
+    required String trackName,
+  }) async {
+    final pc = _pc;
+    if (pc == null) return;
+    final transceiver = await pc.addTransceiver(
+      track: track,
+      init: RTCRtpTransceiverInit(direction: TransceiverDirection.SendOnly),
+    );
+    await _offerAnswerCycle((pc) async {
+      final mid = await _resolveMid(pc, transceiver);
+      return [
+        {'location': 'local', 'mid': mid, 'trackName': trackName},
+      ];
+    });
   }
 
   Future<void> subscribeToParticipant({
     required String userId,
     required String cfSessionId,
     required String trackName,
+  }) => _subscribeTrack(
+    userId: userId,
+    cfSessionId: cfSessionId,
+    trackName: trackName,
+    kind: TrackKind.audio,
+    mediaType: RTCRtpMediaType.RTCRtpMediaTypeAudio,
+  );
+
+  /// Subscribes to a remote participant's camera/screen track once a
+  /// `TrackPublished(kind: "video"|"screen")` event names it.
+  Future<void> subscribeToTrack({
+    required String userId,
+    required String cfSessionId,
+    required String trackName,
+    required TrackKind kind,
+  }) => _subscribeTrack(
+    userId: userId,
+    cfSessionId: cfSessionId,
+    trackName: trackName,
+    kind: kind,
+    mediaType: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+  );
+
+  Future<void> _subscribeTrack({
+    required String userId,
+    required String cfSessionId,
+    required String trackName,
+    required TrackKind kind,
+    required RTCRtpMediaType mediaType,
   }) async {
     final pc = _pc;
-    if (pc == null) return;
+    final key = '$userId|${kind.name}';
+    if (pc == null || !_subscribedKeys.add(key)) return;
 
     final transceiver = await pc.addTransceiver(
-      kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
+      kind: mediaType,
       init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
     );
 
@@ -135,7 +284,7 @@ class GuildVoiceWebRtcService {
             as String? ??
         await _resolveMid(pc, transceiver) ??
         '';
-    _midToUserId[mid] = userId;
+    _midOwners[mid] = (userId: userId, kind: kind);
     _processPendingTracks();
   }
 
@@ -171,9 +320,22 @@ class GuildVoiceWebRtcService {
     return original.mid;
   }
 
-  void unsubscribeParticipant(String userId) {
-    _remoteAudioTracks.remove(userId);
-    _midToUserId.removeWhere((mid, id) => id == userId);
+  void unsubscribeParticipant(String userId) =>
+      unsubscribeTrack(userId: userId, kind: TrackKind.audio);
+
+  void unsubscribeTrack({required String userId, required TrackKind kind}) {
+    switch (kind) {
+      case TrackKind.audio:
+        _remoteAudioTracks.remove(userId);
+      case TrackKind.video:
+        _remoteVideoTracks.remove(userId);
+      case TrackKind.screen:
+        _remoteScreenTracks.remove(userId);
+    }
+    _subscribedKeys.remove('$userId|${kind.name}');
+    _midOwners.removeWhere(
+      (mid, owner) => owner.userId == userId && owner.kind == kind,
+    );
   }
 
   void setMuted(bool isMuted) {
@@ -190,11 +352,25 @@ class GuildVoiceWebRtcService {
     }
   }
 
+  MediaStreamTrack? get localVideoTrack => _localVideoTrack;
+  MediaStreamTrack? get localScreenTrack => _localScreenTrack;
+  MediaStreamTrack? remoteVideoTrackFor(String userId) =>
+      _remoteVideoTracks[userId];
+  MediaStreamTrack? remoteScreenTrackFor(String userId) =>
+      _remoteScreenTracks[userId];
+
   Future<void> disconnect() async {
     _statsTimer?.cancel();
     _statsTimer = null;
+    if (_localScreenTrack != null && Platform.isAndroid) {
+      await _screenShareService.stop();
+    }
     _localAudioTrack?.stop();
+    _localVideoTrack?.stop();
+    _localScreenTrack?.stop();
     await _localStream?.dispose();
+    await _localVideoStream?.dispose();
+    await _localScreenStream?.dispose();
     await _pc?.close();
     _pc = null;
     _guildId = null;
@@ -202,9 +378,17 @@ class GuildVoiceWebRtcService {
     _cfSessionId = null;
     _localAudioTrack = null;
     _localStream = null;
-    _midToUserId.clear();
+    _localVideoTrack = null;
+    _localVideoStream = null;
+    _localScreenTrack = null;
+    _localScreenStream = null;
+    _activeShareId = null;
+    _midOwners.clear();
     _remoteAudioTracks.clear();
+    _remoteVideoTracks.clear();
+    _remoteScreenTracks.clear();
     _pendingTracks.clear();
+    _subscribedKeys.clear();
     _deafened = false;
     _negotiationChain = Future.value();
   }
@@ -279,7 +463,7 @@ class GuildVoiceWebRtcService {
     final remaining = <RTCTrackEvent>[];
     for (final event in _pendingTracks) {
       final mid = event.transceiver?.mid;
-      if (mid != null && _midToUserId.containsKey(mid)) {
+      if (mid != null && _midOwners.containsKey(mid)) {
         _routeTrack(mid, event);
       } else {
         remaining.add(event);
@@ -292,7 +476,7 @@ class GuildVoiceWebRtcService {
 
   void _handleRemoteTrack(RTCTrackEvent event) {
     final mid = event.transceiver?.mid;
-    if (mid == null || !_midToUserId.containsKey(mid)) {
+    if (mid == null || !_midOwners.containsKey(mid)) {
       _pendingTracks.add(event);
       return;
     }
@@ -300,9 +484,16 @@ class GuildVoiceWebRtcService {
   }
 
   void _routeTrack(String mid, RTCTrackEvent event) {
-    final userId = _midToUserId[mid]!;
+    final owner = _midOwners[mid]!;
     final track = event.track;
-    track.enabled = !_deafened;
-    _remoteAudioTracks[userId] = track;
+    switch (owner.kind) {
+      case TrackKind.audio:
+        track.enabled = !_deafened;
+        _remoteAudioTracks[owner.userId] = track;
+      case TrackKind.video:
+        _remoteVideoTracks[owner.userId] = track;
+      case TrackKind.screen:
+        _remoteScreenTracks[owner.userId] = track;
+    }
   }
 }

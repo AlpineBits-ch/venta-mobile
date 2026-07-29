@@ -54,10 +54,12 @@ class ConversationScreen extends StatelessWidget {
           conversationId: conversationId,
         ),
         myUserId: myUserId,
+        soundService: getIt(),
       ),
       child: ThreadView(
         title: _title(myUserId),
         myUserId: myUserId,
+        mentionableUserIds: otherMemberIds,
         actions: otherMemberIds.isEmpty
             ? null
             : [

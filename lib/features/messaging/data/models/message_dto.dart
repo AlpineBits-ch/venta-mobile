@@ -51,6 +51,9 @@ sealed class MessageDto with _$MessageDto {
     @Default(false) bool isFailed,
     String? inReplyTo,
     @Default(<String>[]) List<String> mentions,
+    @Default(<String>[]) List<String> roleMentions,
+    @Default(false) bool mentionsEveryone,
+    @Default(false) bool mentionsHere,
     @Default(<AttachmentDto>[]) List<AttachmentDto> attachments,
     @Default(<MessageReactionDto>[]) List<MessageReactionDto> reactions,
     @Default(MessageEncryptionState.plain)
@@ -59,6 +62,11 @@ sealed class MessageDto with _$MessageDto {
     @Default(MessageAuthorType.standard)
     @JsonKey(unknownEnumValue: MessageAuthorType.standard)
     MessageAuthorType authorIdType,
+
+    /// Picks the wording variant for `MessageType.system`/`guildMemberJoin`/
+    /// `guildMemberLeave` copy (server-assigned, matches Alpine's flavor-text
+    /// rotation) — null/out-of-range falls back to variant 0.
+    int? systemMessageVariant,
 
     /// Client-only: a synthetic placeholder for an in-flight/failed bot
     /// command invocation, never sent or received over the wire — see

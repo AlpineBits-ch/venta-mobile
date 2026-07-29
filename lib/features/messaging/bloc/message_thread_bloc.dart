@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/sound/sound_service.dart';
 import '../data/message_content_codec.dart';
 import '../data/message_repository.dart';
 import '../data/models/attachment_dto.dart';
@@ -25,12 +26,57 @@ class ThreadLoadMoreRequested extends ThreadEvent {
 }
 
 class ThreadMessageSubmitted extends ThreadEvent {
-  const ThreadMessageSubmitted(this.text, {this.attachments = const []});
+  const ThreadMessageSubmitted(
+    this.text, {
+    this.attachments = const [],
+    this.replyToId,
+    this.mentionedUserIds = const [],
+    this.mentionedRoleIds = const [],
+    this.mentionsEveryone = false,
+    this.mentionsHere = false,
+  });
   final String text;
   final List<AttachmentDto> attachments;
+  final String? replyToId;
+  final List<String> mentionedUserIds;
+  final List<String> mentionedRoleIds;
+  final bool mentionsEveryone;
+  final bool mentionsHere;
 
   @override
-  List<Object?> get props => [text, attachments];
+  List<Object?> get props => [
+    text,
+    attachments,
+    replyToId,
+    mentionedUserIds,
+    mentionedRoleIds,
+    mentionsEveryone,
+    mentionsHere,
+  ];
+}
+
+/// Edits an existing message's content — optimistic-first like reactions,
+/// rolled back to [previousText] if the HTTP call fails.
+class MessageEditRequested extends ThreadEvent {
+  const MessageEditRequested({
+    required this.messageId,
+    required this.newText,
+  });
+  final String messageId;
+  final String newText;
+
+  @override
+  List<Object?> get props => [messageId, newText];
+}
+
+/// Deletes a message — optimistic-first, reinserted at its original index
+/// if the HTTP call fails.
+class MessageDeleteRequested extends ThreadEvent {
+  const MessageDeleteRequested(this.messageId);
+  final String messageId;
+
+  @override
+  List<Object?> get props => [messageId];
 }
 
 class ThreadTypingNotified extends ThreadEvent {
@@ -216,11 +262,16 @@ class ThreadState extends Equatable {
 }
 
 class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
-  MessageThreadBloc({required this.repository, required this.myUserId})
-    : super(const ThreadState()) {
+  MessageThreadBloc({
+    required this.repository,
+    required this.myUserId,
+    required this.soundService,
+  }) : super(const ThreadState()) {
     on<ThreadOpened>(_onOpened);
     on<ThreadLoadMoreRequested>(_onLoadMoreRequested);
     on<ThreadMessageSubmitted>(_onMessageSubmitted);
+    on<MessageEditRequested>(_onMessageEditRequested);
+    on<MessageDeleteRequested>(_onMessageDeleteRequested);
     on<ThreadTypingNotified>(_onTypingNotified);
     on<ReactionToggled>(_onReactionToggled);
     on<ThreadBotPlaceholderAdded>(_onBotPlaceholderAdded);
@@ -273,6 +324,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
   final MessageRepository repository;
   final String myUserId;
+  final SoundService soundService;
   late final StreamSubscription<MessageRepositoryEvent> _repoSub;
   final Map<String, Timer> _typingTimers = {};
   int _tempIdCounter = 0;
@@ -338,6 +390,11 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       authorId: myUserId,
       encodedContent: MessageContentCodec.encode(text),
       attachments: event.attachments,
+      inReplyTo: event.replyToId,
+      mentions: event.mentionedUserIds,
+      roleMentions: event.mentionedRoleIds,
+      mentionsEveryone: event.mentionsEveryone,
+      mentionsHere: event.mentionsHere,
     );
     emit(
       state.copyWith(
@@ -350,6 +407,11 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       final sent = await repository.send(
         plaintextContent: text,
         attachments: event.attachments,
+        inReplyTo: event.replyToId,
+        mentions: event.mentionedUserIds,
+        roleMentions: event.mentionedRoleIds,
+        mentionsEveryone: event.mentionsEveryone,
+        mentionsHere: event.mentionsHere,
       );
       emit(
         state.copyWith(
@@ -443,6 +505,78 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           ),
         ),
       );
+    }
+  }
+
+  Future<void> _onMessageEditRequested(
+    MessageEditRequested event,
+    Emitter<ThreadState> emit,
+  ) async {
+    final previous = state.messages
+        .where((m) => m.id == event.messageId)
+        .firstOrNull;
+    if (previous == null) return;
+
+    emit(
+      state.copyWith(
+        messages: [
+          for (final m in state.messages)
+            if (m.id == event.messageId)
+              m.copyWith(content: MessageContentCodec.encode(event.newText))
+            else
+              m,
+        ],
+      ),
+    );
+
+    try {
+      final updated = await repository.editMessage(
+        event.messageId,
+        event.newText,
+      );
+      emit(
+        state.copyWith(
+          messages: [
+            for (final m in state.messages)
+              if (m.id == event.messageId) updated else m,
+          ],
+        ),
+      );
+    } catch (_) {
+      emit(
+        state.copyWith(
+          messages: [
+            for (final m in state.messages)
+              if (m.id == event.messageId) previous else m,
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _onMessageDeleteRequested(
+    MessageDeleteRequested event,
+    Emitter<ThreadState> emit,
+  ) async {
+    final index = state.messages.indexWhere((m) => m.id == event.messageId);
+    if (index == -1) return;
+    final removed = state.messages[index];
+
+    emit(
+      state.copyWith(
+        messages: [
+          for (final m in state.messages)
+            if (m.id != event.messageId) m,
+        ],
+      ),
+    );
+
+    try {
+      await repository.deleteMessage(event.messageId);
+    } catch (_) {
+      final restored = [...state.messages];
+      restored.insert(index.clamp(0, restored.length), removed);
+      emit(state.copyWith(messages: restored));
     }
   }
 
@@ -588,6 +722,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
     emit(state.copyWith(messages: [event.message, ...state.messages]));
     if (event.message.authorId != myUserId) {
+      unawaited(soundService.playNewMessage());
       unawaited(_markRead());
     }
   }

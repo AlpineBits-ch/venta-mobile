@@ -17,7 +17,10 @@ mixin _$MessageDto {
 
  String get id;/// Always base64(UTF-8) on the wire, even in Plain mode — see
 /// `MessageContentCodec`, the seam where MLS decrypt gets added later.
- String get content; String? get conversationId; String? get channelId; String get authorId; DateTime? get createdAt; bool get isPending; bool get isFailed; String? get inReplyTo; List<String> get mentions; List<AttachmentDto> get attachments; List<MessageReactionDto> get reactions; MessageEncryptionState get encryptionState; MessageType get type;@JsonKey(unknownEnumValue: MessageAuthorType.standard) MessageAuthorType get authorIdType;/// Client-only: a synthetic placeholder for an in-flight/failed bot
+ String get content; String? get conversationId; String? get channelId; String get authorId; DateTime? get createdAt; bool get isPending; bool get isFailed; String? get inReplyTo; List<String> get mentions; List<String> get roleMentions; bool get mentionsEveryone; bool get mentionsHere; List<AttachmentDto> get attachments; List<MessageReactionDto> get reactions; MessageEncryptionState get encryptionState; MessageType get type;@JsonKey(unknownEnumValue: MessageAuthorType.standard) MessageAuthorType get authorIdType;/// Picks the wording variant for `MessageType.system`/`guildMemberJoin`/
+/// `guildMemberLeave` copy (server-assigned, matches Alpine's flavor-text
+/// rotation) — null/out-of-range falls back to variant 0.
+ int? get systemMessageVariant;/// Client-only: a synthetic placeholder for an in-flight/failed bot
 /// command invocation, never sent or received over the wire — see
 /// `ThreadBotPlaceholderAdded` in `MessageThreadBloc`.
 @JsonKey(includeFromJson: false, includeToJson: false) bool get isBotCommandPlaceholder;
@@ -33,16 +36,16 @@ $MessageDtoCopyWith<MessageDto> get copyWith => _$MessageDtoCopyWithImpl<Message
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MessageDto&&(identical(other.id, id) || other.id == id)&&(identical(other.content, content) || other.content == content)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.authorId, authorId) || other.authorId == authorId)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.isPending, isPending) || other.isPending == isPending)&&(identical(other.isFailed, isFailed) || other.isFailed == isFailed)&&(identical(other.inReplyTo, inReplyTo) || other.inReplyTo == inReplyTo)&&const DeepCollectionEquality().equals(other.mentions, mentions)&&const DeepCollectionEquality().equals(other.attachments, attachments)&&const DeepCollectionEquality().equals(other.reactions, reactions)&&(identical(other.encryptionState, encryptionState) || other.encryptionState == encryptionState)&&(identical(other.type, type) || other.type == type)&&(identical(other.authorIdType, authorIdType) || other.authorIdType == authorIdType)&&(identical(other.isBotCommandPlaceholder, isBotCommandPlaceholder) || other.isBotCommandPlaceholder == isBotCommandPlaceholder));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MessageDto&&(identical(other.id, id) || other.id == id)&&(identical(other.content, content) || other.content == content)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.authorId, authorId) || other.authorId == authorId)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.isPending, isPending) || other.isPending == isPending)&&(identical(other.isFailed, isFailed) || other.isFailed == isFailed)&&(identical(other.inReplyTo, inReplyTo) || other.inReplyTo == inReplyTo)&&const DeepCollectionEquality().equals(other.mentions, mentions)&&const DeepCollectionEquality().equals(other.roleMentions, roleMentions)&&(identical(other.mentionsEveryone, mentionsEveryone) || other.mentionsEveryone == mentionsEveryone)&&(identical(other.mentionsHere, mentionsHere) || other.mentionsHere == mentionsHere)&&const DeepCollectionEquality().equals(other.attachments, attachments)&&const DeepCollectionEquality().equals(other.reactions, reactions)&&(identical(other.encryptionState, encryptionState) || other.encryptionState == encryptionState)&&(identical(other.type, type) || other.type == type)&&(identical(other.authorIdType, authorIdType) || other.authorIdType == authorIdType)&&(identical(other.systemMessageVariant, systemMessageVariant) || other.systemMessageVariant == systemMessageVariant)&&(identical(other.isBotCommandPlaceholder, isBotCommandPlaceholder) || other.isBotCommandPlaceholder == isBotCommandPlaceholder));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,content,conversationId,channelId,authorId,createdAt,isPending,isFailed,inReplyTo,const DeepCollectionEquality().hash(mentions),const DeepCollectionEquality().hash(attachments),const DeepCollectionEquality().hash(reactions),encryptionState,type,authorIdType,isBotCommandPlaceholder);
+int get hashCode => Object.hashAll([runtimeType,id,content,conversationId,channelId,authorId,createdAt,isPending,isFailed,inReplyTo,const DeepCollectionEquality().hash(mentions),const DeepCollectionEquality().hash(roleMentions),mentionsEveryone,mentionsHere,const DeepCollectionEquality().hash(attachments),const DeepCollectionEquality().hash(reactions),encryptionState,type,authorIdType,systemMessageVariant,isBotCommandPlaceholder]);
 
 @override
 String toString() {
-  return 'MessageDto(id: $id, content: $content, conversationId: $conversationId, channelId: $channelId, authorId: $authorId, createdAt: $createdAt, isPending: $isPending, isFailed: $isFailed, inReplyTo: $inReplyTo, mentions: $mentions, attachments: $attachments, reactions: $reactions, encryptionState: $encryptionState, type: $type, authorIdType: $authorIdType, isBotCommandPlaceholder: $isBotCommandPlaceholder)';
+  return 'MessageDto(id: $id, content: $content, conversationId: $conversationId, channelId: $channelId, authorId: $authorId, createdAt: $createdAt, isPending: $isPending, isFailed: $isFailed, inReplyTo: $inReplyTo, mentions: $mentions, roleMentions: $roleMentions, mentionsEveryone: $mentionsEveryone, mentionsHere: $mentionsHere, attachments: $attachments, reactions: $reactions, encryptionState: $encryptionState, type: $type, authorIdType: $authorIdType, systemMessageVariant: $systemMessageVariant, isBotCommandPlaceholder: $isBotCommandPlaceholder)';
 }
 
 
@@ -53,7 +56,7 @@ abstract mixin class $MessageDtoCopyWith<$Res>  {
   factory $MessageDtoCopyWith(MessageDto value, $Res Function(MessageDto) _then) = _$MessageDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String content, String? conversationId, String? channelId, String authorId, DateTime? createdAt, bool isPending, bool isFailed, String? inReplyTo, List<String> mentions, List<AttachmentDto> attachments, List<MessageReactionDto> reactions, MessageEncryptionState encryptionState, MessageType type,@JsonKey(unknownEnumValue: MessageAuthorType.standard) MessageAuthorType authorIdType,@JsonKey(includeFromJson: false, includeToJson: false) bool isBotCommandPlaceholder
+ String id, String content, String? conversationId, String? channelId, String authorId, DateTime? createdAt, bool isPending, bool isFailed, String? inReplyTo, List<String> mentions, List<String> roleMentions, bool mentionsEveryone, bool mentionsHere, List<AttachmentDto> attachments, List<MessageReactionDto> reactions, MessageEncryptionState encryptionState, MessageType type,@JsonKey(unknownEnumValue: MessageAuthorType.standard) MessageAuthorType authorIdType, int? systemMessageVariant,@JsonKey(includeFromJson: false, includeToJson: false) bool isBotCommandPlaceholder
 });
 
 
@@ -70,7 +73,7 @@ class _$MessageDtoCopyWithImpl<$Res>
 
 /// Create a copy of MessageDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? content = null,Object? conversationId = freezed,Object? channelId = freezed,Object? authorId = null,Object? createdAt = freezed,Object? isPending = null,Object? isFailed = null,Object? inReplyTo = freezed,Object? mentions = null,Object? attachments = null,Object? reactions = null,Object? encryptionState = null,Object? type = null,Object? authorIdType = null,Object? isBotCommandPlaceholder = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? content = null,Object? conversationId = freezed,Object? channelId = freezed,Object? authorId = null,Object? createdAt = freezed,Object? isPending = null,Object? isFailed = null,Object? inReplyTo = freezed,Object? mentions = null,Object? roleMentions = null,Object? mentionsEveryone = null,Object? mentionsHere = null,Object? attachments = null,Object? reactions = null,Object? encryptionState = null,Object? type = null,Object? authorIdType = null,Object? systemMessageVariant = freezed,Object? isBotCommandPlaceholder = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,content: null == content ? _self.content : content // ignore: cast_nullable_to_non_nullable
@@ -82,12 +85,16 @@ as DateTime?,isPending: null == isPending ? _self.isPending : isPending // ignor
 as bool,isFailed: null == isFailed ? _self.isFailed : isFailed // ignore: cast_nullable_to_non_nullable
 as bool,inReplyTo: freezed == inReplyTo ? _self.inReplyTo : inReplyTo // ignore: cast_nullable_to_non_nullable
 as String?,mentions: null == mentions ? _self.mentions : mentions // ignore: cast_nullable_to_non_nullable
-as List<String>,attachments: null == attachments ? _self.attachments : attachments // ignore: cast_nullable_to_non_nullable
+as List<String>,roleMentions: null == roleMentions ? _self.roleMentions : roleMentions // ignore: cast_nullable_to_non_nullable
+as List<String>,mentionsEveryone: null == mentionsEveryone ? _self.mentionsEveryone : mentionsEveryone // ignore: cast_nullable_to_non_nullable
+as bool,mentionsHere: null == mentionsHere ? _self.mentionsHere : mentionsHere // ignore: cast_nullable_to_non_nullable
+as bool,attachments: null == attachments ? _self.attachments : attachments // ignore: cast_nullable_to_non_nullable
 as List<AttachmentDto>,reactions: null == reactions ? _self.reactions : reactions // ignore: cast_nullable_to_non_nullable
 as List<MessageReactionDto>,encryptionState: null == encryptionState ? _self.encryptionState : encryptionState // ignore: cast_nullable_to_non_nullable
 as MessageEncryptionState,type: null == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
 as MessageType,authorIdType: null == authorIdType ? _self.authorIdType : authorIdType // ignore: cast_nullable_to_non_nullable
-as MessageAuthorType,isBotCommandPlaceholder: null == isBotCommandPlaceholder ? _self.isBotCommandPlaceholder : isBotCommandPlaceholder // ignore: cast_nullable_to_non_nullable
+as MessageAuthorType,systemMessageVariant: freezed == systemMessageVariant ? _self.systemMessageVariant : systemMessageVariant // ignore: cast_nullable_to_non_nullable
+as int?,isBotCommandPlaceholder: null == isBotCommandPlaceholder ? _self.isBotCommandPlaceholder : isBotCommandPlaceholder // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
 }
@@ -170,10 +177,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String content,  String? conversationId,  String? channelId,  String authorId,  DateTime? createdAt,  bool isPending,  bool isFailed,  String? inReplyTo,  List<String> mentions,  List<AttachmentDto> attachments,  List<MessageReactionDto> reactions,  MessageEncryptionState encryptionState,  MessageType type, @JsonKey(unknownEnumValue: MessageAuthorType.standard)  MessageAuthorType authorIdType, @JsonKey(includeFromJson: false, includeToJson: false)  bool isBotCommandPlaceholder)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String content,  String? conversationId,  String? channelId,  String authorId,  DateTime? createdAt,  bool isPending,  bool isFailed,  String? inReplyTo,  List<String> mentions,  List<String> roleMentions,  bool mentionsEveryone,  bool mentionsHere,  List<AttachmentDto> attachments,  List<MessageReactionDto> reactions,  MessageEncryptionState encryptionState,  MessageType type, @JsonKey(unknownEnumValue: MessageAuthorType.standard)  MessageAuthorType authorIdType,  int? systemMessageVariant, @JsonKey(includeFromJson: false, includeToJson: false)  bool isBotCommandPlaceholder)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _MessageDto() when $default != null:
-return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_that.authorId,_that.createdAt,_that.isPending,_that.isFailed,_that.inReplyTo,_that.mentions,_that.attachments,_that.reactions,_that.encryptionState,_that.type,_that.authorIdType,_that.isBotCommandPlaceholder);case _:
+return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_that.authorId,_that.createdAt,_that.isPending,_that.isFailed,_that.inReplyTo,_that.mentions,_that.roleMentions,_that.mentionsEveryone,_that.mentionsHere,_that.attachments,_that.reactions,_that.encryptionState,_that.type,_that.authorIdType,_that.systemMessageVariant,_that.isBotCommandPlaceholder);case _:
   return orElse();
 
 }
@@ -191,10 +198,10 @@ return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_tha
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String content,  String? conversationId,  String? channelId,  String authorId,  DateTime? createdAt,  bool isPending,  bool isFailed,  String? inReplyTo,  List<String> mentions,  List<AttachmentDto> attachments,  List<MessageReactionDto> reactions,  MessageEncryptionState encryptionState,  MessageType type, @JsonKey(unknownEnumValue: MessageAuthorType.standard)  MessageAuthorType authorIdType, @JsonKey(includeFromJson: false, includeToJson: false)  bool isBotCommandPlaceholder)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String content,  String? conversationId,  String? channelId,  String authorId,  DateTime? createdAt,  bool isPending,  bool isFailed,  String? inReplyTo,  List<String> mentions,  List<String> roleMentions,  bool mentionsEveryone,  bool mentionsHere,  List<AttachmentDto> attachments,  List<MessageReactionDto> reactions,  MessageEncryptionState encryptionState,  MessageType type, @JsonKey(unknownEnumValue: MessageAuthorType.standard)  MessageAuthorType authorIdType,  int? systemMessageVariant, @JsonKey(includeFromJson: false, includeToJson: false)  bool isBotCommandPlaceholder)  $default,) {final _that = this;
 switch (_that) {
 case _MessageDto():
-return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_that.authorId,_that.createdAt,_that.isPending,_that.isFailed,_that.inReplyTo,_that.mentions,_that.attachments,_that.reactions,_that.encryptionState,_that.type,_that.authorIdType,_that.isBotCommandPlaceholder);}
+return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_that.authorId,_that.createdAt,_that.isPending,_that.isFailed,_that.inReplyTo,_that.mentions,_that.roleMentions,_that.mentionsEveryone,_that.mentionsHere,_that.attachments,_that.reactions,_that.encryptionState,_that.type,_that.authorIdType,_that.systemMessageVariant,_that.isBotCommandPlaceholder);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -208,10 +215,10 @@ return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_tha
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String content,  String? conversationId,  String? channelId,  String authorId,  DateTime? createdAt,  bool isPending,  bool isFailed,  String? inReplyTo,  List<String> mentions,  List<AttachmentDto> attachments,  List<MessageReactionDto> reactions,  MessageEncryptionState encryptionState,  MessageType type, @JsonKey(unknownEnumValue: MessageAuthorType.standard)  MessageAuthorType authorIdType, @JsonKey(includeFromJson: false, includeToJson: false)  bool isBotCommandPlaceholder)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String content,  String? conversationId,  String? channelId,  String authorId,  DateTime? createdAt,  bool isPending,  bool isFailed,  String? inReplyTo,  List<String> mentions,  List<String> roleMentions,  bool mentionsEveryone,  bool mentionsHere,  List<AttachmentDto> attachments,  List<MessageReactionDto> reactions,  MessageEncryptionState encryptionState,  MessageType type, @JsonKey(unknownEnumValue: MessageAuthorType.standard)  MessageAuthorType authorIdType,  int? systemMessageVariant, @JsonKey(includeFromJson: false, includeToJson: false)  bool isBotCommandPlaceholder)?  $default,) {final _that = this;
 switch (_that) {
 case _MessageDto() when $default != null:
-return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_that.authorId,_that.createdAt,_that.isPending,_that.isFailed,_that.inReplyTo,_that.mentions,_that.attachments,_that.reactions,_that.encryptionState,_that.type,_that.authorIdType,_that.isBotCommandPlaceholder);case _:
+return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_that.authorId,_that.createdAt,_that.isPending,_that.isFailed,_that.inReplyTo,_that.mentions,_that.roleMentions,_that.mentionsEveryone,_that.mentionsHere,_that.attachments,_that.reactions,_that.encryptionState,_that.type,_that.authorIdType,_that.systemMessageVariant,_that.isBotCommandPlaceholder);case _:
   return null;
 
 }
@@ -223,7 +230,7 @@ return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_tha
 @JsonSerializable()
 
 class _MessageDto implements MessageDto {
-  const _MessageDto({required this.id, required this.content, this.conversationId, this.channelId, required this.authorId, this.createdAt, this.isPending = false, this.isFailed = false, this.inReplyTo, final  List<String> mentions = const <String>[], final  List<AttachmentDto> attachments = const <AttachmentDto>[], final  List<MessageReactionDto> reactions = const <MessageReactionDto>[], this.encryptionState = MessageEncryptionState.plain, this.type = MessageType.message, @JsonKey(unknownEnumValue: MessageAuthorType.standard) this.authorIdType = MessageAuthorType.standard, @JsonKey(includeFromJson: false, includeToJson: false) this.isBotCommandPlaceholder = false}): _mentions = mentions,_attachments = attachments,_reactions = reactions;
+  const _MessageDto({required this.id, required this.content, this.conversationId, this.channelId, required this.authorId, this.createdAt, this.isPending = false, this.isFailed = false, this.inReplyTo, final  List<String> mentions = const <String>[], final  List<String> roleMentions = const <String>[], this.mentionsEveryone = false, this.mentionsHere = false, final  List<AttachmentDto> attachments = const <AttachmentDto>[], final  List<MessageReactionDto> reactions = const <MessageReactionDto>[], this.encryptionState = MessageEncryptionState.plain, this.type = MessageType.message, @JsonKey(unknownEnumValue: MessageAuthorType.standard) this.authorIdType = MessageAuthorType.standard, this.systemMessageVariant, @JsonKey(includeFromJson: false, includeToJson: false) this.isBotCommandPlaceholder = false}): _mentions = mentions,_roleMentions = roleMentions,_attachments = attachments,_reactions = reactions;
   factory _MessageDto.fromJson(Map<String, dynamic> json) => _$MessageDtoFromJson(json);
 
 @override final  String id;
@@ -244,6 +251,15 @@ class _MessageDto implements MessageDto {
   return EqualUnmodifiableListView(_mentions);
 }
 
+ final  List<String> _roleMentions;
+@override@JsonKey() List<String> get roleMentions {
+  if (_roleMentions is EqualUnmodifiableListView) return _roleMentions;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_roleMentions);
+}
+
+@override@JsonKey() final  bool mentionsEveryone;
+@override@JsonKey() final  bool mentionsHere;
  final  List<AttachmentDto> _attachments;
 @override@JsonKey() List<AttachmentDto> get attachments {
   if (_attachments is EqualUnmodifiableListView) return _attachments;
@@ -261,6 +277,10 @@ class _MessageDto implements MessageDto {
 @override@JsonKey() final  MessageEncryptionState encryptionState;
 @override@JsonKey() final  MessageType type;
 @override@JsonKey(unknownEnumValue: MessageAuthorType.standard) final  MessageAuthorType authorIdType;
+/// Picks the wording variant for `MessageType.system`/`guildMemberJoin`/
+/// `guildMemberLeave` copy (server-assigned, matches Alpine's flavor-text
+/// rotation) — null/out-of-range falls back to variant 0.
+@override final  int? systemMessageVariant;
 /// Client-only: a synthetic placeholder for an in-flight/failed bot
 /// command invocation, never sent or received over the wire — see
 /// `ThreadBotPlaceholderAdded` in `MessageThreadBloc`.
@@ -279,16 +299,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MessageDto&&(identical(other.id, id) || other.id == id)&&(identical(other.content, content) || other.content == content)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.authorId, authorId) || other.authorId == authorId)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.isPending, isPending) || other.isPending == isPending)&&(identical(other.isFailed, isFailed) || other.isFailed == isFailed)&&(identical(other.inReplyTo, inReplyTo) || other.inReplyTo == inReplyTo)&&const DeepCollectionEquality().equals(other._mentions, _mentions)&&const DeepCollectionEquality().equals(other._attachments, _attachments)&&const DeepCollectionEquality().equals(other._reactions, _reactions)&&(identical(other.encryptionState, encryptionState) || other.encryptionState == encryptionState)&&(identical(other.type, type) || other.type == type)&&(identical(other.authorIdType, authorIdType) || other.authorIdType == authorIdType)&&(identical(other.isBotCommandPlaceholder, isBotCommandPlaceholder) || other.isBotCommandPlaceholder == isBotCommandPlaceholder));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MessageDto&&(identical(other.id, id) || other.id == id)&&(identical(other.content, content) || other.content == content)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.authorId, authorId) || other.authorId == authorId)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.isPending, isPending) || other.isPending == isPending)&&(identical(other.isFailed, isFailed) || other.isFailed == isFailed)&&(identical(other.inReplyTo, inReplyTo) || other.inReplyTo == inReplyTo)&&const DeepCollectionEquality().equals(other._mentions, _mentions)&&const DeepCollectionEquality().equals(other._roleMentions, _roleMentions)&&(identical(other.mentionsEveryone, mentionsEveryone) || other.mentionsEveryone == mentionsEveryone)&&(identical(other.mentionsHere, mentionsHere) || other.mentionsHere == mentionsHere)&&const DeepCollectionEquality().equals(other._attachments, _attachments)&&const DeepCollectionEquality().equals(other._reactions, _reactions)&&(identical(other.encryptionState, encryptionState) || other.encryptionState == encryptionState)&&(identical(other.type, type) || other.type == type)&&(identical(other.authorIdType, authorIdType) || other.authorIdType == authorIdType)&&(identical(other.systemMessageVariant, systemMessageVariant) || other.systemMessageVariant == systemMessageVariant)&&(identical(other.isBotCommandPlaceholder, isBotCommandPlaceholder) || other.isBotCommandPlaceholder == isBotCommandPlaceholder));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,content,conversationId,channelId,authorId,createdAt,isPending,isFailed,inReplyTo,const DeepCollectionEquality().hash(_mentions),const DeepCollectionEquality().hash(_attachments),const DeepCollectionEquality().hash(_reactions),encryptionState,type,authorIdType,isBotCommandPlaceholder);
+int get hashCode => Object.hashAll([runtimeType,id,content,conversationId,channelId,authorId,createdAt,isPending,isFailed,inReplyTo,const DeepCollectionEquality().hash(_mentions),const DeepCollectionEquality().hash(_roleMentions),mentionsEveryone,mentionsHere,const DeepCollectionEquality().hash(_attachments),const DeepCollectionEquality().hash(_reactions),encryptionState,type,authorIdType,systemMessageVariant,isBotCommandPlaceholder]);
 
 @override
 String toString() {
-  return 'MessageDto(id: $id, content: $content, conversationId: $conversationId, channelId: $channelId, authorId: $authorId, createdAt: $createdAt, isPending: $isPending, isFailed: $isFailed, inReplyTo: $inReplyTo, mentions: $mentions, attachments: $attachments, reactions: $reactions, encryptionState: $encryptionState, type: $type, authorIdType: $authorIdType, isBotCommandPlaceholder: $isBotCommandPlaceholder)';
+  return 'MessageDto(id: $id, content: $content, conversationId: $conversationId, channelId: $channelId, authorId: $authorId, createdAt: $createdAt, isPending: $isPending, isFailed: $isFailed, inReplyTo: $inReplyTo, mentions: $mentions, roleMentions: $roleMentions, mentionsEveryone: $mentionsEveryone, mentionsHere: $mentionsHere, attachments: $attachments, reactions: $reactions, encryptionState: $encryptionState, type: $type, authorIdType: $authorIdType, systemMessageVariant: $systemMessageVariant, isBotCommandPlaceholder: $isBotCommandPlaceholder)';
 }
 
 
@@ -299,7 +319,7 @@ abstract mixin class _$MessageDtoCopyWith<$Res> implements $MessageDtoCopyWith<$
   factory _$MessageDtoCopyWith(_MessageDto value, $Res Function(_MessageDto) _then) = __$MessageDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String content, String? conversationId, String? channelId, String authorId, DateTime? createdAt, bool isPending, bool isFailed, String? inReplyTo, List<String> mentions, List<AttachmentDto> attachments, List<MessageReactionDto> reactions, MessageEncryptionState encryptionState, MessageType type,@JsonKey(unknownEnumValue: MessageAuthorType.standard) MessageAuthorType authorIdType,@JsonKey(includeFromJson: false, includeToJson: false) bool isBotCommandPlaceholder
+ String id, String content, String? conversationId, String? channelId, String authorId, DateTime? createdAt, bool isPending, bool isFailed, String? inReplyTo, List<String> mentions, List<String> roleMentions, bool mentionsEveryone, bool mentionsHere, List<AttachmentDto> attachments, List<MessageReactionDto> reactions, MessageEncryptionState encryptionState, MessageType type,@JsonKey(unknownEnumValue: MessageAuthorType.standard) MessageAuthorType authorIdType, int? systemMessageVariant,@JsonKey(includeFromJson: false, includeToJson: false) bool isBotCommandPlaceholder
 });
 
 
@@ -316,7 +336,7 @@ class __$MessageDtoCopyWithImpl<$Res>
 
 /// Create a copy of MessageDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? content = null,Object? conversationId = freezed,Object? channelId = freezed,Object? authorId = null,Object? createdAt = freezed,Object? isPending = null,Object? isFailed = null,Object? inReplyTo = freezed,Object? mentions = null,Object? attachments = null,Object? reactions = null,Object? encryptionState = null,Object? type = null,Object? authorIdType = null,Object? isBotCommandPlaceholder = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? content = null,Object? conversationId = freezed,Object? channelId = freezed,Object? authorId = null,Object? createdAt = freezed,Object? isPending = null,Object? isFailed = null,Object? inReplyTo = freezed,Object? mentions = null,Object? roleMentions = null,Object? mentionsEveryone = null,Object? mentionsHere = null,Object? attachments = null,Object? reactions = null,Object? encryptionState = null,Object? type = null,Object? authorIdType = null,Object? systemMessageVariant = freezed,Object? isBotCommandPlaceholder = null,}) {
   return _then(_MessageDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,content: null == content ? _self.content : content // ignore: cast_nullable_to_non_nullable
@@ -328,12 +348,16 @@ as DateTime?,isPending: null == isPending ? _self.isPending : isPending // ignor
 as bool,isFailed: null == isFailed ? _self.isFailed : isFailed // ignore: cast_nullable_to_non_nullable
 as bool,inReplyTo: freezed == inReplyTo ? _self.inReplyTo : inReplyTo // ignore: cast_nullable_to_non_nullable
 as String?,mentions: null == mentions ? _self._mentions : mentions // ignore: cast_nullable_to_non_nullable
-as List<String>,attachments: null == attachments ? _self._attachments : attachments // ignore: cast_nullable_to_non_nullable
+as List<String>,roleMentions: null == roleMentions ? _self._roleMentions : roleMentions // ignore: cast_nullable_to_non_nullable
+as List<String>,mentionsEveryone: null == mentionsEveryone ? _self.mentionsEveryone : mentionsEveryone // ignore: cast_nullable_to_non_nullable
+as bool,mentionsHere: null == mentionsHere ? _self.mentionsHere : mentionsHere // ignore: cast_nullable_to_non_nullable
+as bool,attachments: null == attachments ? _self._attachments : attachments // ignore: cast_nullable_to_non_nullable
 as List<AttachmentDto>,reactions: null == reactions ? _self._reactions : reactions // ignore: cast_nullable_to_non_nullable
 as List<MessageReactionDto>,encryptionState: null == encryptionState ? _self.encryptionState : encryptionState // ignore: cast_nullable_to_non_nullable
 as MessageEncryptionState,type: null == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
 as MessageType,authorIdType: null == authorIdType ? _self.authorIdType : authorIdType // ignore: cast_nullable_to_non_nullable
-as MessageAuthorType,isBotCommandPlaceholder: null == isBotCommandPlaceholder ? _self.isBotCommandPlaceholder : isBotCommandPlaceholder // ignore: cast_nullable_to_non_nullable
+as MessageAuthorType,systemMessageVariant: freezed == systemMessageVariant ? _self.systemMessageVariant : systemMessageVariant // ignore: cast_nullable_to_non_nullable
+as int?,isBotCommandPlaceholder: null == isBotCommandPlaceholder ? _self.isBotCommandPlaceholder : isBotCommandPlaceholder // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
 }

@@ -13,6 +13,7 @@ import '../../features/conversations/presentation/screens/home_screen.dart';
 import '../../features/friends/bloc/friends_bloc.dart';
 import '../../features/friends/presentation/screens/friends_screen.dart';
 import '../../features/guilds/presentation/screens/channel_screen.dart';
+import '../../features/guilds/presentation/screens/channel_settings_screen.dart';
 import '../../features/guilds/presentation/screens/guild_detail_screen.dart';
 import '../../features/guilds/presentation/screens/guild_members_screen.dart';
 import '../../features/guilds/presentation/screens/guild_settings/guild_settings_screen.dart';
@@ -137,6 +138,13 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       GoRoute(
         path: RoutePaths.serverChannel,
         builder: (context, state) => ChannelScreen(
+          guildId: state.pathParameters['guildId']!,
+          channelId: state.pathParameters['channelId']!,
+        ),
+      ),
+      GoRoute(
+        path: RoutePaths.serverChannelSettings,
+        builder: (context, state) => ChannelSettingsScreen(
           guildId: state.pathParameters['guildId']!,
           channelId: state.pathParameters['channelId']!,
         ),

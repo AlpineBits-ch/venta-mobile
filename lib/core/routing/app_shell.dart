@@ -16,6 +16,7 @@ import '../di/injector.dart';
 import '../theme/avatar_palette.dart';
 import '../theme/status_colors_extension.dart';
 import '../theme/widget_styles.dart';
+import '../widgets/connection_status_banner.dart';
 import '../widgets/server_rail_icon.dart';
 import 'route_paths.dart';
 
@@ -215,6 +216,7 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       body: Column(
         children: [
+          const ConnectionStatusBanner(),
           Expanded(
             child: _buildRailAndContent(theme, onHome, currentGuildId, profile),
           ),

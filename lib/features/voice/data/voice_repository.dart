@@ -85,6 +85,54 @@ class CallMuteChanged extends VoiceRepositoryEvent {
   final bool isMuted;
 }
 
+class CallCameraChanged extends VoiceRepositoryEvent {
+  const CallCameraChanged({required this.userId, required this.isCameraOn});
+  final String userId;
+  final bool isCameraOn;
+}
+
+/// A remote participant published a new track. `kind` is video/screen/
+/// screenAudio — mirrors `guild.voice.TrackPublished` (see
+/// `GuildVoiceRepository`'s `VoiceTrackPublished`).
+class CallTrackPublished extends VoiceRepositoryEvent {
+  const CallTrackPublished({
+    required this.userId,
+    required this.cfSessionId,
+    required this.trackName,
+    required this.kind,
+    this.shareId,
+  });
+  final String userId;
+  final String cfSessionId;
+  final String trackName;
+  final String kind;
+  final String? shareId;
+}
+
+class CallTrackClosed extends VoiceRepositoryEvent {
+  const CallTrackClosed({required this.userId, required this.trackName});
+  final String userId;
+  final String trackName;
+}
+
+class CallScreenShareStarted extends VoiceRepositoryEvent {
+  const CallScreenShareStarted({
+    required this.userId,
+    required this.shareId,
+    required this.trackName,
+  });
+  final String userId;
+  final String shareId;
+  final String trackName;
+}
+
+/// Client-side is a no-op beyond clearing the streaming badge — the actual
+/// track teardown rides on [CallTrackClosed], same as guild voice.
+class CallScreenShareStopped extends VoiceRepositoryEvent {
+  const CallScreenShareStopped({required this.shareId});
+  final String shareId;
+}
+
 /// [reason] is the backend's `CallEndedReason` — one of `Declined`,
 /// `UserEnded`, `AllParticipantsLeft`, `AloneTimeout` — used to pick UI copy.
 /// May be `null` for events from before this field existed.
@@ -171,6 +219,42 @@ class VoiceRepository {
             deadline: DateTime.parse(payload['deadline'] as String),
           ),
         );
+      case 'call.CameraChanged':
+        _eventsController.add(
+          CallCameraChanged(
+            userId: payload['userId'] as String,
+            isCameraOn: payload['isCameraOn'] as bool,
+          ),
+        );
+      case 'call.TrackPublished':
+        _eventsController.add(
+          CallTrackPublished(
+            userId: payload['userId'] as String,
+            cfSessionId: payload['cfSessionId'] as String,
+            trackName: payload['trackName'] as String,
+            kind: payload['kind'] as String,
+            shareId: payload['shareId'] as String?,
+          ),
+        );
+      case 'call.TrackClosed':
+        _eventsController.add(
+          CallTrackClosed(
+            userId: payload['userId'] as String,
+            trackName: payload['trackName'] as String,
+          ),
+        );
+      case 'call.ScreenShareStarted':
+        _eventsController.add(
+          CallScreenShareStarted(
+            userId: payload['userId'] as String,
+            shareId: payload['shareId'] as String,
+            trackName: payload['trackName'] as String,
+          ),
+        );
+      case 'call.ScreenShareStopped':
+        _eventsController.add(
+          CallScreenShareStopped(shareId: payload['shareId'] as String),
+        );
     }
   }
 
@@ -206,6 +290,37 @@ class VoiceRepository {
     'call.MuteChanged',
     args: [
       {'callId': callId, 'isMuted': isMuted},
+    ],
+  );
+
+  Future<void> invokeCameraChanged({
+    required String callId,
+    required bool isCameraOn,
+  }) => _realtimeService.invoke(
+    'call.CameraChanged',
+    args: [
+      {'callId': callId, 'isCameraOn': isCameraOn},
+    ],
+  );
+
+  Future<void> invokeScreenShareStarted({
+    required String callId,
+    required String shareId,
+    required String trackName,
+  }) => _realtimeService.invoke(
+    'call.ScreenShareStarted',
+    args: [
+      {'callId': callId, 'shareId': shareId, 'trackName': trackName},
+    ],
+  );
+
+  Future<void> invokeScreenShareStopped({
+    required String callId,
+    required String shareId,
+  }) => _realtimeService.invoke(
+    'call.ScreenShareStopped',
+    args: [
+      {'callId': callId, 'shareId': shareId},
     ],
   );
 

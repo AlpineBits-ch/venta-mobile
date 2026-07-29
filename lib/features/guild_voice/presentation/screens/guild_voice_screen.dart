@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -7,6 +9,9 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/call_action_button.dart';
 import '../../../../core/widgets/call_participant_tile.dart';
 import '../../../../core/widgets/elapsed_time_label.dart';
+import '../../../../core/widgets/screen_share_view.dart';
+import '../../../../core/widgets/video_participant_tile.dart';
+import '../../../auth/data/auth_repository.dart';
 import '../../bloc/guild_voice_cubit.dart';
 
 /// Full-screen "in-call" view for the currently joined guild voice channel.
@@ -43,6 +48,7 @@ class GuildVoiceScreen extends StatelessWidget {
             if (!state.isInVoice || state.channelId == null) {
               return const SizedBox.shrink();
             }
+            final myUserId = getIt<AuthRepository>().currentUserId ?? '';
             final participants = state.rosterFor(state.channelId!);
             return Padding(
               padding: const EdgeInsets.all(AppSpacing.l),
@@ -64,6 +70,19 @@ class GuildVoiceScreen extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: AppSpacing.xl),
+                  for (final sharer in participants.where((p) => p.isStreaming))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.l),
+                      child: ScreenShareView(
+                        userId: sharer.userId,
+                        isSelf: sharer.userId == myUserId,
+                        track: sharer.userId == myUserId
+                            ? getIt<GuildVoiceCubit>().localScreenTrack
+                            : getIt<GuildVoiceCubit>().remoteScreenTrackFor(
+                                sharer.userId,
+                              ),
+                      ),
+                    ),
                   Expanded(
                     child: state.phase == GuildVoicePhase.connecting
                         ? const Center(
@@ -81,10 +100,25 @@ class GuildVoiceScreen extends StatelessWidget {
                               alignment: WrapAlignment.center,
                               children: [
                                 for (final participant in participants)
-                                  CallParticipantTile(
-                                    userId: participant.userId,
-                                    isMuted: participant.isMuted,
-                                  ),
+                                  if (participant.userId == myUserId &&
+                                      participant.hasCamera)
+                                    VideoParticipantTile(
+                                      track: getIt<GuildVoiceCubit>()
+                                          .localVideoTrack,
+                                      mirror: true,
+                                    )
+                                  else if (participant.hasCamera)
+                                    VideoParticipantTile(
+                                      track: getIt<GuildVoiceCubit>()
+                                          .remoteVideoTrackFor(
+                                            participant.userId,
+                                          ),
+                                    )
+                                  else
+                                    CallParticipantTile(
+                                      userId: participant.userId,
+                                      isMuted: participant.isMuted,
+                                    ),
                               ],
                             ),
                           ),
@@ -127,6 +161,34 @@ class GuildVoiceScreen extends StatelessWidget {
                             : Colors.black,
                         onTap: () => getIt<GuildVoiceCubit>().toggleSpeaker(),
                       ),
+                      CallActionButton(
+                        icon: getIt<GuildVoiceCubit>().isCameraOn
+                            ? Icons.videocam
+                            : Icons.videocam_off,
+                        label: 'Camera',
+                        background: getIt<GuildVoiceCubit>().isCameraOn
+                            ? Colors.white
+                            : Colors.white24,
+                        iconColor: getIt<GuildVoiceCubit>().isCameraOn
+                            ? Colors.black
+                            : Colors.white,
+                        onTap: () => getIt<GuildVoiceCubit>().toggleCamera(),
+                      ),
+                      if (Platform.isAndroid)
+                        CallActionButton(
+                          icon: getIt<GuildVoiceCubit>().isScreenSharing
+                              ? Icons.stop_screen_share
+                              : Icons.screen_share,
+                          label: 'Share',
+                          background: getIt<GuildVoiceCubit>().isScreenSharing
+                              ? Colors.white
+                              : Colors.white24,
+                          iconColor: getIt<GuildVoiceCubit>().isScreenSharing
+                              ? Colors.black
+                              : Colors.white,
+                          onTap: () =>
+                              getIt<GuildVoiceCubit>().toggleScreenShare(),
+                        ),
                       CallActionButton(
                         icon: Icons.call_end,
                         label: 'Leave',

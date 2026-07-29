@@ -112,6 +112,11 @@ class MessageRepository {
               inReplyTo: payload['inReplyTo'] as String?,
               mentions:
                   (payload['mentions'] as List?)?.cast<String>() ?? const [],
+              roleMentions:
+                  (payload['roleMentions'] as List?)?.cast<String>() ??
+                  const [],
+              mentionsEveryone: payload['mentionsEveryone'] as bool? ?? false,
+              mentionsHere: payload['mentionsHere'] as bool? ?? false,
               attachments:
                   (payload['attachments'] as List?)
                       ?.map(
@@ -173,6 +178,10 @@ class MessageRepository {
     required String plaintextContent,
     String? inReplyTo,
     List<AttachmentDto> attachments = const [],
+    List<String> mentions = const [],
+    List<String> roleMentions = const [],
+    bool mentionsEveryone = false,
+    bool mentionsHere = false,
   }) {
     return api.create(
       content: plaintextContent,
@@ -180,6 +189,10 @@ class MessageRepository {
       channelId: channelId,
       inReplyTo: inReplyTo,
       attachments: attachments.map((a) => a.id).toList(),
+      mentions: mentions,
+      roleMentions: roleMentions,
+      mentionsEveryone: mentionsEveryone,
+      mentionsHere: mentionsHere,
     );
   }
 
@@ -203,6 +216,11 @@ class MessageRepository {
     required String authorId,
     required String encodedContent,
     List<AttachmentDto> attachments = const [],
+    String? inReplyTo,
+    List<String> mentions = const [],
+    List<String> roleMentions = const [],
+    bool mentionsEveryone = false,
+    bool mentionsHere = false,
   }) {
     return MessageDto(
       id: id,
@@ -213,8 +231,31 @@ class MessageRepository {
       createdAt: DateTime.now(),
       isPending: true,
       attachments: attachments,
+      inReplyTo: inReplyTo,
+      mentions: mentions,
+      roleMentions: roleMentions,
+      mentionsEveryone: mentionsEveryone,
+      mentionsHere: mentionsHere,
     );
   }
+
+  Future<List<MessageDto>> search(String query) => isChannel
+      ? api.searchChannel(_contextId, query)
+      : api.searchConversation(_contextId, query);
+
+  Future<MessageDto> editMessage(String messageId, String plaintextContent) =>
+      api.update(messageId: messageId, content: plaintextContent);
+
+  Future<void> deleteMessage(String messageId) => api.delete(messageId);
+
+  /// Used to resolve a reply reference that's scrolled out of the currently
+  /// loaded page — mirrors Alpine's `MessageStore.getOrFetchMessage`.
+  Future<MessageDto> getMessageById(String messageId) => isChannel
+      ? api.getChannelMessage(channelId: _contextId, messageId: messageId)
+      : api.getConversationMessage(
+          conversationId: _contextId,
+          messageId: messageId,
+        );
 
   Future<void> addReaction(String messageId, String emoji) => api.addReaction(
     messageId: messageId,

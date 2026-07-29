@@ -11,6 +11,7 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../bloc/conversation_list_bloc.dart';
 import '../../data/models/conversation_dto.dart';
+import '../widgets/new_conversation_dialog.dart';
 
 /// The default landing surface (Discord mobile's "Home" tab) — rendered as
 /// the shell's content pane, next to the always-visible server rail
@@ -36,10 +37,7 @@ class _HomeView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})],
-      ),
+      appBar: AppBar(title: const Text('Home')),
       body: BlocBuilder<ConversationListBloc, ConversationListState>(
         builder: (context, state) {
           return AnimatedSwitcher(
@@ -104,7 +102,7 @@ class _HomeView extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push(RoutePaths.homeFriends),
+        onPressed: () => showNewConversationDialog(context),
         child: const Icon(Icons.edit_square),
       ),
     );

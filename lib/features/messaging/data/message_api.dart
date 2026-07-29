@@ -15,6 +15,10 @@ class MessageApi {
     String? channelId,
     String? inReplyTo,
     List<String> attachments = const [],
+    List<String> mentions = const [],
+    List<String> roleMentions = const [],
+    bool mentionsEveryone = false,
+    bool mentionsHere = false,
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       client.url('/api/v1/messaging/messaging'),
@@ -24,7 +28,10 @@ class MessageApi {
         'channelId': channelId,
         'attachments': attachments,
         'inReplyTo': inReplyTo,
-        'mentions': <String>[],
+        'mentions': mentions,
+        'roleMentions': roleMentions,
+        'mentionsEveryone': mentionsEveryone,
+        'mentionsHere': mentionsHere,
         'encryptionState': 'Plain',
       },
     );
@@ -76,6 +83,72 @@ class MessageApi {
       }
       await Future<void>.delayed(const Duration(seconds: 2));
     }
+  }
+
+  Future<MessageDto> update({
+    required String messageId,
+    required String content,
+  }) async {
+    final response = await client.dio.put<Map<String, dynamic>>(
+      client.url('/api/v1/messaging/messaging/$messageId'),
+      data: {'content': content},
+    );
+    return MessageDto.fromJson(response.data!);
+  }
+
+  Future<void> delete(String messageId) {
+    return client.dio.delete<void>(
+      client.url('/api/v1/messaging/messaging/$messageId'),
+    );
+  }
+
+  Future<List<MessageDto>> searchConversation(
+    String conversationId,
+    String query,
+  ) async {
+    final response = await client.dio.get<List<dynamic>>(
+      client.url(
+        '/api/v1/messaging/messaging/conversations/$conversationId/messages/search?q=${Uri.encodeQueryComponent(query)}',
+      ),
+    );
+    return response.data!
+        .map((json) => MessageDto.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<MessageDto>> searchChannel(String channelId, String query) async {
+    final response = await client.dio.get<List<dynamic>>(
+      client.url(
+        '/api/v1/messaging/messaging/channels/$channelId/messages/search?q=${Uri.encodeQueryComponent(query)}',
+      ),
+    );
+    return response.data!
+        .map((json) => MessageDto.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<MessageDto> getConversationMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      client.url(
+        '/api/v1/messaging/messaging/conversations/$conversationId/messages/$messageId',
+      ),
+    );
+    return MessageDto.fromJson(response.data!);
+  }
+
+  Future<MessageDto> getChannelMessage({
+    required String channelId,
+    required String messageId,
+  }) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      client.url(
+        '/api/v1/messaging/messaging/channels/$channelId/messages/$messageId',
+      ),
+    );
+    return MessageDto.fromJson(response.data!);
   }
 
   String downloadUrl(String attachmentId) =>

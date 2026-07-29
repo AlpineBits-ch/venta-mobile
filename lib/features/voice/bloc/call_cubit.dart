@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
 
 import '../../../core/realtime/realtime_transport.dart';
+import '../../../core/sound/sound_service.dart';
+import '../../../core/webrtc/track_kind.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/models/call_dto.dart';
 import '../data/voice_repository.dart';
@@ -12,16 +15,33 @@ import '../webrtc/call_webrtc_service.dart';
 enum CallPhase { idle, incoming, connecting, active }
 
 class CallParticipantState extends Equatable {
-  const CallParticipantState({required this.userId, this.isMuted = false});
+  const CallParticipantState({
+    required this.userId,
+    this.isMuted = false,
+    this.isStreaming = false,
+    this.hasCamera = false,
+  });
 
   final String userId;
   final bool isMuted;
 
-  CallParticipantState copyWith({bool? isMuted}) =>
-      CallParticipantState(userId: userId, isMuted: isMuted ?? this.isMuted);
+  /// Screen sharing.
+  final bool isStreaming;
+  final bool hasCamera;
+
+  CallParticipantState copyWith({
+    bool? isMuted,
+    bool? isStreaming,
+    bool? hasCamera,
+  }) => CallParticipantState(
+    userId: userId,
+    isMuted: isMuted ?? this.isMuted,
+    isStreaming: isStreaming ?? this.isStreaming,
+    hasCamera: hasCamera ?? this.hasCamera,
+  );
 
   @override
-  List<Object?> get props => [userId, isMuted];
+  List<Object?> get props => [userId, isMuted, isStreaming, hasCamera];
 }
 
 class CallState extends Equatable {
@@ -36,6 +56,7 @@ class CallState extends Equatable {
     this.errorMessage,
     this.disconnectNotice,
     this.aloneDeadline,
+    this.videoRevision = 0,
   });
 
   final CallPhase phase;
@@ -65,6 +86,13 @@ class CallState extends Equatable {
   /// nobody rejoins. Cleared once another participant is observed.
   final DateTime? aloneDeadline;
 
+  /// Bumped on every local/remote camera or screen-share track add/remove —
+  /// `MediaStreamTrack`s themselves can't live in this `Equatable` state (not
+  /// comparable/immutable-safe), so `VideoParticipantTile`/`ScreenShareView`
+  /// instead pull the current track imperatively from the webrtc service and
+  /// rely on this counter changing to know when to re-pull and rebuild.
+  final int videoRevision;
+
   /// [errorMessage]/[disconnectNotice] are always set as given (including
   /// `null`), never falling back to the current value — every emitting call
   /// site recomputes them, and `null` there means "nothing to show", not
@@ -84,6 +112,7 @@ class CallState extends Equatable {
     String? disconnectNotice,
     DateTime? aloneDeadline,
     bool clearAloneDeadline = false,
+    int? videoRevision,
   }) => CallState(
     phase: phase ?? this.phase,
     call: call ?? this.call,
@@ -97,6 +126,7 @@ class CallState extends Equatable {
     aloneDeadline: clearAloneDeadline
         ? null
         : (aloneDeadline ?? this.aloneDeadline),
+    videoRevision: videoRevision ?? this.videoRevision,
   );
 
   @override
@@ -111,6 +141,7 @@ class CallState extends Equatable {
     errorMessage,
     disconnectNotice,
     aloneDeadline,
+    videoRevision,
   ];
 }
 
@@ -122,6 +153,7 @@ class CallCubit extends Cubit<CallState> {
   CallCubit({
     required this.repository,
     required this.authRepository,
+    required this.soundService,
     required CallWebRtcService Function() webRtcServiceFactory,
   }) : _webRtcServiceFactory = webRtcServiceFactory,
        super(const CallState()) {
@@ -133,10 +165,23 @@ class CallCubit extends Cubit<CallState> {
 
   final VoiceRepository repository;
   final AuthRepository authRepository;
+  final SoundService soundService;
   final CallWebRtcService Function() _webRtcServiceFactory;
   late final StreamSubscription<VoiceRepositoryEvent> _sub;
   late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
   CallWebRtcService? _webRtc;
+
+  /// Set only for calls *this* device initiated via [startCall] — drives the
+  /// outgoing ringback tone, which (unlike incoming calls) has no native
+  /// CallKit equivalent to double up with. Cleared as soon as another
+  /// participant actually joins, or the call ends/is torn down.
+  bool _isRingingOutgoing = false;
+
+  void _stopOutgoingRingback() {
+    if (!_isRingingOutgoing) return;
+    _isRingingOutgoing = false;
+    unawaited(soundService.stopRingOutgoing());
+  }
 
   String get _myUserId => authRepository.currentUserId ?? '';
 
@@ -151,8 +196,11 @@ class CallCubit extends Cubit<CallState> {
         conversationId: conversationId,
         participantUserIds: participantUserIds,
       );
+      _isRingingOutgoing = true;
+      unawaited(soundService.startRingOutgoing());
       await _connect(call);
     } catch (_) {
+      _stopOutgoingRingback();
       emit(const CallState(errorMessage: 'Could not start the call.'));
     }
   }
@@ -232,6 +280,7 @@ class CallCubit extends Cubit<CallState> {
   Future<void> endCall() async {
     final call = state.call;
     if (call == null) return;
+    _stopOutgoingRingback();
     final webRtc = _webRtc;
     _webRtc = null;
     emit(const CallState());
@@ -267,6 +316,123 @@ class CallCubit extends Cubit<CallState> {
     emit(state.copyWith(isSpeakerOn: isSpeakerOn));
     await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
   }
+
+  /// Current local camera state — read from [state.participants] rather than
+  /// a separate field, since the self-entry there is already the source of
+  /// truth other participants' badges read from.
+  bool get isCameraOn =>
+      state.participants
+          .where((p) => p.userId == _myUserId)
+          .firstOrNull
+          ?.hasCamera ??
+      false;
+
+  Future<void> toggleCamera() async {
+    if (state.phase != CallPhase.active) return;
+    final webRtc = _webRtc;
+    final callId = state.call?.id;
+    if (webRtc == null || callId == null) return;
+    final turningOn = !isCameraOn;
+    try {
+      if (turningOn) {
+        await webRtc.publishLocalVideo();
+      } else {
+        await webRtc.stopLocalVideo();
+      }
+    } catch (_) {
+      return; // Capture failed (denied permission, no camera, etc.) — bail.
+    }
+    emit(
+      state.copyWith(
+        participants: [
+          for (final p in state.participants)
+            p.userId == _myUserId ? p.copyWith(hasCamera: turningOn) : p,
+        ],
+      ),
+    );
+    _bumpVideoRevision();
+    await repository.invokeCameraChanged(
+      callId: callId,
+      isCameraOn: turningOn,
+    );
+  }
+
+  /// Mirrors [isCameraOn] for screen sharing — Android only (see
+  /// `toggleScreenShare` callers, which gate the button by platform).
+  bool get isScreenSharing =>
+      state.participants
+          .where((p) => p.userId == _myUserId)
+          .firstOrNull
+          ?.isStreaming ??
+      false;
+
+  String? _myShareId;
+
+  Future<void> toggleScreenShare() async {
+    if (state.phase != CallPhase.active) return;
+    final webRtc = _webRtc;
+    final callId = state.call?.id;
+    if (webRtc == null || callId == null) return;
+    if (isScreenSharing) {
+      final shareId = _myShareId;
+      _myShareId = null;
+      try {
+        await webRtc.stopScreenShare();
+      } catch (_) {
+        // Best-effort — fall through to update local state regardless.
+      }
+      emit(
+        state.copyWith(
+          participants: [
+            for (final p in state.participants)
+              p.userId == _myUserId ? p.copyWith(isStreaming: false) : p,
+          ],
+        ),
+      );
+      _bumpVideoRevision();
+      if (shareId != null) {
+        await repository.invokeScreenShareStopped(
+          callId: callId,
+          shareId: shareId,
+        );
+      }
+    } else {
+      final shareId =
+          '${DateTime.now().microsecondsSinceEpoch}-${identityHashCode(this)}';
+      try {
+        await webRtc.startScreenShare(shareId);
+      } catch (_) {
+        return; // Permission denied/cancelled the system picker — bail.
+      }
+      _myShareId = shareId;
+      emit(
+        state.copyWith(
+          participants: [
+            for (final p in state.participants)
+              p.userId == _myUserId ? p.copyWith(isStreaming: true) : p,
+          ],
+        ),
+      );
+      _bumpVideoRevision();
+      await repository.invokeScreenShareStarted(
+        callId: callId,
+        shareId: shareId,
+        trackName: 'screen-$shareId',
+      );
+    }
+  }
+
+  void _bumpVideoRevision() =>
+      emit(state.copyWith(videoRevision: state.videoRevision + 1));
+
+  /// Track getters for the UI — read imperatively, see [CallState.videoRevision]
+  /// doc comment for why `MediaStreamTrack`s can't live in cubit state itself.
+  MediaStreamTrack? get localVideoTrack => _webRtc?.localVideoTrack;
+  MediaStreamTrack? get localScreenTrack => _webRtc?.localScreenTrack;
+  MediaStreamTrack? remoteVideoTrackFor(String userId) =>
+      _webRtc?.remoteVideoTrackFor(userId);
+  MediaStreamTrack? remoteScreenTrackFor(String userId) =>
+      _webRtc?.remoteScreenTrackFor(userId);
 
   Future<void> _connect(CallDto call) async {
     final webRtc = _webRtcServiceFactory();
@@ -388,6 +554,7 @@ class CallCubit extends Cubit<CallState> {
         :final audioTrackName,
       ):
         if (userId == _myUserId || state.phase != CallPhase.active) return;
+        _stopOutgoingRingback();
         if (!state.participants.any((p) => p.userId == userId)) {
           emit(
             state.copyWith(
@@ -439,16 +606,98 @@ class CallCubit extends Cubit<CallState> {
           ),
         );
 
+      case CallCameraChanged(:final userId, :final isCameraOn):
+        if (userId == _myUserId) return;
+        emit(
+          state.copyWith(
+            participants: [
+              for (final p in state.participants)
+                p.userId == userId ? p.copyWith(hasCamera: isCameraOn) : p,
+            ],
+          ),
+        );
+
+      case CallTrackPublished(
+        :final userId,
+        :final cfSessionId,
+        :final trackName,
+        :final kind,
+      ):
+        if (userId == _myUserId) return;
+        final trackKind = trackKindFromWire(kind);
+        if (trackKind == null) return; // screenAudio or unknown - ignored
+        unawaited(
+          _webRtc?.subscribeToTrack(
+            userId: userId,
+            cfSessionId: cfSessionId,
+            trackName: trackName,
+            kind: trackKind,
+          ),
+        );
+        emit(
+          state.copyWith(
+            participants: [
+              for (final p in state.participants)
+                if (p.userId == userId)
+                  trackKind == TrackKind.screen
+                      ? p.copyWith(isStreaming: true)
+                      : p.copyWith(hasCamera: true)
+                else
+                  p,
+            ],
+            videoRevision: state.videoRevision + 1,
+          ),
+        );
+
+      case CallTrackClosed(:final userId, :final trackName):
+        final trackKind = trackName == 'camera'
+            ? TrackKind.video
+            : trackName.startsWith('screen-')
+            ? TrackKind.screen
+            : null;
+        if (trackKind == null) return;
+        _webRtc?.unsubscribeTrack(userId: userId, kind: trackKind);
+        emit(
+          state.copyWith(
+            participants: [
+              for (final p in state.participants)
+                if (p.userId == userId)
+                  trackKind == TrackKind.screen
+                      ? p.copyWith(isStreaming: false)
+                      : p.copyWith(hasCamera: false)
+                else
+                  p,
+            ],
+            videoRevision: state.videoRevision + 1,
+          ),
+        );
+
+      case CallScreenShareStarted(:final userId):
+        emit(
+          state.copyWith(
+            participants: [
+              for (final p in state.participants)
+                p.userId == userId ? p.copyWith(isStreaming: true) : p,
+            ],
+          ),
+        );
+
+      case CallScreenShareStopped():
+        break; // Teardown rides on CallTrackClosed, same as guild voice.
+
       case CallAcceptedElsewhere(:final callId):
       case CallDeviceDismissed(:final callId):
         // Another device resolved the ring (accepted, or this device's own
         // decline raced a takeover) — dismiss silently, no "ended" messaging.
         if (state.phase == CallPhase.incoming && state.call?.id == callId) {
           emit(const CallState());
+        } else if (state.call?.id == callId) {
+          _stopOutgoingRingback();
         }
 
       case CallDeviceTakeover(:final callId):
         if (state.call?.id == callId) {
+          _stopOutgoingRingback();
           final webRtc = _webRtc;
           _webRtc = null;
           emit(
@@ -466,6 +715,7 @@ class CallCubit extends Cubit<CallState> {
 
       case CallEndedRemotely(:final callId, :final reason):
         if (state.call?.id == callId) {
+          _stopOutgoingRingback();
           final webRtc = _webRtc;
           _webRtc = null;
           emit(CallState(disconnectNotice: _endedNoticeFor(reason)));

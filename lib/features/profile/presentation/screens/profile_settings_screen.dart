@@ -4,12 +4,26 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/di/injector.dart';
 import '../../../../core/theme/avatar_palette.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../auth/data/account_repository.dart';
+import '../../../auth/data/identity_api.dart';
+import '../../../auth/data/models/user_dto.dart';
 import '../../bloc/self_profile_cubit.dart';
 import '../../data/models/profile_dto.dart';
+
+const _monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June', //
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+String _formatDate(DateTime dateTime) {
+  final local = dateTime.toLocal();
+  return '${_monthNames[local.month - 1]} ${local.day}, ${local.year}';
+}
 
 const _accentSwatches = <String>[
   '#7C72FF', // brand
@@ -65,10 +79,108 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   bool _bioDirty = false;
   String? _seededProfileId;
 
+  UserDto? _account;
+  bool _accountActionInProgress = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAccount();
+  }
+
   @override
   void dispose() {
     _bioController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadAccount() async {
+    try {
+      final account = await getIt<AccountRepository>().getSelf();
+      if (mounted) setState(() => _account = account);
+    } catch (_) {
+      // Danger-zone section just stays hidden if this fails.
+    }
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete your account?'),
+        content: const Text(
+          'You will be signed out on any new login attempt right away. '
+          'Everything else keeps working normally for 30 days, during which '
+          'you can cancel. After that the deletion becomes permanent and '
+          'cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete account'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _accountActionInProgress = true);
+    try {
+      final purgeScheduledAt = await getIt<AccountRepository>()
+          .requestDeletion();
+      if (!mounted) return;
+      setState(() {
+        _account = _account?.copyWith(
+          status: UserStatus.pendingDeletion,
+          purgeScheduledAt: purgeScheduledAt,
+        );
+        _accountActionInProgress = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _accountActionInProgress = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete your account.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _cancelDeleteAccount() async {
+    setState(() => _accountActionInProgress = true);
+    try {
+      await getIt<AccountRepository>().cancelDeletion();
+      if (!mounted) return;
+      setState(() {
+        _account = _account?.copyWith(
+          status: UserStatus.active,
+          deletionRequestedAt: null,
+          purgeScheduledAt: null,
+        );
+        _accountActionInProgress = false;
+      });
+    } on DeletionNotCancellableException catch (e) {
+      if (mounted) {
+        setState(() => _accountActionInProgress = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+        _loadAccount();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _accountActionInProgress = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not cancel deletion.')),
+        );
+      }
+    }
   }
 
   void _seedBio(ProfileDto profile) {
@@ -192,6 +304,19 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                           .read<SelfProfileCubit>()
                           .updateProfile(font: font),
                     ),
+                    if (_account != null) ...[
+                      const SizedBox(height: AppSpacing.l),
+                      const Divider(),
+                      const SizedBox(height: AppSpacing.s),
+                      Text('DANGER ZONE', style: theme.textTheme.labelSmall),
+                      const SizedBox(height: AppSpacing.s),
+                      _DangerZone(
+                        account: _account!,
+                        actionInProgress: _accountActionInProgress,
+                        onDelete: _confirmDeleteAccount,
+                        onCancelDeletion: _cancelDeleteAccount,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -410,5 +535,65 @@ class _FontPicker extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _DangerZone extends StatelessWidget {
+  const _DangerZone({
+    required this.account,
+    required this.actionInProgress,
+    required this.onDelete,
+    required this.onCancelDeletion,
+  });
+
+  final UserDto account;
+  final bool actionInProgress;
+  final VoidCallback onDelete;
+  final VoidCallback onCancelDeletion;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    switch (account.status) {
+      case UserStatus.active:
+        return OutlinedButton(
+          style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
+          onPressed: actionInProgress ? null : onDelete,
+          child: const Text('Delete my account'),
+        );
+      case UserStatus.pendingDeletion:
+        final purgeDate = account.purgeScheduledAt;
+        return Container(
+          padding: const EdgeInsets.all(AppSpacing.m),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.errorContainer,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                purgeDate != null
+                    ? 'Your account is scheduled for deletion on '
+                          '${_formatDate(purgeDate)}.'
+                    : 'Your account is scheduled for deletion.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s),
+              FilledButton(
+                onPressed: actionInProgress ? null : onCancelDeletion,
+                child: const Text('Cancel deletion'),
+              ),
+            ],
+          ),
+        );
+      case UserStatus.purgeInProgress:
+      case UserStatus.deleted:
+      case UserStatus.inactive:
+      case UserStatus.banned:
+        return const SizedBox.shrink();
+    }
   }
 }
