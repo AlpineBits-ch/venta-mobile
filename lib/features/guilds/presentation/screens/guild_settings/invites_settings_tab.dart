@@ -41,15 +41,20 @@ class _InvitesSettingsTabState extends State<InvitesSettingsTab> {
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not revoke that invite.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not revoke that invite.')),
+        );
       }
     }
   }
 
   void _copy(InviteDto invite) {
-    Clipboard.setData(ClipboardData(text: 'https://venta.gg/invite/${invite.code}'));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied.')));
+    Clipboard.setData(
+      ClipboardData(text: 'https://venta.gg/invite/${invite.code}'),
+    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Link copied.')));
   }
 
   @override
@@ -57,7 +62,8 @@ class _InvitesSettingsTabState extends State<InvitesSettingsTab> {
     final theme = Theme.of(context);
     if (_error != null) return Center(child: Text(_error!));
     final invites = _invites;
-    if (invites == null) return const Center(child: CircularProgressIndicator());
+    if (invites == null)
+      return const Center(child: CircularProgressIndicator());
 
     return Column(
       children: [
@@ -67,14 +73,18 @@ class _InvitesSettingsTabState extends State<InvitesSettingsTab> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _creating ? null : () => _createTyped(InviteType.permanent),
+                  onPressed: _creating
+                      ? null
+                      : () => _createTyped(InviteType.permanent),
                   child: const Text('Create permanent'),
                 ),
               ),
               const SizedBox(width: AppSpacing.s),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _creating ? null : () => _createTyped(InviteType.oneTime),
+                  onPressed: _creating
+                      ? null
+                      : () => _createTyped(InviteType.oneTime),
                   child: const Text('Create one-time'),
                 ),
               ),
@@ -90,15 +100,21 @@ class _InvitesSettingsTabState extends State<InvitesSettingsTab> {
                     final invite = invites[index];
                     final expired = invite.state == InviteState.expired;
                     return ListTile(
-                      title: Text(invite.code, style: const TextStyle(fontFamily: 'monospace')),
+                      title: Text(
+                        invite.code,
+                        style: const TextStyle(fontFamily: 'monospace'),
+                      ),
                       subtitle: Text(
                         [
-                          invite.type == InviteType.permanent ? 'Permanent' : 'One-time',
+                          invite.type == InviteType.permanent
+                              ? 'Permanent'
+                              : 'One-time',
                           '${invite.useCount} use${invite.useCount == 1 ? '' : 's'}',
                           if (expired) 'Expired',
                         ].join(' · '),
-                        style: theme.textTheme.labelSmall
-                            ?.copyWith(color: expired ? theme.colorScheme.error : null),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: expired ? theme.colorScheme.error : null,
+                        ),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -128,8 +144,9 @@ class _InvitesSettingsTabState extends State<InvitesSettingsTab> {
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not create an invite.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not create an invite.')),
+        );
       }
     } finally {
       if (mounted) setState(() => _creating = false);

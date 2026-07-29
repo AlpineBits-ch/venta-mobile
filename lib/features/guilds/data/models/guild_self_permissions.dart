@@ -18,15 +18,22 @@ class GuildSelfPermissions {
   factory GuildSelfPermissions.fromJson(Map<String, dynamic> json) {
     var permissions = GuildPermissions.none;
     for (final raw in (json['roleMembers'] as List?) ?? const []) {
-      final role = (raw as Map<String, dynamic>)['role'] as Map<String, dynamic>?;
+      final role =
+          (raw as Map<String, dynamic>)['role'] as Map<String, dynamic>?;
       final wire = role?['permissions'] as String?;
-      if (wire != null) permissions = permissions | GuildPermissions.parse(wire);
+      if (wire != null)
+        permissions = permissions | GuildPermissions.parse(wire);
     }
-    return GuildSelfPermissions(userId: json['userId'] as String, permissions: permissions);
+    return GuildSelfPermissions(
+      userId: json['userId'] as String,
+      permissions: permissions,
+    );
   }
 
   /// [permissions] plus an automatic Superadmin bypass when this is the
   /// guild owner — mirrors [GuildMemberEffectivePermissions.effectivePermissions].
   GuildPermissions effectivePermissions(String guildOwnerId) =>
-      userId == guildOwnerId ? permissions | GuildPermissions.superadmin : permissions;
+      userId == guildOwnerId
+      ? permissions | GuildPermissions.superadmin
+      : permissions;
 }

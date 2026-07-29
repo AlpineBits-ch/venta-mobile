@@ -15,5 +15,6 @@ class RealtimeEvent {
   }
 
   /// For events whose sole argument is a bare string (e.g. a user/conversation id).
-  String get stringPayload => (args?.isNotEmpty == true ? args!.first as String? : null) ?? '';
+  String get stringPayload =>
+      (args?.isNotEmpty == true ? args!.first as String? : null) ?? '';
 }

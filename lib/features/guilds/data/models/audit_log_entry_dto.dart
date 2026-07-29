@@ -64,8 +64,10 @@ sealed class AuditLogEntryDto with _$AuditLogEntryDto {
     required String id,
     required String guildId,
     required String actorUserId,
-    @JsonKey(unknownEnumValue: AuditActionType.unknown) required AuditActionType actionType,
+    @JsonKey(unknownEnumValue: AuditActionType.unknown)
+    required AuditActionType actionType,
     String? targetId,
+
     /// Raw JSON string, shape varies per [actionType] — parsed defensively.
     String? metadata,
     DateTime? createdAt,

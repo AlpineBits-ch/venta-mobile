@@ -25,7 +25,8 @@ sealed class RoleDto with _$RoleDto {
     @Default(0) int position,
   }) = _RoleDto;
 
-  factory RoleDto.fromJson(Map<String, dynamic> json) => _$RoleDtoFromJson(json);
+  factory RoleDto.fromJson(Map<String, dynamic> json) =>
+      _$RoleDtoFromJson(json);
 }
 
 extension RoleDtoX on RoleDto {

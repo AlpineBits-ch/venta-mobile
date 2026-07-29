@@ -1,7 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/data/auth_repository.dart';
 import '../../features/guilds/data/guild_repository.dart';
 import '../../features/guilds/data/models/guild_dto.dart';
 import '../../features/profile/data/models/profile_dto.dart';
@@ -11,6 +13,7 @@ import '../../features/guild_voice/presentation/widgets/voice_status_bar.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/presentation/screens/call_screen.dart';
 import '../di/injector.dart';
+import '../theme/avatar_palette.dart';
 import '../theme/status_colors_extension.dart';
 import '../theme/widget_styles.dart';
 import '../widgets/server_rail_icon.dart';
@@ -24,7 +27,11 @@ import 'route_paths.dart';
 /// `app_router.dart`), which is where the back button belongs — going back
 /// returns here with the rail still in place.
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.child, required this.currentLocation});
+  const AppShell({
+    super.key,
+    required this.child,
+    required this.currentLocation,
+  });
 
   final Widget child;
   final String currentLocation;
@@ -80,8 +87,9 @@ class _AppShellState extends State<AppShell> {
         );
         if (name == null || name.trim().isEmpty || !mounted) return;
         try {
-          final guild =
-              await getIt<GuildRepository>().createGuild(name: name.trim());
+          final guild = await getIt<GuildRepository>().createGuild(
+            name: name.trim(),
+          );
           if (mounted) context.push(RoutePaths.serverPath(guild.id));
         } catch (_) {
           if (mounted) {
@@ -115,7 +123,10 @@ class _AppShellState extends State<AppShell> {
     return match?.group(1) ?? input;
   }
 
-  Future<String?> _promptForText({required String title, required String hint}) {
+  Future<String?> _promptForText({
+    required String title,
+    required String hint,
+  }) {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -146,11 +157,13 @@ class _AppShellState extends State<AppShell> {
     if (shouldShow && !_callScreenShown) {
       _callScreenShown = true;
       Navigator.of(context, rootNavigator: true)
-          .push(PageRouteBuilder<void>(
-            pageBuilder: (_, _, _) => const CallScreen(),
-            transitionDuration: Duration.zero,
-            reverseTransitionDuration: Duration.zero,
-          ))
+          .push(
+            PageRouteBuilder<void>(
+              pageBuilder: (_, _, _) => const CallScreen(),
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
+            ),
+          )
           .then((_) => _callScreenShown = false);
     } else if (!shouldShow && _callScreenShown) {
       _callScreenShown = false;
@@ -161,7 +174,9 @@ class _AppShellState extends State<AppShell> {
     // inside it would vanish with the route before anyone saw it.
     final notice = state.disconnectNotice;
     if (notice != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(notice)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(notice)));
     }
   }
 
@@ -175,14 +190,17 @@ class _AppShellState extends State<AppShell> {
     return BlocListener<CallCubit, CallState>(
       bloc: getIt<CallCubit>(),
       listenWhen: (previous, current) =>
-          (previous.phase == CallPhase.idle) != (current.phase == CallPhase.idle),
+          (previous.phase == CallPhase.idle) !=
+          (current.phase == CallPhase.idle),
       listener: _syncCallScreen,
       child: BlocListener<GuildVoiceCubit, GuildVoiceState>(
         bloc: getIt<GuildVoiceCubit>(),
         listenWhen: (previous, current) =>
-            current.errorMessage != null && current.errorMessage != previous.errorMessage,
-        listener: (context, state) => ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(state.errorMessage!))),
+            current.errorMessage != null &&
+            current.errorMessage != previous.errorMessage,
+        listener: (context, state) => ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(state.errorMessage!))),
         child: _buildShellScaffold(theme, onHome, currentGuildId, profile),
       ),
     );
@@ -197,7 +215,9 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       body: Column(
         children: [
-          Expanded(child: _buildRailAndContent(theme, onHome, currentGuildId, profile)),
+          Expanded(
+            child: _buildRailAndContent(theme, onHome, currentGuildId, profile),
+          ),
           const SafeArea(top: false, child: VoiceStatusBar()),
         ],
       ),
@@ -211,73 +231,86 @@ class _AppShellState extends State<AppShell> {
     ProfileDto? profile,
   ) {
     return Row(
-        children: [
-          Container(
-            width: 76,
-            color: context.statusColors.sidebar,
-            child: SafeArea(
-              right: false,
-              bottom: false,
-              child: Column(
-                children: [
-                  const SizedBox(height: AppSpacing.s),
-                  ServerRailIcon(
-                    selected: onHome,
-                    icon: Icons.forum_rounded,
-                    backgroundColor: onHome ? theme.colorScheme.primary : null,
-                    onTap: () => context.go(RoutePaths.home),
+      children: [
+        Container(
+          width: 76,
+          color: context.statusColors.sidebar,
+          child: SafeArea(
+            right: false,
+            bottom: false,
+            child: Column(
+              children: [
+                const SizedBox(height: AppSpacing.s),
+                ServerRailIcon(
+                  selected: onHome,
+                  icon: Icons.forum_rounded,
+                  backgroundColor: onHome ? theme.colorScheme.primary : null,
+                  onTap: () => context.go(RoutePaths.home),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                  child: Divider(
+                    color: context.statusColors.hover,
+                    thickness: 2,
+                    indent: 16,
+                    endIndent: 16,
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                    child: Divider(
-                      color: context.statusColors.hover,
-                      thickness: 2,
-                      indent: 16,
-                      endIndent: 16,
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView(
-                      padding: EdgeInsets.zero,
-                      children: [
-                        for (final guild in _guilds)
-                          ServerRailIcon(
-                            selected: guild.id == currentGuildId,
-                            label: guild.name.isNotEmpty ? guild.name[0].toUpperCase() : '?',
-                            backgroundColor:
-                                guild.id == currentGuildId ? theme.colorScheme.primary : null,
-                            onTap: () => context.go(RoutePaths.serverPath(guild.id)),
-                          ),
-                        ServerRailIcon(icon: Icons.add, onTap: _showAddServerSheet),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
-                    child: GestureDetector(
-                      onTap: () => context.push(RoutePaths.profileSettings),
-                      child: CircleAvatar(
-                        radius: 22,
-                        backgroundColor: context.statusColors.hover,
-                        backgroundImage:
-                            profile?.avatarUrl != null ? NetworkImage(profile!.avatarUrl!) : null,
-                        child: profile?.avatarUrl == null
-                            ? Text(
-                                (profile?.userName.isNotEmpty ?? false)
-                                    ? profile!.userName[0].toUpperCase()
-                                    : '?',
-                                style: theme.textTheme.titleSmall,
-                              )
-                            : null,
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      for (final guild in _guilds)
+                        ServerRailIcon(
+                          selected: guild.id == currentGuildId,
+                          label: guild.name.isNotEmpty
+                              ? guild.name[0].toUpperCase()
+                              : '?',
+                          imageUrl: guild.iconUrl,
+                          backgroundColor: guild.id == currentGuildId
+                              ? theme.colorScheme.primary
+                              : null,
+                          onTap: () =>
+                              context.go(RoutePaths.serverPath(guild.id)),
+                        ),
+                      ServerRailIcon(
+                        icon: Icons.add,
+                        onTap: _showAddServerSheet,
                       ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+                  child: GestureDetector(
+                    onTap: () => context.push(RoutePaths.profileSettings),
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: AvatarPalette.colorForUserId(
+                        getIt<AuthRepository>().currentUserId ?? '',
+                      ),
+                      backgroundImage: profile?.avatarUrl != null
+                          ? CachedNetworkImageProvider(profile!.avatarUrl!)
+                          : null,
+                      child: profile?.avatarUrl == null
+                          ? Text(
+                              (profile?.userName.isNotEmpty ?? false)
+                                  ? profile!.userName[0].toUpperCase()
+                                  : '?',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: Colors.white,
+                              ),
+                            )
+                          : null,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          Expanded(child: widget.child),
-        ],
+        ),
+        Expanded(child: widget.child),
+      ],
     );
   }
 

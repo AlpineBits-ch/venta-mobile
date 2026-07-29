@@ -51,5 +51,6 @@ sealed class BotCommandDto with _$BotCommandDto {
     String? scope,
   }) = _BotCommandDto;
 
-  factory BotCommandDto.fromJson(Map<String, dynamic> json) => _$BotCommandDtoFromJson(json);
+  factory BotCommandDto.fromJson(Map<String, dynamic> json) =>
+      _$BotCommandDtoFromJson(json);
 }

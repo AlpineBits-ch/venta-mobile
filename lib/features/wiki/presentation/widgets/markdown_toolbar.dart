@@ -12,11 +12,18 @@ class MarkdownToolbar extends StatelessWidget {
     final end = suffix ?? prefix;
     final text = controller.text;
     var selection = controller.selection;
-    if (!selection.isValid) selection = TextSelection.collapsed(offset: text.length);
+    if (!selection.isValid)
+      selection = TextSelection.collapsed(offset: text.length);
 
     final selected = selection.textInside(text);
-    final newText = selection.textBefore(text) + prefix + selected + end + selection.textAfter(text);
-    final cursor = selection.start + prefix.length + selected.length + end.length;
+    final newText =
+        selection.textBefore(text) +
+        prefix +
+        selected +
+        end +
+        selection.textAfter(text);
+    final cursor =
+        selection.start + prefix.length + selected.length + end.length;
     controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(offset: cursor),
@@ -26,9 +33,11 @@ class MarkdownToolbar extends StatelessWidget {
   void _prefixCurrentLine(String prefix) {
     final text = controller.text;
     var selection = controller.selection;
-    if (!selection.isValid) selection = TextSelection.collapsed(offset: text.length);
+    if (!selection.isValid)
+      selection = TextSelection.collapsed(offset: text.length);
 
-    final lineStart = text.lastIndexOf('\n', (selection.start - 1).clamp(0, text.length)) + 1;
+    final lineStart =
+        text.lastIndexOf('\n', (selection.start - 1).clamp(0, text.length)) + 1;
     final newText = text.replaceRange(lineStart, lineStart, prefix);
     controller.value = TextEditingValue(
       text: newText,

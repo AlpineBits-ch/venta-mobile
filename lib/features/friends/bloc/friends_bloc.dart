@@ -83,25 +83,24 @@ class FriendsState extends Equatable {
     List<RelationshipModel>? pendingOutgoing,
     List<RelationshipModel>? blocked,
     String? actionError,
-  }) =>
-      FriendsState(
-        status: status ?? this.status,
-        friends: friends ?? this.friends,
-        pendingIncoming: pendingIncoming ?? this.pendingIncoming,
-        pendingOutgoing: pendingOutgoing ?? this.pendingOutgoing,
-        blocked: blocked ?? this.blocked,
-        actionError: actionError,
-      );
+  }) => FriendsState(
+    status: status ?? this.status,
+    friends: friends ?? this.friends,
+    pendingIncoming: pendingIncoming ?? this.pendingIncoming,
+    pendingOutgoing: pendingOutgoing ?? this.pendingOutgoing,
+    blocked: blocked ?? this.blocked,
+    actionError: actionError,
+  );
 
   @override
   List<Object?> get props => [
-        status,
-        friends,
-        pendingIncoming,
-        pendingOutgoing,
-        blocked,
-        actionError,
-      ];
+    status,
+    friends,
+    pendingIncoming,
+    pendingOutgoing,
+    blocked,
+    actionError,
+  ];
 }
 
 class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
@@ -122,7 +121,10 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
   final RelationshipRepository repository;
   late final StreamSubscription<List<RelationshipModel>> _subscription;
 
-  Future<void> _onLoadRequested(FriendsLoadRequested event, Emitter<FriendsState> emit) async {
+  Future<void> _onLoadRequested(
+    FriendsLoadRequested event,
+    Emitter<FriendsState> emit,
+  ) async {
     try {
       await repository.fetch();
     } catch (_) {
@@ -130,7 +132,10 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
     }
   }
 
-  void _onRelationshipsUpdated(_RelationshipsUpdated event, Emitter<FriendsState> emit) {
+  void _onRelationshipsUpdated(
+    _RelationshipsUpdated event,
+    Emitter<FriendsState> emit,
+  ) {
     final byStatus = <RelationshipStatus, List<RelationshipModel>>{};
     for (final relationship in event.relationships) {
       (byStatus[relationship.status] ??= []).add(relationship);
@@ -139,23 +144,35 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
       state.copyWith(
         status: FriendsStatus.loaded,
         friends: byStatus[RelationshipStatus.friends] ?? const [],
-        pendingIncoming: byStatus[RelationshipStatus.pendingIncoming] ?? const [],
-        pendingOutgoing: byStatus[RelationshipStatus.pendingOutgoing] ?? const [],
+        pendingIncoming:
+            byStatus[RelationshipStatus.pendingIncoming] ?? const [],
+        pendingOutgoing:
+            byStatus[RelationshipStatus.pendingOutgoing] ?? const [],
         blocked: byStatus[RelationshipStatus.blocked] ?? const [],
         actionError: null,
       ),
     );
   }
 
-  Future<void> _onAddSubmitted(FriendAddSubmitted event, Emitter<FriendsState> emit) async {
+  Future<void> _onAddSubmitted(
+    FriendAddSubmitted event,
+    Emitter<FriendsState> emit,
+  ) async {
     try {
       await repository.addFriend(event.username);
     } catch (_) {
-      emit(state.copyWith(actionError: 'Could not find or add "${event.username}".'));
+      emit(
+        state.copyWith(
+          actionError: 'Could not find or add "${event.username}".',
+        ),
+      );
     }
   }
 
-  Future<void> _onAcceptRequested(FriendAcceptRequested event, Emitter<FriendsState> emit) async {
+  Future<void> _onAcceptRequested(
+    FriendAcceptRequested event,
+    Emitter<FriendsState> emit,
+  ) async {
     try {
       await repository.accept(event.relationshipId);
     } catch (_) {
@@ -163,7 +180,10 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
     }
   }
 
-  Future<void> _onRejectRequested(FriendRejectRequested event, Emitter<FriendsState> emit) async {
+  Future<void> _onRejectRequested(
+    FriendRejectRequested event,
+    Emitter<FriendsState> emit,
+  ) async {
     try {
       await repository.reject(event.relationshipId);
     } catch (_) {
@@ -171,7 +191,10 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
     }
   }
 
-  Future<void> _onRevokeRequested(FriendRevokeRequested event, Emitter<FriendsState> emit) async {
+  Future<void> _onRevokeRequested(
+    FriendRevokeRequested event,
+    Emitter<FriendsState> emit,
+  ) async {
     try {
       await repository.revoke(event.relationshipId);
     } catch (_) {

@@ -15,7 +15,10 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$GuildDto {
 
- String get id; String get name; String? get description; String get ownerId; List<CategoryDto> get categories; List<ChannelDto> get channels; List<RoleDto> get roles; String? get bannerUrl; String? get systemChannelId;
+ String get id; String get name; String? get description; String get ownerId; List<CategoryDto> get categories; List<ChannelDto> get channels; List<RoleDto> get roles; String? get bannerUrl;/// Not yet sent by the backend — forward-compatible plumbing only, so
+/// the client doesn't need a second change once it starts being sent.
+/// `ServerRailIcon` falls back to the initial-letter circle while null.
+ String? get iconUrl; String? get systemChannelId;
 /// Create a copy of GuildDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +31,16 @@ $GuildDtoCopyWith<GuildDto> get copyWith => _$GuildDtoCopyWithImpl<GuildDto>(thi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is GuildDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.ownerId, ownerId) || other.ownerId == ownerId)&&const DeepCollectionEquality().equals(other.categories, categories)&&const DeepCollectionEquality().equals(other.channels, channels)&&const DeepCollectionEquality().equals(other.roles, roles)&&(identical(other.bannerUrl, bannerUrl) || other.bannerUrl == bannerUrl)&&(identical(other.systemChannelId, systemChannelId) || other.systemChannelId == systemChannelId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is GuildDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.ownerId, ownerId) || other.ownerId == ownerId)&&const DeepCollectionEquality().equals(other.categories, categories)&&const DeepCollectionEquality().equals(other.channels, channels)&&const DeepCollectionEquality().equals(other.roles, roles)&&(identical(other.bannerUrl, bannerUrl) || other.bannerUrl == bannerUrl)&&(identical(other.iconUrl, iconUrl) || other.iconUrl == iconUrl)&&(identical(other.systemChannelId, systemChannelId) || other.systemChannelId == systemChannelId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,description,ownerId,const DeepCollectionEquality().hash(categories),const DeepCollectionEquality().hash(channels),const DeepCollectionEquality().hash(roles),bannerUrl,systemChannelId);
+int get hashCode => Object.hash(runtimeType,id,name,description,ownerId,const DeepCollectionEquality().hash(categories),const DeepCollectionEquality().hash(channels),const DeepCollectionEquality().hash(roles),bannerUrl,iconUrl,systemChannelId);
 
 @override
 String toString() {
-  return 'GuildDto(id: $id, name: $name, description: $description, ownerId: $ownerId, categories: $categories, channels: $channels, roles: $roles, bannerUrl: $bannerUrl, systemChannelId: $systemChannelId)';
+  return 'GuildDto(id: $id, name: $name, description: $description, ownerId: $ownerId, categories: $categories, channels: $channels, roles: $roles, bannerUrl: $bannerUrl, iconUrl: $iconUrl, systemChannelId: $systemChannelId)';
 }
 
 
@@ -48,7 +51,7 @@ abstract mixin class $GuildDtoCopyWith<$Res>  {
   factory $GuildDtoCopyWith(GuildDto value, $Res Function(GuildDto) _then) = _$GuildDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String? description, String ownerId, List<CategoryDto> categories, List<ChannelDto> channels, List<RoleDto> roles, String? bannerUrl, String? systemChannelId
+ String id, String name, String? description, String ownerId, List<CategoryDto> categories, List<ChannelDto> channels, List<RoleDto> roles, String? bannerUrl, String? iconUrl, String? systemChannelId
 });
 
 
@@ -65,7 +68,7 @@ class _$GuildDtoCopyWithImpl<$Res>
 
 /// Create a copy of GuildDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? ownerId = null,Object? categories = null,Object? channels = null,Object? roles = null,Object? bannerUrl = freezed,Object? systemChannelId = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? ownerId = null,Object? categories = null,Object? channels = null,Object? roles = null,Object? bannerUrl = freezed,Object? iconUrl = freezed,Object? systemChannelId = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -75,6 +78,7 @@ as String,categories: null == categories ? _self.categories : categories // igno
 as List<CategoryDto>,channels: null == channels ? _self.channels : channels // ignore: cast_nullable_to_non_nullable
 as List<ChannelDto>,roles: null == roles ? _self.roles : roles // ignore: cast_nullable_to_non_nullable
 as List<RoleDto>,bannerUrl: freezed == bannerUrl ? _self.bannerUrl : bannerUrl // ignore: cast_nullable_to_non_nullable
+as String?,iconUrl: freezed == iconUrl ? _self.iconUrl : iconUrl // ignore: cast_nullable_to_non_nullable
 as String?,systemChannelId: freezed == systemChannelId ? _self.systemChannelId : systemChannelId // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
@@ -158,10 +162,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  String ownerId,  List<CategoryDto> categories,  List<ChannelDto> channels,  List<RoleDto> roles,  String? bannerUrl,  String? systemChannelId)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  String ownerId,  List<CategoryDto> categories,  List<ChannelDto> channels,  List<RoleDto> roles,  String? bannerUrl,  String? iconUrl,  String? systemChannelId)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _GuildDto() when $default != null:
-return $default(_that.id,_that.name,_that.description,_that.ownerId,_that.categories,_that.channels,_that.roles,_that.bannerUrl,_that.systemChannelId);case _:
+return $default(_that.id,_that.name,_that.description,_that.ownerId,_that.categories,_that.channels,_that.roles,_that.bannerUrl,_that.iconUrl,_that.systemChannelId);case _:
   return orElse();
 
 }
@@ -179,10 +183,10 @@ return $default(_that.id,_that.name,_that.description,_that.ownerId,_that.catego
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  String ownerId,  List<CategoryDto> categories,  List<ChannelDto> channels,  List<RoleDto> roles,  String? bannerUrl,  String? systemChannelId)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description,  String ownerId,  List<CategoryDto> categories,  List<ChannelDto> channels,  List<RoleDto> roles,  String? bannerUrl,  String? iconUrl,  String? systemChannelId)  $default,) {final _that = this;
 switch (_that) {
 case _GuildDto():
-return $default(_that.id,_that.name,_that.description,_that.ownerId,_that.categories,_that.channels,_that.roles,_that.bannerUrl,_that.systemChannelId);}
+return $default(_that.id,_that.name,_that.description,_that.ownerId,_that.categories,_that.channels,_that.roles,_that.bannerUrl,_that.iconUrl,_that.systemChannelId);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -196,10 +200,10 @@ return $default(_that.id,_that.name,_that.description,_that.ownerId,_that.catego
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description,  String ownerId,  List<CategoryDto> categories,  List<ChannelDto> channels,  List<RoleDto> roles,  String? bannerUrl,  String? systemChannelId)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description,  String ownerId,  List<CategoryDto> categories,  List<ChannelDto> channels,  List<RoleDto> roles,  String? bannerUrl,  String? iconUrl,  String? systemChannelId)?  $default,) {final _that = this;
 switch (_that) {
 case _GuildDto() when $default != null:
-return $default(_that.id,_that.name,_that.description,_that.ownerId,_that.categories,_that.channels,_that.roles,_that.bannerUrl,_that.systemChannelId);case _:
+return $default(_that.id,_that.name,_that.description,_that.ownerId,_that.categories,_that.channels,_that.roles,_that.bannerUrl,_that.iconUrl,_that.systemChannelId);case _:
   return null;
 
 }
@@ -211,7 +215,7 @@ return $default(_that.id,_that.name,_that.description,_that.ownerId,_that.catego
 @JsonSerializable()
 
 class _GuildDto implements GuildDto {
-  const _GuildDto({required this.id, required this.name, this.description, required this.ownerId, final  List<CategoryDto> categories = const <CategoryDto>[], final  List<ChannelDto> channels = const <ChannelDto>[], final  List<RoleDto> roles = const <RoleDto>[], this.bannerUrl, this.systemChannelId}): _categories = categories,_channels = channels,_roles = roles;
+  const _GuildDto({required this.id, required this.name, this.description, required this.ownerId, final  List<CategoryDto> categories = const <CategoryDto>[], final  List<ChannelDto> channels = const <ChannelDto>[], final  List<RoleDto> roles = const <RoleDto>[], this.bannerUrl, this.iconUrl, this.systemChannelId}): _categories = categories,_channels = channels,_roles = roles;
   factory _GuildDto.fromJson(Map<String, dynamic> json) => _$GuildDtoFromJson(json);
 
 @override final  String id;
@@ -240,6 +244,10 @@ class _GuildDto implements GuildDto {
 }
 
 @override final  String? bannerUrl;
+/// Not yet sent by the backend — forward-compatible plumbing only, so
+/// the client doesn't need a second change once it starts being sent.
+/// `ServerRailIcon` falls back to the initial-letter circle while null.
+@override final  String? iconUrl;
 @override final  String? systemChannelId;
 
 /// Create a copy of GuildDto
@@ -255,16 +263,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _GuildDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.ownerId, ownerId) || other.ownerId == ownerId)&&const DeepCollectionEquality().equals(other._categories, _categories)&&const DeepCollectionEquality().equals(other._channels, _channels)&&const DeepCollectionEquality().equals(other._roles, _roles)&&(identical(other.bannerUrl, bannerUrl) || other.bannerUrl == bannerUrl)&&(identical(other.systemChannelId, systemChannelId) || other.systemChannelId == systemChannelId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _GuildDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.ownerId, ownerId) || other.ownerId == ownerId)&&const DeepCollectionEquality().equals(other._categories, _categories)&&const DeepCollectionEquality().equals(other._channels, _channels)&&const DeepCollectionEquality().equals(other._roles, _roles)&&(identical(other.bannerUrl, bannerUrl) || other.bannerUrl == bannerUrl)&&(identical(other.iconUrl, iconUrl) || other.iconUrl == iconUrl)&&(identical(other.systemChannelId, systemChannelId) || other.systemChannelId == systemChannelId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,description,ownerId,const DeepCollectionEquality().hash(_categories),const DeepCollectionEquality().hash(_channels),const DeepCollectionEquality().hash(_roles),bannerUrl,systemChannelId);
+int get hashCode => Object.hash(runtimeType,id,name,description,ownerId,const DeepCollectionEquality().hash(_categories),const DeepCollectionEquality().hash(_channels),const DeepCollectionEquality().hash(_roles),bannerUrl,iconUrl,systemChannelId);
 
 @override
 String toString() {
-  return 'GuildDto(id: $id, name: $name, description: $description, ownerId: $ownerId, categories: $categories, channels: $channels, roles: $roles, bannerUrl: $bannerUrl, systemChannelId: $systemChannelId)';
+  return 'GuildDto(id: $id, name: $name, description: $description, ownerId: $ownerId, categories: $categories, channels: $channels, roles: $roles, bannerUrl: $bannerUrl, iconUrl: $iconUrl, systemChannelId: $systemChannelId)';
 }
 
 
@@ -275,7 +283,7 @@ abstract mixin class _$GuildDtoCopyWith<$Res> implements $GuildDtoCopyWith<$Res>
   factory _$GuildDtoCopyWith(_GuildDto value, $Res Function(_GuildDto) _then) = __$GuildDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String? description, String ownerId, List<CategoryDto> categories, List<ChannelDto> channels, List<RoleDto> roles, String? bannerUrl, String? systemChannelId
+ String id, String name, String? description, String ownerId, List<CategoryDto> categories, List<ChannelDto> channels, List<RoleDto> roles, String? bannerUrl, String? iconUrl, String? systemChannelId
 });
 
 
@@ -292,7 +300,7 @@ class __$GuildDtoCopyWithImpl<$Res>
 
 /// Create a copy of GuildDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? ownerId = null,Object? categories = null,Object? channels = null,Object? roles = null,Object? bannerUrl = freezed,Object? systemChannelId = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? ownerId = null,Object? categories = null,Object? channels = null,Object? roles = null,Object? bannerUrl = freezed,Object? iconUrl = freezed,Object? systemChannelId = freezed,}) {
   return _then(_GuildDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -302,6 +310,7 @@ as String,categories: null == categories ? _self._categories : categories // ign
 as List<CategoryDto>,channels: null == channels ? _self._channels : channels // ignore: cast_nullable_to_non_nullable
 as List<ChannelDto>,roles: null == roles ? _self._roles : roles // ignore: cast_nullable_to_non_nullable
 as List<RoleDto>,bannerUrl: freezed == bannerUrl ? _self.bannerUrl : bannerUrl // ignore: cast_nullable_to_non_nullable
+as String?,iconUrl: freezed == iconUrl ? _self.iconUrl : iconUrl // ignore: cast_nullable_to_non_nullable
 as String?,systemChannelId: freezed == systemChannelId ? _self.systemChannelId : systemChannelId // ignore: cast_nullable_to_non_nullable
 as String?,
   ));

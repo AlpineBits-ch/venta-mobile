@@ -11,12 +11,14 @@ import '../../data/models/attachment_dto.dart';
 /// `thumbnailUrl` for images) — the full-file/download link must be built
 /// client-side from the id. Standalone attachments (fresh off the upload
 /// poll) already have both populated directly by the server.
-String _resolveUrl(AttachmentDto attachment) => attachment.url ?? getIt<MessageApi>().downloadUrl(attachment.id);
+String _resolveUrl(AttachmentDto attachment) =>
+    attachment.url ?? getIt<MessageApi>().downloadUrl(attachment.id);
 
 String? _resolveThumbnail(AttachmentDto attachment) {
   if (attachment.thumbnailUrl != null) return attachment.thumbnailUrl;
   if (attachment.url != null) return attachment.url;
-  if (attachment.isImage) return getIt<MessageApi>().thumbnailUrl(attachment.id);
+  if (attachment.isImage)
+    return getIt<MessageApi>().thumbnailUrl(attachment.id);
   return null;
 }
 
@@ -59,7 +61,9 @@ class _ImageAttachment extends StatelessWidget {
     if (previewUrl == null) return const SizedBox.shrink();
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => _ImageViewerScreen(attachment: attachment)),
+        MaterialPageRoute<void>(
+          builder: (_) => _ImageViewerScreen(attachment: attachment),
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadii.chip),
@@ -103,7 +107,8 @@ class _ImageViewerScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.open_in_browser),
-            onPressed: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+            onPressed: () =>
+                launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
           ),
         ],
       ),
@@ -127,9 +132,13 @@ class _FileAttachment extends StatelessWidget {
     final url = _resolveUrl(attachment);
     return InkWell(
       borderRadius: BorderRadius.circular(AppRadii.chip),
-      onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      onTap: () =>
+          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s, vertical: AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s,
+          vertical: AppSpacing.xs,
+        ),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(AppRadii.chip),
@@ -141,7 +150,11 @@ class _FileAttachment extends StatelessWidget {
             const SizedBox(width: AppSpacing.xs),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 160),
-              child: Text(attachment.fileName, overflow: TextOverflow.ellipsis, maxLines: 1),
+              child: Text(
+                attachment.fileName,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
             ),
             const SizedBox(width: AppSpacing.xs),
             const Icon(Icons.download_rounded, size: 16),

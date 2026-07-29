@@ -7,10 +7,12 @@ import 'realtime_transport.dart';
 
 class SignalrNetcoreTransport implements RealtimeTransport {
   HubConnection? _connection;
-  final _statusController = StreamController<RealtimeConnectionStatus>.broadcast();
+  final _statusController =
+      StreamController<RealtimeConnectionStatus>.broadcast();
 
   @override
-  Stream<RealtimeConnectionStatus> get connectionStatus => _statusController.stream;
+  Stream<RealtimeConnectionStatus> get connectionStatus =>
+      _statusController.stream;
 
   @override
   void configure({
@@ -18,13 +20,25 @@ class SignalrNetcoreTransport implements RealtimeTransport {
     required Future<String> Function() accessTokenFactory,
   }) {
     final connection = HubConnectionBuilder()
-        .withUrl(hubUrl, options: HttpConnectionOptions(accessTokenFactory: accessTokenFactory))
+        .withUrl(
+          hubUrl,
+          options: HttpConnectionOptions(
+            accessTokenFactory: accessTokenFactory,
+          ),
+        )
         .withAutomaticReconnect(reconnectPolicy: ExponentialRetryPolicy())
         .build();
 
-    connection.onclose(({error}) => _statusController.add(RealtimeConnectionStatus.disconnected));
-    connection.onreconnecting(({error}) => _statusController.add(RealtimeConnectionStatus.connecting));
-    connection.onreconnected(({connectionId}) => _statusController.add(RealtimeConnectionStatus.connected));
+    connection.onclose(
+      ({error}) => _statusController.add(RealtimeConnectionStatus.disconnected),
+    );
+    connection.onreconnecting(
+      ({error}) => _statusController.add(RealtimeConnectionStatus.connecting),
+    );
+    connection.onreconnected(
+      ({connectionId}) =>
+          _statusController.add(RealtimeConnectionStatus.connected),
+    );
 
     _connection = connection;
   }
@@ -51,7 +65,8 @@ class SignalrNetcoreTransport implements RealtimeTransport {
   @override
   Future<void> invoke(String method, {List<Object>? args}) async {
     final connection = _connection;
-    if (connection == null || connection.state != HubConnectionState.Connected) return;
+    if (connection == null || connection.state != HubConnectionState.Connected)
+      return;
     try {
       await connection.invoke(method, args: args);
     } catch (_) {

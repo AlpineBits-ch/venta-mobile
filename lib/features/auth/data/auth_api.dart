@@ -9,12 +9,12 @@ import 'models/token_response.dart';
 /// refresh call must never itself trigger a 401-retry loop.
 class AuthApi {
   AuthApi()
-      : _dio = Dio(
-          BaseOptions(
-            connectTimeout: const Duration(seconds: 15),
-            receiveTimeout: const Duration(seconds: 15),
-          ),
-        );
+    : _dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
 
   final Dio _dio;
 

@@ -38,8 +38,7 @@ class _WikiHomeScreenState extends State<WikiHomeScreen> {
     super.initState();
     _load();
     unawaited(_loadPermissions());
-    _invalidatedSub = getIt<WikiRepository>()
-        .invalidated
+    _invalidatedSub = getIt<WikiRepository>().invalidated
         .where((guildId) => guildId == widget.guildId)
         .listen((_) => _load());
   }
@@ -71,7 +70,9 @@ class _WikiHomeScreenState extends State<WikiHomeScreen> {
 
   Future<void> _manageCategories() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => WikiCategoryManagerScreen(guildId: widget.guildId)),
+      MaterialPageRoute(
+        builder: (_) => WikiCategoryManagerScreen(guildId: widget.guildId),
+      ),
     );
     if (mounted) _load();
   }
@@ -108,7 +109,9 @@ class _WikiHomeScreenState extends State<WikiHomeScreen> {
       body: body,
       floatingActionButton: canCreate
           ? FloatingActionButton(
-              onPressed: () => context.push(RoutePaths.serverWikiNewPagePath(widget.guildId)),
+              onPressed: () => context.push(
+                RoutePaths.serverWikiNewPagePath(widget.guildId),
+              ),
               tooltip: 'New page',
               child: const Icon(Icons.add),
             )
@@ -145,13 +148,15 @@ class _EmptyWiki extends StatelessWidget {
                   ? 'Start documenting your server — the first page can be anything from rules to a getting-started guide.'
                   : 'Nobody has written anything here yet.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
             ),
             if (canCreate) ...[
               const SizedBox(height: AppSpacing.m),
               FilledButton.icon(
-                onPressed: () => context.push(RoutePaths.serverWikiNewPagePath(guildId)),
+                onPressed: () =>
+                    context.push(RoutePaths.serverWikiNewPagePath(guildId)),
                 icon: const Icon(Icons.add),
                 label: const Text('New page'),
               ),
@@ -176,16 +181,24 @@ class _WikiOutline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pinned = wiki.pages.where((p) => p.isPinned).toList()
-      ..sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
+      ..sort(
+        (a, b) =>
+            (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)),
+      );
     final recent = [...wiki.pages]
-      ..sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
+      ..sort(
+        (a, b) =>
+            (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)),
+      );
     final recentTop = recent.take(8).toList();
 
-    final categories = [...wiki.categories]..sort((a, b) => a.position.compareTo(b.position));
-    final uncategorizedRoots = wiki.pages
-        .where((p) => p.categoryId == null && p.parentPageId == null)
-        .toList()
-      ..sort((a, b) => a.title.compareTo(b.title));
+    final categories = [...wiki.categories]
+      ..sort((a, b) => a.position.compareTo(b.position));
+    final uncategorizedRoots =
+        wiki.pages
+            .where((p) => p.categoryId == null && p.parentPageId == null)
+            .toList()
+          ..sort((a, b) => a.title.compareTo(b.title));
 
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
@@ -200,16 +213,31 @@ class _WikiOutline extends StatelessWidget {
         ],
         for (final category in categories) ...[
           _SectionHeader(icon: Icons.folder_outlined, label: category.name),
-          for (final page in wiki.pages
-              .where((p) => p.categoryId == category.id && p.parentPageId == null)
-              .toList()
-            ..sort((a, b) => a.title.compareTo(b.title)))
-            _PageTile(guildId: guildId, page: page, children: _childrenOf(page.id)),
+          for (final page
+              in wiki.pages
+                  .where(
+                    (p) =>
+                        p.categoryId == category.id && p.parentPageId == null,
+                  )
+                  .toList()
+                ..sort((a, b) => a.title.compareTo(b.title)))
+            _PageTile(
+              guildId: guildId,
+              page: page,
+              children: _childrenOf(page.id),
+            ),
         ],
         if (uncategorizedRoots.isNotEmpty) ...[
-          const _SectionHeader(icon: Icons.description_outlined, label: 'Uncategorized'),
+          const _SectionHeader(
+            icon: Icons.description_outlined,
+            label: 'Uncategorized',
+          ),
           for (final page in uncategorizedRoots)
-            _PageTile(guildId: guildId, page: page, children: _childrenOf(page.id)),
+            _PageTile(
+              guildId: guildId,
+              page: page,
+              children: _childrenOf(page.id),
+            ),
         ],
       ],
     );
@@ -227,7 +255,12 @@ class _SectionHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final color = theme.colorScheme.onSurface.withValues(alpha: 0.55);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.m, AppSpacing.m, AppSpacing.m, AppSpacing.xs),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.m,
+        AppSpacing.m,
+        AppSpacing.m,
+        AppSpacing.xs,
+      ),
       child: Row(
         children: [
           Icon(icon, size: 14, color: color),
@@ -275,9 +308,14 @@ class _PageTile extends StatelessWidget {
             ),
             title: Text(page.title, style: theme.textTheme.bodyMedium),
             trailing: page.visibility == WikiVisibility.public
-                ? Icon(Icons.public, size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.4))
+                ? Icon(
+                    Icons.public,
+                    size: 16,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  )
                 : null,
-            onTap: () => context.push(RoutePaths.serverWikiPagePath(guildId, page.id)),
+            onTap: () =>
+                context.push(RoutePaths.serverWikiPagePath(guildId, page.id)),
           ),
         ),
         for (final child in children)

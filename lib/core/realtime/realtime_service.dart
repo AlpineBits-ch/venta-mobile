@@ -11,7 +11,11 @@ import 'realtime_transport.dart';
 /// broadcast [Stream<RealtimeEvent>] that feature repositories subscribe to
 /// and interpret.
 class RealtimeService {
-  RealtimeService({required this.transport, required this.authRepository, required this.deviceIdService});
+  RealtimeService({
+    required this.transport,
+    required this.authRepository,
+    required this.deviceIdService,
+  });
 
   final RealtimeTransport transport;
   final AuthRepository authRepository;
@@ -93,18 +97,23 @@ class RealtimeService {
   /// `.where((e) => e.name == '...')`.
   Stream<RealtimeEvent> get events => _eventsController.stream;
 
-  Stream<RealtimeConnectionStatus> get connectionStatus => transport.connectionStatus;
+  Stream<RealtimeConnectionStatus> get connectionStatus =>
+      transport.connectionStatus;
 
   /// Idempotent: call once per authenticated session (login, or app cold
   /// start with a restored session). Safe to call again after [stop].
   Future<void> start() async {
     if (!_configured) {
       transport.configure(
-        hubUrl: '${authRepository.baseUrl}/api/v1/ws/hub?deviceId=${deviceIdService.deviceId}',
+        hubUrl:
+            '${authRepository.baseUrl}/api/v1/ws/hub?deviceId=${deviceIdService.deviceId}',
         accessTokenFactory: () => authRepository.ensureValidToken(),
       );
       for (final event in _watchedEvents) {
-        transport.on(event, (args) => _eventsController.add(RealtimeEvent(event, args)));
+        transport.on(
+          event,
+          (args) => _eventsController.add(RealtimeEvent(event, args)),
+        );
       }
       _configured = true;
     }
@@ -116,5 +125,6 @@ class RealtimeService {
     _configured = false;
   }
 
-  Future<void> invoke(String method, {List<Object>? args}) => transport.invoke(method, args: args);
+  Future<void> invoke(String method, {List<Object>? args}) =>
+      transport.invoke(method, args: args);
 }

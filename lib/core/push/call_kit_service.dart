@@ -71,13 +71,22 @@ Future<void> showCallKitFromPushData(Map<String, dynamic> data) async {
 @pragma('vm:entry-point')
 Future<void> callKitBackgroundMessageHandler(CallEvent event) async {
   final (callId, action) = switch (event) {
-    CallEventActionCallAccept(:final callKitParams) => (callKitParams.id, 'accept'),
-    CallEventActionCallDecline(:final callKitParams) => (callKitParams.id, 'decline'),
+    CallEventActionCallAccept(:final callKitParams) => (
+      callKitParams.id,
+      'accept',
+    ),
+    CallEventActionCallDecline(:final callKitParams) => (
+      callKitParams.id,
+      'decline',
+    ),
     CallEventActionCallTimeout(:final id) => (id, 'decline'),
     _ => (null, null),
   };
   if (callId == null || action == null) return;
-  await SecureStorageService().writePendingCallAction(callId: callId, action: action);
+  await SecureStorageService().writePendingCallAction(
+    callId: callId,
+    action: action,
+  );
 }
 
 /// Bridges the native CallKit/Android-incoming-call UI to [CallCubit] — the
@@ -109,7 +118,9 @@ class CallKitService {
   final PushTokenApi pushTokenApi;
   final SecureStorageService secureStorage;
 
-  final IosCallKitBridge? _iosBridge = Platform.isIOS ? IosCallKitBridge() : null;
+  final IosCallKitBridge? _iosBridge = Platform.isIOS
+      ? IosCallKitBridge()
+      : null;
   StreamSubscription<CallEvent?>? _androidEventSub;
   StreamSubscription<IosCallKitEvent>? _iosEventSub;
   StreamSubscription<CallState>? _callCubitSub;
@@ -123,12 +134,16 @@ class CallKitService {
       _iosEventSub = iosBridge.events.listen(_handleIosEvent);
       await _registerVoipToken();
     } else {
-      _androidEventSub = FlutterCallkitIncoming.onEvent.listen(_handleAndroidEvent);
+      _androidEventSub = FlutterCallkitIncoming.onEvent.listen(
+        _handleAndroidEvent,
+      );
       // iOS's own CXProvider relays accept/decline/end natively regardless
       // of whether any Dart engine was already running (AppDelegate.swift
       // eagerly boots one if not) — only Android needs this background
       // hand-off registered/consumed. See callKitBackgroundMessageHandler.
-      await FlutterCallkitIncoming.onBackgroundMessage(callKitBackgroundMessageHandler);
+      await FlutterCallkitIncoming.onBackgroundMessage(
+        callKitBackgroundMessageHandler,
+      );
       await _resumePendingCallAction();
     }
   }
@@ -149,8 +164,9 @@ class CallKitService {
 
   Future<void> _registerVoipToken() async {
     final iosBridge = _iosBridge;
-    final token =
-        iosBridge != null ? await iosBridge.getVoipToken() : await FlutterCallkitIncoming.getDevicePushTokenVoIP();
+    final token = iosBridge != null
+        ? await iosBridge.getVoipToken()
+        : await FlutterCallkitIncoming.getDevicePushTokenVoIP();
     if (token == null || token.isEmpty) return;
     await pushTokenApi.registerVoipToken(token);
   }
@@ -161,7 +177,9 @@ class CallKitService {
   /// Dart code runs at all — see [showCallKitFromPushData] on Android, and
   /// the PushKit delegate in `AppDelegate.swift` on iOS).
   Future<void> _handleCallCubitState(CallState state) async {
-    if (state.phase == CallPhase.incoming && state.call != null && _shownForCallId != state.call!.id) {
+    if (state.phase == CallPhase.incoming &&
+        state.call != null &&
+        _shownForCallId != state.call!.id) {
       _shownForCallId = state.call!.id;
       await _showForIncoming(state.call!);
     } else if (state.phase == CallPhase.active &&
@@ -222,7 +240,10 @@ class CallKitService {
     }
     final iosBridge = _iosBridge;
     if (iosBridge != null) {
-      await iosBridge.reportIncomingCall(callId: call.id, callerName: callerName ?? 'Unknown');
+      await iosBridge.reportIncomingCall(
+        callId: call.id,
+        callerName: callerName ?? 'Unknown',
+      );
       return;
     }
     await FlutterCallkitIncoming.showCallkitIncoming(

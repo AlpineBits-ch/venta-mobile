@@ -34,7 +34,9 @@ abstract final class DeepLinkHandler {
 
     switch (uri.host) {
       case 'invite':
-        final code = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
+        final code = uri.pathSegments.isNotEmpty
+            ? uri.pathSegments.first
+            : null;
         if (code == null || code.isEmpty) return null;
         return InviteTarget(code);
       case 'conversation':

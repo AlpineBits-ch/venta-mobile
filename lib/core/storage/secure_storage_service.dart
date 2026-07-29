@@ -8,7 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// tokens in plain `localStorage`.
 class SecureStorageService {
   SecureStorageService({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 
@@ -30,13 +30,17 @@ class SecureStorageService {
   Future<String?> readServerUrl() => _storage.read(key: _serverUrlKey);
 
   Future<String?> readDeviceId() => _storage.read(key: _deviceIdKey);
-  Future<void> writeDeviceId(String deviceId) => _storage.write(key: _deviceIdKey, value: deviceId);
+  Future<void> writeDeviceId(String deviceId) =>
+      _storage.write(key: _deviceIdKey, value: deviceId);
 
   /// A call action (accept/decline) that a [CallKitService] background
   /// isolate captured while the main Flutter engine wasn't running yet — see
   /// `call_kit_service.dart`'s background handler for why this hand-off is
   /// needed instead of just acting on it directly from that isolate.
-  Future<void> writePendingCallAction({required String callId, required String action}) async {
+  Future<void> writePendingCallAction({
+    required String callId,
+    required String action,
+  }) async {
     await _storage.write(key: _pendingCallIdKey, value: callId);
     await _storage.write(key: _pendingCallActionKey, value: action);
   }

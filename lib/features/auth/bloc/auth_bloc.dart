@@ -51,10 +51,8 @@ class AuthState extends Equatable {
   final AuthStatus status;
   final String? errorMessage;
 
-  AuthState copyWith({AuthStatus? status, String? errorMessage}) => AuthState(
-        status: status ?? this.status,
-        errorMessage: errorMessage,
-      );
+  AuthState copyWith({AuthStatus? status, String? errorMessage}) =>
+      AuthState(status: status ?? this.status, errorMessage: errorMessage);
 
   @override
   List<Object?> get props => [status, errorMessage];
@@ -74,7 +72,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final SessionCubit sessionCubit;
   final RealtimeService realtimeService;
 
-  Future<void> _onLoginSubmitted(LoginSubmitted event, Emitter<AuthState> emit) async {
+  Future<void> _onLoginSubmitted(
+    LoginSubmitted event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(state.copyWith(status: AuthStatus.loading));
     try {
       await authRepository.login(event.input, event.password);
@@ -83,11 +84,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       unawaited(startPushServices());
       emit(state.copyWith(status: AuthStatus.success));
     } catch (e) {
-      emit(state.copyWith(status: AuthStatus.failure, errorMessage: _describeError(e)));
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          errorMessage: _describeError(e),
+        ),
+      );
     }
   }
 
-  Future<void> _onRegisterSubmitted(RegisterSubmitted event, Emitter<AuthState> emit) async {
+  Future<void> _onRegisterSubmitted(
+    RegisterSubmitted event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(state.copyWith(status: AuthStatus.loading));
     try {
       await authRepository.register(
@@ -101,7 +110,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       unawaited(startPushServices());
       emit(state.copyWith(status: AuthStatus.success));
     } catch (e) {
-      emit(state.copyWith(status: AuthStatus.failure, errorMessage: _describeError(e)));
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          errorMessage: _describeError(e),
+        ),
+      );
     }
   }
 

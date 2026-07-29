@@ -12,6 +12,7 @@ sealed class MessageReactionDto with _$MessageReactionDto {
     required String messageId,
     required String emoji,
     required String userId,
+
     /// `conversationId` or `channelId`, whichever this message belongs to —
     /// present on the wire but unused client-side (the message it's
     /// attached to already carries that context).

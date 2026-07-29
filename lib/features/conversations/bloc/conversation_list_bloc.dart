@@ -39,18 +39,19 @@ class ConversationListState extends Equatable {
   ConversationListState copyWith({
     ConversationListStatus? status,
     List<ConversationDto>? conversations,
-  }) =>
-      ConversationListState(
-        status: status ?? this.status,
-        conversations: conversations ?? this.conversations,
-      );
+  }) => ConversationListState(
+    status: status ?? this.status,
+    conversations: conversations ?? this.conversations,
+  );
 
   @override
   List<Object?> get props => [status, conversations];
 }
 
-class ConversationListBloc extends Bloc<ConversationListEvent, ConversationListState> {
-  ConversationListBloc({required this.repository}) : super(const ConversationListState()) {
+class ConversationListBloc
+    extends Bloc<ConversationListEvent, ConversationListState> {
+  ConversationListBloc({required this.repository})
+    : super(const ConversationListState()) {
     on<ConversationListLoadRequested>(_onLoadRequested);
     on<_ConversationsUpdated>(_onConversationsUpdated);
 
@@ -79,7 +80,10 @@ class ConversationListBloc extends Bloc<ConversationListEvent, ConversationListS
     Emitter<ConversationListState> emit,
   ) {
     emit(
-      state.copyWith(status: ConversationListStatus.loaded, conversations: event.conversations),
+      state.copyWith(
+        status: ConversationListStatus.loaded,
+        conversations: event.conversations,
+      ),
     );
   }
 

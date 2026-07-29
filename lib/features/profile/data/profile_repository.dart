@@ -7,13 +7,20 @@ import 'models/profile_dto.dart';
 /// name/avatar without a network round trip once it's been seen once.
 /// Also the sole listener for `presence.*` realtime events.
 class ProfileRepository {
-  ProfileRepository({required this.api, required RealtimeService realtimeService}) {
-    realtimeService.events.where((e) => e.name == 'presence.UserOnline').listen((e) {
-      updateOnlineStatus(e.stringPayload, OnlineStatus.online);
-    });
-    realtimeService.events.where((e) => e.name == 'presence.UserOffline').listen((e) {
-      updateOnlineStatus(e.stringPayload, OnlineStatus.offline);
-    });
+  ProfileRepository({
+    required this.api,
+    required RealtimeService realtimeService,
+  }) {
+    realtimeService.events.where((e) => e.name == 'presence.UserOnline').listen(
+      (e) {
+        updateOnlineStatus(e.stringPayload, OnlineStatus.online);
+      },
+    );
+    realtimeService.events
+        .where((e) => e.name == 'presence.UserOffline')
+        .listen((e) {
+          updateOnlineStatus(e.stringPayload, OnlineStatus.offline);
+        });
   }
 
   final ProfileApi api;
@@ -38,7 +45,10 @@ class ProfileRepository {
     return profile;
   }
 
-  Future<ProfileDto> getByUserId(String userId, {bool forceRefresh = false}) async {
+  Future<ProfileDto> getByUserId(
+    String userId, {
+    bool forceRefresh = false,
+  }) async {
     if (!forceRefresh) {
       final cached = _byUserId[userId];
       if (cached != null) return cached;
@@ -48,10 +58,19 @@ class ProfileRepository {
     return profile;
   }
 
-  Future<ProfileDto> updateProfile({String? bio, String? accentColor, ProfileFont? font}) async {
+  Future<ProfileDto> updateProfile({
+    String? bio,
+    String? accentColor,
+    ProfileFont? font,
+  }) async {
     final current = _self;
     if (current == null) throw StateError('Self profile not loaded yet.');
-    await api.updateProfile(profileId: current.id, bio: bio, accentColor: accentColor, font: font);
+    await api.updateProfile(
+      profileId: current.id,
+      bio: bio,
+      accentColor: accentColor,
+      font: font,
+    );
     return getSelf();
   }
 

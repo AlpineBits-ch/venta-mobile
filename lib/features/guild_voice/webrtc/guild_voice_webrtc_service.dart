@@ -80,7 +80,10 @@ class GuildVoiceWebRtcService {
 
     _cfSessionId = await api.cfCreateSession(guildId, channelId);
 
-    final stream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
+    final stream = await navigator.mediaDevices.getUserMedia({
+      'audio': true,
+      'video': false,
+    });
     final track = stream.getAudioTracks().first;
     _localStream = stream;
     _localAudioTrack = track;
@@ -114,14 +117,22 @@ class GuildVoiceWebRtcService {
       init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
     );
 
-    final results = await _offerAnswerCycle((pc) async => [
-          {'location': 'remote', 'sessionId': cfSessionId, 'trackName': trackName},
-        ]);
+    final results = await _offerAnswerCycle(
+      (pc) async => [
+        {
+          'location': 'remote',
+          'sessionId': cfSessionId,
+          'trackName': trackName,
+        },
+      ],
+    );
 
-    final mid = results.firstWhere(
-          (r) => r['trackName'] == trackName,
-          orElse: () => const {},
-        )['mid'] as String? ??
+    final mid =
+        results.firstWhere(
+              (r) => r['trackName'] == trackName,
+              orElse: () => const {},
+            )['mid']
+            as String? ??
         await _resolveMid(pc, transceiver) ??
         '';
     _midToUserId[mid] = userId;
@@ -146,7 +157,10 @@ class GuildVoiceWebRtcService {
   // (the real mid) once mid becomes available. The "same" transceiver
   // therefore never compares equal to itself across this before/after gap.
   // The sender's local track id is what's actually stable.
-  Future<String?> _resolveMid(RTCPeerConnection pc, RTCRtpTransceiver original) async {
+  Future<String?> _resolveMid(
+    RTCPeerConnection pc,
+    RTCRtpTransceiver original,
+  ) async {
     final trackId = original.sender.track?.id;
     final transceivers = await pc.getTransceivers();
     if (trackId != null) {
@@ -166,7 +180,8 @@ class GuildVoiceWebRtcService {
     _localAudioTrack?.enabled = !isMuted;
   }
 
-  Future<void> setSpeakerphoneOn(bool enable) => Helper.setSpeakerphoneOn(enable);
+  Future<void> setSpeakerphoneOn(bool enable) =>
+      Helper.setSpeakerphoneOn(enable);
 
   void setDeafened(bool isDeafened) {
     _deafened = isDeafened;
@@ -197,21 +212,29 @@ class GuildVoiceWebRtcService {
   // ── SDP offer/answer cycle ────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> _offerAnswerCycle(
-    Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc) buildTracks,
+    Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc)
+    buildTracks,
   ) {
-    final next = _negotiationChain.catchError((_) {}).then((_) => _doOfferAnswer(buildTracks));
+    final next = _negotiationChain
+        .catchError((_) {})
+        .then((_) => _doOfferAnswer(buildTracks));
     _negotiationChain = next.catchError((_) => const <Map<String, dynamic>>[]);
     return next;
   }
 
   Future<List<Map<String, dynamic>>> _doOfferAnswer(
-    Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc) buildTracks,
+    Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc)
+    buildTracks,
   ) async {
     final pc = _pc;
     final guildId = _guildId;
     final channelId = _channelId;
     final cfSessionId = _cfSessionId;
-    if (pc == null || guildId == null || channelId == null || cfSessionId == null) return const [];
+    if (pc == null ||
+        guildId == null ||
+        channelId == null ||
+        cfSessionId == null)
+      return const [];
 
     final offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -224,7 +247,9 @@ class GuildVoiceWebRtcService {
       tracks: await buildTracks(pc),
     );
 
-    await pc.setRemoteDescription(_toSessionDescription(response.sessionDescription));
+    await pc.setRemoteDescription(
+      _toSessionDescription(response.sessionDescription),
+    );
 
     if (response.requiresImmediateRenegotiation) {
       final reOffer = await pc.createOffer();
@@ -235,10 +260,14 @@ class GuildVoiceWebRtcService {
         cfSessionId: cfSessionId,
         sessionDescription: {'type': reOffer.type, 'sdp': reOffer.sdp},
       );
-      await pc.setRemoteDescription(_toSessionDescription(reneg.sessionDescription));
+      await pc.setRemoteDescription(
+        _toSessionDescription(reneg.sessionDescription),
+      );
     }
 
-    return response.tracks.map((t) => <String, dynamic>{'mid': t.mid, 'trackName': t.trackName}).toList();
+    return response.tracks
+        .map((t) => <String, dynamic>{'mid': t.mid, 'trackName': t.trackName})
+        .toList();
   }
 
   RTCSessionDescription _toSessionDescription(Map<String, dynamic> map) =>

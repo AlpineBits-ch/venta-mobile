@@ -1,8 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../routing/route_paths.dart';
-import '../theme/status_colors_extension.dart';
+import '../theme/avatar_palette.dart';
 import 'profile_resolver.dart';
 import 'status_dot.dart';
 
@@ -42,15 +43,21 @@ class UserAvatar extends StatelessWidget {
 
         final avatar = CircleAvatar(
           radius: radius,
-          backgroundColor: context.statusColors.hover,
-          backgroundImage: profile?.avatarUrl != null ? NetworkImage(profile!.avatarUrl!) : null,
+          backgroundColor: AvatarPalette.colorForUserId(userId),
+          backgroundImage: profile?.avatarUrl != null
+              ? CachedNetworkImageProvider(profile!.avatarUrl!)
+              : null,
           child: profile?.avatarUrl == null
-              ? Text(label, style: TextStyle(fontSize: radius * 0.7))
+              ? Text(
+                  label,
+                  style: TextStyle(color: Colors.white, fontSize: radius * 0.7),
+                )
               : null,
         );
 
         return GestureDetector(
-          onTap: onTap ?? () => context.push(RoutePaths.userProfilePath(userId)),
+          onTap:
+              onTap ?? () => context.push(RoutePaths.userProfilePath(userId)),
           child: showStatus && profile != null
               ? Stack(
                   clipBehavior: Clip.none,
@@ -59,7 +66,10 @@ class UserAvatar extends StatelessWidget {
                     Positioned(
                       right: -1,
                       bottom: -1,
-                      child: StatusDot(status: profile.onlineStatus, size: radius * 0.5),
+                      child: StatusDot(
+                        status: profile.onlineStatus,
+                        size: radius * 0.5,
+                      ),
                     ),
                   ],
                 )

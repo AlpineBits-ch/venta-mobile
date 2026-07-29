@@ -6,9 +6,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
-import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/profile_resolver.dart';
+import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
@@ -86,10 +86,16 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   }
 
   Future<void> _createChannel() async {
-    final name = await _promptForText(title: 'Create a channel', hint: 'channel-name');
+    final name = await _promptForText(
+      title: 'Create a channel',
+      hint: 'channel-name',
+    );
     if (name == null || name.trim().isEmpty) return;
     try {
-      await getIt<GuildRepository>().createChannel(guildId: widget.guildId, name: name.trim());
+      await getIt<GuildRepository>().createChannel(
+        guildId: widget.guildId,
+        name: name.trim(),
+      );
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -99,15 +105,25 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     }
   }
 
-  Future<String?> _promptForText({required String title, required String hint}) {
+  Future<String?> _promptForText({
+    required String title,
+    required String hint,
+  }) {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: TextField(controller: controller, autofocus: true, decoration: InputDecoration(hintText: hint)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(hintText: hint),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
             child: const Text('Create'),
@@ -121,7 +137,16 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   Widget build(BuildContext context) {
     final guild = _guild;
     if (guild == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: ListView(
+            key: const ValueKey('loading'),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+            children: [for (var i = 0; i < 6; i++) const SkeletonListTile()],
+          ),
+        ),
+      );
     }
 
     final byCategory = <String?, List<ChannelDto>>{};
@@ -131,7 +156,8 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     for (final list in byCategory.values) {
       list.sort((a, b) => a.position.compareTo(b.position));
     }
-    final sortedCategories = [...guild.categories]..sort((a, b) => a.position.compareTo(b.position));
+    final sortedCategories = [...guild.categories]
+      ..sort((a, b) => a.position.compareTo(b.position));
     final uncategorized = byCategory[null] ?? const <ChannelDto>[];
 
     return Scaffold(
@@ -142,31 +168,47 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
             IconButton(
               icon: const Icon(Icons.menu_book_outlined),
               tooltip: 'Wiki',
-              onPressed: () => context.push(RoutePaths.serverWikiPath(guild.id)),
+              onPressed: () =>
+                  context.push(RoutePaths.serverWikiPath(guild.id)),
             ),
           IconButton(
             icon: const Icon(Icons.people_outline),
-            onPressed: () => context.push(RoutePaths.serverMembersPath(guild.id)),
+            onPressed: () =>
+                context.push(RoutePaths.serverMembersPath(guild.id)),
           ),
           if (_permissions.has('ManageGuild'))
             IconButton(
               icon: const Icon(Icons.settings_outlined),
-              onPressed: () => context.push(RoutePaths.serverSettingsPath(guild.id)),
+              onPressed: () =>
+                  context.push(RoutePaths.serverSettingsPath(guild.id)),
             ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
-        children: [
-          for (final channel in uncategorized)
-            _ChannelTile(guildId: guild.id, guildName: guild.name, channel: channel),
-          for (final category in sortedCategories)
-            if ((byCategory[category.id] ?? const <ChannelDto>[]).isNotEmpty) ...[
-              _CategoryHeader(category: category),
-              for (final channel in byCategory[category.id]!)
-                _ChannelTile(guildId: guild.id, guildName: guild.name, channel: channel),
-            ],
-        ],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        child: ListView(
+          key: const ValueKey('loaded'),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+          children: [
+            for (final channel in uncategorized)
+              _ChannelTile(
+                guildId: guild.id,
+                guildName: guild.name,
+                channel: channel,
+              ),
+            for (final category in sortedCategories)
+              if ((byCategory[category.id] ?? const <ChannelDto>[])
+                  .isNotEmpty) ...[
+                _CategoryHeader(category: category),
+                for (final channel in byCategory[category.id]!)
+                  _ChannelTile(
+                    guildId: guild.id,
+                    guildName: guild.name,
+                    channel: channel,
+                  ),
+              ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _createChannel,
@@ -194,7 +236,11 @@ class _CategoryHeader extends StatelessWidget {
 }
 
 class _ChannelTile extends StatelessWidget {
-  const _ChannelTile({required this.guildId, required this.guildName, required this.channel});
+  const _ChannelTile({
+    required this.guildId,
+    required this.guildName,
+    required this.channel,
+  });
   final String guildId;
   final String guildName;
   final ChannelDto channel;
@@ -202,13 +248,18 @@ class _ChannelTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (channel.type == ChannelType.voice) {
-      return _VoiceChannelTile(guildId: guildId, guildName: guildName, channel: channel);
+      return _VoiceChannelTile(
+        guildId: guildId,
+        guildName: guildName,
+        channel: channel,
+      );
     }
     final theme = Theme.of(context);
     return ListTile(
-      leading: Icon(Icons.tag, color: context.statusColors.hover.withValues(alpha: 1)),
+      leading: const Icon(Icons.tag),
       title: Text(channel.name, style: theme.textTheme.bodyMedium),
-      onTap: () => context.push(RoutePaths.serverChannelPath(guildId, channel.id)),
+      onTap: () =>
+          context.push(RoutePaths.serverChannelPath(guildId, channel.id)),
     );
   }
 }
@@ -219,7 +270,11 @@ class _ChannelTile extends StatelessWidget {
 /// navigation; tapping it again while already joined opens the full
 /// `GuildVoiceScreen`.
 class _VoiceChannelTile extends StatelessWidget {
-  const _VoiceChannelTile({required this.guildId, required this.guildName, required this.channel});
+  const _VoiceChannelTile({
+    required this.guildId,
+    required this.guildName,
+    required this.channel,
+  });
   final String guildId;
   final String guildName;
   final ChannelDto channel;
@@ -227,9 +282,10 @@ class _VoiceChannelTile extends StatelessWidget {
   void _onTap(BuildContext context, GuildVoiceState state) {
     final alreadyJoined = state.channelId == channel.id && state.isInVoice;
     if (alreadyJoined) {
-      Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute(builder: (_) => const GuildVoiceScreen()),
-      );
+      Navigator.of(
+        context,
+        rootNavigator: true,
+      ).push(MaterialPageRoute(builder: (_) => const GuildVoiceScreen()));
     } else {
       getIt<GuildVoiceCubit>().join(
         guildId: guildId,
@@ -254,12 +310,15 @@ class _VoiceChannelTile extends StatelessWidget {
             ListTile(
               leading: Icon(
                 Icons.volume_up_outlined,
-                color: joined ? theme.colorScheme.primary : context.statusColors.hover.withValues(alpha: 1),
+                color: joined ? theme.colorScheme.primary : null,
               ),
               title: Text(channel.name, style: theme.textTheme.bodyMedium),
               trailing: participants.isEmpty
                   ? null
-                  : Text('${participants.length}', style: theme.textTheme.labelSmall),
+                  : Text(
+                      '${participants.length}',
+                      style: theme.textTheme.labelSmall,
+                    ),
               onTap: () => _onTap(context, state),
             ),
             for (final participant in participants)
@@ -267,7 +326,10 @@ class _VoiceChannelTile extends StatelessWidget {
                 padding: const EdgeInsets.only(left: 56, bottom: AppSpacing.xs),
                 child: Row(
                   children: [
-                    UserAvatar(userId: participant.userId, radius: AppRadii.avatarSmall / 2),
+                    UserAvatar(
+                      userId: participant.userId,
+                      radius: AppRadii.avatarSmall / 2,
+                    ),
                     const SizedBox(width: AppSpacing.s),
                     Expanded(
                       child: ProfileResolver(
@@ -280,7 +342,13 @@ class _VoiceChannelTile extends StatelessWidget {
                       ),
                     ),
                     if (participant.isMuted)
-                      Icon(Icons.mic_off, size: 14, color: context.statusColors.hover),
+                      Icon(
+                        Icons.mic_off,
+                        size: 14,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
                   ],
                 ),
               ),

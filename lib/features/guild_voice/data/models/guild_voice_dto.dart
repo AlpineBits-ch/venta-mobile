@@ -31,5 +31,6 @@ sealed class VoiceStateDto with _$VoiceStateDto {
     @Default(<VoiceParticipantDto>[]) List<VoiceParticipantDto> participants,
   }) = _VoiceStateDto;
 
-  factory VoiceStateDto.fromJson(Map<String, dynamic> json) => _$VoiceStateDtoFromJson(json);
+  factory VoiceStateDto.fromJson(Map<String, dynamic> json) =>
+      _$VoiceStateDtoFromJson(json);
 }

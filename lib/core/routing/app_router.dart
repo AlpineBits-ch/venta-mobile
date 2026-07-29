@@ -56,14 +56,15 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
     refreshListenable: GoRouterRefreshStream(sessionCubit.stream),
     redirect: (context, state) {
       final session = sessionCubit.state;
-      final loggingIn = state.matchedLocation == RoutePaths.login ||
+      final loggingIn =
+          state.matchedLocation == RoutePaths.login ||
           state.matchedLocation == RoutePaths.register ||
           state.matchedLocation == RoutePaths.serverSetup;
 
       return switch (session) {
         SessionUnknown() => null,
-        SessionUnauthenticated() || SessionServerMisconfigured() =>
-          loggingIn ? null : RoutePaths.login,
+        SessionUnauthenticated() ||
+        SessionServerMisconfigured() => loggingIn ? null : RoutePaths.login,
         SessionAuthenticated() => loggingIn ? RoutePaths.home : null,
       };
     },
@@ -105,7 +106,8 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
           // platform push transition).
           GoRoute(
             path: RoutePaths.home,
-            pageBuilder: (context, state) => const NoTransitionPage(child: HomeScreen()),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: HomeScreen()),
           ),
           GoRoute(
             path: RoutePaths.homeFriends,
@@ -119,7 +121,9 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
           GoRoute(
             path: RoutePaths.server,
             pageBuilder: (context, state) => NoTransitionPage(
-              child: GuildDetailScreen(guildId: state.pathParameters['guildId']!),
+              child: GuildDetailScreen(
+                guildId: state.pathParameters['guildId']!,
+              ),
             ),
           ),
         ],
@@ -139,30 +143,26 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       ),
       GoRoute(
         path: RoutePaths.serverMembers,
-        builder: (context, state) => GuildMembersScreen(
-          guildId: state.pathParameters['guildId']!,
-        ),
+        builder: (context, state) =>
+            GuildMembersScreen(guildId: state.pathParameters['guildId']!),
       ),
       GoRoute(
         path: RoutePaths.serverSettings,
-        builder: (context, state) => GuildSettingsScreen(
-          guildId: state.pathParameters['guildId']!,
-        ),
+        builder: (context, state) =>
+            GuildSettingsScreen(guildId: state.pathParameters['guildId']!),
       ),
       GoRoute(
         path: RoutePaths.serverWiki,
-        builder: (context, state) => WikiHomeScreen(
-          guildId: state.pathParameters['guildId']!,
-        ),
+        builder: (context, state) =>
+            WikiHomeScreen(guildId: state.pathParameters['guildId']!),
       ),
       // Declared before serverWikiPage — see the comment on
       // RoutePaths.serverWikiNewPage for why literal `new` must be tried
       // before the `:pageId` wildcard.
       GoRoute(
         path: RoutePaths.serverWikiNewPage,
-        builder: (context, state) => WikiEditorScreen(
-          guildId: state.pathParameters['guildId']!,
-        ),
+        builder: (context, state) =>
+            WikiEditorScreen(guildId: state.pathParameters['guildId']!),
       ),
       GoRoute(
         path: RoutePaths.serverWikiPageEdit,
@@ -194,9 +194,8 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       ),
       GoRoute(
         path: RoutePaths.userProfile,
-        builder: (context, state) => UserProfileScreen(
-          userId: state.pathParameters['userId']!,
-        ),
+        builder: (context, state) =>
+            UserProfileScreen(userId: state.pathParameters['userId']!),
       ),
     ],
   );

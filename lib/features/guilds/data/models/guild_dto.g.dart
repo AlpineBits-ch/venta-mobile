@@ -27,6 +27,7 @@ _GuildDto _$GuildDtoFromJson(Map<String, dynamic> json) => _GuildDto(
           .toList() ??
       const <RoleDto>[],
   bannerUrl: json['bannerUrl'] as String?,
+  iconUrl: json['iconUrl'] as String?,
   systemChannelId: json['systemChannelId'] as String?,
 );
 
@@ -39,5 +40,6 @@ Map<String, dynamic> _$GuildDtoToJson(_GuildDto instance) => <String, dynamic>{
   'channels': instance.channels,
   'roles': instance.roles,
   'bannerUrl': instance.bannerUrl,
+  'iconUrl': instance.iconUrl,
   'systemChannelId': instance.systemChannelId,
 };

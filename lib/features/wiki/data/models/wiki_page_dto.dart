@@ -30,24 +30,25 @@ sealed class WikiPageDto with _$WikiPageDto {
     @Default('') String content,
   }) = _WikiPageDto;
 
-  factory WikiPageDto.fromJson(Map<String, dynamic> json) => _$WikiPageDtoFromJson(json);
+  factory WikiPageDto.fromJson(Map<String, dynamic> json) =>
+      _$WikiPageDtoFromJson(json);
 }
 
 extension WikiPageDtoX on WikiPageDto {
   WikiPageSummaryDto toSummary() => WikiPageSummaryDto(
-        id: id,
-        guildId: guildId,
-        title: title,
-        slug: slug,
-        authorId: authorId,
-        lastEditorId: lastEditorId,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-        parentPageId: parentPageId,
-        categoryId: categoryId,
-        visibility: visibility,
-        tags: tags,
-        isPinned: isPinned,
-        revisionCount: revisionCount,
-      );
+    id: id,
+    guildId: guildId,
+    title: title,
+    slug: slug,
+    authorId: authorId,
+    lastEditorId: lastEditorId,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+    parentPageId: parentPageId,
+    categoryId: categoryId,
+    visibility: visibility,
+    tags: tags,
+    isPinned: isPinned,
+    revisionCount: revisionCount,
+  );
 }

@@ -10,7 +10,11 @@ import '../di/injector.dart';
 /// user's live name/avatar/status (`UserAvatar`, message author headers, …)
 /// so the cache-then-fetch dance lives in exactly one place.
 class ProfileResolver extends StatefulWidget {
-  const ProfileResolver({super.key, required this.userId, required this.builder});
+  const ProfileResolver({
+    super.key,
+    required this.userId,
+    required this.builder,
+  });
 
   final String userId;
   final Widget Function(BuildContext context, ProfileDto? profile) builder;
@@ -44,9 +48,12 @@ class _ProfileResolverState extends State<ProfileResolver> {
       _profile = cached;
       return;
     }
-    repository.getByUserId(widget.userId).then((profile) {
-      if (mounted) setState(() => _profile = profile);
-    }).catchError((_) {});
+    repository
+        .getByUserId(widget.userId)
+        .then((profile) {
+          if (mounted) setState(() => _profile = profile);
+        })
+        .catchError((_) {});
   }
 
   @override

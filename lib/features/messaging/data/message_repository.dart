@@ -32,7 +32,11 @@ class RemoteUserTyping extends MessageRepositoryEvent {
 }
 
 class RemoteReactionAdded extends MessageRepositoryEvent {
-  const RemoteReactionAdded({required this.messageId, required this.emoji, required this.userId});
+  const RemoteReactionAdded({
+    required this.messageId,
+    required this.emoji,
+    required this.userId,
+  });
   final String messageId;
   final String emoji;
   final String userId;
@@ -64,15 +68,15 @@ class MessageRepository {
     required RealtimeService realtimeService,
     this.conversationId,
     this.channelId,
-  })  : assert(
-          (conversationId == null) != (channelId == null),
-          'Exactly one of conversationId/channelId must be set.',
-        ),
-        _realtimeService = realtimeService {
+  }) : assert(
+         (conversationId == null) != (channelId == null),
+         'Exactly one of conversationId/channelId must be set.',
+       ),
+       _realtimeService = realtimeService {
     final prefix = isChannel ? 'guild.' : 'conversation.';
-    _realtimeSub = realtimeService.events.where((e) => e.name.startsWith(prefix)).listen(
-          _handleRealtimeEvent,
-        );
+    _realtimeSub = realtimeService.events
+        .where((e) => e.name.startsWith(prefix))
+        .listen(_handleRealtimeEvent);
   }
 
   final MessageApi api;
@@ -86,7 +90,8 @@ class MessageRepository {
   String get _contextKey => isChannel ? 'channelId' : 'conversationId';
   String get _methodPrefix => isChannel ? 'guild' : 'conversation';
 
-  final _eventsController = StreamController<MessageRepositoryEvent>.broadcast();
+  final _eventsController =
+      StreamController<MessageRepositoryEvent>.broadcast();
   Stream<MessageRepositoryEvent> get events => _eventsController.stream;
 
   void _handleRealtimeEvent(RealtimeEvent event) {
@@ -105,9 +110,15 @@ class MessageRepository {
               authorId: payload['authorId'] as String,
               createdAt: DateTime.now(),
               inReplyTo: payload['inReplyTo'] as String?,
-              mentions: (payload['mentions'] as List?)?.cast<String>() ?? const [],
-              attachments: (payload['attachments'] as List?)
-                      ?.map((a) => AttachmentDto.fromJson((a as Map).cast<String, dynamic>()))
+              mentions:
+                  (payload['mentions'] as List?)?.cast<String>() ?? const [],
+              attachments:
+                  (payload['attachments'] as List?)
+                      ?.map(
+                        (a) => AttachmentDto.fromJson(
+                          (a as Map).cast<String, dynamic>(),
+                        ),
+                      )
                       .toList() ??
                   const [],
               authorIdType: payload['authorIdType'] == 'Bot'
@@ -124,7 +135,9 @@ class MessageRepository {
           ),
         );
       case 'conversation.MessageDeleted' || 'guild.MessageDeleted':
-        _eventsController.add(RemoteMessageDeleted(payload['messageId'] as String));
+        _eventsController.add(
+          RemoteMessageDeleted(payload['messageId'] as String),
+        );
       case 'conversation.UserTyping' || 'guild.UserTyping':
         _eventsController.add(RemoteUserTyping(payload['userId'] as String));
       case 'conversation.ReactionCreated' || 'guild.ReactionCreated':
@@ -146,7 +159,8 @@ class MessageRepository {
     }
   }
 
-  Future<List<MessageDto>> fetchPage({int offset = 0, int limit = 50}) => isChannel
+  Future<List<MessageDto>> fetchPage({int offset = 0, int limit = 50}) =>
+      isChannel
       ? api.getForChannel(_contextId, offset: offset, limit: limit)
       : api.getForConversation(_contextId, offset: offset, limit: limit);
 
@@ -173,7 +187,10 @@ class MessageRepository {
   /// attachment picker — the returned [AttachmentDto] already has its final
   /// `url`, so it can be used directly both in the optimistic local message
   /// and as the id passed to [send].
-  Future<AttachmentDto> uploadAttachment({required List<int> bytes, required String fileName}) async {
+  Future<AttachmentDto> uploadAttachment({
+    required List<int> bytes,
+    required String fileName,
+  }) async {
     final id = await api.uploadAttachment(bytes: bytes, fileName: fileName);
     return api.pollAttachment(id);
   }
@@ -200,24 +217,28 @@ class MessageRepository {
   }
 
   Future<void> addReaction(String messageId, String emoji) => api.addReaction(
-        messageId: messageId,
-        emoji: emoji,
-        conversationId: conversationId,
-        channelId: channelId,
-      );
+    messageId: messageId,
+    emoji: emoji,
+    conversationId: conversationId,
+    channelId: channelId,
+  );
 
   Future<void> removeReaction(String messageId, String emoji) =>
-      api.removeReaction(messageId: messageId, emoji: emoji, contextId: _contextId);
+      api.removeReaction(
+        messageId: messageId,
+        emoji: emoji,
+        contextId: _contextId,
+      );
 
   Future<void> sendTypingIndicator() =>
       _realtimeService.invoke('$_methodPrefix.StartTyping', args: [_contextId]);
 
   Future<void> updateLastRead(String messageId) => _realtimeService.invoke(
-        '$_methodPrefix.UpdateLastRead',
-        args: [
-          {_contextKey: _contextId, 'id': messageId},
-        ],
-      );
+    '$_methodPrefix.UpdateLastRead',
+    args: [
+      {_contextKey: _contextId, 'id': messageId},
+    ],
+  );
 
   void dispose() {
     _realtimeSub.cancel();

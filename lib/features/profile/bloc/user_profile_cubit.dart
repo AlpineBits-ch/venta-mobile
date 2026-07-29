@@ -36,18 +36,22 @@ class UserProfileState extends Equatable {
     RelationshipModel? relationship,
     bool? isActionInProgress,
     String? errorMessage,
-  }) =>
-      UserProfileState(
-        status: status ?? this.status,
-        profile: profile ?? this.profile,
-        relationship: relationship,
-        isActionInProgress: isActionInProgress ?? false,
-        errorMessage: errorMessage,
-      );
+  }) => UserProfileState(
+    status: status ?? this.status,
+    profile: profile ?? this.profile,
+    relationship: relationship,
+    isActionInProgress: isActionInProgress ?? false,
+    errorMessage: errorMessage,
+  );
 
   @override
-  List<Object?> get props =>
-      [status, profile, relationship, isActionInProgress, errorMessage];
+  List<Object?> get props => [
+    status,
+    profile,
+    relationship,
+    isActionInProgress,
+    errorMessage,
+  ];
 }
 
 /// Loads another user's profile plus the caller's relationship to them (so
@@ -92,7 +96,12 @@ class UserProfileCubit extends Cubit<UserProfileState> {
     emit(state.copyWith(isActionInProgress: true));
     try {
       await relationshipRepository.addFriend(profile.userName);
-      emit(state.copyWith(isActionInProgress: false, relationship: _cachedRelationship));
+      emit(
+        state.copyWith(
+          isActionInProgress: false,
+          relationship: _cachedRelationship,
+        ),
+      );
     } catch (_) {
       emit(
         state.copyWith(
@@ -109,10 +118,18 @@ class UserProfileCubit extends Cubit<UserProfileState> {
     emit(state.copyWith(isActionInProgress: true));
     try {
       await relationshipRepository.accept(relationship.id);
-      emit(state.copyWith(isActionInProgress: false, relationship: _cachedRelationship));
+      emit(
+        state.copyWith(
+          isActionInProgress: false,
+          relationship: _cachedRelationship,
+        ),
+      );
     } catch (_) {
       emit(
-        state.copyWith(isActionInProgress: false, errorMessage: 'Could not accept that request.'),
+        state.copyWith(
+          isActionInProgress: false,
+          errorMessage: 'Could not accept that request.',
+        ),
       );
     }
   }
@@ -129,10 +146,18 @@ class UserProfileCubit extends Cubit<UserProfileState> {
       } else {
         await relationshipRepository.revoke(relationship.id);
       }
-      emit(state.copyWith(isActionInProgress: false, relationship: _cachedRelationship));
+      emit(
+        state.copyWith(
+          isActionInProgress: false,
+          relationship: _cachedRelationship,
+        ),
+      );
     } catch (_) {
       emit(
-        state.copyWith(isActionInProgress: false, errorMessage: 'Could not update that request.'),
+        state.copyWith(
+          isActionInProgress: false,
+          errorMessage: 'Could not update that request.',
+        ),
       );
     }
   }

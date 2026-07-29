@@ -9,32 +9,33 @@ import '../../../data/guild_repository.dart';
 import '../../../data/models/audit_log_entry_dto.dart';
 
 String _describe(AuditActionType type) => switch (type) {
-      AuditActionType.memberBanned => 'banned a member',
-      AuditActionType.memberUnbanned => 'unbanned a member',
-      AuditActionType.memberKicked => 'kicked a member',
-      AuditActionType.memberMuted => 'muted a member',
-      AuditActionType.memberUnmuted => 'unmuted a member',
-      AuditActionType.memberLeft => 'left the server',
-      AuditActionType.roleCreated => 'created a role',
-      AuditActionType.roleUpdated => 'updated a role',
-      AuditActionType.roleDeleted => 'deleted a role',
-      AuditActionType.rolePositionsChanged => 'reordered roles',
-      AuditActionType.channelCreated => 'created a channel',
-      AuditActionType.channelDeleted => 'deleted a channel',
-      AuditActionType.channelUpdated => 'updated a channel',
-      AuditActionType.channelPermissionChanged => 'changed channel permissions',
-      AuditActionType.categoryCreated => 'created a category',
-      AuditActionType.categoryDeleted => 'deleted a category',
-      AuditActionType.guildUpdated => 'updated server settings',
-      AuditActionType.guildDeleted => 'deleted the server',
-      AuditActionType.inviteCreated => 'created an invite',
-      AuditActionType.inviteDeleted => 'deleted an invite',
-      AuditActionType.botInstalled => 'installed a bot',
-      AuditActionType.botUninstalled => 'uninstalled a bot',
-      AuditActionType.guildImportedFromDiscord => 'imported this server from Discord',
-      AuditActionType.guildSyncedFromDiscord => 'synced this server from Discord',
-      AuditActionType.unknown => 'did something',
-    };
+  AuditActionType.memberBanned => 'banned a member',
+  AuditActionType.memberUnbanned => 'unbanned a member',
+  AuditActionType.memberKicked => 'kicked a member',
+  AuditActionType.memberMuted => 'muted a member',
+  AuditActionType.memberUnmuted => 'unmuted a member',
+  AuditActionType.memberLeft => 'left the server',
+  AuditActionType.roleCreated => 'created a role',
+  AuditActionType.roleUpdated => 'updated a role',
+  AuditActionType.roleDeleted => 'deleted a role',
+  AuditActionType.rolePositionsChanged => 'reordered roles',
+  AuditActionType.channelCreated => 'created a channel',
+  AuditActionType.channelDeleted => 'deleted a channel',
+  AuditActionType.channelUpdated => 'updated a channel',
+  AuditActionType.channelPermissionChanged => 'changed channel permissions',
+  AuditActionType.categoryCreated => 'created a category',
+  AuditActionType.categoryDeleted => 'deleted a category',
+  AuditActionType.guildUpdated => 'updated server settings',
+  AuditActionType.guildDeleted => 'deleted the server',
+  AuditActionType.inviteCreated => 'created an invite',
+  AuditActionType.inviteDeleted => 'deleted an invite',
+  AuditActionType.botInstalled => 'installed a bot',
+  AuditActionType.botUninstalled => 'uninstalled a bot',
+  AuditActionType.guildImportedFromDiscord =>
+    'imported this server from Discord',
+  AuditActionType.guildSyncedFromDiscord => 'synced this server from Discord',
+  AuditActionType.unknown => 'did something',
+};
 
 String? _metadataSummary(String? metadata) {
   if (metadata == null || metadata.isEmpty) return null;
@@ -68,7 +69,9 @@ class _AuditLogSettingsTabState extends State<AuditLogSettingsTab> {
 
   Future<void> _load() async {
     try {
-      final entries = await getIt<GuildRepository>().getAuditLog(widget.guildId);
+      final entries = await getIt<GuildRepository>().getAuditLog(
+        widget.guildId,
+      );
       if (mounted) setState(() => _entries = entries);
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not load the audit log.');
@@ -80,7 +83,8 @@ class _AuditLogSettingsTabState extends State<AuditLogSettingsTab> {
     final theme = Theme.of(context);
     if (_error != null) return Center(child: Text(_error!));
     final entries = _entries;
-    if (entries == null) return const Center(child: CircularProgressIndicator());
+    if (entries == null)
+      return const Center(child: CircularProgressIndicator());
     if (entries.isEmpty) return const Center(child: Text('No activity yet.'));
 
     return ListView.builder(

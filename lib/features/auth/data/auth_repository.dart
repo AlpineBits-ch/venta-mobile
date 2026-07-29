@@ -82,8 +82,9 @@ class AuthRepository {
     required DateTime birthdate,
     String? serverDomain,
   }) async {
-    final resolvedBaseUrl =
-        serverDomain != null ? _resolveBaseUrl(serverDomain) : AppConfig.defaultApiUrl;
+    final resolvedBaseUrl = serverDomain != null
+        ? _resolveBaseUrl(serverDomain)
+        : AppConfig.defaultApiUrl;
     await api.register(
       baseUrl: resolvedBaseUrl,
       email: email,
@@ -112,8 +113,14 @@ class AuthRepository {
 
     final refreshFuture = () async {
       try {
-        final tokens = await api.refreshGrant(baseUrl: _baseUrl, refreshToken: refreshToken);
-        await _applyTokens(tokens.accessToken, tokens.refreshToken ?? refreshToken);
+        final tokens = await api.refreshGrant(
+          baseUrl: _baseUrl,
+          refreshToken: refreshToken,
+        );
+        await _applyTokens(
+          tokens.accessToken,
+          tokens.refreshToken ?? refreshToken,
+        );
         return tokens.accessToken;
       } catch (e) {
         await _clearSession();
@@ -166,7 +173,8 @@ class AuthRepository {
     try {
       final normalized = base64Url.normalize(parts[1]);
       final payload =
-          jsonDecode(utf8.decode(base64Url.decode(normalized))) as Map<String, dynamic>;
+          jsonDecode(utf8.decode(base64Url.decode(normalized)))
+              as Map<String, dynamic>;
       return payload['sub'] as String?;
     } catch (_) {
       return null;

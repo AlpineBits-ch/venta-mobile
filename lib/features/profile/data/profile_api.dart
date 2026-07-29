@@ -53,42 +53,46 @@ class ProfileApi {
     );
   }
 
-  Future<void> uploadAvatar({required String profileId, required String filePath}) async {
+  Future<void> uploadAvatar({
+    required String profileId,
+    required String filePath,
+  }) async {
     await client.dio.patch<void>(
       client.url('/api/v1/social/profiles/$profileId/avatar'),
-      data: FormData.fromMap({
-        'file': await MultipartFile.fromFile(filePath),
-      }),
+      data: FormData.fromMap({'file': await MultipartFile.fromFile(filePath)}),
     );
   }
 
-  Future<void> uploadBanner({required String profileId, required String filePath}) async {
+  Future<void> uploadBanner({
+    required String profileId,
+    required String filePath,
+  }) async {
     await client.dio.patch<void>(
       client.url('/api/v1/social/profiles/$profileId/banner'),
-      data: FormData.fromMap({
-        'file': await MultipartFile.fromFile(filePath),
-      }),
+      data: FormData.fromMap({'file': await MultipartFile.fromFile(filePath)}),
     );
   }
 
   Future<void> removeAvatar(String profileId) async {
-    await client.dio.delete<void>(client.url('/api/v1/social/profiles/$profileId/avatar'));
+    await client.dio.delete<void>(
+      client.url('/api/v1/social/profiles/$profileId/avatar'),
+    );
   }
 
   String _fontWireValue(ProfileFont font) => switch (font) {
-        ProfileFont.defaultFont => 'Default',
-        ProfileFont.serif => 'Serif',
-        ProfileFont.monospace => 'Monospace',
-        ProfileFont.rounded => 'Rounded',
-        ProfileFont.display => 'Display',
-        ProfileFont.handwritten => 'Handwritten',
-      };
+    ProfileFont.defaultFont => 'Default',
+    ProfileFont.serif => 'Serif',
+    ProfileFont.monospace => 'Monospace',
+    ProfileFont.rounded => 'Rounded',
+    ProfileFont.display => 'Display',
+    ProfileFont.handwritten => 'Handwritten',
+  };
 
   String _statusWireValue(OnlineStatus status) => switch (status) {
-        OnlineStatus.offline => 'Offline',
-        OnlineStatus.hidden => 'Hidden',
-        OnlineStatus.online => 'Online',
-        OnlineStatus.idle => 'Idle',
-        OnlineStatus.doNotDisturb => 'DoNotDisturb',
-      };
+    OnlineStatus.offline => 'Offline',
+    OnlineStatus.hidden => 'Hidden',
+    OnlineStatus.online => 'Online',
+    OnlineStatus.idle => 'Idle',
+    OnlineStatus.doNotDisturb => 'DoNotDisturb',
+  };
 }

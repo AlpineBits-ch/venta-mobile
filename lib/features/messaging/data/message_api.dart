@@ -47,7 +47,8 @@ class MessageApi {
       client.url('/api/v1/messaging/attachments'),
       data: formData,
     );
-    return (response.data!.first as Map<String, dynamic>)['attachmentId'] as String;
+    return (response.data!.first as Map<String, dynamic>)['attachmentId']
+        as String;
   }
 
   Future<AttachmentDto> getAttachmentStatus(String attachmentId) async {

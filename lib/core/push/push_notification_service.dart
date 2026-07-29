@@ -65,7 +65,10 @@ class PushNotificationService {
   /// and [firebaseMessagingBackgroundHandler] registration have already run
   /// in `main()`.
   Future<void> start() async {
-    await _localNotifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(_messagesChannel);
     await _localNotifications.initialize(
       settings: const InitializationSettings(
@@ -121,7 +124,10 @@ class PushNotificationService {
       title: notification.title,
       body: notification.body,
       notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(_messagesChannel.id, _messagesChannel.name),
+        android: AndroidNotificationDetails(
+          _messagesChannel.id,
+          _messagesChannel.name,
+        ),
         iOS: const DarwinNotificationDetails(),
       ),
       payload: message.data['conversationId'],

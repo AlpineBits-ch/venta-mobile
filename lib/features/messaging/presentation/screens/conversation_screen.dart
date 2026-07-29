@@ -19,20 +19,22 @@ class ConversationScreen extends StatelessWidget {
   final String conversationId;
 
   String _title(String myUserId) {
-    final conversation = getIt<ConversationRepository>()
-        .cached
+    final conversation = getIt<ConversationRepository>().cached
         .where((c) => c.id == conversationId)
         .firstOrNull;
     if (conversation == null) return 'Conversation';
     if (conversation.name != null) return conversation.name!;
-    final others = conversation.members.where((m) => m.userId != myUserId).toList();
+    final others = conversation.members
+        .where((m) => m.userId != myUserId)
+        .toList();
     if (others.isEmpty) return 'Just you';
     return others.map((m) => m.cachedUserName).join(', ');
   }
 
   List<String> _otherMemberIds(String myUserId) {
-    final conversation =
-        getIt<ConversationRepository>().cached.where((c) => c.id == conversationId).firstOrNull;
+    final conversation = getIt<ConversationRepository>().cached
+        .where((c) => c.id == conversationId)
+        .firstOrNull;
     return conversation?.members
             .where((m) => m.userId != myUserId)
             .map((m) => m.userId)
@@ -62,18 +64,19 @@ class ConversationScreen extends StatelessWidget {
                 BlocBuilder<CallCubit, CallState>(
                   bloc: getIt<CallCubit>(),
                   builder: (context, callState) {
-                    final inThisCall = callState.call?.conversationId == conversationId &&
+                    final inThisCall =
+                        callState.call?.conversationId == conversationId &&
                         callState.phase != CallPhase.idle;
                     return IconButton(
                       icon: Icon(inThisCall ? Icons.call_end : Icons.call),
                       onPressed: inThisCall
                           ? getIt<CallCubit>().endCall
                           : callState.phase == CallPhase.idle
-                              ? () => getIt<CallCubit>().startCall(
-                                    conversationId: conversationId,
-                                    participantUserIds: otherMemberIds,
-                                  )
-                              : null,
+                          ? () => getIt<CallCubit>().startCall(
+                              conversationId: conversationId,
+                              participantUserIds: otherMemberIds,
+                            )
+                          : null,
                     );
                   },
                 ),

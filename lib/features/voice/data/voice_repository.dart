@@ -102,10 +102,11 @@ class VoiceRepository {
     required this.api,
     required RealtimeService realtimeService,
     required DeviceIdService deviceIdService,
-  })  : _realtimeService = realtimeService,
-        _deviceIdService = deviceIdService {
-    _realtimeSub =
-        realtimeService.events.where((e) => e.name.startsWith('call.')).listen(_handleRealtimeEvent);
+  }) : _realtimeService = realtimeService,
+       _deviceIdService = deviceIdService {
+    _realtimeSub = realtimeService.events
+        .where((e) => e.name.startsWith('call.'))
+        .listen(_handleRealtimeEvent);
   }
 
   final VoiceApi api;
@@ -119,7 +120,8 @@ class VoiceRepository {
   /// Drives [CallCubit]'s reconcile-on-reconnect — a transition back to
   /// [RealtimeConnectionStatus.connected] is the signal that any `call.*`
   /// events broadcast during the gap were silently dropped.
-  Stream<RealtimeConnectionStatus> get connectionStatus => _realtimeService.connectionStatus;
+  Stream<RealtimeConnectionStatus> get connectionStatus =>
+      _realtimeService.connectionStatus;
 
   void _handleRealtimeEvent(RealtimeEvent event) {
     final payload = event.objectPayload;
@@ -138,20 +140,30 @@ class VoiceRepository {
         _eventsController.add(CallParticipantLeft(payload['userId'] as String));
       case 'call.MuteChanged':
         _eventsController.add(
-          CallMuteChanged(userId: payload['userId'] as String, isMuted: payload['isMuted'] as bool),
+          CallMuteChanged(
+            userId: payload['userId'] as String,
+            isMuted: payload['isMuted'] as bool,
+          ),
         );
       case 'call.CallEnded':
         _eventsController.add(
-          CallEndedRemotely(payload['callId'] as String, reason: payload['reason'] as String?),
+          CallEndedRemotely(
+            payload['callId'] as String,
+            reason: payload['reason'] as String?,
+          ),
         );
       case 'call.CallAccepted':
-        _eventsController.add(CallAcceptedElsewhere(payload['callId'] as String));
+        _eventsController.add(
+          CallAcceptedElsewhere(payload['callId'] as String),
+        );
       case 'call.CallDeviceDismissed':
         _eventsController.add(CallDeviceDismissed(payload['callId'] as String));
       case 'call.CallDeviceTakeover':
         _eventsController.add(CallDeviceTakeover(payload['callId'] as String));
       case 'call.CallParticipantLeft':
-        _eventsController.add(CallLifecycleParticipantLeft(payload['userId'] as String));
+        _eventsController.add(
+          CallLifecycleParticipantLeft(payload['userId'] as String),
+        );
       case 'call.CallAlone':
         _eventsController.add(
           CallAlone(
@@ -162,31 +174,40 @@ class VoiceRepository {
     }
   }
 
-  Future<CallDto> createCall({required String conversationId, required List<String> participantUserIds}) =>
-      api.createCall(
-        conversationId: conversationId,
-        participantUserIds: participantUserIds,
-        deviceId: _deviceIdService.deviceId,
-      );
+  Future<CallDto> createCall({
+    required String conversationId,
+    required List<String> participantUserIds,
+  }) => api.createCall(
+    conversationId: conversationId,
+    participantUserIds: participantUserIds,
+    deviceId: _deviceIdService.deviceId,
+  );
 
-  Future<CallDto> acceptCall(String callId) => api.acceptCall(callId, deviceId: _deviceIdService.deviceId);
+  Future<CallDto> acceptCall(String callId) =>
+      api.acceptCall(callId, deviceId: _deviceIdService.deviceId);
 
-  Future<CallDto> declineCall(String callId) => api.declineCall(callId, deviceId: _deviceIdService.deviceId);
+  Future<CallDto> declineCall(String callId) =>
+      api.declineCall(callId, deviceId: _deviceIdService.deviceId);
 
   /// Removes the local user from the call without ending it for anyone else
   /// still connected — see [VoiceApi.leaveCall].
-  Future<CallDto> leaveCall(String callId) => api.leaveCall(callId, deviceId: _deviceIdService.deviceId);
+  Future<CallDto> leaveCall(String callId) =>
+      api.leaveCall(callId, deviceId: _deviceIdService.deviceId);
 
-  Future<CallDto> endCall(String callId) => api.endCall(callId, deviceId: _deviceIdService.deviceId);
+  Future<CallDto> endCall(String callId) =>
+      api.endCall(callId, deviceId: _deviceIdService.deviceId);
 
   Future<CallDto> getCall(String callId) => api.getCall(callId);
 
-  Future<void> invokeMuteChanged({required String callId, required bool isMuted}) => _realtimeService.invoke(
-        'call.MuteChanged',
-        args: [
-          {'callId': callId, 'isMuted': isMuted},
-        ],
-      );
+  Future<void> invokeMuteChanged({
+    required String callId,
+    required bool isMuted,
+  }) => _realtimeService.invoke(
+    'call.MuteChanged',
+    args: [
+      {'callId': callId, 'isMuted': isMuted},
+    ],
+  );
 
   void dispose() {
     _realtimeSub.cancel();

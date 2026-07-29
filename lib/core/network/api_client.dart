@@ -9,12 +9,12 @@ import 'auth_interceptor.dart';
 /// callers build request paths via [url] against [AuthRepository.baseUrl].
 class ApiClient {
   ApiClient({required this.authRepository})
-      : dio = Dio(
-          BaseOptions(
-            connectTimeout: const Duration(seconds: 15),
-            receiveTimeout: const Duration(seconds: 15),
-          ),
-        ) {
+    : dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      ) {
     dio.interceptors.add(AuthInterceptor(authRepository));
   }
 

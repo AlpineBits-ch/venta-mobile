@@ -24,7 +24,8 @@ class _BotCommandOptionsDialog extends StatefulWidget {
   final BotCommandDto command;
 
   @override
-  State<_BotCommandOptionsDialog> createState() => _BotCommandOptionsDialogState();
+  State<_BotCommandOptionsDialog> createState() =>
+      _BotCommandOptionsDialogState();
 }
 
 class _BotCommandOptionsDialogState extends State<_BotCommandOptionsDialog> {
@@ -53,8 +54,10 @@ class _BotCommandOptionsDialogState extends State<_BotCommandOptionsDialog> {
 
   bool get _canSubmit {
     for (final option in widget.command.options) {
-      if (!option.required || option.type == BotCommandOptionType.boolean) continue;
-      if ((_textControllers[option.name]?.text ?? '').trim().isEmpty) return false;
+      if (!option.required || option.type == BotCommandOptionType.boolean)
+        continue;
+      if ((_textControllers[option.name]?.text ?? '').trim().isEmpty)
+        return false;
     }
     return true;
   }
@@ -63,7 +66,12 @@ class _BotCommandOptionsDialogState extends State<_BotCommandOptionsDialog> {
     final options = <InvokeCommandOption>[];
     for (final option in widget.command.options) {
       if (option.type == BotCommandOptionType.boolean) {
-        options.add(InvokeCommandOption(name: option.name, value: _boolValues[option.name] ?? false));
+        options.add(
+          InvokeCommandOption(
+            name: option.name,
+            value: _boolValues[option.name] ?? false,
+          ),
+        );
         continue;
       }
       final raw = _textControllers[option.name]!.text.trim();
@@ -71,7 +79,12 @@ class _BotCommandOptionsDialogState extends State<_BotCommandOptionsDialog> {
         if (option.required) return;
         continue;
       }
-      options.add(InvokeCommandOption(name: option.name, value: _coerce(option.type, raw)));
+      options.add(
+        InvokeCommandOption(
+          name: option.name,
+          value: _coerce(option.type, raw),
+        ),
+      );
     }
     Navigator.of(context).pop(options);
   }
@@ -126,9 +139,12 @@ class _BotCommandOptionsDialogState extends State<_BotCommandOptionsDialog> {
                   builder: (context, setInner) => SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(option.name),
-                    subtitle: option.description != null ? Text(option.description!) : null,
+                    subtitle: option.description != null
+                        ? Text(option.description!)
+                        : null,
                     value: _boolValues[option.name] ?? false,
-                    onChanged: (value) => setInner(() => _boolValues[option.name] = value),
+                    onChanged: (value) =>
+                        setInner(() => _boolValues[option.name] = value),
                   ),
                 )
               else
@@ -136,7 +152,8 @@ class _BotCommandOptionsDialogState extends State<_BotCommandOptionsDialog> {
                   padding: const EdgeInsets.only(bottom: AppSpacing.s),
                   child: TextField(
                     controller: _textControllers[option.name],
-                    keyboardType: option.type == BotCommandOptionType.integer ||
+                    keyboardType:
+                        option.type == BotCommandOptionType.integer ||
                             option.type == BotCommandOptionType.number
                         ? TextInputType.number
                         : TextInputType.text,

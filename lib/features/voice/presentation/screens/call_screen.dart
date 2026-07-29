@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/call_action_button.dart';
+import '../../../../core/widgets/call_participant_tile.dart';
 import '../../../../core/widgets/countdown_label.dart';
 import '../../../../core/widgets/elapsed_time_label.dart';
 import '../../../../core/widgets/profile_resolver.dart';
@@ -14,6 +18,12 @@ import '../../bloc/call_cubit.dart';
 /// active-call controls, since both are just different renderings of the
 /// same `CallCubit` state and the screen is pushed/popped as one unit by
 /// `AppShell` whenever `CallState.phase` leaves/returns to idle.
+///
+/// Deliberately always-dark regardless of the app's light/dark theme
+/// setting (same "photo viewer chrome" exception as `message_attachment_view`'s
+/// full-screen image viewer) — text/icon colors below are the named
+/// `AppColors` dark-surface tokens rather than `colorScheme.onSurface`,
+/// which would invert unreadably if the app theme were light.
 class CallScreen extends StatelessWidget {
   const CallScreen({super.key});
 
@@ -23,17 +33,20 @@ class CallScreen extends StatelessWidget {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: AppColors.darkAppBg,
         body: SafeArea(
           child: BlocBuilder<CallCubit, CallState>(
             builder: (context, state) {
               return switch (state.phase) {
-                CallPhase.incoming => _IncomingCallView(state: state, myUserId: myUserId),
+                CallPhase.incoming => _IncomingCallView(
+                  state: state,
+                  myUserId: myUserId,
+                ),
                 CallPhase.idle => const SizedBox.shrink(),
                 CallPhase.connecting || CallPhase.active => _ActiveCallView(
-                    state: state,
-                    myUserId: myUserId,
-                  ),
+                  state: state,
+                  myUserId: myUserId,
+                ),
               };
             },
           ),
@@ -67,25 +80,30 @@ class _IncomingCallView extends StatelessWidget {
               userId: callerId,
               builder: (context, profile) => Text(
                 profile?.userName ?? '…',
-                style: theme.textTheme.titleLarge?.copyWith(color: Colors.white),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: AppColors.darkTextPrimary,
+                ),
               ),
             ),
           const SizedBox(height: AppSpacing.xs),
-          const Text('Incoming call', style: TextStyle(color: Colors.white70)),
+          Text(
+            'Incoming call',
+            style: TextStyle(color: AppColors.darkTextSecondary),
+          ),
           const Spacer(),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _CallActionButton(
+              CallActionButton(
                 icon: Icons.call_end,
                 label: 'Decline',
-                background: Colors.red,
+                background: theme.colorScheme.error,
                 onTap: () => context.read<CallCubit>().declineIncomingCall(),
               ),
-              _CallActionButton(
+              CallActionButton(
                 icon: Icons.call,
                 label: 'Accept',
-                background: Colors.green,
+                background: context.statusColors.online,
                 onTap: () => context.read<CallCubit>().acceptIncomingCall(),
               ),
             ],
@@ -105,7 +123,9 @@ class _ActiveCallView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final others = state.participants.where((p) => p.userId != myUserId).toList();
+    final others = state.participants
+        .where((p) => p.userId != myUserId)
+        .toList();
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.l),
@@ -114,11 +134,19 @@ class _ActiveCallView extends StatelessWidget {
           const SizedBox(height: AppSpacing.m),
           Text(
             state.phase == CallPhase.connecting ? 'Connecting…' : 'Voice call',
-            style: theme.textTheme.titleMedium?.copyWith(color: Colors.white70),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppColors.darkTextSecondary,
+            ),
           ),
           if (state.phase == CallPhase.active && state.connectedAt != null) ...[
             const SizedBox(height: AppSpacing.xs),
-            ElapsedTimeLabel(since: state.connectedAt!),
+            ElapsedTimeLabel(
+              since: state.connectedAt!,
+              style: TextStyle(
+                color: AppColors.darkTextSecondary,
+                fontSize: 13,
+              ),
+            ),
           ],
           if (state.aloneDeadline != null) ...[
             const SizedBox(height: AppSpacing.xs),
@@ -126,10 +154,16 @@ class _ActiveCallView extends StatelessWidget {
               alignment: WrapAlignment.center,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                const Text('Waiting for others to rejoin — call ends in ', style: TextStyle(color: Colors.amber)),
+                Text(
+                  'Waiting for others to rejoin — call ends in ',
+                  style: TextStyle(color: context.statusColors.idle),
+                ),
                 CountdownLabel(
                   deadline: state.aloneDeadline!,
-                  style: const TextStyle(color: Colors.amber, fontSize: 13),
+                  style: TextStyle(
+                    color: context.statusColors.idle,
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
@@ -144,11 +178,17 @@ class _ActiveCallView extends StatelessWidget {
                 children: [
                   if (others.isEmpty)
                     Text(
-                      state.aloneDeadline != null ? 'You\'re the only one here…' : 'Ringing…',
-                      style: const TextStyle(color: Colors.white70),
+                      state.aloneDeadline != null
+                          ? 'You\'re the only one here…'
+                          : 'Ringing…',
+                      style: TextStyle(color: AppColors.darkTextSecondary),
                     )
                   else
-                    for (final participant in others) _ParticipantTile(participant: participant),
+                    for (final participant in others)
+                      CallParticipantTile(
+                        userId: participant.userId,
+                        isMuted: participant.isMuted,
+                      ),
                 ],
               ),
             ),
@@ -156,31 +196,31 @@ class _ActiveCallView extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _CallActionButton(
+              CallActionButton(
                 icon: state.isMuted ? Icons.mic_off : Icons.mic,
                 label: state.isMuted ? 'Unmute' : 'Mute',
                 background: state.isMuted ? Colors.white : Colors.white24,
                 iconColor: state.isMuted ? Colors.black : Colors.white,
                 onTap: () => context.read<CallCubit>().toggleMute(),
               ),
-              _CallActionButton(
+              CallActionButton(
                 icon: state.isDeafened ? Icons.hearing_disabled : Icons.headset,
                 label: state.isDeafened ? 'Undeafen' : 'Deafen',
                 background: state.isDeafened ? Colors.white : Colors.white24,
                 iconColor: state.isDeafened ? Colors.black : Colors.white,
                 onTap: () => context.read<CallCubit>().toggleDeafen(),
               ),
-              _CallActionButton(
+              CallActionButton(
                 icon: state.isSpeakerOn ? Icons.volume_up : Icons.phone_in_talk,
                 label: state.isSpeakerOn ? 'Speaker' : 'Earpiece',
                 background: state.isSpeakerOn ? Colors.white24 : Colors.white,
                 iconColor: state.isSpeakerOn ? Colors.white : Colors.black,
                 onTap: () => context.read<CallCubit>().toggleSpeaker(),
               ),
-              _CallActionButton(
+              CallActionButton(
                 icon: Icons.call_end,
                 label: 'End',
-                background: Colors.red,
+                background: theme.colorScheme.error,
                 onTap: () => context.read<CallCubit>().endCall(),
               ),
             ],
@@ -191,79 +231,3 @@ class _ActiveCallView extends StatelessWidget {
     );
   }
 }
-
-class _ParticipantTile extends StatelessWidget {
-  const _ParticipantTile({required this.participant});
-  final CallParticipantState participant;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            UserAvatar(userId: participant.userId, radius: 44, onTap: () {}),
-            if (participant.isMuted)
-              Positioned(
-                right: -2,
-                bottom: -2,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                  child: const Icon(Icons.mic_off, size: 14, color: Colors.white),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        ProfileResolver(
-          userId: participant.userId,
-          builder: (context, profile) => Text(
-            profile?.userName ?? '…',
-            style: const TextStyle(color: Colors.white),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CallActionButton extends StatelessWidget {
-  const _CallActionButton({
-    required this.icon,
-    required this.background,
-    required this.onTap,
-    this.iconColor = Colors.white,
-    this.label,
-  });
-
-  final IconData icon;
-  final Color background;
-  final Color iconColor;
-  final VoidCallback onTap;
-  final String? label;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: background,
-            child: Icon(icon, color: iconColor),
-          ),
-          if (label != null) ...[
-            const SizedBox(height: AppSpacing.xs),
-            Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-

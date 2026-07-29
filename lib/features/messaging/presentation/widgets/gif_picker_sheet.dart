@@ -51,7 +51,9 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
       _error = null;
     });
     try {
-      final results = query.isEmpty ? await _api.trending() : await _api.search(query);
+      final results = query.isEmpty
+          ? await _api.trending()
+          : await _api.search(query);
       if (mounted) setState(() => _results = results);
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not load GIFs.');
@@ -60,7 +62,10 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
 
   void _onSearchChanged(String value) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () => _load(query: value.trim()));
+    _debounce = Timer(
+      const Duration(milliseconds: 350),
+      () => _load(query: value.trim()),
+    );
   }
 
   @override
@@ -92,45 +97,53 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
                 child: _error != null
                     ? Center(child: Text(_error!))
                     : _results == null
-                        ? const Center(child: CircularProgressIndicator())
-                        : _results!.isEmpty
-                            ? const Center(child: Text('No GIFs found'))
-                            : GridView.builder(
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                  mainAxisSpacing: AppSpacing.xs,
-                                  crossAxisSpacing: AppSpacing.xs,
-                                  childAspectRatio: 1,
-                                ),
-                                itemCount: _results!.length,
-                                itemBuilder: (context, index) {
-                                  final gif = _results![index];
-                                  return GestureDetector(
-                                    onTap: () => Navigator.of(context).pop(gif.url),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(AppRadii.chip),
-                                      child: CachedNetworkImage(
-                                        imageUrl: gif.previewUrl,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) => Container(
-                                          color: theme.colorScheme.surfaceContainerHighest,
-                                        ),
-                                        errorWidget: (context, url, error) => Container(
-                                          color: theme.colorScheme.surfaceContainerHighest,
-                                          child: const Icon(Icons.broken_image_outlined),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
+                    ? const Center(child: CircularProgressIndicator())
+                    : _results!.isEmpty
+                    ? const Center(child: Text('No GIFs found'))
+                    : GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              mainAxisSpacing: AppSpacing.xs,
+                              crossAxisSpacing: AppSpacing.xs,
+                              childAspectRatio: 1,
+                            ),
+                        itemCount: _results!.length,
+                        itemBuilder: (context, index) {
+                          final gif = _results![index];
+                          return GestureDetector(
+                            onTap: () => Navigator.of(context).pop(gif.url),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                AppRadii.chip,
                               ),
+                              child: CachedNetworkImage(
+                                imageUrl: gif.previewUrl,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color:
+                                      theme.colorScheme.surfaceContainerHighest,
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color:
+                                      theme.colorScheme.surfaceContainerHighest,
+                                  child: const Icon(
+                                    Icons.broken_image_outlined,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
               ),
               Padding(
                 padding: const EdgeInsets.only(top: AppSpacing.xs),
                 child: Text(
                   'Powered by KLIPY',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
                 ),
               ),
             ],

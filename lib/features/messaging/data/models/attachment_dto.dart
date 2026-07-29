@@ -36,7 +36,8 @@ sealed class AttachmentDto with _$AttachmentDto {
     String? thumbnailUrl,
   }) = _AttachmentDto;
 
-  factory AttachmentDto.fromJson(Map<String, dynamic> json) => _$AttachmentDtoFromJson(json);
+  factory AttachmentDto.fromJson(Map<String, dynamic> json) =>
+      _$AttachmentDtoFromJson(json);
 }
 
 extension AttachmentDtoX on AttachmentDto {

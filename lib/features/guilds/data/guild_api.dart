@@ -22,7 +22,10 @@ class GuildApi {
 
   String get _base => client.url('/api/v1/guild');
 
-  Future<GuildDto> createGuild({required String name, String? description}) async {
+  Future<GuildDto> createGuild({
+    required String name,
+    String? description,
+  }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       '$_base/guilds',
       data: {'name': name, 'description': description},
@@ -32,11 +35,15 @@ class GuildApi {
 
   Future<List<GuildDto>> getGuilds() async {
     final response = await client.dio.get<List<dynamic>>('$_base/guilds');
-    return response.data!.map((json) => GuildDto.fromJson(json as Map<String, dynamic>)).toList();
+    return response.data!
+        .map((json) => GuildDto.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<GuildDto> getGuild(String id) async {
-    final response = await client.dio.get<Map<String, dynamic>>('$_base/guilds/$id');
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/guilds/$id',
+    );
     return GuildDto.fromJson(response.data!);
   }
 
@@ -69,13 +76,17 @@ class GuildApi {
     final formData = FormData.fromMap({
       'file': MultipartFile.fromBytes(bytes, filename: fileName),
     });
-    final response =
-        await client.dio.post<Map<String, dynamic>>('$_base/guilds/$guildId/icon', data: formData);
+    final response = await client.dio.post<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/icon',
+      data: formData,
+    );
     return GuildDto.fromJson(response.data!);
   }
 
   Future<GuildDto> deleteGuildIcon(String guildId) async {
-    final response = await client.dio.delete<Map<String, dynamic>>('$_base/guilds/$guildId/icon');
+    final response = await client.dio.delete<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/icon',
+    );
     return GuildDto.fromJson(response.data!);
   }
 
@@ -128,18 +139,29 @@ class GuildApi {
     await client.dio.delete<void>('$_base/roles/$roleId');
   }
 
-  Future<void> reorderRoles(String guildId, List<({String roleId, int position})> positions) async {
+  Future<void> reorderRoles(
+    String guildId,
+    List<({String roleId, int position})> positions,
+  ) async {
     await client.dio.patch<void>(
       '$_base/guilds/$guildId/roles/reorder',
       data: {
-        'roles': [for (final p in positions) {'roleId': p.roleId, 'position': p.position}],
+        'roles': [
+          for (final p in positions)
+            {'roleId': p.roleId, 'position': p.position},
+        ],
       },
     );
   }
 
-  Future<List<GuildMemberDto>> getRoleMembers(String roleId, {int skip = 0, int take = 30}) async {
-    final response =
-        await client.dio.get<List<dynamic>>('$_base/roles/$roleId/members?skip=$skip&take=$take');
+  Future<List<GuildMemberDto>> getRoleMembers(
+    String roleId, {
+    int skip = 0,
+    int take = 30,
+  }) async {
+    final response = await client.dio.get<List<dynamic>>(
+      '$_base/roles/$roleId/members?skip=$skip&take=$take',
+    );
     return response.data!
         .map((json) => GuildMemberDto.fromJson(json as Map<String, dynamic>))
         .toList();
@@ -153,7 +175,10 @@ class GuildApi {
     await client.dio.delete<void>('$_base/roles/$roleId/members/$memberId');
   }
 
-  Future<List<GuildMemberDto>> searchMembers(String guildId, String search) async {
+  Future<List<GuildMemberDto>> searchMembers(
+    String guildId,
+    String search,
+  ) async {
     final response = await client.dio.get<List<dynamic>>(
       '$_base/guilds/$guildId/members/search?search=${Uri.encodeQueryComponent(search)}',
     );
@@ -167,11 +192,19 @@ class GuildApi {
   }
 
   Future<List<BanDto>> getBans(String guildId) async {
-    final response = await client.dio.get<List<dynamic>>('$_base/guilds/$guildId/bans');
-    return response.data!.map((json) => BanDto.fromJson(json as Map<String, dynamic>)).toList();
+    final response = await client.dio.get<List<dynamic>>(
+      '$_base/guilds/$guildId/bans',
+    );
+    return response.data!
+        .map((json) => BanDto.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
-  Future<void> createBan(String guildId, {required String userId, String? reason}) async {
+  Future<void> createBan(
+    String guildId, {
+    required String userId,
+    String? reason,
+  }) async {
     await client.dio.post<void>(
       '$_base/guilds/$guildId/bans',
       data: {'userId': userId, 'reason': reason},
@@ -182,17 +215,26 @@ class GuildApi {
     await client.dio.delete<void>('$_base/guilds/$guildId/bans/$bannedUserId');
   }
 
-  Future<List<AuditLogEntryDto>> getAuditLog(String guildId, {int skip = 0, int take = 50}) async {
-    final response = await client.dio
-        .get<List<dynamic>>('$_base/guilds/$guildId/audit-log?skip=$skip&take=$take');
+  Future<List<AuditLogEntryDto>> getAuditLog(
+    String guildId, {
+    int skip = 0,
+    int take = 50,
+  }) async {
+    final response = await client.dio.get<List<dynamic>>(
+      '$_base/guilds/$guildId/audit-log?skip=$skip&take=$take',
+    );
     return response.data!
         .map((json) => AuditLogEntryDto.fromJson(json as Map<String, dynamic>))
         .toList();
   }
 
   Future<List<InviteDto>> getInvites(String guildId) async {
-    final response = await client.dio.get<List<dynamic>>('$_base/guilds/$guildId/invites');
-    return response.data!.map((json) => InviteDto.fromJson(json as Map<String, dynamic>)).toList();
+    final response = await client.dio.get<List<dynamic>>(
+      '$_base/guilds/$guildId/invites',
+    );
+    return response.data!
+        .map((json) => InviteDto.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> deleteInvite(String inviteId) async {
@@ -247,7 +289,11 @@ class GuildApi {
     await client.dio.delete<void>('$_base/categories/$categoryId');
   }
 
-  Future<List<GuildMemberDto>> getMembers(String guildId, {int skip = 0, int take = 50}) async {
+  Future<List<GuildMemberDto>> getMembers(
+    String guildId, {
+    int skip = 0,
+    int take = 50,
+  }) async {
     final response = await client.dio.get<List<dynamic>>(
       '$_base/guilds/$guildId/members?skip=$skip&take=$take',
     );
@@ -257,7 +303,9 @@ class GuildApi {
   }
 
   Future<GuildSelfPermissions> getOwnMember(String guildId) async {
-    final response = await client.dio.get<Map<String, dynamic>>('$_base/guilds/$guildId/me');
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/me',
+    );
     return GuildSelfPermissions.fromJson(response.data!);
   }
 
@@ -277,7 +325,9 @@ class GuildApi {
   }
 
   Future<InviteDto> getInviteByCode(String code) async {
-    final response = await client.dio.get<Map<String, dynamic>>('$_base/invites/code/$code');
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/invites/code/$code',
+    );
     return InviteDto.fromJson(response.data!);
   }
 
@@ -286,9 +336,9 @@ class GuildApi {
   }
 
   String _channelTypeWireValue(ChannelType type) => switch (type) {
-        ChannelType.text => 'Text',
-        ChannelType.voice => 'Voice',
-        ChannelType.thread => 'Thread',
-        ChannelType.announcement => 'Announcement',
-      };
+    ChannelType.text => 'Text',
+    ChannelType.voice => 'Voice',
+    ChannelType.thread => 'Thread',
+    ChannelType.announcement => 'Announcement',
+  };
 }

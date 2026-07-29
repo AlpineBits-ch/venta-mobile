@@ -33,5 +33,6 @@ sealed class ConversationDto with _$ConversationDto {
     required ConversationEncryption encryptionState,
   }) = _ConversationDto;
 
-  factory ConversationDto.fromJson(Map<String, dynamic> json) => _$ConversationDtoFromJson(json);
+  factory ConversationDto.fromJson(Map<String, dynamic> json) =>
+      _$ConversationDtoFromJson(json);
 }

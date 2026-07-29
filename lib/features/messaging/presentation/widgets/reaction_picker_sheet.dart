@@ -39,13 +39,15 @@ class _ReactionPickerSheetState extends State<_ReactionPickerSheet> {
             ? SizedBox(
                 height: 340,
                 child: EmojiPicker(
-                  onEmojiSelected: (category, emoji) => Navigator.of(context).pop(emoji.emoji),
+                  onEmojiSelected: (category, emoji) =>
+                      Navigator.of(context).pop(emoji.emoji),
                   config: Config(
                     emojiViewConfig: EmojiViewConfig(
                       backgroundColor: theme.colorScheme.surface,
                     ),
                     bottomActionBarConfig: BottomActionBarConfig(
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
                       buttonColor: theme.colorScheme.surfaceContainerHighest,
                       buttonIconColor: theme.colorScheme.onSurface,
                     ),
@@ -77,7 +79,9 @@ class _ReactionPickerSheetState extends State<_ReactionPickerSheet> {
                         height: 4,
                         margin: const EdgeInsets.only(bottom: AppSpacing.m),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.2,
+                          ),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -126,7 +130,10 @@ class _QuickReactionButton extends StatelessWidget {
           child: Center(
             child: emoji != null
                 ? Text(emoji!, style: const TextStyle(fontSize: 22))
-                : Icon(icon, color: theme.colorScheme.onSurface.withValues(alpha: 0.7)),
+                : Icon(
+                    icon,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
           ),
         ),
       ),

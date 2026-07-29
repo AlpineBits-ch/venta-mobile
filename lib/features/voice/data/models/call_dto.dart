@@ -27,7 +27,8 @@ sealed class CallTrackDto with _$CallTrackDto {
     required String status,
   }) = _CallTrackDto;
 
-  factory CallTrackDto.fromJson(Map<String, dynamic> json) => _$CallTrackDtoFromJson(json);
+  factory CallTrackDto.fromJson(Map<String, dynamic> json) =>
+      _$CallTrackDtoFromJson(json);
 }
 
 @freezed
@@ -45,5 +46,6 @@ sealed class CallDto with _$CallDto {
     @Default(<CallParticipantDto>[]) List<CallParticipantDto> participants,
   }) = _CallDto;
 
-  factory CallDto.fromJson(Map<String, dynamic> json) => _$CallDtoFromJson(json);
+  factory CallDto.fromJson(Map<String, dynamic> json) =>
+      _$CallDtoFromJson(json);
 }

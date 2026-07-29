@@ -10,7 +10,10 @@ abstract class RealtimeTransport {
 
   /// Builds the underlying connection object against [hubUrl]. Must be
   /// called once, before [on] or [start].
-  void configure({required String hubUrl, required Future<String> Function() accessTokenFactory});
+  void configure({
+    required String hubUrl,
+    required Future<String> Function() accessTokenFactory,
+  });
 
   /// Registers a handler for a server → client hub method. Safe to call any
   /// time after [configure].

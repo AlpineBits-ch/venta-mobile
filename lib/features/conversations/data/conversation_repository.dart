@@ -9,7 +9,10 @@ import 'models/conversation_dto.dart';
 /// (`ConversationCreated`/`ConversationDeleted`/`MemberLeft`). Message
 /// content updates are the message thread's concern, not this list's.
 class ConversationRepository {
-  ConversationRepository({required this.api, required RealtimeService realtimeService}) {
+  ConversationRepository({
+    required this.api,
+    required RealtimeService realtimeService,
+  }) {
     _realtimeSub = realtimeService.events
         .where(
           (e) =>
@@ -23,10 +26,12 @@ class ConversationRepository {
   final ConversationApi api;
   late final StreamSubscription<RealtimeEvent> _realtimeSub;
 
-  final _conversationsController = StreamController<List<ConversationDto>>.broadcast();
+  final _conversationsController =
+      StreamController<List<ConversationDto>>.broadcast();
   List<ConversationDto> _cache = [];
 
-  Stream<List<ConversationDto>> get conversationsStream => _conversationsController.stream;
+  Stream<List<ConversationDto>> get conversationsStream =>
+      _conversationsController.stream;
   List<ConversationDto> get cached => _cache;
 
   Future<List<ConversationDto>> fetch() async {

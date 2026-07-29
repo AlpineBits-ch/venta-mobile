@@ -39,6 +39,7 @@ enum MessageAuthorType {
 sealed class MessageDto with _$MessageDto {
   const factory MessageDto({
     required String id,
+
     /// Always base64(UTF-8) on the wire, even in Plain mode — see
     /// `MessageContentCodec`, the seam where MLS decrypt gets added later.
     required String content,
@@ -52,11 +53,13 @@ sealed class MessageDto with _$MessageDto {
     @Default(<String>[]) List<String> mentions,
     @Default(<AttachmentDto>[]) List<AttachmentDto> attachments,
     @Default(<MessageReactionDto>[]) List<MessageReactionDto> reactions,
-    @Default(MessageEncryptionState.plain) MessageEncryptionState encryptionState,
+    @Default(MessageEncryptionState.plain)
+    MessageEncryptionState encryptionState,
     @Default(MessageType.message) MessageType type,
     @Default(MessageAuthorType.standard)
     @JsonKey(unknownEnumValue: MessageAuthorType.standard)
     MessageAuthorType authorIdType,
+
     /// Client-only: a synthetic placeholder for an in-flight/failed bot
     /// command invocation, never sent or received over the wire — see
     /// `ThreadBotPlaceholderAdded` in `MessageThreadBloc`.
@@ -65,5 +68,6 @@ sealed class MessageDto with _$MessageDto {
     bool isBotCommandPlaceholder,
   }) = _MessageDto;
 
-  factory MessageDto.fromJson(Map<String, dynamic> json) => _$MessageDtoFromJson(json);
+  factory MessageDto.fromJson(Map<String, dynamic> json) =>
+      _$MessageDtoFromJson(json);
 }

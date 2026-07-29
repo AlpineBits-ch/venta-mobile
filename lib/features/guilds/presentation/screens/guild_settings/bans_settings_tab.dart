@@ -35,11 +35,16 @@ class _BansSettingsTabState extends State<BansSettingsTab> {
 
   Future<void> _unban(BanDto ban) async {
     try {
-      await getIt<GuildRepository>().deleteBan(widget.guildId, ban.bannedUserId);
+      await getIt<GuildRepository>().deleteBan(
+        widget.guildId,
+        ban.bannedUserId,
+      );
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not unban.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not unban.')));
       }
     }
   }
@@ -67,7 +72,10 @@ class _BansSettingsTabState extends State<BansSettingsTab> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Ban'),
@@ -80,13 +88,16 @@ class _BansSettingsTabState extends State<BansSettingsTab> {
       await getIt<GuildRepository>().createBan(
         widget.guildId,
         userId: userIdController.text.trim(),
-        reason: reasonController.text.trim().isEmpty ? null : reasonController.text.trim(),
+        reason: reasonController.text.trim().isEmpty
+            ? null
+            : reasonController.text.trim(),
       );
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not ban that user.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not ban that user.')),
+        );
       }
     }
   }
@@ -98,25 +109,25 @@ class _BansSettingsTabState extends State<BansSettingsTab> {
       body: _error != null
           ? Center(child: Text(_error!))
           : _bans == null
-              ? const Center(child: CircularProgressIndicator())
-              : _bans!.isEmpty
-                  ? const Center(child: Text('No bans.'))
-                  : ListView.builder(
-                      itemCount: _bans!.length,
-                      itemBuilder: (context, index) {
-                        final ban = _bans![index];
-                        return ListTile(
-                          title: Text(ban.bannedUserId),
-                          subtitle: ban.reason != null && ban.reason!.isNotEmpty
-                              ? Text(ban.reason!, style: theme.textTheme.bodySmall)
-                              : null,
-                          trailing: TextButton(
-                            onPressed: () => _unban(ban),
-                            child: const Text('Unban'),
-                          ),
-                        );
-                      },
-                    ),
+          ? const Center(child: CircularProgressIndicator())
+          : _bans!.isEmpty
+          ? const Center(child: Text('No bans.'))
+          : ListView.builder(
+              itemCount: _bans!.length,
+              itemBuilder: (context, index) {
+                final ban = _bans![index];
+                return ListTile(
+                  title: Text(ban.bannedUserId),
+                  subtitle: ban.reason != null && ban.reason!.isNotEmpty
+                      ? Text(ban.reason!, style: theme.textTheme.bodySmall)
+                      : null,
+                  trailing: TextButton(
+                    onPressed: () => _unban(ban),
+                    child: const Text('Unban'),
+                  ),
+                );
+              },
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: _createBan,
         tooltip: 'Ban user',

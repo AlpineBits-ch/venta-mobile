@@ -67,7 +67,8 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
       final results = await Future.wait([
         getIt<WikiRepository>().getWiki(widget.guildId),
         loadGuildPermissions(widget.guildId),
-        if (pageId != null) getIt<WikiRepository>().getPage(widget.guildId, pageId),
+        if (pageId != null)
+          getIt<WikiRepository>().getPage(widget.guildId, pageId),
       ]);
       if (!mounted) return;
       setState(() {
@@ -129,7 +130,8 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
         title: 'Parent page',
         options: [
           const _PickerOption(value: null, label: 'None (top level)'),
-          for (final page in roots) _PickerOption(value: page.id, label: page.title),
+          for (final page in roots)
+            _PickerOption(value: page.id, label: page.title),
         ],
         selected: _parentPageId,
       ),
@@ -140,7 +142,9 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
   Future<void> _save() async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Give the page a title.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Give the page a title.')));
       return;
     }
     setState(() => _saving = true);
@@ -177,8 +181,9 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
     } catch (e, st) {
       debugPrint('wiki save failed: $e\n$st');
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not save this page.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save this page.')),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -191,28 +196,42 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
 
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.isEditing ? 'Edit page' : 'New page')),
+        appBar: AppBar(
+          title: Text(widget.isEditing ? 'Edit page' : 'New page'),
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
     if (_loadError != null) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.isEditing ? 'Edit page' : 'New page')),
+        appBar: AppBar(
+          title: Text(widget.isEditing ? 'Edit page' : 'New page'),
+        ),
         body: Center(child: Text(_loadError!)),
       );
     }
 
     final canPublish = _permissions.has('PublishWikiPublicly');
-    final categoryName = _findLabel(_wiki?.categories, _categoryId, (c) => c.id, (c) => c.name) ?? 'None';
+    final categoryName =
+        _findLabel(
+          _wiki?.categories,
+          _categoryId,
+          (c) => c.id,
+          (c) => c.name,
+        ) ??
+        'None';
     final parentTitle =
-        _findLabel(_wiki?.pages, _parentPageId, (p) => p.id, (p) => p.title) ?? 'None (top level)';
+        _findLabel(_wiki?.pages, _parentPageId, (p) => p.id, (p) => p.title) ??
+        'None (top level)';
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isEditing ? 'Edit page' : 'New page'),
         actions: [
           IconButton(
-            icon: Icon(_showPreview ? Icons.edit_outlined : Icons.visibility_outlined),
+            icon: Icon(
+              _showPreview ? Icons.edit_outlined : Icons.visibility_outlined,
+            ),
             tooltip: _showPreview ? 'Edit' : 'Preview',
             onPressed: () => setState(() => _showPreview = !_showPreview),
           ),
@@ -234,7 +253,10 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
           TextField(
             controller: _titleController,
             style: theme.textTheme.titleLarge,
-            decoration: const InputDecoration(hintText: 'Page title', border: InputBorder.none),
+            decoration: const InputDecoration(
+              hintText: 'Page title',
+              border: InputBorder.none,
+            ),
           ),
           const Divider(height: AppSpacing.l),
           if (_showPreview) ...[
@@ -243,8 +265,9 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.l),
                 child: Text(
                   'Nothing to preview yet.',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
                 ),
               )
             else
@@ -291,12 +314,16 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
             contentPadding: EdgeInsets.zero,
             secondary: const Icon(Icons.public),
             title: const Text('Visible to anyone with a share link'),
-            subtitle: canPublish ? null : const Text("You don't have permission to publish publicly"),
+            subtitle: canPublish
+                ? null
+                : const Text("You don't have permission to publish publicly"),
             value: _visibility == WikiVisibility.public,
             onChanged: canPublish
                 ? (value) => setState(
-                      () => _visibility = value ? WikiVisibility.public : WikiVisibility.private,
-                    )
+                    () => _visibility = value
+                        ? WikiVisibility.public
+                        : WikiVisibility.private,
+                  )
                 : null,
           ),
           const SizedBox(height: AppSpacing.s),
@@ -315,7 +342,10 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
                 width: 140,
                 child: TextField(
                   controller: _tagController,
-                  decoration: const InputDecoration(hintText: 'Add tag…', isDense: true),
+                  decoration: const InputDecoration(
+                    hintText: 'Add tag…',
+                    isDense: true,
+                  ),
                   onSubmitted: _addTag,
                 ),
               ),
@@ -347,7 +377,11 @@ class _PickerOption<T> {
 }
 
 class _PickerSheet<T> extends StatelessWidget {
-  const _PickerSheet({required this.title, required this.options, required this.selected});
+  const _PickerSheet({
+    required this.title,
+    required this.options,
+    required this.selected,
+  });
 
   final String title;
   final List<_PickerOption<T>> options;
@@ -370,7 +404,9 @@ class _PickerSheet<T> extends StatelessWidget {
                 for (final option in options)
                   ListTile(
                     title: Text(option.label),
-                    trailing: option.value == selected ? const Icon(Icons.check) : null,
+                    trailing: option.value == selected
+                        ? const Icon(Icons.check)
+                        : null,
                     onTap: () => Navigator.of(context).pop(option.value),
                   ),
               ],

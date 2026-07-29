@@ -20,11 +20,16 @@ class AuthInterceptor extends Interceptor {
   }
 
   @override
-  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
     final alreadyRetried = err.requestOptions.extra['retried'] == true;
     if (err.response?.statusCode == 401 && !alreadyRetried) {
       try {
-        final token = await _authRepository.ensureValidToken(forceRefresh: true);
+        final token = await _authRepository.ensureValidToken(
+          forceRefresh: true,
+        );
         final options = err.requestOptions..extra['retried'] = true;
         options.headers['Authorization'] = 'Bearer $token';
         final retryResponse = await Dio().fetch<dynamic>(options);

@@ -22,7 +22,11 @@ import 'models/role_dto.dart';
 /// infrequent enough that a full refetch per event is simple and correct
 /// rather than hand-patching nested categories/channels/roles.
 class GuildRepository {
-  GuildRepository({required this.api, required RealtimeService realtimeService, required this.myUserId}) {
+  GuildRepository({
+    required this.api,
+    required RealtimeService realtimeService,
+    required this.myUserId,
+  }) {
     _realtimeSub = realtimeService.events
         .where(
           (e) => const {
@@ -38,13 +42,14 @@ class GuildRepository {
           }.contains(e.name),
         )
         .listen((event) {
-      if (event.name == 'guild.MemberLeft' && event.objectPayload['userId'] == myUserId) {
-        _guilds.removeWhere((g) => g.id == event.objectPayload['guildId']);
-        _guildsController.add(List.unmodifiable(_guilds));
-        return;
-      }
-      unawaited(_refreshGuild(event.objectPayload['guildId'] as String?));
-    });
+          if (event.name == 'guild.MemberLeft' &&
+              event.objectPayload['userId'] == myUserId) {
+            _guilds.removeWhere((g) => g.id == event.objectPayload['guildId']);
+            _guildsController.add(List.unmodifiable(_guilds));
+            return;
+          }
+          unawaited(_refreshGuild(event.objectPayload['guildId'] as String?));
+        });
   }
 
   final GuildApi api;
@@ -104,7 +109,10 @@ class GuildRepository {
     }
   }
 
-  Future<GuildDto> createGuild({required String name, String? description}) async {
+  Future<GuildDto> createGuild({
+    required String name,
+    String? description,
+  }) async {
     final guild = await api.createGuild(name: name, description: description);
     await fetch();
     return guild;
@@ -154,15 +162,20 @@ class GuildRepository {
     return category;
   }
 
-  Future<List<GuildMemberDto>> getMembers(String guildId, {int skip = 0, int take = 50}) =>
-      api.getMembers(guildId, skip: skip, take: take);
+  Future<List<GuildMemberDto>> getMembers(
+    String guildId, {
+    int skip = 0,
+    int take = 50,
+  }) => api.getMembers(guildId, skip: skip, take: take);
 
-  Future<GuildSelfPermissions> getOwnMember(String guildId) => api.getOwnMember(guildId);
+  Future<GuildSelfPermissions> getOwnMember(String guildId) =>
+      api.getOwnMember(guildId);
 
   Future<List<GuildMemberDto>> searchMembers(String guildId, String search) =>
       api.searchMembers(guildId, search);
 
-  Future<void> kickMember(String guildId, String memberId) => api.kickMember(guildId, memberId);
+  Future<void> kickMember(String guildId, String memberId) =>
+      api.kickMember(guildId, memberId);
 
   Future<GuildDto> updateGuild(
     String guildId, {
@@ -185,7 +198,11 @@ class GuildRepository {
     required List<int> bytes,
     required String fileName,
   }) async {
-    final updated = await api.uploadGuildIcon(guildId, bytes: bytes, fileName: fileName);
+    final updated = await api.uploadGuildIcon(
+      guildId,
+      bytes: bytes,
+      fileName: fileName,
+    );
     _replaceCached(updated);
     return updated;
   }
@@ -246,28 +263,42 @@ class GuildRepository {
     await _refreshGuild(guildId);
   }
 
-  Future<void> reorderRoles(String guildId, List<({String roleId, int position})> positions) async {
+  Future<void> reorderRoles(
+    String guildId,
+    List<({String roleId, int position})> positions,
+  ) async {
     await api.reorderRoles(guildId, positions);
     await _refreshGuild(guildId);
   }
 
-  Future<List<GuildMemberDto>> getRoleMembers(String roleId, {int skip = 0, int take = 30}) =>
-      api.getRoleMembers(roleId, skip: skip, take: take);
+  Future<List<GuildMemberDto>> getRoleMembers(
+    String roleId, {
+    int skip = 0,
+    int take = 30,
+  }) => api.getRoleMembers(roleId, skip: skip, take: take);
 
-  Future<void> addRoleMember(String roleId, String memberId) => api.addRoleMember(roleId, memberId);
+  Future<void> addRoleMember(String roleId, String memberId) =>
+      api.addRoleMember(roleId, memberId);
 
   Future<void> removeRoleMember(String roleId, String memberId) =>
       api.removeRoleMember(roleId, memberId);
 
   Future<List<BanDto>> getBans(String guildId) => api.getBans(guildId);
 
-  Future<void> createBan(String guildId, {required String userId, String? reason}) =>
-      api.createBan(guildId, userId: userId, reason: reason);
+  Future<void> createBan(
+    String guildId, {
+    required String userId,
+    String? reason,
+  }) => api.createBan(guildId, userId: userId, reason: reason);
 
-  Future<void> deleteBan(String guildId, String bannedUserId) => api.deleteBan(guildId, bannedUserId);
+  Future<void> deleteBan(String guildId, String bannedUserId) =>
+      api.deleteBan(guildId, bannedUserId);
 
-  Future<List<AuditLogEntryDto>> getAuditLog(String guildId, {int skip = 0, int take = 50}) =>
-      api.getAuditLog(guildId, skip: skip, take: take);
+  Future<List<AuditLogEntryDto>> getAuditLog(
+    String guildId, {
+    int skip = 0,
+    int take = 50,
+  }) => api.getAuditLog(guildId, skip: skip, take: take);
 
   Future<List<InviteDto>> getInvites(String guildId) => api.getInvites(guildId);
 
@@ -287,8 +318,7 @@ class GuildRepository {
     String guildId, {
     String? channelId,
     InviteType type = InviteType.permanent,
-  }) =>
-      api.createInvite(guildId: guildId, channelId: channelId, type: type);
+  }) => api.createInvite(guildId: guildId, channelId: channelId, type: type);
 
   Future<InviteDto> previewInvite(String code) => api.getInviteByCode(code);
 

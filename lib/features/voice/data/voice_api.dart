@@ -17,11 +17,14 @@ class VoiceApi {
   /// Authoritative current-state fetch — the catch-up path when a live
   /// `call.*` SignalR event may have been missed (e.g. a reconnect gap).
   Future<CallDto> getCall(String callId) async {
-    final response = await client.dio.get<Map<String, dynamic>>(client.url('$_base/call/$callId'));
+    final response = await client.dio.get<Map<String, dynamic>>(
+      client.url('$_base/call/$callId'),
+    );
     return CallDto.fromJson(response.data!);
   }
 
-  Options _deviceHeader(String deviceId) => Options(headers: {'X-Device-Id': deviceId});
+  Options _deviceHeader(String deviceId) =>
+      Options(headers: {'X-Device-Id': deviceId});
 
   Future<CallDto> createCall({
     required String conversationId,
@@ -30,7 +33,10 @@ class VoiceApi {
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       client.url('$_base/call'),
-      data: {'conversationId': conversationId, 'participants': participantUserIds},
+      data: {
+        'conversationId': conversationId,
+        'participants': participantUserIds,
+      },
       options: _deviceHeader(deviceId),
     );
     return CallDto.fromJson(response.data!);
@@ -107,7 +113,10 @@ class VoiceApi {
   }) async {
     final response = await client.dio.put<Map<String, dynamic>>(
       client.url('$_base/calls/$callId/cf/renegotiate'),
-      data: {'cfSessionId': cfSessionId, 'sessionDescription': sessionDescription},
+      data: {
+        'cfSessionId': cfSessionId,
+        'sessionDescription': sessionDescription,
+      },
     );
     return CfRenegotiateResponseDto.fromJson(response.data!);
   }

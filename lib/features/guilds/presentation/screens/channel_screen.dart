@@ -14,7 +14,11 @@ import '../../data/guild_repository.dart';
 /// of `conversationId`. This is the shared-kernel decision from the Phase 1
 /// plan paying off in Phase 2.
 class ChannelScreen extends StatelessWidget {
-  const ChannelScreen({super.key, required this.guildId, required this.channelId});
+  const ChannelScreen({
+    super.key,
+    required this.guildId,
+    required this.channelId,
+  });
 
   final String guildId;
   final String channelId;

@@ -37,6 +37,14 @@ class _CountdownLabelState extends State<CountdownLabel> {
     final clamped = remaining.isNegative ? Duration.zero : remaining;
     final seconds = (clamped.inSeconds % 60).toString().padLeft(2, '0');
     final minutes = (clamped.inMinutes % 60).toString().padLeft(2, '0');
-    return Text('$minutes:$seconds', style: widget.style ?? const TextStyle(color: Colors.white54, fontSize: 13));
+    final theme = Theme.of(context);
+    return Text(
+      '$minutes:$seconds',
+      style:
+          widget.style ??
+          theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+    );
   }
 }

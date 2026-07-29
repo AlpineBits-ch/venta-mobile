@@ -18,7 +18,11 @@ class GuildVoiceApi {
   String _base(String guildId, String channelId) =>
       client.url('/api/v1/guild/guilds/$guildId/channels/$channelId/voice');
 
-  Future<VoiceStateDto> join(String guildId, String channelId, {required String deviceId}) async {
+  Future<VoiceStateDto> join(
+    String guildId,
+    String channelId, {
+    required String deviceId,
+  }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       '${_base(guildId, channelId)}/join',
       data: const {},
@@ -27,18 +31,26 @@ class GuildVoiceApi {
     return VoiceStateDto.fromJson(response.data!);
   }
 
-  Future<void> leave(String guildId, String channelId, {String? deviceId}) async {
+  Future<void> leave(
+    String guildId,
+    String channelId, {
+    String? deviceId,
+  }) async {
     await client.dio.post<void>(
       '${_base(guildId, channelId)}/leave',
       data: const {},
-      options: deviceId != null ? Options(headers: {'X-Device-Id': deviceId}) : null,
+      options: deviceId != null
+          ? Options(headers: {'X-Device-Id': deviceId})
+          : null,
     );
   }
 
   /// Roster-only fetch, without joining — used to populate participant
   /// counts/avatars for voice channels the user hasn't joined yet.
   Future<VoiceStateDto> getState(String guildId, String channelId) async {
-    final response = await client.dio.get<Map<String, dynamic>>(_base(guildId, channelId));
+    final response = await client.dio.get<Map<String, dynamic>>(
+      _base(guildId, channelId),
+    );
     return VoiceStateDto.fromJson(response.data!);
   }
 
@@ -76,7 +88,10 @@ class GuildVoiceApi {
   }) async {
     final response = await client.dio.put<Map<String, dynamic>>(
       '${_base(guildId, channelId)}/cf/renegotiate',
-      data: {'cfSessionId': cfSessionId, 'sessionDescription': sessionDescription},
+      data: {
+        'cfSessionId': cfSessionId,
+        'sessionDescription': sessionDescription,
+      },
     );
     return CfRenegotiateResponseDto.fromJson(response.data!);
   }

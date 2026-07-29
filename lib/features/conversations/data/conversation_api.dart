@@ -6,7 +6,10 @@ class ConversationApi {
 
   final ApiClient client;
 
-  Future<ConversationDto> create({String? name, required List<String> memberUserIds}) async {
+  Future<ConversationDto> create({
+    String? name,
+    required List<String> memberUserIds,
+  }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       client.url('/api/v1/messaging/conversations'),
       data: {
@@ -36,6 +39,8 @@ class ConversationApi {
   }
 
   Future<void> delete(String id) async {
-    await client.dio.delete<void>(client.url('/api/v1/messaging/conversations/$id'));
+    await client.dio.delete<void>(
+      client.url('/api/v1/messaging/conversations/$id'),
+    );
   }
 }

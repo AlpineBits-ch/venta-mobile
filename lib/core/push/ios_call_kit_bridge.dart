@@ -57,7 +57,9 @@ class IosCallKitBridge {
   }
 
   Future<void> _drainPendingEvents() async {
-    final raw = await _channel.invokeMethod<List<Object?>>('drainPendingEvents');
+    final raw = await _channel.invokeMethod<List<Object?>>(
+      'drainPendingEvents',
+    );
     for (final entry in raw ?? const []) {
       final event = _toEvent((entry as Map).cast<String, dynamic>());
       if (event != null) _eventsController.add(event);
@@ -70,16 +72,23 @@ class IosCallKitBridge {
       'accept' when callId != null => IosCallAccepted(callId),
       'decline' when callId != null => IosCallDeclined(callId),
       'end' when callId != null => IosCallEndedNatively(callId),
-      'voipTokenUpdated' when args['token'] is String => IosVoipTokenUpdated(args['token'] as String),
-      _ => null, // 'reported' is purely informational — nothing to react to here.
+      'voipTokenUpdated' when args['token'] is String => IosVoipTokenUpdated(
+        args['token'] as String,
+      ),
+      _ =>
+        null, // 'reported' is purely informational — nothing to react to here.
     };
   }
 
-  Future<String?> getVoipToken() => _channel.invokeMethod<String>('getVoipToken');
+  Future<String?> getVoipToken() =>
+      _channel.invokeMethod<String>('getVoipToken');
 
   /// Foreground/live-socket path — mirrors the old `showCallkitIncoming`
   /// call for a call [CallKitService] already learned about over SignalR.
-  Future<bool> reportIncomingCall({required String callId, required String callerName}) async {
+  Future<bool> reportIncomingCall({
+    required String callId,
+    required String callerName,
+  }) async {
     final ok = await _channel.invokeMethod<bool>('reportIncomingCall', {
       'callId': callId,
       'callerName': callerName,
@@ -90,7 +99,8 @@ class IosCallKitBridge {
   Future<void> setCallConnected(String callId) =>
       _channel.invokeMethod<void>('setCallConnected', {'callId': callId});
 
-  Future<void> endCall(String callId) => _channel.invokeMethod<void>('endCall', {'callId': callId});
+  Future<void> endCall(String callId) =>
+      _channel.invokeMethod<void>('endCall', {'callId': callId});
 
   Future<void> dispose() => _eventsController.close();
 }

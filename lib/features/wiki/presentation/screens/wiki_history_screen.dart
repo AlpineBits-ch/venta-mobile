@@ -8,7 +8,11 @@ import '../../data/models/wiki_revision_dto.dart';
 import '../../data/wiki_repository.dart';
 
 class WikiHistoryScreen extends StatefulWidget {
-  const WikiHistoryScreen({super.key, required this.guildId, required this.pageId});
+  const WikiHistoryScreen({
+    super.key,
+    required this.guildId,
+    required this.pageId,
+  });
 
   final String guildId;
   final String pageId;
@@ -30,8 +34,10 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
 
   Future<void> _load() async {
     try {
-      final revisions =
-          await getIt<WikiRepository>().getRevisions(widget.guildId, widget.pageId);
+      final revisions = await getIt<WikiRepository>().getRevisions(
+        widget.guildId,
+        widget.pageId,
+      );
       revisions.sort((a, b) => b.revisionNumber.compareTo(a.revisionNumber));
       if (mounted) setState(() => _revisions = revisions);
     } catch (_) {
@@ -44,9 +50,14 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Restore this version?'),
-        content: Text('Revision ${revision.revisionNumber} will become the current page content.'),
+        content: Text(
+          'Revision ${revision.revisionNumber} will become the current page content.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Restore'),
@@ -57,12 +68,17 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _restoringId = revision.id);
     try {
-      await getIt<WikiRepository>().restoreRevision(widget.guildId, widget.pageId, revision.id);
+      await getIt<WikiRepository>().restoreRevision(
+        widget.guildId,
+        widget.pageId,
+        revision.id,
+      );
       if (mounted) context.pop();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not restore that version.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not restore that version.')),
+        );
       }
     } finally {
       if (mounted) setState(() => _restoringId = null);
@@ -83,8 +99,9 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
       body = Center(
         child: Text(
           'No earlier versions yet.',
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
         ),
       );
     } else {
@@ -100,8 +117,8 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
               revision.summary?.isNotEmpty == true
                   ? revision.summary!
                   : revision.createdAt != null
-                      ? _formatDate(revision.createdAt!)
-                      : '',
+                  ? _formatDate(revision.createdAt!)
+                  : '',
             ),
             children: [
               Padding(
@@ -133,7 +150,10 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
       );
     }
 
-    return Scaffold(appBar: AppBar(title: const Text('History')), body: body);
+    return Scaffold(
+      appBar: AppBar(title: const Text('History')),
+      body: body,
+    );
   }
 
   static String _formatDate(DateTime date) {

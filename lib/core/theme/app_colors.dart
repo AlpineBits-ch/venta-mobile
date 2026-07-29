@@ -19,8 +19,8 @@ abstract final class AppColors {
   static const darkCard = Color(0xFF161B27);
   static const darkHover = Color(0xFF1D2333);
   static const darkBorder = Color(0xFF252E42);
-  static const darkBorderSubtle = Color(0x1AFFFFFF); // rgba(255,255,255,.10)
-  static const darkBorderDefault = Color(0x29FFFFFF); // rgba(255,255,255,.16)
+  static const darkBorderSubtle = Color(0x24FFFFFF); // rgba(255,255,255,.14)
+  static const darkBorderDefault = Color(0x38FFFFFF); // rgba(255,255,255,.22)
   static const darkTextPrimary = Color(0xD9FFFFFF); // rgba(255,255,255,.85)
   static const darkTextSecondary = Color(0x99FFFFFF); // rgba(255,255,255,.60)
   static const darkTextMuted = Color(0x66FFFFFF); // rgba(255,255,255,.40)
@@ -32,8 +32,8 @@ abstract final class AppColors {
   static const lightCard = Color(0xFFFFFFFF);
   static const lightHover = Color(0xFFE9EAF2);
   static const lightBorder = Color(0xFFE1E3EC);
-  static const lightBorderSubtle = Color(0x14060714); // rgba(6,7,20,.08)
-  static const lightBorderDefault = Color(0x29060714); // rgba(6,7,20,.16)
+  static const lightBorderSubtle = Color(0x1F060714); // rgba(6,7,20,.12)
+  static const lightBorderDefault = Color(0x38060714); // rgba(6,7,20,.22)
   static const lightTextPrimary = Color(0xE0060714); // rgba(6,7,20,.88)
   static const lightTextSecondary = Color(0xA3060714); // rgba(6,7,20,.64)
   static const lightTextMuted = Color(0x73060714); // rgba(6,7,20,.45)
@@ -43,4 +43,13 @@ abstract final class AppColors {
   static const statusIdle = Color(0xFFFBBF24);
   static const statusOffline = Color(0xFFF43F5E);
   static const statusDnd = Color(0xFFF43F5E);
+
+  // Avatar-placeholder accent palette — deterministic per-user fallback fill
+  // (see AvatarPalette.colorForUserId), kept hue-distinct from the presence
+  // colors above so a placeholder is never mistaken for a status dot.
+  static const avatarAccentBlue = Color(0xFF4C8DFF);
+  static const avatarAccentCyan = Color(0xFF2BB8C4);
+  static const avatarAccentPink = Color(0xFFEA5FA3);
+  static const avatarAccentMagenta = Color(0xFFC768E0);
+  static const avatarAccentCoral = Color(0xFFF2784B);
 }

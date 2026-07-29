@@ -27,11 +27,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _submit() {
     context.read<AuthBloc>().add(
-          LoginSubmitted(
-            input: _usernameController.text.trim(),
-            password: _passwordController.text,
-          ),
-        );
+      LoginSubmitted(
+        input: _usernameController.text.trim(),
+        password: _passwordController.text,
+      ),
+    );
   }
 
   @override
@@ -43,7 +43,9 @@ class _LoginScreenState extends State<LoginScreen> {
           listener: (context, state) {
             if (state.status == AuthStatus.failure) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.errorMessage ?? 'Something went wrong.')),
+                SnackBar(
+                  content: Text(state.errorMessage ?? 'Something went wrong.'),
+                ),
               );
             }
           },
@@ -64,7 +66,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: theme.colorScheme.primary,
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: const Icon(Icons.forum_rounded, color: Colors.white, size: 32),
+                      child: Icon(
+                        Icons.forum_rounded,
+                        color: theme.colorScheme.onPrimary,
+                        size: 32,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.l),
                     Text('Welcome back', style: theme.textTheme.titleLarge),
@@ -72,16 +78,23 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(
                       'We\'re so excited to see you again.',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.l),
-                    Text('USERNAME OR EMAIL', style: theme.textTheme.labelSmall),
+                    Text(
+                      'USERNAME OR EMAIL',
+                      style: theme.textTheme.labelSmall,
+                    ),
                     const SizedBox(height: AppSpacing.xs),
                     TextField(
                       controller: _usernameController,
                       autocorrect: false,
-                      decoration: const InputDecoration(hintText: 'you, or you@your-server.com'),
+                      decoration: const InputDecoration(
+                        hintText: 'you, or you@your-server.com',
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.m),
                     Text('PASSWORD', style: theme.textTheme.labelSmall),
@@ -93,10 +106,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: InputDecoration(
                         hintText: 'Your password',
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                     ),
@@ -107,10 +124,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         return ElevatedButton(
                           onPressed: loading ? null : _submit,
                           child: loading
-                              ? const SizedBox(
+                              ? SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: theme.colorScheme.onPrimary,
+                                  ),
                                 )
                               : const Text('Log In'),
                         );

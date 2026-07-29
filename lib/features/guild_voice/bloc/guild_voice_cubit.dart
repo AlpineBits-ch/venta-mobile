@@ -23,13 +23,16 @@ class VoiceParticipantState extends Equatable {
   final bool isDeafened;
   final bool isStreaming;
 
-  VoiceParticipantState copyWith({bool? isMuted, bool? isDeafened, bool? isStreaming}) =>
-      VoiceParticipantState(
-        userId: userId,
-        isMuted: isMuted ?? this.isMuted,
-        isDeafened: isDeafened ?? this.isDeafened,
-        isStreaming: isStreaming ?? this.isStreaming,
-      );
+  VoiceParticipantState copyWith({
+    bool? isMuted,
+    bool? isDeafened,
+    bool? isStreaming,
+  }) => VoiceParticipantState(
+    userId: userId,
+    isMuted: isMuted ?? this.isMuted,
+    isDeafened: isDeafened ?? this.isDeafened,
+    isStreaming: isStreaming ?? this.isStreaming,
+  );
 
   @override
   List<Object?> get props => [userId, isMuted, isDeafened, isStreaming];
@@ -77,7 +80,8 @@ class GuildVoiceState extends Equatable {
 
   bool get isInVoice => phase != GuildVoicePhase.idle;
 
-  List<VoiceParticipantState> rosterFor(String channelId) => rosters[channelId] ?? const [];
+  List<VoiceParticipantState> rosterFor(String channelId) =>
+      rosters[channelId] ?? const [];
 
   /// Identity fields (guildId/channelId/channelName/guildName) intentionally
   /// never fall back to null here — a full reset (leave/error) constructs a
@@ -94,35 +98,34 @@ class GuildVoiceState extends Equatable {
     DateTime? connectedAt,
     Map<String, List<VoiceParticipantState>>? rosters,
     String? errorMessage,
-  }) =>
-      GuildVoiceState(
-        phase: phase ?? this.phase,
-        guildId: guildId ?? this.guildId,
-        channelId: channelId ?? this.channelId,
-        channelName: channelName ?? this.channelName,
-        guildName: guildName ?? this.guildName,
-        isMuted: isMuted ?? this.isMuted,
-        isDeafened: isDeafened ?? this.isDeafened,
-        isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
-        connectedAt: connectedAt ?? this.connectedAt,
-        rosters: rosters ?? this.rosters,
-        errorMessage: errorMessage,
-      );
+  }) => GuildVoiceState(
+    phase: phase ?? this.phase,
+    guildId: guildId ?? this.guildId,
+    channelId: channelId ?? this.channelId,
+    channelName: channelName ?? this.channelName,
+    guildName: guildName ?? this.guildName,
+    isMuted: isMuted ?? this.isMuted,
+    isDeafened: isDeafened ?? this.isDeafened,
+    isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
+    connectedAt: connectedAt ?? this.connectedAt,
+    rosters: rosters ?? this.rosters,
+    errorMessage: errorMessage,
+  );
 
   @override
   List<Object?> get props => [
-        phase,
-        guildId,
-        channelId,
-        channelName,
-        guildName,
-        isMuted,
-        isDeafened,
-        isSpeakerOn,
-        connectedAt,
-        rosters,
-        errorMessage,
-      ];
+    phase,
+    guildId,
+    channelId,
+    channelName,
+    guildName,
+    isMuted,
+    isDeafened,
+    isSpeakerOn,
+    connectedAt,
+    rosters,
+    errorMessage,
+  ];
 }
 
 /// App-lifetime singleton owning the one guild voice channel the app can be
@@ -136,8 +139,8 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     required this.repository,
     required this.authRepository,
     required GuildVoiceWebRtcService Function() webRtcServiceFactory,
-  })  : _webRtcServiceFactory = webRtcServiceFactory,
-        super(const GuildVoiceState()) {
+  }) : _webRtcServiceFactory = webRtcServiceFactory,
+       super(const GuildVoiceState()) {
     _sub = repository.events.listen(_handleEvent);
   }
 
@@ -156,7 +159,10 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
   Future<void> hydrateChannelRoster(String guildId, String channelId) async {
     try {
       final voiceState = await repository.getState(guildId, channelId);
-      _setRoster(channelId, voiceState.participants.map(_toParticipantState).toList());
+      _setRoster(
+        channelId,
+        voiceState.participants.map(_toParticipantState).toList(),
+      );
     } catch (_) {
       // Best-effort — realtime events will keep it eventually consistent.
     }
@@ -185,7 +191,12 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       final voiceState = await repository.join(guildId, channelId);
       await _connect(guildId, channelId, voiceState);
     } catch (_) {
-      emit(GuildVoiceState(rosters: state.rosters, errorMessage: 'Could not join voice channel.'));
+      emit(
+        GuildVoiceState(
+          rosters: state.rosters,
+          errorMessage: 'Could not join voice channel.',
+        ),
+      );
     }
   }
 
@@ -196,8 +207,12 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     _stopHeartbeat();
     final webRtc = _webRtc;
     _webRtc = null;
-    final rosters = Map<String, List<VoiceParticipantState>>.from(state.rosters);
-    rosters[channelId] = (rosters[channelId] ?? const []).where((p) => p.userId != _myUserId).toList();
+    final rosters = Map<String, List<VoiceParticipantState>>.from(
+      state.rosters,
+    );
+    rosters[channelId] = (rosters[channelId] ?? const [])
+        .where((p) => p.userId != _myUserId)
+        .toList();
     emit(GuildVoiceState(rosters: rosters));
     await webRtc?.disconnect();
     try {
@@ -212,10 +227,18 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     final isMuted = !state.isMuted;
     final channelId = state.channelId;
     _webRtc?.setMuted(isMuted);
-    if (channelId != null) _updateParticipant(channelId, _myUserId, (p) => p.copyWith(isMuted: isMuted));
+    if (channelId != null)
+      _updateParticipant(
+        channelId,
+        _myUserId,
+        (p) => p.copyWith(isMuted: isMuted),
+      );
     emit(state.copyWith(isMuted: isMuted));
     if (channelId != null) {
-      await repository.invokeMuteChanged(channelId: channelId, isMuted: isMuted);
+      await repository.invokeMuteChanged(
+        channelId: channelId,
+        isMuted: isMuted,
+      );
     }
   }
 
@@ -225,11 +248,18 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     final channelId = state.channelId;
     _webRtc?.setDeafened(isDeafened);
     if (channelId != null) {
-      _updateParticipant(channelId, _myUserId, (p) => p.copyWith(isDeafened: isDeafened));
+      _updateParticipant(
+        channelId,
+        _myUserId,
+        (p) => p.copyWith(isDeafened: isDeafened),
+      );
     }
     emit(state.copyWith(isDeafened: isDeafened));
     if (channelId != null) {
-      await repository.invokeDeafenChanged(channelId: channelId, isDeafened: isDeafened);
+      await repository.invokeDeafenChanged(
+        channelId: channelId,
+        isDeafened: isDeafened,
+      );
     }
   }
 
@@ -240,17 +270,33 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
   }
 
-  Future<void> _connect(String guildId, String channelId, VoiceStateDto voiceState) async {
+  Future<void> _connect(
+    String guildId,
+    String channelId,
+    VoiceStateDto voiceState,
+  ) async {
     final webRtc = _webRtcServiceFactory();
     _webRtc = webRtc;
 
-    final rosters = Map<String, List<VoiceParticipantState>>.from(state.rosters);
+    final rosters = Map<String, List<VoiceParticipantState>>.from(
+      state.rosters,
+    );
     rosters[channelId] = [
-      VoiceParticipantState(userId: _myUserId, isMuted: state.isMuted, isDeafened: state.isDeafened),
+      VoiceParticipantState(
+        userId: _myUserId,
+        isMuted: state.isMuted,
+        isDeafened: state.isDeafened,
+      ),
       for (final p in voiceState.participants)
         if (p.userId != _myUserId) _toParticipantState(p),
     ];
-    emit(state.copyWith(phase: GuildVoicePhase.active, rosters: rosters, connectedAt: DateTime.now()));
+    emit(
+      state.copyWith(
+        phase: GuildVoicePhase.active,
+        rosters: rosters,
+        connectedAt: DateTime.now(),
+      ),
+    );
     _startHeartbeat();
 
     try {
@@ -263,7 +309,11 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
         final trackName = p.audioTrackName;
         if (p.userId != _myUserId && cfSessionId != null && trackName != null) {
           unawaited(
-            webRtc.subscribeToParticipant(userId: p.userId, cfSessionId: cfSessionId, trackName: trackName),
+            webRtc.subscribeToParticipant(
+              userId: p.userId,
+              cfSessionId: cfSessionId,
+              trackName: trackName,
+            ),
           );
         }
       }
@@ -280,41 +330,77 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
 
       case UserLeftVoiceChannel(:final userId, :final channelId):
         _removeFromRoster(channelId, userId);
-        if (channelId == state.channelId) _webRtc?.unsubscribeParticipant(userId);
+        if (channelId == state.channelId)
+          _webRtc?.unsubscribeParticipant(userId);
 
-      case VoiceParticipantJoined(:final userId, :final channelId, :final cfSessionId, :final audioTrackName):
-        if (userId == _myUserId || channelId != state.channelId || state.phase != GuildVoicePhase.active) {
+      case VoiceParticipantJoined(
+        :final userId,
+        :final channelId,
+        :final cfSessionId,
+        :final audioTrackName,
+      ):
+        if (userId == _myUserId ||
+            channelId != state.channelId ||
+            state.phase != GuildVoicePhase.active) {
           return;
         }
         _addToRoster(channelId, VoiceParticipantState(userId: userId));
         unawaited(
-          _webRtc?.subscribeToParticipant(userId: userId, cfSessionId: cfSessionId, trackName: audioTrackName),
+          _webRtc?.subscribeToParticipant(
+            userId: userId,
+            cfSessionId: cfSessionId,
+            trackName: audioTrackName,
+          ),
         );
 
       case VoiceTrackPublished(:final userId, :final channelId, :final kind):
-        if (kind == 'screen') _updateParticipant(channelId, userId, (p) => p.copyWith(isStreaming: true));
+        if (kind == 'screen')
+          _updateParticipant(
+            channelId,
+            userId,
+            (p) => p.copyWith(isStreaming: true),
+          );
 
       case VoiceTrackClosed(:final userId, :final channelId):
-        _updateParticipant(channelId, userId, (p) => p.copyWith(isStreaming: false));
+        _updateParticipant(
+          channelId,
+          userId,
+          (p) => p.copyWith(isStreaming: false),
+        );
 
       case VoiceMuteChanged(:final userId, :final channelId, :final isMuted):
         if (userId == _myUserId) return;
-        _updateParticipant(channelId, userId, (p) => p.copyWith(isMuted: isMuted));
+        _updateParticipant(
+          channelId,
+          userId,
+          (p) => p.copyWith(isMuted: isMuted),
+        );
 
-      case VoiceDeafenChanged(:final userId, :final channelId, :final isDeafened):
+      case VoiceDeafenChanged(
+        :final userId,
+        :final channelId,
+        :final isDeafened,
+      ):
         if (userId == _myUserId) return;
         // Deafen implies mute one-way for the badge: false doesn't auto-unmute.
         _updateParticipant(
           channelId,
           userId,
-          (p) => p.copyWith(isDeafened: isDeafened, isMuted: isDeafened ? true : p.isMuted),
+          (p) => p.copyWith(
+            isDeafened: isDeafened,
+            isMuted: isDeafened ? true : p.isMuted,
+          ),
         );
 
       case VoiceCameraChanged():
         break; // Video is out of scope for this audio-only v1.
 
       case VoiceScreenShareStarted(:final userId, :final channelId):
-        _updateParticipant(channelId, userId, (p) => p.copyWith(isStreaming: true));
+        _updateParticipant(
+          channelId,
+          userId,
+          (p) => p.copyWith(isStreaming: true),
+        );
 
       case VoiceScreenShareStopped():
         break; // Teardown rides on VoiceTrackClosed, same as Alpine.
@@ -336,8 +422,12 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
         _stopHeartbeat();
         final webRtc = _webRtc;
         _webRtc = null;
-        final rosters = Map<String, List<VoiceParticipantState>>.from(state.rosters);
-        rosters[channelId] = (rosters[channelId] ?? const []).where((p) => p.userId != _myUserId).toList();
+        final rosters = Map<String, List<VoiceParticipantState>>.from(
+          state.rosters,
+        );
+        rosters[channelId] = (rosters[channelId] ?? const [])
+            .where((p) => p.userId != _myUserId)
+            .toList();
         emit(
           GuildVoiceState(
             rosters: rosters,
@@ -348,7 +438,8 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     }
   }
 
-  VoiceParticipantState _toParticipantState(VoiceParticipantDto p) => VoiceParticipantState(
+  VoiceParticipantState _toParticipantState(VoiceParticipantDto p) =>
+      VoiceParticipantState(
         userId: p.userId,
         isMuted: p.isSelfMuted || p.isServerMuted,
         isDeafened: p.isSelfDeafened || p.isServerDeafened,
@@ -356,14 +447,18 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       );
 
   void _addToRoster(String channelId, VoiceParticipantState participant) {
-    final list = List<VoiceParticipantState>.from(state.rosters[channelId] ?? const []);
+    final list = List<VoiceParticipantState>.from(
+      state.rosters[channelId] ?? const [],
+    );
     if (list.any((p) => p.userId == participant.userId)) return;
     list.add(participant);
     _setRoster(channelId, list);
   }
 
   void _removeFromRoster(String channelId, String userId) {
-    final list = (state.rosters[channelId] ?? const []).where((p) => p.userId != userId).toList();
+    final list = (state.rosters[channelId] ?? const [])
+        .where((p) => p.userId != userId)
+        .toList();
     _setRoster(channelId, list);
   }
 
@@ -374,18 +469,25 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
   ) {
     final list = state.rosters[channelId];
     if (list == null) return;
-    _setRoster(channelId, [for (final p in list) p.userId == userId ? update(p) : p]);
+    _setRoster(channelId, [
+      for (final p in list) p.userId == userId ? update(p) : p,
+    ]);
   }
 
   void _setRoster(String channelId, List<VoiceParticipantState> list) {
-    final rosters = Map<String, List<VoiceParticipantState>>.from(state.rosters);
+    final rosters = Map<String, List<VoiceParticipantState>>.from(
+      state.rosters,
+    );
     rosters[channelId] = list;
     emit(state.copyWith(rosters: rosters));
   }
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) => repository.invokeHeartbeat());
+    _heartbeatTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => repository.invokeHeartbeat(),
+    );
   }
 
   void _stopHeartbeat() {

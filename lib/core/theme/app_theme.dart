@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_typography.dart';
 import 'status_colors_extension.dart';
+import 'widget_styles.dart';
 
 /// Builds explicit [ThemeData] for both brightness modes.
 ///
@@ -95,15 +96,13 @@ abstract final class AppTheme {
         centerTitle: false,
         titleTextStyle: textTheme.titleMedium,
       ),
-      drawerTheme: DrawerThemeData(
-        backgroundColor: statusColors.sidebar,
-      ),
+      drawerTheme: DrawerThemeData(backgroundColor: statusColors.sidebar),
       cardTheme: CardThemeData(
         color: cardColor,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadii.card),
           side: BorderSide(color: dividerColor),
         ),
       ),
@@ -113,18 +112,20 @@ abstract final class AppTheme {
         hintStyle: textTheme.bodyMedium?.copyWith(
           color: colorScheme.onSurface.withValues(alpha: 0.5),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadii.input),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadii.input),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadii.input),
           borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
         ),
       ),
@@ -135,9 +136,11 @@ abstract final class AppTheme {
           disabledBackgroundColor: colorScheme.primary.withValues(alpha: 0.4),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppRadii.input),
           ),
-          textStyle: textTheme.titleSmall?.copyWith(color: colorScheme.onPrimary),
+          textStyle: textTheme.titleSmall?.copyWith(
+            color: colorScheme.onPrimary,
+          ),
         ),
       ),
       listTileTheme: ListTileThemeData(

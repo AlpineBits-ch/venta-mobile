@@ -62,10 +62,13 @@ class GuildPermissions {
   static List<String> get grantableFlagNames =>
       _flags.keys.where((k) => k != 'Superadmin').toList();
 
-  static GuildPermissions _bit(int position) => GuildPermissions(BigInt.one << position);
+  static GuildPermissions _bit(int position) =>
+      GuildPermissions(BigInt.one << position);
 
   static GuildPermissions parse(String? serialized) {
-    if (serialized == null || serialized.trim().isEmpty || serialized.trim() == 'None') {
+    if (serialized == null ||
+        serialized.trim().isEmpty ||
+        serialized.trim() == 'None') {
       return none;
     }
     var result = BigInt.zero;
@@ -80,13 +83,15 @@ class GuildPermissions {
   bool has(String flagName) {
     final bit = _flags[flagName];
     if (bit == null) return false;
-    if (value & (BigInt.one << 63) != BigInt.zero) return true; // Superadmin bypasses all checks
+    if (value & (BigInt.one << 63) != BigInt.zero)
+      return true; // Superadmin bypasses all checks
     return value & (BigInt.one << bit) != BigInt.zero;
   }
 
   bool get isSuperadmin => value & (BigInt.one << 63) != BigInt.zero;
 
-  GuildPermissions operator |(GuildPermissions other) => GuildPermissions(value | other.value);
+  GuildPermissions operator |(GuildPermissions other) =>
+      GuildPermissions(value | other.value);
 
   /// Sets or clears one named flag — the building block for a permission
   /// checkbox list.
@@ -112,7 +117,8 @@ class GuildPermissions {
     if (value == BigInt.zero) return 'None';
     final names = <String>[];
     for (final entry in _flags.entries) {
-      if (value & (BigInt.one << entry.value) != BigInt.zero) names.add(entry.key);
+      if (value & (BigInt.one << entry.value) != BigInt.zero)
+        names.add(entry.key);
     }
     return names.join(', ');
   }

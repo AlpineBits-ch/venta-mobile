@@ -15,14 +15,18 @@ extension RelationshipModelX on RelationshipModel {
   /// namespace than `myUserId` (the Identity JWT `sub`), so it never
   /// matched and this always fell back to `owner`, showing yourself as
   /// every friend.
-  MinimalProfileId otherParty(String myUserId) => owner.userId == myUserId ? target : owner;
+  MinimalProfileId otherParty(String myUserId) =>
+      owner.userId == myUserId ? target : owner;
 }
 
 /// REST relationship list merged with realtime friend-request events. The
 /// hub only sends a display name on those events (not enough to patch one
 /// entry), so a received/accepted event just triggers a full refetch.
 class RelationshipRepository {
-  RelationshipRepository({required this.api, required RealtimeService realtimeService}) {
+  RelationshipRepository({
+    required this.api,
+    required RealtimeService realtimeService,
+  }) {
     _realtimeSub = realtimeService.events
         .where(
           (e) =>
@@ -35,10 +39,12 @@ class RelationshipRepository {
   final RelationshipApi api;
   late final StreamSubscription<RealtimeEvent> _realtimeSub;
 
-  final _relationshipsController = StreamController<List<RelationshipModel>>.broadcast();
+  final _relationshipsController =
+      StreamController<List<RelationshipModel>>.broadcast();
   List<RelationshipModel> _cache = [];
 
-  Stream<List<RelationshipModel>> get relationshipsStream => _relationshipsController.stream;
+  Stream<List<RelationshipModel>> get relationshipsStream =>
+      _relationshipsController.stream;
   List<RelationshipModel> get cached => _cache;
 
   Future<List<RelationshipModel>> fetch() async {

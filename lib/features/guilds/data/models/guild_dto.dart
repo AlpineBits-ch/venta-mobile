@@ -18,8 +18,14 @@ sealed class GuildDto with _$GuildDto {
     @Default(<ChannelDto>[]) List<ChannelDto> channels,
     @Default(<RoleDto>[]) List<RoleDto> roles,
     String? bannerUrl,
+
+    /// Not yet sent by the backend — forward-compatible plumbing only, so
+    /// the client doesn't need a second change once it starts being sent.
+    /// `ServerRailIcon` falls back to the initial-letter circle while null.
+    String? iconUrl,
     String? systemChannelId,
   }) = _GuildDto;
 
-  factory GuildDto.fromJson(Map<String, dynamic> json) => _$GuildDtoFromJson(json);
+  factory GuildDto.fromJson(Map<String, dynamic> json) =>
+      _$GuildDtoFromJson(json);
 }

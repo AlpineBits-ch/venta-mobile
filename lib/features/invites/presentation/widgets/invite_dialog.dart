@@ -70,7 +70,8 @@ class _InviteDialogState extends State<InviteDialog> {
     Navigator.of(context).pop();
   }
 
-  String? _iconUrl(String guildId) => getIt<ApiClient>().url('/api/v1/guild/guilds/$guildId/icon');
+  String? _iconUrl(String guildId) =>
+      getIt<ApiClient>().url('/api/v1/guild/guilds/$guildId/icon');
 
   String _initials(String name) {
     final words = name.trim().split(RegExp(r'\s+'));
@@ -83,7 +84,9 @@ class _InviteDialogState extends State<InviteDialog> {
     return PopScope(
       canPop: _state != _DialogState.joining,
       child: Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.dialog),
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
           child: Padding(
@@ -98,11 +101,17 @@ class _InviteDialogState extends State<InviteDialog> {
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.12,
+                        ),
+                        borderRadius: BorderRadius.circular(AppRadii.chip),
                       ),
                       alignment: Alignment.center,
-                      child: Icon(Icons.groups_outlined, size: 18, color: theme.colorScheme.primary),
+                      child: Icon(
+                        Icons.groups_outlined,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.s),
                     Text('Server Invite', style: theme.textTheme.titleMedium),
@@ -115,7 +124,9 @@ class _InviteDialogState extends State<InviteDialog> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed: _state == _DialogState.joining ? null : _dismiss,
+                      onPressed: _state == _DialogState.joining
+                          ? null
+                          : _dismiss,
                       child: const Text('Dismiss'),
                     ),
                     const SizedBox(width: AppSpacing.s),
@@ -143,7 +154,7 @@ class _InviteDialogState extends State<InviteDialog> {
               height: 64,
               decoration: BoxDecoration(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppRadii.dialog),
               ),
             ),
             const SizedBox(height: AppSpacing.m),
@@ -152,7 +163,7 @@ class _InviteDialogState extends State<InviteDialog> {
               height: 16,
               decoration: BoxDecoration(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(AppRadii.badge),
               ),
             ),
           ],
@@ -166,10 +177,14 @@ class _InviteDialogState extends State<InviteDialog> {
               height: 64,
               decoration: BoxDecoration(
                 color: theme.colorScheme.error.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppRadii.dialog),
               ),
               alignment: Alignment.center,
-              child: Icon(Icons.error_outline, size: 32, color: theme.colorScheme.error),
+              child: Icon(
+                Icons.error_outline,
+                size: 32,
+                color: theme.colorScheme.error,
+              ),
             ),
             const SizedBox(height: AppSpacing.m),
             Text(
@@ -202,7 +217,7 @@ class _InviteDialogState extends State<InviteDialog> {
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppRadii.dialog),
               ),
               alignment: Alignment.center,
               child: iconUrl != null && !_iconFailed
@@ -212,15 +227,18 @@ class _InviteDialogState extends State<InviteDialog> {
                       width: 64,
                       height: 64,
                       errorWidget: (context, url, error) {
-                        WidgetsBinding.instance
-                            .addPostFrameCallback((_) => setState(() => _iconFailed = true));
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => setState(() => _iconFailed = true),
+                        );
                         return const SizedBox.shrink();
                       },
                     )
                   : Text(
                       _initials(guild?.name ?? '?'),
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
             ),
             const SizedBox(height: AppSpacing.m),
@@ -229,7 +247,8 @@ class _InviteDialogState extends State<InviteDialog> {
               style: theme.textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),
-            if (guild?.description != null && guild!.description!.isNotEmpty) ...[
+            if (guild?.description != null &&
+                guild!.description!.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(
                 guild.description!,
@@ -243,7 +262,9 @@ class _InviteDialogState extends State<InviteDialog> {
               const SizedBox(height: 6),
               Text(
                 'Invite expired',
-                style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.error),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
               ),
             ],
           ],
@@ -262,10 +283,13 @@ class _InviteDialogState extends State<InviteDialog> {
     return FilledButton(
       onPressed: _state == _DialogState.loading ? null : _join,
       child: _state == _DialogState.joining
-          ? const SizedBox(
+          ? SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: theme.colorScheme.onPrimary,
+              ),
             )
           : const Text('Join Server'),
     );

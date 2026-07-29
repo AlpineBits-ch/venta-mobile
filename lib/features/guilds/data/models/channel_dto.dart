@@ -54,5 +54,6 @@ sealed class ChannelDto with _$ChannelDto {
     String? parentChannelId,
   }) = _ChannelDto;
 
-  factory ChannelDto.fromJson(Map<String, dynamic> json) => _$ChannelDtoFromJson(json);
+  factory ChannelDto.fromJson(Map<String, dynamic> json) =>
+      _$ChannelDtoFromJson(json);
 }

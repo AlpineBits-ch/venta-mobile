@@ -14,7 +14,11 @@ import '../../data/wiki_repository.dart';
 import '../wiki_permissions.dart';
 
 class WikiPageViewScreen extends StatefulWidget {
-  const WikiPageViewScreen({super.key, required this.guildId, required this.pageId});
+  const WikiPageViewScreen({
+    super.key,
+    required this.guildId,
+    required this.pageId,
+  });
 
   final String guildId;
   final String pageId;
@@ -34,8 +38,7 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
     super.initState();
     _load();
     unawaited(_loadPermissions());
-    _invalidatedSub = getIt<WikiRepository>()
-        .invalidated
+    _invalidatedSub = getIt<WikiRepository>().invalidated
         .where((guildId) => guildId == widget.guildId)
         .listen((_) => _load());
   }
@@ -57,7 +60,10 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
 
   Future<void> _load() async {
     try {
-      final page = await getIt<WikiRepository>().getPage(widget.guildId, widget.pageId);
+      final page = await getIt<WikiRepository>().getPage(
+        widget.guildId,
+        widget.pageId,
+      );
       if (mounted) setState(() => _page = page);
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not load this page.');
@@ -71,9 +77,14 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
         title: const Text('Delete page?'),
         content: Text('"${_page?.title}" will be gone for everyone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),
@@ -86,8 +97,9 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
       if (mounted) context.pop();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not delete this page.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete this page.')),
+        );
       }
     }
   }
@@ -97,9 +109,11 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
     final theme = Theme.of(context);
     final page = _page;
     final myUserId = getIt<AuthRepository>().currentUserId ?? '';
-    final canEdit = page != null &&
+    final canEdit =
+        page != null &&
         (_permissions.has('EditAnyWikiPage') ||
-            (page.authorId == myUserId && _permissions.has('EditOwnWikiPages')));
+            (page.authorId == myUserId &&
+                _permissions.has('EditOwnWikiPages')));
     final canSeeHistory = _permissions.has('ManageWikiRevisions');
     final canDelete = _permissions.has('DeleteWikiPages');
 
@@ -115,11 +129,18 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
           Row(
             children: [
               if (page.isPinned) ...[
-                Icon(Icons.push_pin, size: 16, color: theme.colorScheme.primary),
+                Icon(
+                  Icons.push_pin,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 4),
               ],
               Expanded(
-                child: Text(page.title, style: theme.textTheme.headlineSmall?.copyWith(height: 1.2)),
+                child: Text(
+                  page.title,
+                  style: theme.textTheme.headlineSmall?.copyWith(height: 1.2),
+                ),
               ),
             ],
           ),
@@ -128,8 +149,9 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
             page.updatedAt != null
                 ? 'Updated ${_formatDate(page.updatedAt!)}'
                 : 'Not yet saved',
-            style: theme.textTheme.labelSmall
-                ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
           ),
           if (page.tags.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.s),
@@ -170,15 +192,20 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
             IconButton(
               icon: const Icon(Icons.history),
               tooltip: 'History',
-              onPressed: () =>
-                  context.push(RoutePaths.serverWikiHistoryPath(widget.guildId, widget.pageId)),
+              onPressed: () => context.push(
+                RoutePaths.serverWikiHistoryPath(widget.guildId, widget.pageId),
+              ),
             ),
           if (canEdit)
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Edit',
-              onPressed: () => context
-                  .push(RoutePaths.serverWikiPageEditPath(widget.guildId, widget.pageId)),
+              onPressed: () => context.push(
+                RoutePaths.serverWikiPageEditPath(
+                  widget.guildId,
+                  widget.pageId,
+                ),
+              ),
             ),
           if (canDelete)
             IconButton(

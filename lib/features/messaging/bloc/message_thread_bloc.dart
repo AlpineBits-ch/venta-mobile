@@ -57,7 +57,10 @@ class ReactionToggled extends ThreadEvent {
 /// `guild.MessageCreated` realtime path in [_onMessageReceived] once the bot
 /// posts (there's no correlation id from the server — see `BotCommandApi`).
 class ThreadBotPlaceholderAdded extends ThreadEvent {
-  const ThreadBotPlaceholderAdded({required this.tempId, required this.botUserId});
+  const ThreadBotPlaceholderAdded({
+    required this.tempId,
+    required this.botUserId,
+  });
   final String tempId;
   final String botUserId;
 
@@ -118,7 +121,11 @@ class _UserTypingRemote extends ThreadEvent {
 }
 
 class _ReactionAddedRemote extends ThreadEvent {
-  const _ReactionAddedRemote({required this.messageId, required this.emoji, required this.userId});
+  const _ReactionAddedRemote({
+    required this.messageId,
+    required this.emoji,
+    required this.userId,
+  });
   final String messageId;
   final String emoji;
   final String userId;
@@ -184,34 +191,33 @@ class ThreadState extends Equatable {
     Set<String>? failedSendIds,
     Set<String>? typingUserIds,
     String? error,
-  }) =>
-      ThreadState(
-        messages: messages ?? this.messages,
-        isLoadingInitial: isLoadingInitial ?? this.isLoadingInitial,
-        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-        hasMoreOlder: hasMoreOlder ?? this.hasMoreOlder,
-        pendingSendIds: pendingSendIds ?? this.pendingSendIds,
-        failedSendIds: failedSendIds ?? this.failedSendIds,
-        typingUserIds: typingUserIds ?? this.typingUserIds,
-        error: error,
-      );
+  }) => ThreadState(
+    messages: messages ?? this.messages,
+    isLoadingInitial: isLoadingInitial ?? this.isLoadingInitial,
+    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+    hasMoreOlder: hasMoreOlder ?? this.hasMoreOlder,
+    pendingSendIds: pendingSendIds ?? this.pendingSendIds,
+    failedSendIds: failedSendIds ?? this.failedSendIds,
+    typingUserIds: typingUserIds ?? this.typingUserIds,
+    error: error,
+  );
 
   @override
   List<Object?> get props => [
-        messages,
-        isLoadingInitial,
-        isLoadingMore,
-        hasMoreOlder,
-        pendingSendIds,
-        failedSendIds,
-        typingUserIds,
-        error,
-      ];
+    messages,
+    isLoadingInitial,
+    isLoadingMore,
+    hasMoreOlder,
+    pendingSendIds,
+    failedSendIds,
+    typingUserIds,
+    error,
+  ];
 }
 
 class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   MessageThreadBloc({required this.repository, required this.myUserId})
-      : super(const ThreadState()) {
+    : super(const ThreadState()) {
     on<ThreadOpened>(_onOpened);
     on<ThreadLoadMoreRequested>(_onLoadMoreRequested);
     on<ThreadMessageSubmitted>(_onMessageSubmitted);
@@ -233,7 +239,12 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         case RemoteMessageReceived():
           add(_MessageReceived(event.message));
         case RemoteMessageUpdated():
-          add(_MessageUpdatedRemote(messageId: event.messageId, content: event.content));
+          add(
+            _MessageUpdatedRemote(
+              messageId: event.messageId,
+              content: event.content,
+            ),
+          );
         case RemoteMessageDeleted():
           add(_MessageDeletedRemote(event.messageId));
         case RemoteUserTyping():
@@ -284,7 +295,12 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       );
       unawaited(_markRead());
     } catch (_) {
-      emit(state.copyWith(isLoadingInitial: false, error: 'Could not load messages.'));
+      emit(
+        state.copyWith(
+          isLoadingInitial: false,
+          error: 'Could not load messages.',
+        ),
+      );
     }
   }
 
@@ -298,7 +314,11 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       final page = await repository.fetchPage(offset: state.messages.length);
       final merged = _sortNewestFirst([...state.messages, ...page]);
       emit(
-        state.copyWith(messages: merged, isLoadingMore: false, hasMoreOlder: page.length >= 50),
+        state.copyWith(
+          messages: merged,
+          isLoadingMore: false,
+          hasMoreOlder: page.length >= 50,
+        ),
       );
     } catch (_) {
       emit(state.copyWith(isLoadingMore: false));
@@ -333,7 +353,10 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       );
       emit(
         state.copyWith(
-          messages: [for (final m in state.messages) if (m.id == tempId) sent else m],
+          messages: [
+            for (final m in state.messages)
+              if (m.id == tempId) sent else m,
+          ],
           pendingSendIds: {...state.pendingSendIds}..remove(tempId),
         ),
       );
@@ -347,15 +370,23 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     }
   }
 
-  Future<void> _onTypingNotified(ThreadTypingNotified event, Emitter<ThreadState> emit) async {
+  Future<void> _onTypingNotified(
+    ThreadTypingNotified event,
+    Emitter<ThreadState> emit,
+  ) async {
     await repository.sendTypingIndicator();
   }
 
-  Future<void> _onReactionToggled(ReactionToggled event, Emitter<ThreadState> emit) async {
+  Future<void> _onReactionToggled(
+    ReactionToggled event,
+    Emitter<ThreadState> emit,
+  ) async {
     final hasOwn = state.messages.any(
       (m) =>
           m.id == event.messageId &&
-          m.reactions.any((r) => r.emoji == event.emoji && r.userId == myUserId),
+          m.reactions.any(
+            (r) => r.emoji == event.emoji && r.userId == myUserId,
+          ),
     );
 
     emit(
@@ -363,7 +394,11 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         messages: _withReactions(
           event.messageId,
           (reactions) => hasOwn
-              ? reactions.where((r) => !(r.emoji == event.emoji && r.userId == myUserId)).toList()
+              ? reactions
+                    .where(
+                      (r) => !(r.emoji == event.emoji && r.userId == myUserId),
+                    )
+                    .toList()
               : [
                   ...reactions,
                   MessageReactionDto(
@@ -400,19 +435,27 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
                     ),
                   ]
                 : reactions
-                    .where((r) => !(r.emoji == event.emoji && r.userId == myUserId))
-                    .toList(),
+                      .where(
+                        (r) =>
+                            !(r.emoji == event.emoji && r.userId == myUserId),
+                      )
+                      .toList(),
           ),
         ),
       );
     }
   }
 
-  void _onReactionAddedRemote(_ReactionAddedRemote event, Emitter<ThreadState> emit) {
+  void _onReactionAddedRemote(
+    _ReactionAddedRemote event,
+    Emitter<ThreadState> emit,
+  ) {
     emit(
       state.copyWith(
         messages: _withReactions(event.messageId, (reactions) {
-          if (reactions.any((r) => r.emoji == event.emoji && r.userId == event.userId)) {
+          if (reactions.any(
+            (r) => r.emoji == event.emoji && r.userId == event.userId,
+          )) {
             return reactions;
           }
           return [
@@ -429,13 +472,19 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     );
   }
 
-  void _onReactionRemovedRemote(_ReactionRemovedRemote event, Emitter<ThreadState> emit) {
+  void _onReactionRemovedRemote(
+    _ReactionRemovedRemote event,
+    Emitter<ThreadState> emit,
+  ) {
     emit(
       state.copyWith(
         messages: _withReactions(
           event.messageId,
-          (reactions) =>
-              reactions.where((r) => !(r.emoji == event.emoji && r.userId == event.userId)).toList(),
+          (reactions) => reactions
+              .where(
+                (r) => !(r.emoji == event.emoji && r.userId == event.userId),
+              )
+              .toList(),
         ),
       ),
     );
@@ -450,11 +499,17 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   ) {
     return [
       for (final m in state.messages)
-        if (m.id == messageId) m.copyWith(reactions: update(m.reactions)) else m,
+        if (m.id == messageId)
+          m.copyWith(reactions: update(m.reactions))
+        else
+          m,
     ];
   }
 
-  void _onBotPlaceholderAdded(ThreadBotPlaceholderAdded event, Emitter<ThreadState> emit) {
+  void _onBotPlaceholderAdded(
+    ThreadBotPlaceholderAdded event,
+    Emitter<ThreadState> emit,
+  ) {
     final placeholder = MessageDto(
       id: event.tempId,
       content: '',
@@ -472,18 +527,26 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         pendingSendIds: {...state.pendingSendIds, event.tempId},
       ),
     );
-    _pendingBotTempIdsByBot.putIfAbsent(event.botUserId, () => []).add(event.tempId);
+    _pendingBotTempIdsByBot
+        .putIfAbsent(event.botUserId, () => [])
+        .add(event.tempId);
     _botTimeoutTimers[event.tempId] = Timer(
       const Duration(seconds: 10),
       () => add(_BotPlaceholderTimedOut(event.tempId)),
     );
   }
 
-  void _onBotPlaceholderFailed(ThreadBotPlaceholderFailed event, Emitter<ThreadState> emit) {
+  void _onBotPlaceholderFailed(
+    ThreadBotPlaceholderFailed event,
+    Emitter<ThreadState> emit,
+  ) {
     _failBotPlaceholder(event.tempId, emit);
   }
 
-  void _onBotPlaceholderTimedOut(_BotPlaceholderTimedOut event, Emitter<ThreadState> emit) {
+  void _onBotPlaceholderTimedOut(
+    _BotPlaceholderTimedOut event,
+    Emitter<ThreadState> emit,
+  ) {
     _failBotPlaceholder(event.tempId, emit);
   }
 
@@ -514,7 +577,8 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         state.copyWith(
           messages: [
             event.message,
-            for (final m in state.messages) if (m.id != tempId) m,
+            for (final m in state.messages)
+              if (m.id != tempId) m,
           ],
           pendingSendIds: {...state.pendingSendIds}..remove(tempId),
         ),
@@ -528,18 +592,27 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     }
   }
 
-  void _onMessageUpdatedRemote(_MessageUpdatedRemote event, Emitter<ThreadState> emit) {
+  void _onMessageUpdatedRemote(
+    _MessageUpdatedRemote event,
+    Emitter<ThreadState> emit,
+  ) {
     emit(
       state.copyWith(
         messages: [
           for (final m in state.messages)
-            if (m.id == event.messageId) m.copyWith(content: event.content) else m,
+            if (m.id == event.messageId)
+              m.copyWith(content: event.content)
+            else
+              m,
         ],
       ),
     );
   }
 
-  void _onMessageDeletedRemote(_MessageDeletedRemote event, Emitter<ThreadState> emit) {
+  void _onMessageDeletedRemote(
+    _MessageDeletedRemote event,
+    Emitter<ThreadState> emit,
+  ) {
     emit(
       state.copyWith(
         messages: state.messages.where((m) => m.id != event.messageId).toList(),
@@ -558,7 +631,11 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   }
 
   void _onTypingExpired(_TypingExpired event, Emitter<ThreadState> emit) {
-    emit(state.copyWith(typingUserIds: {...state.typingUserIds}..remove(event.userId)));
+    emit(
+      state.copyWith(
+        typingUserIds: {...state.typingUserIds}..remove(event.userId),
+      ),
+    );
   }
 
   Future<void> _markRead() async {
@@ -568,7 +645,10 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
   List<MessageDto> _sortNewestFirst(List<MessageDto> messages) {
     final sorted = [...messages];
-    sorted.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+    sorted.sort(
+      (a, b) =>
+          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+    );
     return sorted;
   }
 

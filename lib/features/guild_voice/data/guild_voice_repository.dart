@@ -14,14 +14,22 @@ sealed class GuildVoiceEvent {
 /// inline participant list shown under every voice channel in the sidebar,
 /// including channels the local user hasn't joined.
 class UserJoinedVoiceChannel extends GuildVoiceEvent {
-  const UserJoinedVoiceChannel({required this.userId, required this.channelId, required this.guildId});
+  const UserJoinedVoiceChannel({
+    required this.userId,
+    required this.channelId,
+    required this.guildId,
+  });
   final String userId;
   final String channelId;
   final String guildId;
 }
 
 class UserLeftVoiceChannel extends GuildVoiceEvent {
-  const UserLeftVoiceChannel({required this.userId, required this.channelId, required this.guildId});
+  const UserLeftVoiceChannel({
+    required this.userId,
+    required this.channelId,
+    required this.guildId,
+  });
   final String userId;
   final String channelId;
   final String guildId;
@@ -63,7 +71,11 @@ class VoiceTrackPublished extends GuildVoiceEvent {
 }
 
 class VoiceTrackClosed extends GuildVoiceEvent {
-  const VoiceTrackClosed({required this.userId, required this.channelId, required this.trackName});
+  const VoiceTrackClosed({
+    required this.userId,
+    required this.channelId,
+    required this.trackName,
+  });
   final String userId;
   final String channelId;
   final String trackName;
@@ -99,7 +111,11 @@ class VoiceDeafenChanged extends GuildVoiceEvent {
 }
 
 class VoiceCameraChanged extends GuildVoiceEvent {
-  const VoiceCameraChanged({required this.userId, required this.channelId, required this.isCameraOn});
+  const VoiceCameraChanged({
+    required this.userId,
+    required this.channelId,
+    required this.isCameraOn,
+  });
   final String userId;
   final String channelId;
   final bool isCameraOn;
@@ -121,14 +137,21 @@ class VoiceScreenShareStarted extends GuildVoiceEvent {
 /// Client-side is a no-op beyond clearing the streaming badge — the actual
 /// track teardown rides on [VoiceTrackClosed], same as Alpine.
 class VoiceScreenShareStopped extends GuildVoiceEvent {
-  const VoiceScreenShareStopped({required this.channelId, required this.shareId});
+  const VoiceScreenShareStopped({
+    required this.channelId,
+    required this.shareId,
+  });
   final String channelId;
   final String shareId;
 }
 
 /// A moderator moved the local user to a different channel.
 class VoiceMovedToChannel extends GuildVoiceEvent {
-  const VoiceMovedToChannel({required this.channelId, required this.guildId, required this.movedBy});
+  const VoiceMovedToChannel({
+    required this.channelId,
+    required this.guildId,
+    required this.movedBy,
+  });
   final String channelId;
   final String guildId;
   final String movedBy;
@@ -138,7 +161,10 @@ class VoiceMovedToChannel extends GuildVoiceEvent {
 /// the user's own devices joining the same channel. Must tear down local
 /// WebRTC/audio without calling leave — the server already removed it.
 class VoiceKickedByOtherDevice extends GuildVoiceEvent {
-  const VoiceKickedByOtherDevice({required this.channelId, required this.guildId});
+  const VoiceKickedByOtherDevice({
+    required this.channelId,
+    required this.guildId,
+  });
   final String channelId;
   final String guildId;
 }
@@ -152,8 +178,8 @@ class GuildVoiceRepository {
     required this.api,
     required RealtimeService realtimeService,
     required DeviceIdService deviceIdService,
-  })  : _realtimeService = realtimeService,
-        _deviceIdService = deviceIdService {
+  }) : _realtimeService = realtimeService,
+       _deviceIdService = deviceIdService {
     _realtimeSub = realtimeService.events
         .where((e) => e.name.startsWith('guild.voice.'))
         .listen(_handleRealtimeEvent);
@@ -280,53 +306,62 @@ class GuildVoiceRepository {
   Future<void> leave(String guildId, String channelId) =>
       api.leave(guildId, channelId, deviceId: _deviceIdService.deviceId);
 
-  Future<VoiceStateDto> getState(String guildId, String channelId) => api.getState(guildId, channelId);
+  Future<VoiceStateDto> getState(String guildId, String channelId) =>
+      api.getState(guildId, channelId);
 
-  Future<void> invokeMuteChanged({required String channelId, required bool isMuted}) =>
-      _realtimeService.invoke(
-        'guild.voice.MuteChanged',
-        args: [
-          {'channelId': channelId, 'isMuted': isMuted},
-        ],
-      );
+  Future<void> invokeMuteChanged({
+    required String channelId,
+    required bool isMuted,
+  }) => _realtimeService.invoke(
+    'guild.voice.MuteChanged',
+    args: [
+      {'channelId': channelId, 'isMuted': isMuted},
+    ],
+  );
 
-  Future<void> invokeDeafenChanged({required String channelId, required bool isDeafened}) =>
-      _realtimeService.invoke(
-        'guild.voice.DeafenChanged',
-        args: [
-          {'channelId': channelId, 'isDeafened': isDeafened},
-        ],
-      );
+  Future<void> invokeDeafenChanged({
+    required String channelId,
+    required bool isDeafened,
+  }) => _realtimeService.invoke(
+    'guild.voice.DeafenChanged',
+    args: [
+      {'channelId': channelId, 'isDeafened': isDeafened},
+    ],
+  );
 
-  Future<void> invokeCameraChanged({required String channelId, required bool isCameraOn}) =>
-      _realtimeService.invoke(
-        'guild.voice.CameraChanged',
-        args: [
-          {'channelId': channelId, 'isCameraOn': isCameraOn},
-        ],
-      );
+  Future<void> invokeCameraChanged({
+    required String channelId,
+    required bool isCameraOn,
+  }) => _realtimeService.invoke(
+    'guild.voice.CameraChanged',
+    args: [
+      {'channelId': channelId, 'isCameraOn': isCameraOn},
+    ],
+  );
 
   Future<void> invokeScreenShareStarted({
     required String channelId,
     required String shareId,
     required String trackName,
-  }) =>
-      _realtimeService.invoke(
-        'guild.voice.ScreenShareStarted',
-        args: [
-          {'channelId': channelId, 'shareId': shareId, 'trackName': trackName},
-        ],
-      );
+  }) => _realtimeService.invoke(
+    'guild.voice.ScreenShareStarted',
+    args: [
+      {'channelId': channelId, 'shareId': shareId, 'trackName': trackName},
+    ],
+  );
 
-  Future<void> invokeScreenShareStopped({required String channelId, required String shareId}) =>
-      _realtimeService.invoke(
-        'guild.voice.ScreenShareStopped',
-        args: [
-          {'channelId': channelId, 'shareId': shareId},
-        ],
-      );
+  Future<void> invokeScreenShareStopped({
+    required String channelId,
+    required String shareId,
+  }) => _realtimeService.invoke(
+    'guild.voice.ScreenShareStopped',
+    args: [
+      {'channelId': channelId, 'shareId': shareId},
+    ],
+  );
 
-  Future<void> invokeHeartbeat() => _realtimeService.invoke('guild.voice.Heartbeat');
+  Future<void> invokeHeartbeat() =>
+      _realtimeService.invoke('guild.voice.Heartbeat');
 
   void dispose() {
     _realtimeSub.cancel();

@@ -70,12 +70,15 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
         systemChannelId: _systemChannelId,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Saved.')));
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not save changes.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save changes.')),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -83,29 +86,39 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
   }
 
   Future<void> _pickIcon() async {
-    final file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+    final file = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 90,
+    );
     if (file == null) return;
     final bytes = await file.readAsBytes();
     try {
-      final updated = await getIt<GuildRepository>()
-          .uploadGuildIcon(widget.guildId, bytes: bytes, fileName: file.name);
+      final updated = await getIt<GuildRepository>().uploadGuildIcon(
+        widget.guildId,
+        bytes: bytes,
+        fileName: file.name,
+      );
       if (mounted) _applyGuild(updated);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not upload icon.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not upload icon.')));
       }
     }
   }
 
   Future<void> _removeIcon() async {
     try {
-      final updated = await getIt<GuildRepository>().deleteGuildIcon(widget.guildId);
+      final updated = await getIt<GuildRepository>().deleteGuildIcon(
+        widget.guildId,
+      );
       if (mounted) _applyGuild(updated);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not remove icon.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not remove icon.')));
       }
     }
   }
@@ -120,9 +133,14 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
           'This cannot be undone.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),
@@ -135,8 +153,9 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not delete server.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete server.')),
+        );
       }
     }
   }
@@ -146,7 +165,9 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
     final guild = _guild;
     if (guild == null) return const Center(child: CircularProgressIndicator());
     final theme = Theme.of(context);
-    final textChannels = guild.channels.where((c) => c.type == ChannelType.text).toList();
+    final textChannels = guild.channels
+        .where((c) => c.type == ChannelType.text)
+        .toList();
     final iconUrl = getIt<GuildRepository>().guildIconUrl(widget.guildId);
 
     return ListView(
@@ -168,13 +189,16 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
                           height: 88,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stack) {
-                            WidgetsBinding.instance
-                                .addPostFrameCallback((_) => setState(() => _iconFailed = true));
+                            WidgetsBinding.instance.addPostFrameCallback(
+                              (_) => setState(() => _iconFailed = true),
+                            );
                             return const SizedBox.shrink();
                           },
                         )
                       : Text(
-                          guild.name.isNotEmpty ? guild.name[0].toUpperCase() : '?',
+                          guild.name.isNotEmpty
+                              ? guild.name[0].toUpperCase()
+                              : '?',
                           style: theme.textTheme.headlineMedium,
                         ),
                 ),
@@ -193,7 +217,10 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
         ),
         if (!_iconFailed)
           Center(
-            child: TextButton(onPressed: _removeIcon, child: const Text('Remove icon')),
+            child: TextButton(
+              onPressed: _removeIcon,
+              child: const Text('Remove icon'),
+            ),
           ),
         const SizedBox(height: AppSpacing.m),
         TextField(
@@ -214,7 +241,10 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
           items: [
             const DropdownMenuItem<String?>(child: Text('None')),
             for (final channel in textChannels)
-              DropdownMenuItem<String?>(value: channel.id, child: Text('#${channel.name}')),
+              DropdownMenuItem<String?>(
+                value: channel.id,
+                child: Text('#${channel.name}'),
+              ),
           ],
           onChanged: (value) => setState(() => _systemChannelId = value),
         ),
@@ -225,7 +255,10 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Text('Save changes'),
         ),
@@ -233,7 +266,9 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
         const Divider(),
         const SizedBox(height: AppSpacing.s),
         OutlinedButton(
-          style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: theme.colorScheme.error,
+          ),
           onPressed: _confirmDeleteServer,
           child: const Text('Delete server'),
         ),

@@ -17,5 +17,6 @@ sealed class WikiDto with _$WikiDto {
     @Default(<WikiPageSummaryDto>[]) List<WikiPageSummaryDto> pages,
   }) = _WikiDto;
 
-  factory WikiDto.fromJson(Map<String, dynamic> json) => _$WikiDtoFromJson(json);
+  factory WikiDto.fromJson(Map<String, dynamic> json) =>
+      _$WikiDtoFromJson(json);
 }

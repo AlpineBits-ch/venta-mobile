@@ -7,7 +7,8 @@ import 'dart:convert';
 /// message is currently treated as plaintext regardless of its
 /// `encryptionState`, per the v1 "plaintext-first" scope decision.
 abstract final class MessageContentCodec {
-  static String encode(String plaintext) => base64Encode(utf8.encode(plaintext));
+  static String encode(String plaintext) =>
+      base64Encode(utf8.encode(plaintext));
 
   static String decode(String wireContent) {
     try {

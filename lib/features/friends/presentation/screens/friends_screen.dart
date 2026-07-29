@@ -38,10 +38,13 @@ class _FriendsScreenState extends State<FriendsScreen> {
     FocusScope.of(context).unfocus();
   }
 
-  Future<void> _openDirectMessage(BuildContext context, String otherUserId) async {
+  Future<void> _openDirectMessage(
+    BuildContext context,
+    String otherUserId,
+  ) async {
     try {
-      final conversation =
-          await getIt<ConversationRepository>().createOrOpenDirectMessage(otherUserId);
+      final conversation = await getIt<ConversationRepository>()
+          .createOrOpenDirectMessage(otherUserId);
       if (context.mounted) {
         context.push(RoutePaths.conversationPath(conversation.id));
       }
@@ -62,9 +65,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
       body: BlocConsumer<FriendsBloc, FriendsState>(
         listener: (context, state) {
           if (state.actionError != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.actionError!)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.actionError!)));
           }
         },
         builder: (context, state) {
@@ -81,7 +84,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
                       controller: _usernameController,
                       autocorrect: false,
                       onSubmitted: (_) => _submitAddFriend(context),
-                      decoration: const InputDecoration(hintText: 'Add a friend by username'),
+                      decoration: const InputDecoration(
+                        hintText: 'Add a friend by username',
+                      ),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.s),
@@ -101,14 +106,22 @@ class _FriendsScreenState extends State<FriendsScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: Icon(Icons.check_circle, color: context.statusColors.online),
-                          onPressed: () =>
-                              context.read<FriendsBloc>().add(FriendAcceptRequested(r.id)),
+                          icon: Icon(
+                            Icons.check_circle,
+                            color: context.statusColors.online,
+                          ),
+                          onPressed: () => context.read<FriendsBloc>().add(
+                            FriendAcceptRequested(r.id),
+                          ),
                         ),
                         IconButton(
-                          icon: Icon(Icons.cancel, color: context.statusColors.offline),
-                          onPressed: () =>
-                              context.read<FriendsBloc>().add(FriendRejectRequested(r.id)),
+                          icon: Icon(
+                            Icons.cancel,
+                            color: context.statusColors.offline,
+                          ),
+                          onPressed: () => context.read<FriendsBloc>().add(
+                            FriendRejectRequested(r.id),
+                          ),
                         ),
                       ],
                     ),
@@ -123,8 +136,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     subtitle: 'Pending',
                     trailing: IconButton(
                       icon: const Icon(Icons.close),
-                      onPressed: () =>
-                          context.read<FriendsBloc>().add(FriendRevokeRequested(r.id)),
+                      onPressed: () => context.read<FriendsBloc>().add(
+                        FriendRevokeRequested(r.id),
+                      ),
                     ),
                   ),
               ],
@@ -135,8 +149,11 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   child: Center(
                     child: Text(
                       'No friends yet — add one above.',
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
                     ),
                   ),
                 )
@@ -145,7 +162,10 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   _RelationshipTile(
                     relationship: r,
                     myUserId: _myUserId,
-                    onTap: () => _openDirectMessage(context, r.otherParty(_myUserId).userId),
+                    onTap: () => _openDirectMessage(
+                      context,
+                      r.otherParty(_myUserId).userId,
+                    ),
                   ),
             ],
           );
@@ -189,7 +209,9 @@ class _RelationshipTile extends StatelessWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: context.statusColors.hover,
-        child: Text(other.userName.isNotEmpty ? other.userName[0].toUpperCase() : '?'),
+        child: Text(
+          other.userName.isNotEmpty ? other.userName[0].toUpperCase() : '?',
+        ),
       ),
       title: Text(other.userName),
       subtitle: subtitle != null ? Text(subtitle!) : null,

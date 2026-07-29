@@ -46,13 +46,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
     context.read<AuthBloc>().add(
-          RegisterSubmitted(
-            email: _emailController.text.trim(),
-            username: _usernameController.text.trim(),
-            password: _passwordController.text,
-            birthdate: birthdate,
-          ),
-        );
+      RegisterSubmitted(
+        email: _emailController.text.trim(),
+        username: _usernameController.text.trim(),
+        password: _passwordController.text,
+        birthdate: birthdate,
+      ),
+    );
   }
 
   @override
@@ -65,7 +65,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           listener: (context, state) {
             if (state.status == AuthStatus.failure) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.errorMessage ?? 'Something went wrong.')),
+                SnackBar(
+                  content: Text(state.errorMessage ?? 'Something went wrong.'),
+                ),
               );
             }
           },
@@ -82,7 +84,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   autocorrect: false,
-                  decoration: const InputDecoration(hintText: 'you@example.com'),
+                  decoration: const InputDecoration(
+                    hintText: 'you@example.com',
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.m),
                 Text('USERNAME', style: theme.textTheme.labelSmall),
@@ -90,7 +94,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextField(
                   controller: _usernameController,
                   autocorrect: false,
-                  decoration: const InputDecoration(hintText: 'A unique username'),
+                  decoration: const InputDecoration(
+                    hintText: 'A unique username',
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.m),
                 Text('PASSWORD', style: theme.textTheme.labelSmall),
@@ -101,10 +107,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: InputDecoration(
                     hintText: 'At least 8 characters',
                     suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
                 ),
@@ -113,7 +122,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: AppSpacing.xs),
                 InkWell(
                   onTap: _pickBirthdate,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadii.input),
                   child: InputDecorator(
                     decoration: const InputDecoration(),
                     child: Text(
@@ -130,10 +139,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     return ElevatedButton(
                       onPressed: loading ? null : _submit,
                       child: loading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.onPrimary,
+                              ),
                             )
                           : const Text('Create Account'),
                     );

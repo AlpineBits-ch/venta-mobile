@@ -26,17 +26,23 @@ class VoiceStatusBar extends StatelessWidget {
         return Material(
           color: context.statusColors.sidebar,
           child: InkWell(
-            onTap: () => Navigator.of(context, rootNavigator: true).push(
-              MaterialPageRoute(builder: (_) => const GuildVoiceScreen()),
-            ),
+            onTap: () => Navigator.of(
+              context,
+              rootNavigator: true,
+            ).push(MaterialPageRoute(builder: (_) => const GuildVoiceScreen())),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.m,
+                vertical: AppSpacing.s,
+              ),
               child: Row(
                 children: [
                   Icon(
                     Icons.circle,
                     size: 10,
-                    color: state.phase == GuildVoicePhase.connecting ? Colors.amber : Colors.green,
+                    color: state.phase == GuildVoicePhase.connecting
+                        ? context.statusColors.idle
+                        : context.statusColors.online,
                   ),
                   const SizedBox(width: AppSpacing.s),
                   Expanded(
@@ -52,9 +58,20 @@ class VoiceStatusBar extends StatelessWidget {
                                   : 'Voice connected',
                               style: theme.textTheme.labelMedium,
                             ),
-                            if (state.phase == GuildVoicePhase.active && state.connectedAt != null) ...[
-                              const Text(' · ', style: TextStyle(color: Colors.white54)),
-                              ElapsedTimeLabel(since: state.connectedAt!, style: theme.textTheme.labelMedium),
+                            if (state.phase == GuildVoicePhase.active &&
+                                state.connectedAt != null) ...[
+                              Text(
+                                ' · ',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              ),
+                              ElapsedTimeLabel(
+                                since: state.connectedAt!,
+                                style: theme.textTheme.labelMedium,
+                              ),
                             ],
                           ],
                         ),
@@ -67,7 +84,7 @@ class VoiceStatusBar extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.call_end, color: Colors.red),
+                    icon: Icon(Icons.call_end, color: theme.colorScheme.error),
                     onPressed: () => getIt<GuildVoiceCubit>().leave(),
                   ),
                 ],

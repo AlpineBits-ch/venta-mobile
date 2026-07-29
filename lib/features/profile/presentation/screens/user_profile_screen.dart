@@ -15,20 +15,22 @@ import '../../bloc/user_profile_cubit.dart';
 import '../../data/models/profile_dto.dart';
 import '../../data/profile_repository.dart';
 
-Color _statusDotColor(BuildContext context, OnlineStatus status) => switch (status) {
+Color _statusDotColor(BuildContext context, OnlineStatus status) =>
+    switch (status) {
       OnlineStatus.online => context.statusColors.online,
       OnlineStatus.idle => context.statusColors.idle,
       OnlineStatus.doNotDisturb => context.statusColors.doNotDisturb,
-      OnlineStatus.hidden || OnlineStatus.offline => context.statusColors.offline,
+      OnlineStatus.hidden ||
+      OnlineStatus.offline => context.statusColors.offline,
     };
 
 String _statusLabel(OnlineStatus status) => switch (status) {
-      OnlineStatus.online => 'Online',
-      OnlineStatus.idle => 'Idle',
-      OnlineStatus.doNotDisturb => 'Do Not Disturb',
-      OnlineStatus.hidden => 'Invisible',
-      OnlineStatus.offline => 'Offline',
-    };
+  OnlineStatus.online => 'Online',
+  OnlineStatus.idle => 'Idle',
+  OnlineStatus.doNotDisturb => 'Do Not Disturb',
+  OnlineStatus.hidden => 'Invisible',
+  OnlineStatus.offline => 'Offline',
+};
 
 /// Read-only view of *another* user's profile — the counterpart to
 /// `ProfileSettingsScreen` (which is self-only and editable). Reached by
@@ -60,8 +62,8 @@ class _UserProfileView extends StatelessWidget {
 
   Future<void> _openDirectMessage(BuildContext context) async {
     try {
-      final conversation =
-          await getIt<ConversationRepository>().createOrOpenDirectMessage(userId);
+      final conversation = await getIt<ConversationRepository>()
+          .createOrOpenDirectMessage(userId);
       if (context.mounted) {
         context.push(RoutePaths.conversationPath(conversation.id));
       }
@@ -82,9 +84,9 @@ class _UserProfileView extends StatelessWidget {
       body: BlocConsumer<UserProfileCubit, UserProfileState>(
         listener: (context, state) {
           if (state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.errorMessage!)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.errorMessage!)));
           }
         },
         builder: (context, state) {
@@ -101,8 +103,9 @@ class _UserProfileView extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final accentColor =
-              profile.accentColor != null ? parseHexColor(profile.accentColor!) : theme.colorScheme.primary;
+          final accentColor = profile.accentColor != null
+              ? parseHexColor(profile.accentColor!)
+              : theme.colorScheme.primary;
 
           return ListView(
             padding: EdgeInsets.zero,
@@ -115,14 +118,20 @@ class _UserProfileView extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(profile.userName, style: theme.textTheme.titleLarge),
+                        Text(
+                          profile.userName,
+                          style: theme.textTheme.titleLarge,
+                        ),
                         const SizedBox(width: AppSpacing.s),
                         Container(
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: _statusDotColor(context, profile.onlineStatus),
+                            color: _statusDotColor(
+                              context,
+                              profile.onlineStatus,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 4),
@@ -156,7 +165,11 @@ class _UserProfileView extends StatelessWidget {
 }
 
 class _ActionRow extends StatelessWidget {
-  const _ActionRow({required this.isSelf, required this.state, required this.onMessage});
+  const _ActionRow({
+    required this.isSelf,
+    required this.state,
+    required this.onMessage,
+  });
 
   final bool isSelf;
   final UserProfileState state;
@@ -196,31 +209,34 @@ class _ActionRow extends StatelessWidget {
 
     return switch (relationship.status) {
       RelationshipStatus.friends => OutlinedButton.icon(
-          onPressed: onMessage,
-          icon: const Icon(Icons.chat_bubble_outline),
-          label: const Text('Message'),
-        ),
+        onPressed: onMessage,
+        icon: const Icon(Icons.chat_bubble_outline),
+        label: const Text('Message'),
+      ),
       RelationshipStatus.pendingIncoming => Wrap(
-          spacing: AppSpacing.s,
-          children: [
-            ElevatedButton.icon(
-              onPressed: busy ? null : cubit.acceptRequest,
-              icon: const Icon(Icons.check),
-              label: const Text('Accept'),
-            ),
-            OutlinedButton.icon(
-              onPressed: busy ? null : cubit.rejectOrRevokeRequest,
-              icon: const Icon(Icons.close),
-              label: const Text('Decline'),
-            ),
-          ],
-        ),
+        spacing: AppSpacing.s,
+        children: [
+          ElevatedButton.icon(
+            onPressed: busy ? null : cubit.acceptRequest,
+            icon: const Icon(Icons.check),
+            label: const Text('Accept'),
+          ),
+          OutlinedButton.icon(
+            onPressed: busy ? null : cubit.rejectOrRevokeRequest,
+            icon: const Icon(Icons.close),
+            label: const Text('Decline'),
+          ),
+        ],
+      ),
       RelationshipStatus.pendingOutgoing => OutlinedButton.icon(
-          onPressed: busy ? null : cubit.rejectOrRevokeRequest,
-          icon: const Icon(Icons.hourglass_empty),
-          label: const Text('Cancel Request'),
-        ),
-      RelationshipStatus.blocked => Text('Blocked', style: Theme.of(context).textTheme.bodyMedium),
+        onPressed: busy ? null : cubit.rejectOrRevokeRequest,
+        icon: const Icon(Icons.hourglass_empty),
+        label: const Text('Cancel Request'),
+      ),
+      RelationshipStatus.blocked => Text(
+        'Blocked',
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
     };
   }
 }
@@ -244,7 +260,10 @@ class _BannerAndAvatar extends StatelessWidget {
             decoration: BoxDecoration(
               color: accentColor.withValues(alpha: 0.35),
               image: profile.bannerUrl != null
-                  ? DecorationImage(image: NetworkImage(profile.bannerUrl!), fit: BoxFit.cover)
+                  ? DecorationImage(
+                      image: NetworkImage(profile.bannerUrl!),
+                      fit: BoxFit.cover,
+                    )
                   : null,
             ),
           ),
@@ -256,16 +275,24 @@ class _BannerAndAvatar extends StatelessWidget {
               height: 88,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 4),
+                border: Border.all(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  width: 4,
+                ),
                 color: context.statusColors.hover,
                 image: profile.avatarUrl != null
-                    ? DecorationImage(image: NetworkImage(profile.avatarUrl!), fit: BoxFit.cover)
+                    ? DecorationImage(
+                        image: NetworkImage(profile.avatarUrl!),
+                        fit: BoxFit.cover,
+                      )
                     : null,
               ),
               child: profile.avatarUrl == null
                   ? Center(
                       child: Text(
-                        profile.userName.isNotEmpty ? profile.userName[0].toUpperCase() : '?',
+                        profile.userName.isNotEmpty
+                            ? profile.userName[0].toUpperCase()
+                            : '?',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                     )

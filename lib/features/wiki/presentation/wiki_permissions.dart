@@ -7,7 +7,8 @@ import '../../guilds/data/models/guild_permissions.dart';
 /// consistently, mirroring `GuildDetailScreen._loadOwnPermissions`.
 Future<GuildPermissions> loadGuildPermissions(String guildId) async {
   final repository = getIt<GuildRepository>();
-  final guild = repository.cachedById(guildId) ?? await repository.fetchGuild(guildId);
+  final guild =
+      repository.cachedById(guildId) ?? await repository.fetchGuild(guildId);
   final self = await repository.getOwnMember(guildId);
   return self.effectivePermissions(guild.ownerId);
 }

@@ -28,7 +28,8 @@ class _RolesSettingsTabState extends State<RolesSettingsTab> {
   Future<void> _load() async {
     final repository = getIt<GuildRepository>();
     final guild =
-        repository.cachedById(widget.guildId) ?? await repository.fetchGuild(widget.guildId);
+        repository.cachedById(widget.guildId) ??
+        await repository.fetchGuild(widget.guildId);
     if (!mounted) return;
     setState(() {
       _roles = guild.roles.where((r) => r.type != RoleType.everyone).toList()
@@ -38,12 +39,16 @@ class _RolesSettingsTabState extends State<RolesSettingsTab> {
 
   Future<void> _createRole() async {
     try {
-      await getIt<GuildRepository>().createRole(guildId: widget.guildId, name: 'new-role');
+      await getIt<GuildRepository>().createRole(
+        guildId: widget.guildId,
+        name: 'new-role',
+      );
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not create role.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not create role.')));
       }
     }
   }
@@ -57,7 +62,8 @@ class _RolesSettingsTabState extends State<RolesSettingsTab> {
     });
     final count = roles.length;
     final positions = [
-      for (var i = 0; i < count; i++) (roleId: roles[i].id, position: count - i),
+      for (var i = 0; i < count; i++)
+        (roleId: roles[i].id, position: count - i),
     ];
     try {
       await getIt<GuildRepository>().reorderRoles(widget.guildId, positions);
@@ -68,13 +74,16 @@ class _RolesSettingsTabState extends State<RolesSettingsTab> {
 
   Future<void> _openEditor(RoleDto role) async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => RoleEditorScreen(guildId: widget.guildId, role: role)),
+      MaterialPageRoute(
+        builder: (_) => RoleEditorScreen(guildId: widget.guildId, role: role),
+      ),
     );
     if (mounted) _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final roles = _roles;
     if (roles == null) return const Center(child: CircularProgressIndicator());
     return Scaffold(
@@ -88,7 +97,7 @@ class _RolesSettingsTabState extends State<RolesSettingsTab> {
                 final role = roles[index];
                 final color = role.color != null && role.color!.isNotEmpty
                     ? parseHexColor(role.color!)
-                    : Colors.grey;
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.3);
                 return ListTile(
                   key: ValueKey(role.id),
                   leading: CircleAvatar(radius: 8, backgroundColor: color),

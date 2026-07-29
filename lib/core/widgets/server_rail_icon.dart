@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/status_colors_extension.dart';
@@ -13,6 +14,7 @@ class ServerRailIcon extends StatelessWidget {
     this.icon,
     this.label,
     this.backgroundColor,
+    this.imageUrl,
   });
 
   final VoidCallback onTap;
@@ -20,6 +22,11 @@ class ServerRailIcon extends StatelessWidget {
   final IconData? icon;
   final String? label;
   final Color? backgroundColor;
+
+  /// Real server icon image, when the backend sends one. Falls back to
+  /// [icon]/[label] while null — most guilds today, since the backend
+  /// doesn't send this field yet.
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +42,9 @@ class ServerRailIcon extends StatelessWidget {
             height: selected ? 32 : 0,
             decoration: BoxDecoration(
               color: theme.colorScheme.onSurface,
-              borderRadius: const BorderRadius.horizontal(right: Radius.circular(4)),
+              borderRadius: const BorderRadius.horizontal(
+                right: Radius.circular(4),
+              ),
             ),
           ),
           Center(
@@ -47,16 +56,22 @@ class ServerRailIcon extends StatelessWidget {
                 width: 48,
                 height: 48,
                 alignment: Alignment.center,
+                clipBehavior: imageUrl != null ? Clip.antiAlias : Clip.none,
                 decoration: BoxDecoration(
                   color: backgroundColor ?? context.statusColors.hover,
                   borderRadius: BorderRadius.circular(selected ? 16 : 24),
                 ),
-                child: icon != null
+                child: imageUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl!,
+                        fit: BoxFit.cover,
+                        width: 48,
+                        height: 48,
+                        fadeInDuration: const Duration(milliseconds: 200),
+                      )
+                    : icon != null
                     ? Icon(icon, color: theme.colorScheme.onSurface, size: 24)
-                    : Text(
-                        label ?? '',
-                        style: theme.textTheme.titleSmall,
-                      ),
+                    : Text(label ?? '', style: theme.textTheme.titleSmall),
               ),
             ),
           ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -66,7 +67,11 @@ class _BotSuggestion extends _CommandSuggestion {
 /// uploaded — tracked as local composer state, mirroring desktop's
 /// `AttachedFile`. Mutated in place and surfaced via `setState`.
 class _PendingAttachment {
-  _PendingAttachment({required this.bytes, required this.fileName, required this.isImage});
+  _PendingAttachment({
+    required this.bytes,
+    required this.fileName,
+    required this.isImage,
+  });
 
   final List<int> bytes;
   final String fileName;
@@ -157,8 +162,9 @@ class _ThreadViewState extends State<ThreadView> {
       case _LocalSuggestion(command: final command):
         if (command.name == 'shrug') {
           _textController.text = '¯\\_(ツ)_/¯';
-          _textController.selection =
-              TextSelection.collapsed(offset: _textController.text.length);
+          _textController.selection = TextSelection.collapsed(
+            offset: _textController.text.length,
+          );
         } else {
           _textController.clear();
           unawaited(_pickGif());
@@ -183,7 +189,9 @@ class _ThreadViewState extends State<ThreadView> {
     if (guildId == null || channelId == null) return;
 
     final tempId = 'bot-pending-${DateTime.now().microsecondsSinceEpoch}';
-    bloc.add(ThreadBotPlaceholderAdded(tempId: tempId, botUserId: command.botUserId));
+    bloc.add(
+      ThreadBotPlaceholderAdded(tempId: tempId, botUserId: command.botUserId),
+    );
     try {
       await getIt<BotCommandApi>().invoke(
         guildId: guildId,
@@ -210,7 +218,9 @@ class _ThreadViewState extends State<ThreadView> {
         if (pending.uploaded != null) pending.uploaded!,
     ];
     if (text.trim().isEmpty && attachments.isEmpty) return;
-    context.read<MessageThreadBloc>().add(ThreadMessageSubmitted(text, attachments: attachments));
+    context.read<MessageThreadBloc>().add(
+      ThreadMessageSubmitted(text, attachments: attachments),
+    );
     _textController.clear();
     setState(_pendingAttachments.clear);
   }
@@ -220,7 +230,11 @@ class _ThreadViewState extends State<ThreadView> {
     required String fileName,
     required bool isImage,
   }) {
-    final pending = _PendingAttachment(bytes: bytes, fileName: fileName, isImage: isImage);
+    final pending = _PendingAttachment(
+      bytes: bytes,
+      fileName: fileName,
+      isImage: isImage,
+    );
     setState(() => _pendingAttachments.add(pending));
     _upload(pending);
   }
@@ -328,76 +342,125 @@ class _ThreadViewState extends State<ThreadView> {
           Expanded(
             child: BlocBuilder<MessageThreadBloc, ThreadState>(
               builder: (context, state) {
+                final Widget child;
                 if (state.isLoadingInitial) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (state.messages.isEmpty) {
-                  return Center(
+                  child = const Center(
+                    key: ValueKey('loading'),
+                    child: CircularProgressIndicator(),
+                  );
+                } else if (state.messages.isEmpty) {
+                  child = Center(
+                    key: const ValueKey('empty'),
                     child: Text(
                       'No messages yet — say hi!',
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
+                    ),
+                  );
+                } else {
+                  child = NotificationListener<ScrollNotification>(
+                    key: const ValueKey('loaded'),
+                    onNotification: (notification) {
+                      if (notification.metrics.pixels >=
+                          notification.metrics.maxScrollExtent - 200) {
+                        context.read<MessageThreadBloc>().add(
+                          const ThreadLoadMoreRequested(),
+                        );
+                      }
+                      return false;
+                    },
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      reverse: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.m,
+                        vertical: AppSpacing.s,
+                      ),
+                      itemCount: state.messages.length,
+                      itemBuilder: (context, index) {
+                        final message = state.messages[index];
+                        final isMe = message.authorId == widget.myUserId;
+                        final failed = state.failedSendIds.contains(message.id);
+                        // Reversed list: the visually-previous message (same
+                        // author check, for Discord-style grouping) is the
+                        // *next* index, not the previous one.
+                        final previous = index + 1 < state.messages.length
+                            ? state.messages[index + 1]
+                            : null;
+                        final showHeader =
+                            previous == null ||
+                            previous.authorId != message.authorId ||
+                            (message.createdAt != null &&
+                                previous.createdAt != null &&
+                                message.createdAt!
+                                        .difference(previous.createdAt!)
+                                        .abs() >
+                                    const Duration(minutes: 7));
+                        return _MessageBubble(
+                          message: message,
+                          showHeader: showHeader,
+                          isMe: isMe,
+                          failed: failed,
+                          myUserId: widget.myUserId,
+                          onReactionToggle: (emoji) =>
+                              context.read<MessageThreadBloc>().add(
+                                ReactionToggled(
+                                  messageId: message.id,
+                                  emoji: emoji,
+                                ),
+                              ),
+                          onAddReaction: () async {
+                            final emoji = await showReactionPickerSheet(
+                              context,
+                            );
+                            if (emoji == null || !context.mounted) return;
+                            context.read<MessageThreadBloc>().add(
+                              ReactionToggled(
+                                messageId: message.id,
+                                emoji: emoji,
+                              ),
+                            );
+                          },
+                        );
+                      },
                     ),
                   );
                 }
-                return NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.pixels >= notification.metrics.maxScrollExtent - 200) {
-                      context.read<MessageThreadBloc>().add(const ThreadLoadMoreRequested());
-                    }
-                    return false;
-                  },
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    reverse: true,
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: AppSpacing.s),
-                    itemCount: state.messages.length,
-                    itemBuilder: (context, index) {
-                      final message = state.messages[index];
-                      final isMe = message.authorId == widget.myUserId;
-                      final failed = state.failedSendIds.contains(message.id);
-                      return _MessageBubble(
-                        message: message,
-                        isMe: isMe,
-                        failed: failed,
-                        myUserId: widget.myUserId,
-                        onReactionToggle: (emoji) => context
-                            .read<MessageThreadBloc>()
-                            .add(ReactionToggled(messageId: message.id, emoji: emoji)),
-                        onAddReaction: () async {
-                          final emoji = await showReactionPickerSheet(context);
-                          if (emoji == null || !context.mounted) return;
-                          context
-                              .read<MessageThreadBloc>()
-                              .add(ReactionToggled(messageId: message.id, emoji: emoji));
-                        },
-                      );
-                    },
-                  ),
+                return AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: child,
                 );
               },
             ),
           ),
           BlocBuilder<MessageThreadBloc, ThreadState>(
-            buildWhen: (previous, current) => previous.typingUserIds != current.typingUserIds,
+            buildWhen: (previous, current) =>
+                previous.typingUserIds != current.typingUserIds,
             builder: (context, state) {
-              if (state.typingUserIds.isEmpty) return const SizedBox(height: 20);
+              if (state.typingUserIds.isEmpty)
+                return const SizedBox(height: 20);
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    state.typingUserIds.length == 1 ? 'Typing…' : 'Several people are typing…',
+                    state.typingUserIds.length == 1
+                        ? 'Typing…'
+                        : 'Several people are typing…',
                     style: theme.textTheme.labelSmall,
                   ),
                 ),
               );
             },
           ),
-          if (_suggestions.isNotEmpty) _CommandSuggestionList(
-            suggestions: _suggestions,
-            onSelect: _selectSuggestion,
-          ),
+          if (_suggestions.isNotEmpty)
+            _CommandSuggestionList(
+              suggestions: _suggestions,
+              onSelect: _selectSuggestion,
+            ),
           SafeArea(
             top: false,
             child: Padding(
@@ -413,7 +476,8 @@ class _ThreadViewState extends State<ThreadView> {
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
                           itemCount: _pendingAttachments.length,
-                          separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(width: AppSpacing.xs),
                           itemBuilder: (context, index) {
                             final pending = _pendingAttachments[index];
                             return _PendingAttachmentChip(
@@ -424,30 +488,44 @@ class _ThreadViewState extends State<ThreadView> {
                         ),
                       ),
                     ),
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: _showAttachMenu,
-                        icon: const Icon(Icons.add_circle_outline),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(
+                        AppRadii.composerPill,
                       ),
-                      Expanded(
-                        child: TextField(
-                          controller: _textController,
-                          minLines: 1,
-                          maxLines: 5,
-                          textInputAction: TextInputAction.send,
-                          onChanged: (_) =>
-                              context.read<MessageThreadBloc>().add(const ThreadTypingNotified()),
-                          onSubmitted: (_) => _submit(),
-                          decoration: const InputDecoration(hintText: 'Message'),
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: _showAttachMenu,
+                          icon: const Icon(Icons.add_circle_outline),
                         ),
-                      ),
-                      const SizedBox(width: AppSpacing.s),
-                      IconButton.filled(
-                        onPressed: _submit,
-                        icon: const Icon(Icons.send_rounded),
-                      ),
-                    ],
+                        Expanded(
+                          child: TextField(
+                            controller: _textController,
+                            minLines: 1,
+                            maxLines: 5,
+                            textInputAction: TextInputAction.send,
+                            onChanged: (_) => context
+                                .read<MessageThreadBloc>()
+                                .add(const ThreadTypingNotified()),
+                            onSubmitted: (_) => _submit(),
+                            decoration: const InputDecoration.collapsed(
+                              hintText: 'Message',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        IconButton.filled(
+                          onPressed: _submit,
+                          icon: const Icon(Icons.send_rounded),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -462,7 +540,10 @@ class _ThreadViewState extends State<ThreadView> {
 /// The `/`-trigger autocomplete dropdown — merges local and bot commands
 /// into one flat list, matching desktop's suggestion overlay.
 class _CommandSuggestionList extends StatelessWidget {
-  const _CommandSuggestionList({required this.suggestions, required this.onSelect});
+  const _CommandSuggestionList({
+    required this.suggestions,
+    required this.onSelect,
+  });
 
   final List<_CommandSuggestion> suggestions;
   final ValueChanged<_CommandSuggestion> onSelect;
@@ -485,24 +566,25 @@ class _CommandSuggestionList extends StatelessWidget {
           final suggestion = suggestions[index];
           return switch (suggestion) {
             _LocalSuggestion(command: final command) => ListTile(
-                dense: true,
-                leading: const Icon(Icons.terminal, size: 18),
-                title: Text('/${command.name}'),
-                subtitle: Text(command.description),
-                onTap: () => onSelect(suggestion),
-              ),
+              dense: true,
+              leading: const Icon(Icons.terminal, size: 18),
+              title: Text('/${command.name}'),
+              subtitle: Text(command.description),
+              onTap: () => onSelect(suggestion),
+            ),
             _BotSuggestion(command: final command) => ListTile(
-                dense: true,
-                leading: const Icon(Icons.smart_toy_outlined, size: 18),
-                title: Text('/${command.name}'),
-                subtitle: Text(command.description ?? command.botName),
-                trailing: Text(
-                  command.botName,
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: theme.colorScheme.primary),
+              dense: true,
+              leading: const Icon(Icons.smart_toy_outlined, size: 18),
+              title: Text('/${command.name}'),
+              subtitle: Text(command.description ?? command.botName),
+              trailing: Text(
+                command.botName,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.primary,
                 ),
-                onTap: () => onSelect(suggestion),
               ),
+              onTap: () => onSelect(suggestion),
+            ),
           };
         },
       ),
@@ -534,7 +616,10 @@ class _PendingAttachmentChip extends StatelessWidget {
               width: 64,
               height: 64,
               child: pending.isImage
-                  ? Image.memory(Uint8List.fromList(pending.bytes), fit: BoxFit.cover)
+                  ? Image.memory(
+                      Uint8List.fromList(pending.bytes),
+                      fit: BoxFit.cover,
+                    )
                   : Container(
                       color: theme.colorScheme.surfaceContainerHighest,
                       alignment: Alignment.center,
@@ -557,7 +642,10 @@ class _PendingAttachmentChip extends StatelessWidget {
                   child: SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
@@ -590,11 +678,25 @@ class _PendingAttachmentChip extends StatelessWidget {
   }
 }
 
-/// Discord-style row: avatar on the left, author name (bold, a step above
-/// body size) above the message text on the right — plain text, no bubble.
+/// Formats a local time as e.g. "3:45 PM" without pulling in `intl` for one
+/// call site.
+String _formatMessageTime(DateTime dt) {
+  final local = dt.toLocal();
+  final hour24 = local.hour;
+  final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+  final minute = local.minute.toString().padLeft(2, '0');
+  final period = hour24 < 12 ? 'AM' : 'PM';
+  return '$hour12:$minute $period';
+}
+
+/// Discord-style row: avatar + author name (bold, a step above body size)
+/// shown once per consecutive run of same-author messages — [showHeader]
+/// is false for subsequent messages in that run, which just indent under
+/// where the name was instead of repeating the avatar/name.
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
+    required this.showHeader,
     required this.isMe,
     required this.failed,
     required this.myUserId,
@@ -603,11 +705,17 @@ class _MessageBubble extends StatelessWidget {
   });
 
   final MessageDto message;
+  final bool showHeader;
   final bool isMe;
   final bool failed;
   final String myUserId;
   final ValueChanged<String> onReactionToggle;
   final VoidCallback onAddReaction;
+
+  /// Width the avatar occupies (diameter) plus the gap before the text
+  /// column — grouped messages indent by this same amount so the text
+  /// lines up under the name instead of the avatar.
+  static const _leadingWidth = AppRadii.avatarMedium * 2 + AppSpacing.s;
 
   @override
   Widget build(BuildContext context) {
@@ -615,90 +723,161 @@ class _MessageBubble extends StatelessWidget {
     final text = MessageContentCodec.decode(message.content);
     final isGifMessage = message.attachments.isEmpty && isKlipyGifUrl(text);
 
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showHeader)
+          Row(
+            children: [
+              Flexible(
+                child: ProfileResolver(
+                  userId: message.authorId,
+                  builder: (context, profile) => Text(
+                    profile?.userName ?? '…',
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              if (message.authorIdType == MessageAuthorType.bot) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(AppRadii.badge),
+                  ),
+                  child: Text(
+                    'BOT',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 9,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ],
+              if (message.createdAt != null) ...[
+                const SizedBox(width: 6),
+                Text(
+                  _formatMessageTime(message.createdAt!),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        _MessageBody(
+          message: message,
+          text: text,
+          isGifMessage: isGifMessage,
+          theme: theme,
+        ),
+        MessageReactionBar(
+          reactions: message.reactions,
+          myUserId: myUserId,
+          onToggle: onReactionToggle,
+          onAddPressed: onAddReaction,
+        ),
+        if (message.isPending || failed)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              message.isBotCommandPlaceholder
+                  ? (failed ? "Didn't respond" : 'Thinking…')
+                  : (failed ? 'Failed to send' : 'Sending…'),
+              style: theme.textTheme.labelSmall,
+            ),
+          ),
+      ],
+    );
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => context.push(RoutePaths.userProfilePath(message.authorId)),
-      onLongPress: message.isPending || message.isBotCommandPlaceholder ? null : onAddReaction,
+      onLongPress: message.isPending || message.isBotCommandPlaceholder
+          ? null
+          : onAddReaction,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            UserAvatar(userId: message.authorId, radius: AppRadii.avatarMedium, showStatus: true),
-            const SizedBox(width: AppSpacing.s),
-            Expanded(
-              child: Column(
+        padding: EdgeInsets.only(top: showHeader ? 14 : 3),
+        child: showHeader
+            ? Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: ProfileResolver(
-                          userId: message.authorId,
-                          builder: (context, profile) => Text(
-                            profile?.userName ?? '…',
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (message.authorIdType == MessageAuthorType.bot) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Text(
-                            'BOT',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 9,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  UserAvatar(
+                    userId: message.authorId,
+                    radius: AppRadii.avatarMedium,
+                    showStatus: true,
                   ),
-                  if (isGifMessage)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadii.chip),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 240, maxWidth: 280),
-                        child: Image.network(text, fit: BoxFit.contain),
-                      ),
-                    )
-                  else if (text.isNotEmpty)
-                    Text(text, style: theme.textTheme.bodyMedium),
-                  MessageAttachmentsView(attachments: message.attachments),
-                  MessageReactionBar(
-                    reactions: message.reactions,
-                    myUserId: myUserId,
-                    onToggle: onReactionToggle,
-                    onAddPressed: onAddReaction,
-                  ),
-                  if (message.isPending || failed)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        message.isBotCommandPlaceholder
-                            ? (failed ? "Didn't respond" : 'Thinking…')
-                            : (failed ? 'Failed to send' : 'Sending…'),
-                        style: theme.textTheme.labelSmall,
-                      ),
-                    ),
+                  const SizedBox(width: AppSpacing.s),
+                  Expanded(child: content),
                 ],
+              )
+            : Padding(
+                padding: const EdgeInsets.only(left: _leadingWidth),
+                child: content,
+              ),
+      ),
+    );
+  }
+}
+
+/// Just the GIF/text/attachment body of a message — split out so
+/// [_MessageBubble] doesn't duplicate it between its headered and
+/// grouped-continuation layouts.
+class _MessageBody extends StatelessWidget {
+  const _MessageBody({
+    required this.message,
+    required this.text,
+    required this.isGifMessage,
+    required this.theme,
+  });
+
+  final MessageDto message;
+  final String text;
+  final bool isGifMessage;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (isGifMessage)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadii.chip),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240, maxWidth: 280),
+              child: CachedNetworkImage(
+                imageUrl: text,
+                fit: BoxFit.contain,
+                fadeInDuration: const Duration(milliseconds: 200),
+                placeholder: (context, url) => Container(
+                  width: 120,
+                  height: 120,
+                  color: theme.colorScheme.surfaceContainerHighest,
+                ),
+                errorWidget: (context, url, error) => Container(
+                  width: 120,
+                  height: 120,
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: const Icon(Icons.broken_image_outlined),
+                ),
               ),
             ),
-          ],
-        ),
-      ),
+          )
+        else if (text.isNotEmpty)
+          Text(text, style: theme.textTheme.bodyMedium),
+        MessageAttachmentsView(attachments: message.attachments),
+      ],
     );
   }
 }

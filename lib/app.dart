@@ -34,11 +34,12 @@ class _AppState extends State<App> {
   @override
   void initState() {
     super.initState();
-    _sessionCubit = SessionCubit(authRepository: getIt<AuthRepository>())..restore();
+    _sessionCubit = SessionCubit(authRepository: getIt<AuthRepository>())
+      ..restore();
     _router = buildAppRouter(_sessionCubit);
     _initDeepLinks();
-    _notificationTapSub =
-        getIt<PushNotificationService>().onNotificationTap.listen(_router.push);
+    _notificationTapSub = getIt<PushNotificationService>().onNotificationTap
+        .listen(_router.push);
   }
 
   Future<void> _initDeepLinks() async {
@@ -61,7 +62,10 @@ class _AppState extends State<App> {
   void _showInviteDialog(String code) {
     final context = _router.routerDelegate.navigatorKey.currentContext;
     if (context == null) return;
-    showDialog<void>(context: context, builder: (_) => InviteDialog(code: code));
+    showDialog<void>(
+      context: context,
+      builder: (_) => InviteDialog(code: code),
+    );
   }
 
   @override

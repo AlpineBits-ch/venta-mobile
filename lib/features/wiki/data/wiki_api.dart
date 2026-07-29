@@ -12,7 +12,8 @@ class WikiApi {
 
   final ApiClient client;
 
-  String _base(String guildId) => client.url('/api/v1/guild/guilds/$guildId/wiki');
+  String _base(String guildId) =>
+      client.url('/api/v1/guild/guilds/$guildId/wiki');
 
   Future<WikiDto> getWiki(String guildId) async {
     final response = await client.dio.get<Map<String, dynamic>>(_base(guildId));
@@ -20,7 +21,9 @@ class WikiApi {
   }
 
   Future<WikiPageDto> getPage(String guildId, String pageId) async {
-    final response = await client.dio.get<Map<String, dynamic>>('${_base(guildId)}/pages/$pageId');
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '${_base(guildId)}/pages/$pageId',
+    );
     return WikiPageDto.fromJson(response.data!);
   }
 
@@ -71,8 +74,14 @@ class WikiApi {
       data: {
         if (title != null) 'title': title,
         if (content != null) 'content': content,
-        if (clearParentPage) 'parentPageId': null else if (parentPageId != null) 'parentPageId': parentPageId,
-        if (clearCategory) 'categoryId': null else if (categoryId != null) 'categoryId': categoryId,
+        if (clearParentPage)
+          'parentPageId': null
+        else if (parentPageId != null)
+          'parentPageId': parentPageId,
+        if (clearCategory)
+          'categoryId': null
+        else if (categoryId != null)
+          'categoryId': categoryId,
         if (visibility != null) 'visibility': _visibilityWireValue(visibility),
         if (tags != null) 'tags': tags,
         if (isPinned != null) 'isPinned': isPinned,
@@ -85,15 +94,23 @@ class WikiApi {
     await client.dio.delete<void>('${_base(guildId)}/pages/$pageId');
   }
 
-  Future<List<WikiRevisionDto>> getRevisions(String guildId, String pageId) async {
-    final response =
-        await client.dio.get<List<dynamic>>('${_base(guildId)}/pages/$pageId/revisions');
+  Future<List<WikiRevisionDto>> getRevisions(
+    String guildId,
+    String pageId,
+  ) async {
+    final response = await client.dio.get<List<dynamic>>(
+      '${_base(guildId)}/pages/$pageId/revisions',
+    );
     return response.data!
         .map((json) => WikiRevisionDto.fromJson(json as Map<String, dynamic>))
         .toList();
   }
 
-  Future<WikiPageDto> restoreRevision(String guildId, String pageId, String revisionId) async {
+  Future<WikiPageDto> restoreRevision(
+    String guildId,
+    String pageId,
+    String revisionId,
+  ) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       '${_base(guildId)}/pages/$pageId/revisions/$revisionId/restore',
     );
@@ -108,7 +125,11 @@ class WikiApi {
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       '${_base(guildId)}/categories',
-      data: {'name': name, 'position': position, 'parentCategoryId': parentCategoryId},
+      data: {
+        'name': name,
+        'position': position,
+        'parentCategoryId': parentCategoryId,
+      },
     );
     return WikiCategoryDto.fromJson(response.data!);
   }
@@ -139,7 +160,8 @@ class WikiApi {
     await client.dio.delete<void>('${_base(guildId)}/categories/$categoryId');
   }
 
-  String _visibilityWireValue(WikiVisibility visibility) => switch (visibility) {
+  String _visibilityWireValue(WikiVisibility visibility) =>
+      switch (visibility) {
         WikiVisibility.public => 'Public',
         WikiVisibility.private => 'Private',
       };

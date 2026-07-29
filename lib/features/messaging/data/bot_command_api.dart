@@ -20,8 +20,9 @@ class BotCommandApi {
   final ApiClient client;
 
   Future<List<BotCommandDto>> getCommands(String guildId) async {
-    final response = await client.dio
-        .get<List<dynamic>>(client.url('/api/v1/bots/guilds/$guildId/commands'));
+    final response = await client.dio.get<List<dynamic>>(
+      client.url('/api/v1/bots/guilds/$guildId/commands'),
+    );
     return response.data!
         .map((json) => BotCommandDto.fromJson(json as Map<String, dynamic>))
         .toList();
@@ -39,7 +40,9 @@ class BotCommandApi {
     required List<InvokeCommandOption> options,
   }) {
     return client.dio.post<void>(
-      client.url('/api/v1/bots/guilds/$guildId/channels/$channelId/interactions'),
+      client.url(
+        '/api/v1/bots/guilds/$guildId/channels/$channelId/interactions',
+      ),
       data: {
         'botUserId': botUserId,
         'commandName': commandName,

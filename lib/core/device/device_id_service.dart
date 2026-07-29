@@ -19,7 +19,8 @@ class DeviceIdService {
   String? _deviceId;
 
   String get deviceId =>
-      _deviceId ?? (throw StateError('DeviceIdService.init() must be awaited before use'));
+      _deviceId ??
+      (throw StateError('DeviceIdService.init() must be awaited before use'));
 
   Future<void> init() async {
     if (_deviceId != null) return;

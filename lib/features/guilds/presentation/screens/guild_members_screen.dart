@@ -1,13 +1,15 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
+import '../../../../core/theme/avatar_palette.dart';
 import '../../../../core/theme/hex_color.dart';
-import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/status_dot.dart';
 import '../../../profile/data/models/profile_dto.dart';
 import '../../data/guild_repository.dart';
@@ -37,8 +39,7 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
   void initState() {
     super.initState();
     _load();
-    _presenceSub = getIt<RealtimeService>()
-        .events
+    _presenceSub = getIt<RealtimeService>().events
         .where((e) => e.name == 'guild.PresenceChanged')
         .listen(_onPresenceChanged);
   }
@@ -60,18 +61,21 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
     setState(() {
       _members = [
         for (final member in members)
-          if (member.userId == userId) member.copyWith(status: status) else member,
+          if (member.userId == userId)
+            member.copyWith(status: status)
+          else
+            member,
       ];
     });
   }
 
   static OnlineStatus _parseOnlineStatus(String wire) => switch (wire) {
-        'Online' => OnlineStatus.online,
-        'Idle' => OnlineStatus.idle,
-        'DoNotDisturb' => OnlineStatus.doNotDisturb,
-        'Hidden' => OnlineStatus.hidden,
-        _ => OnlineStatus.offline,
-      };
+    'Online' => OnlineStatus.online,
+    'Idle' => OnlineStatus.idle,
+    'DoNotDisturb' => OnlineStatus.doNotDisturb,
+    'Hidden' => OnlineStatus.hidden,
+    _ => OnlineStatus.offline,
+  };
 
   Future<void> _load() async {
     try {
@@ -87,7 +91,8 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
 
   static bool _isActive(GuildMemberDto member) =>
       _isBot(member) ||
-      (member.status != OnlineStatus.offline && member.status != OnlineStatus.hidden);
+      (member.status != OnlineStatus.offline &&
+          member.status != OnlineStatus.hidden);
 
   static RoleDto? _highestRole(GuildMemberDto member) {
     RoleDto? highest;
@@ -103,7 +108,8 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
     final accent = member.profile?.accentColor;
     if (accent != null && accent.isNotEmpty) return parseHexColor(accent);
     final roleColor = _highestRole(member)?.color;
-    if (roleColor != null && roleColor.isNotEmpty) return parseHexColor(roleColor);
+    if (roleColor != null && roleColor.isNotEmpty)
+      return parseHexColor(roleColor);
     return null;
   }
 
@@ -115,7 +121,10 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
     for (final member in members) {
       final role = _highestRole(member);
       if (role != null) {
-        final entry = roleGroups.putIfAbsent(role.id, () => (role, <GuildMemberDto>[]));
+        final entry = roleGroups.putIfAbsent(
+          role.id,
+          () => (role, <GuildMemberDto>[]),
+        );
         entry.$2.add(member);
       } else if (_isActive(member)) {
         onlineNoRole.add(member);
@@ -133,14 +142,22 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
     final sections = <_MemberSection>[];
     for (final (role, roleMembers) in groups) {
       roleMembers.sort(activeFirst);
-      sections.add(_MemberSection('${role.name} — ${roleMembers.length}', roleMembers));
+      sections.add(
+        _MemberSection('${role.name} — ${roleMembers.length}', roleMembers),
+      );
     }
     if (onlineNoRole.isNotEmpty) {
-      sections.add(_MemberSection('Online — ${onlineNoRole.length}', onlineNoRole));
+      sections.add(
+        _MemberSection('Online — ${onlineNoRole.length}', onlineNoRole),
+      );
     }
     if (offlineNoRole.isNotEmpty) {
       sections.add(
-        _MemberSection('Offline — ${offlineNoRole.length}', offlineNoRole, dimmed: true),
+        _MemberSection(
+          'Offline — ${offlineNoRole.length}',
+          offlineNoRole,
+          dimmed: true,
+        ),
       );
     }
     return sections;
@@ -154,7 +171,10 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
     if (_error != null) {
       body = Center(child: Text(_error!));
     } else if (members == null) {
-      body = const Center(child: CircularProgressIndicator());
+      body = ListView(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+        children: [for (var i = 0; i < 6; i++) const SkeletonListTile()],
+      );
     } else {
       final sections = _buildSections(members);
       body = ListView.builder(
@@ -166,7 +186,12 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.m, AppSpacing.m, AppSpacing.m, 4),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.m,
+                  AppSpacing.m,
+                  AppSpacing.m,
+                  4,
+                ),
                 child: Text(
                   section.title.toUpperCase(),
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -176,13 +201,20 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
                   ),
                 ),
               ),
-              for (final member in section.members) _MemberTile(member: member, dimmed: section.dimmed),
+              for (final member in section.members)
+                _MemberTile(member: member, dimmed: section.dimmed),
             ],
           );
         },
       );
     }
-    return Scaffold(appBar: AppBar(title: const Text('Members')), body: body);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Members')),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        child: KeyedSubtree(key: ValueKey(members == null), child: body),
+      ),
+    );
   }
 }
 
@@ -204,21 +236,27 @@ class _MemberTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isBot = member.type == MemberType.bot;
-    final displayName = member.nickname ?? member.profile?.userName ?? 'Unknown';
+    final displayName =
+        member.nickname ?? member.profile?.userName ?? 'Unknown';
     final nameColor = _GuildMembersScreenState._nameColor(member);
-    final baseColor = dimmed ? theme.colorScheme.onSurface.withValues(alpha: 0.5) : null;
+    final baseColor = dimmed
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.5)
+        : null;
 
     return ListTile(
       leading: Stack(
         clipBehavior: Clip.none,
         children: [
           CircleAvatar(
-            backgroundColor: context.statusColors.hover,
+            backgroundColor: AvatarPalette.colorForUserId(member.userId),
             backgroundImage: member.profile?.avatarUrl != null
-                ? NetworkImage(member.profile!.avatarUrl!)
+                ? CachedNetworkImageProvider(member.profile!.avatarUrl!)
                 : null,
             child: member.profile?.avatarUrl == null
-                ? Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')
+                ? Text(
+                    displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                    style: const TextStyle(color: Colors.white),
+                  )
                 : null,
           ),
           if (!isBot)
@@ -236,7 +274,9 @@ class _MemberTile extends StatelessWidget {
             child: Text(
               displayName,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(color: nameColor ?? baseColor),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: nameColor ?? baseColor,
+              ),
             ),
           ),
           if (isBot) ...[
@@ -245,7 +285,7 @@ class _MemberTile extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(AppRadii.badge),
               ),
               child: Text(
                 'BOT',

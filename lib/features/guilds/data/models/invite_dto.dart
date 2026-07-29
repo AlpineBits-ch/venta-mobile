@@ -33,5 +33,6 @@ sealed class InviteDto with _$InviteDto {
     @Default(0) int useCount,
   }) = _InviteDto;
 
-  factory InviteDto.fromJson(Map<String, dynamic> json) => _$InviteDtoFromJson(json);
+  factory InviteDto.fromJson(Map<String, dynamic> json) =>
+      _$InviteDtoFromJson(json);
 }

@@ -9,7 +9,12 @@ import '../theme/status_colors_extension.dart';
 /// information too, and avoids cluttering member lists with a grey dot on
 /// every inactive row.
 class StatusDot extends StatelessWidget {
-  const StatusDot({super.key, required this.status, this.size = 12, this.borderWidth = 2});
+  const StatusDot({
+    super.key,
+    required this.status,
+    this.size = 12,
+    this.borderWidth = 2,
+  });
 
   final OnlineStatus status;
   final double size;
@@ -32,7 +37,10 @@ class StatusDot extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-        border: Border.all(color: Theme.of(context).colorScheme.surface, width: borderWidth),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.surface,
+          width: borderWidth,
+        ),
       ),
     );
   }

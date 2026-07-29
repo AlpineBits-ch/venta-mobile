@@ -1,8 +1,10 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/theme/avatar_palette.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
@@ -23,30 +25,32 @@ const _accentSwatches = <String>[
 ];
 
 TextStyle _fontPreviewStyle(ProfileFont font) => switch (font) {
-      ProfileFont.defaultFont => GoogleFonts.inter(),
-      ProfileFont.serif => GoogleFonts.merriweather(),
-      ProfileFont.monospace => GoogleFonts.robotoMono(),
-      ProfileFont.rounded => GoogleFonts.varelaRound(),
-      ProfileFont.display => GoogleFonts.oswald(),
-      ProfileFont.handwritten => GoogleFonts.caveat(textStyle: const TextStyle(fontSize: 20)),
-    };
+  ProfileFont.defaultFont => GoogleFonts.inter(),
+  ProfileFont.serif => GoogleFonts.merriweather(),
+  ProfileFont.monospace => GoogleFonts.robotoMono(),
+  ProfileFont.rounded => GoogleFonts.varelaRound(),
+  ProfileFont.display => GoogleFonts.oswald(),
+  ProfileFont.handwritten => GoogleFonts.caveat(
+    textStyle: const TextStyle(fontSize: 20),
+  ),
+};
 
 String _fontLabel(ProfileFont font) => switch (font) {
-      ProfileFont.defaultFont => 'Default',
-      ProfileFont.serif => 'Serif',
-      ProfileFont.monospace => 'Monospace',
-      ProfileFont.rounded => 'Rounded',
-      ProfileFont.display => 'Display',
-      ProfileFont.handwritten => 'Handwritten',
-    };
+  ProfileFont.defaultFont => 'Default',
+  ProfileFont.serif => 'Serif',
+  ProfileFont.monospace => 'Monospace',
+  ProfileFont.rounded => 'Rounded',
+  ProfileFont.display => 'Display',
+  ProfileFont.handwritten => 'Handwritten',
+};
 
 String _statusLabel(OnlineStatus status) => switch (status) {
-      OnlineStatus.online => 'Online',
-      OnlineStatus.idle => 'Idle',
-      OnlineStatus.doNotDisturb => 'Do Not Disturb',
-      OnlineStatus.hidden => 'Invisible',
-      OnlineStatus.offline => 'Offline',
-    };
+  OnlineStatus.online => 'Online',
+  OnlineStatus.idle => 'Idle',
+  OnlineStatus.doNotDisturb => 'Do Not Disturb',
+  OnlineStatus.hidden => 'Invisible',
+  OnlineStatus.offline => 'Offline',
+};
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({super.key});
@@ -76,7 +80,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }
 
   Future<void> _pickAvatar(BuildContext context) async {
-    final file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final file = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
     if (file == null) return;
     if (context.mounted) {
       context.read<SelfProfileCubit>().uploadAvatar(file.path);
@@ -84,7 +91,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }
 
   Future<void> _pickBanner(BuildContext context) async {
-    final file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final file = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
     if (file == null) return;
     if (context.mounted) {
       context.read<SelfProfileCubit>().uploadBanner(file.path);
@@ -99,9 +109,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       body: BlocConsumer<SelfProfileCubit, SelfProfileState>(
         listener: (context, state) {
           if (state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.errorMessage!)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.errorMessage!)));
           }
         },
         builder: (context, state) {
@@ -122,7 +132,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 accentColor: accentColor,
                 onTapBanner: () => _pickBanner(context),
                 onTapAvatar: () => _pickAvatar(context),
-                onRemoveAvatar: () => context.read<SelfProfileCubit>().removeAvatar(),
+                onRemoveAvatar: () =>
+                    context.read<SelfProfileCubit>().removeAvatar(),
               ),
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.m),
@@ -142,7 +153,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       maxLines: 3,
                       maxLength: 190,
                       onChanged: (_) => setState(() => _bioDirty = true),
-                      decoration: const InputDecoration(hintText: 'Tell people about yourself'),
+                      decoration: const InputDecoration(
+                        hintText: 'Tell people about yourself',
+                      ),
                     ),
                     if (_bioDirty)
                       Align(
@@ -153,7 +166,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                               : () {
                                   context
                                       .read<SelfProfileCubit>()
-                                      .updateProfile(bio: _bioController.text.trim());
+                                      .updateProfile(
+                                        bio: _bioController.text.trim(),
+                                      );
                                   setState(() => _bioDirty = false);
                                 },
                           child: const Text('Save bio'),
@@ -164,16 +179,18 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                     const SizedBox(height: AppSpacing.s),
                     _AccentColorPicker(
                       current: profile.accentColor,
-                      onSelected: (hex) =>
-                          context.read<SelfProfileCubit>().updateProfile(accentColor: hex),
+                      onSelected: (hex) => context
+                          .read<SelfProfileCubit>()
+                          .updateProfile(accentColor: hex),
                     ),
                     const SizedBox(height: AppSpacing.l),
                     Text('FONT', style: theme.textTheme.labelSmall),
                     const SizedBox(height: AppSpacing.s),
                     _FontPicker(
                       current: profile.font,
-                      onSelected: (font) =>
-                          context.read<SelfProfileCubit>().updateProfile(font: font),
+                      onSelected: (font) => context
+                          .read<SelfProfileCubit>()
+                          .updateProfile(font: font),
                     ),
                   ],
                 ),
@@ -217,14 +234,19 @@ class _BannerAndAvatar extends StatelessWidget {
                 color: accentColor.withValues(alpha: 0.35),
                 image: profile.bannerUrl != null
                     ? DecorationImage(
-                        image: NetworkImage(profile.bannerUrl!),
+                        image: CachedNetworkImageProvider(profile.bannerUrl!),
                         fit: BoxFit.cover,
                       )
                     : null,
               ),
               child: profile.bannerUrl == null
-                  ? const Center(
-                      child: Icon(Icons.add_photo_alternate_outlined, color: Colors.white70),
+                  ? Center(
+                      child: Icon(
+                        Icons.add_photo_alternate_outlined,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
                     )
                   : null,
             ),
@@ -240,17 +262,27 @@ class _BannerAndAvatar extends StatelessWidget {
                 height: 88,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 4),
-                  color: context.statusColors.hover,
+                  border: Border.all(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    width: 4,
+                  ),
+                  color: AvatarPalette.colorForUserId(profile.userId),
                   image: profile.avatarUrl != null
-                      ? DecorationImage(image: NetworkImage(profile.avatarUrl!), fit: BoxFit.cover)
+                      ? DecorationImage(
+                          image: CachedNetworkImageProvider(profile.avatarUrl!),
+                          fit: BoxFit.cover,
+                        )
                       : null,
                 ),
                 child: profile.avatarUrl == null
                     ? Center(
                         child: Text(
-                          profile.userName.isNotEmpty ? profile.userName[0].toUpperCase() : '?',
-                          style: Theme.of(context).textTheme.titleLarge,
+                          profile.userName.isNotEmpty
+                              ? profile.userName[0].toUpperCase()
+                              : '?',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.titleLarge?.copyWith(color: Colors.white),
                         ),
                       )
                     : null,
@@ -274,11 +306,13 @@ class _StatusPicker extends StatelessWidget {
     OnlineStatus.hidden,
   ];
 
-  Color _dotColor(BuildContext context, OnlineStatus status) => switch (status) {
+  Color _dotColor(BuildContext context, OnlineStatus status) =>
+      switch (status) {
         OnlineStatus.online => context.statusColors.online,
         OnlineStatus.idle => context.statusColors.idle,
         OnlineStatus.doNotDisturb => context.statusColors.doNotDisturb,
-        OnlineStatus.hidden || OnlineStatus.offline => context.statusColors.offline,
+        OnlineStatus.hidden ||
+        OnlineStatus.offline => context.statusColors.offline,
       };
 
   @override
@@ -296,14 +330,17 @@ class _StatusPicker extends StatelessWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration:
-                      BoxDecoration(shape: BoxShape.circle, color: _dotColor(context, status)),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _dotColor(context, status),
+                  ),
                 ),
                 const SizedBox(width: 6),
                 Text(_statusLabel(status)),
               ],
             ),
-            onSelected: (_) => context.read<SelfProfileCubit>().setStatus(status),
+            onSelected: (_) =>
+                context.read<SelfProfileCubit>().setStatus(status),
           ),
       ],
     );
@@ -331,7 +368,10 @@ class _AccentColorPicker extends StatelessWidget {
                 color: parseHexColor(hex),
                 shape: BoxShape.circle,
                 border: current?.toUpperCase() == hex.toUpperCase()
-                    ? Border.all(color: Theme.of(context).colorScheme.onSurface, width: 2)
+                    ? Border.all(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        width: 2,
+                      )
                     : null,
               ),
             ),
@@ -362,10 +402,9 @@ class _FontPicker extends StatelessWidget {
               value: font,
               title: Text(
                 _fontLabel(font),
-                style: _fontPreviewStyle(font).copyWith(
-                  fontSize: 16,
-                  color: theme.colorScheme.onSurface,
-                ),
+                style: _fontPreviewStyle(
+                  font,
+                ).copyWith(fontSize: 16, color: theme.colorScheme.onSurface),
               ),
             ),
         ],

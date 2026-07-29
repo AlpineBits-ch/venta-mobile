@@ -84,33 +84,34 @@ class CallState extends Equatable {
     String? disconnectNotice,
     DateTime? aloneDeadline,
     bool clearAloneDeadline = false,
-  }) =>
-      CallState(
-        phase: phase ?? this.phase,
-        call: call ?? this.call,
-        participants: participants ?? this.participants,
-        isMuted: isMuted ?? this.isMuted,
-        isDeafened: isDeafened ?? this.isDeafened,
-        isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
-        connectedAt: connectedAt ?? this.connectedAt,
-        errorMessage: errorMessage,
-        disconnectNotice: disconnectNotice,
-        aloneDeadline: clearAloneDeadline ? null : (aloneDeadline ?? this.aloneDeadline),
-      );
+  }) => CallState(
+    phase: phase ?? this.phase,
+    call: call ?? this.call,
+    participants: participants ?? this.participants,
+    isMuted: isMuted ?? this.isMuted,
+    isDeafened: isDeafened ?? this.isDeafened,
+    isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
+    connectedAt: connectedAt ?? this.connectedAt,
+    errorMessage: errorMessage,
+    disconnectNotice: disconnectNotice,
+    aloneDeadline: clearAloneDeadline
+        ? null
+        : (aloneDeadline ?? this.aloneDeadline),
+  );
 
   @override
   List<Object?> get props => [
-        phase,
-        call,
-        participants,
-        isMuted,
-        isDeafened,
-        isSpeakerOn,
-        connectedAt,
-        errorMessage,
-        disconnectNotice,
-        aloneDeadline,
-      ];
+    phase,
+    call,
+    participants,
+    isMuted,
+    isDeafened,
+    isSpeakerOn,
+    connectedAt,
+    errorMessage,
+    disconnectNotice,
+    aloneDeadline,
+  ];
 }
 
 /// App-lifetime singleton owning the one call the app can be in at a time —
@@ -122,10 +123,12 @@ class CallCubit extends Cubit<CallState> {
     required this.repository,
     required this.authRepository,
     required CallWebRtcService Function() webRtcServiceFactory,
-  })  : _webRtcServiceFactory = webRtcServiceFactory,
-        super(const CallState()) {
+  }) : _webRtcServiceFactory = webRtcServiceFactory,
+       super(const CallState()) {
     _sub = repository.events.listen(_handleEvent);
-    _connectionSub = repository.connectionStatus.listen(_handleConnectionStatus);
+    _connectionSub = repository.connectionStatus.listen(
+      _handleConnectionStatus,
+    );
   }
 
   final VoiceRepository repository;
@@ -268,7 +271,9 @@ class CallCubit extends Cubit<CallState> {
   Future<void> _connect(CallDto call) async {
     final webRtc = _webRtcServiceFactory();
     _webRtc = webRtc;
-    final participants = call.participants.map((p) => CallParticipantState(userId: p.userId)).toList();
+    final participants = call.participants
+        .map((p) => CallParticipantState(userId: p.userId))
+        .toList();
     emit(
       state.copyWith(
         phase: CallPhase.active,
@@ -291,7 +296,11 @@ class CallCubit extends Cubit<CallState> {
         final trackName = p.audioTrackName;
         if (p.userId != _myUserId && cfSessionId != null && trackName != null) {
           unawaited(
-            webRtc.subscribeToParticipant(userId: p.userId, cfSessionId: cfSessionId, trackName: trackName),
+            webRtc.subscribeToParticipant(
+              userId: p.userId,
+              cfSessionId: cfSessionId,
+              trackName: trackName,
+            ),
           );
         }
       }
@@ -330,10 +339,14 @@ class CallCubit extends Cubit<CallState> {
     }
 
     final freshIds = fresh.participants.map((p) => p.userId).toSet();
-    for (final gone in state.participants.where((p) => !freshIds.contains(p.userId))) {
+    for (final gone in state.participants.where(
+      (p) => !freshIds.contains(p.userId),
+    )) {
       webRtc.unsubscribeParticipant(gone.userId);
     }
-    final remaining = state.participants.where((p) => freshIds.contains(p.userId)).toList();
+    final remaining = state.participants
+        .where((p) => freshIds.contains(p.userId))
+        .toList();
     final knownIds = remaining.map((p) => p.userId).toSet();
 
     final newParticipants = <CallParticipantState>[];
@@ -343,11 +356,22 @@ class CallCubit extends Cubit<CallState> {
       final cfSessionId = p.cfSessionId;
       final trackName = p.audioTrackName;
       if (cfSessionId != null && trackName != null) {
-        unawaited(webRtc.subscribeToParticipant(userId: p.userId, cfSessionId: cfSessionId, trackName: trackName));
+        unawaited(
+          webRtc.subscribeToParticipant(
+            userId: p.userId,
+            cfSessionId: cfSessionId,
+            trackName: trackName,
+          ),
+        );
       }
     }
 
-    emit(state.copyWith(call: fresh, participants: [...remaining, ...newParticipants]));
+    emit(
+      state.copyWith(
+        call: fresh,
+        participants: [...remaining, ...newParticipants],
+      ),
+    );
   }
 
   void _handleEvent(VoiceRepositoryEvent event) {
@@ -358,12 +382,19 @@ class CallCubit extends Cubit<CallState> {
           emit(CallState(phase: CallPhase.incoming, call: call));
         }
 
-      case CallParticipantJoined(:final userId, :final cfSessionId, :final audioTrackName):
+      case CallParticipantJoined(
+        :final userId,
+        :final cfSessionId,
+        :final audioTrackName,
+      ):
         if (userId == _myUserId || state.phase != CallPhase.active) return;
         if (!state.participants.any((p) => p.userId == userId)) {
           emit(
             state.copyWith(
-              participants: [...state.participants, CallParticipantState(userId: userId)],
+              participants: [
+                ...state.participants,
+                CallParticipantState(userId: userId),
+              ],
               clearAloneDeadline: true,
             ),
           );
@@ -377,20 +408,33 @@ class CallCubit extends Cubit<CallState> {
         );
 
       case CallParticipantLeft(:final userId):
-        emit(state.copyWith(participants: state.participants.where((p) => p.userId != userId).toList()));
+        emit(
+          state.copyWith(
+            participants: state.participants
+                .where((p) => p.userId != userId)
+                .toList(),
+          ),
+        );
         _webRtc?.unsubscribeParticipant(userId);
 
       case CallLifecycleParticipantLeft(:final userId):
         // Roster-level counterpart to CallParticipantLeft above — handled
         // identically (idempotent either way, whichever actually fires).
-        emit(state.copyWith(participants: state.participants.where((p) => p.userId != userId).toList()));
+        emit(
+          state.copyWith(
+            participants: state.participants
+                .where((p) => p.userId != userId)
+                .toList(),
+          ),
+        );
         _webRtc?.unsubscribeParticipant(userId);
 
       case CallMuteChanged(:final userId, :final isMuted):
         emit(
           state.copyWith(
             participants: [
-              for (final p in state.participants) p.userId == userId ? p.copyWith(isMuted: isMuted) : p,
+              for (final p in state.participants)
+                p.userId == userId ? p.copyWith(isMuted: isMuted) : p,
             ],
           ),
         );
@@ -407,7 +451,11 @@ class CallCubit extends Cubit<CallState> {
         if (state.call?.id == callId) {
           final webRtc = _webRtc;
           _webRtc = null;
-          emit(const CallState(disconnectNotice: 'You joined this call on another device.'));
+          emit(
+            const CallState(
+              disconnectNotice: 'You joined this call on another device.',
+            ),
+          );
           unawaited(webRtc?.disconnect());
         }
 
@@ -427,10 +475,10 @@ class CallCubit extends Cubit<CallState> {
   }
 
   String? _endedNoticeFor(String? reason) => switch (reason) {
-        'Declined' => 'Call declined.',
-        'AloneTimeout' => 'Call ended — nobody rejoined in time.',
-        _ => null,
-      };
+    'Declined' => 'Call declined.',
+    'AloneTimeout' => 'Call ended — nobody rejoined in time.',
+    _ => null,
+  };
 
   @override
   Future<void> close() {

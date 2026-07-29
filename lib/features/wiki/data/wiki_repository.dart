@@ -18,7 +18,10 @@ import 'wiki_api.dart';
 /// local invalidation rather than shared state, the same choice made for
 /// `guild.PresenceChanged` on the member list.
 class WikiRepository {
-  WikiRepository({required this.api, required RealtimeService realtimeService}) {
+  WikiRepository({
+    required this.api,
+    required RealtimeService realtimeService,
+  }) {
     _realtimeSub = realtimeService.events
         .where(
           (e) => const {
@@ -31,9 +34,9 @@ class WikiRepository {
           }.contains(e.name),
         )
         .listen((event) {
-      final guildId = event.objectPayload['guildId'] as String?;
-      if (guildId != null) _invalidatedController.add(guildId);
-    });
+          final guildId = event.objectPayload['guildId'] as String?;
+          if (guildId != null) _invalidatedController.add(guildId);
+        });
   }
 
   final WikiApi api;
@@ -47,7 +50,8 @@ class WikiRepository {
 
   Future<WikiDto> getWiki(String guildId) => api.getWiki(guildId);
 
-  Future<WikiPageDto> getPage(String guildId, String pageId) => api.getPage(guildId, pageId);
+  Future<WikiPageDto> getPage(String guildId, String pageId) =>
+      api.getPage(guildId, pageId);
 
   Future<WikiPageDto> createPage(
     String guildId, {
@@ -58,17 +62,16 @@ class WikiRepository {
     WikiVisibility visibility = WikiVisibility.private,
     List<String> tags = const [],
     bool isPinned = false,
-  }) =>
-      api.createPage(
-        guildId,
-        title: title,
-        content: content,
-        parentPageId: parentPageId,
-        categoryId: categoryId,
-        visibility: visibility,
-        tags: tags,
-        isPinned: isPinned,
-      );
+  }) => api.createPage(
+    guildId,
+    title: title,
+    content: content,
+    parentPageId: parentPageId,
+    categoryId: categoryId,
+    visibility: visibility,
+    tags: tags,
+    isPinned: isPinned,
+  );
 
   Future<WikiPageDto> updatePage(
     String guildId,
@@ -82,36 +85,43 @@ class WikiRepository {
     WikiVisibility? visibility,
     List<String>? tags,
     bool? isPinned,
-  }) =>
-      api.updatePage(
-        guildId,
-        pageId,
-        title: title,
-        content: content,
-        parentPageId: parentPageId,
-        clearParentPage: clearParentPage,
-        categoryId: categoryId,
-        clearCategory: clearCategory,
-        visibility: visibility,
-        tags: tags,
-        isPinned: isPinned,
-      );
+  }) => api.updatePage(
+    guildId,
+    pageId,
+    title: title,
+    content: content,
+    parentPageId: parentPageId,
+    clearParentPage: clearParentPage,
+    categoryId: categoryId,
+    clearCategory: clearCategory,
+    visibility: visibility,
+    tags: tags,
+    isPinned: isPinned,
+  );
 
-  Future<void> deletePage(String guildId, String pageId) => api.deletePage(guildId, pageId);
+  Future<void> deletePage(String guildId, String pageId) =>
+      api.deletePage(guildId, pageId);
 
   Future<List<WikiRevisionDto>> getRevisions(String guildId, String pageId) =>
       api.getRevisions(guildId, pageId);
 
-  Future<WikiPageDto> restoreRevision(String guildId, String pageId, String revisionId) =>
-      api.restoreRevision(guildId, pageId, revisionId);
+  Future<WikiPageDto> restoreRevision(
+    String guildId,
+    String pageId,
+    String revisionId,
+  ) => api.restoreRevision(guildId, pageId, revisionId);
 
   Future<WikiCategoryDto> createCategory(
     String guildId, {
     required String name,
     int? position,
     String? parentCategoryId,
-  }) =>
-      api.createCategory(guildId, name: name, position: position, parentCategoryId: parentCategoryId);
+  }) => api.createCategory(
+    guildId,
+    name: name,
+    position: position,
+    parentCategoryId: parentCategoryId,
+  );
 
   Future<WikiCategoryDto> updateCategory(
     String guildId,
@@ -120,15 +130,14 @@ class WikiRepository {
     int? position,
     String? parentCategoryId,
     bool clearParentCategory = false,
-  }) =>
-      api.updateCategory(
-        guildId,
-        categoryId,
-        name: name,
-        position: position,
-        parentCategoryId: parentCategoryId,
-        clearParentCategory: clearParentCategory,
-      );
+  }) => api.updateCategory(
+    guildId,
+    categoryId,
+    name: name,
+    position: position,
+    parentCategoryId: parentCategoryId,
+    clearParentCategory: clearParentCategory,
+  );
 
   Future<void> deleteCategory(String guildId, String categoryId) =>
       api.deleteCategory(guildId, categoryId);

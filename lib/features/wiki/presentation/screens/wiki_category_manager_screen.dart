@@ -13,7 +13,8 @@ class WikiCategoryManagerScreen extends StatefulWidget {
   final String guildId;
 
   @override
-  State<WikiCategoryManagerScreen> createState() => _WikiCategoryManagerScreenState();
+  State<WikiCategoryManagerScreen> createState() =>
+      _WikiCategoryManagerScreenState();
 }
 
 class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
@@ -28,7 +29,8 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
   Future<void> _load() async {
     try {
       final wiki = await getIt<WikiRepository>().getWiki(widget.guildId);
-      final categories = [...wiki.categories]..sort((a, b) => a.position.compareTo(b.position));
+      final categories = [...wiki.categories]
+        ..sort((a, b) => a.position.compareTo(b.position));
       if (mounted) setState(() => _categories = categories);
     } catch (_) {
       if (mounted) setState(() => _categories = const []);
@@ -45,7 +47,11 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
     try {
       for (var i = 0; i < categories.length; i++) {
         if (categories[i].position != i) {
-          await getIt<WikiRepository>().updateCategory(widget.guildId, categories[i].id, position: i);
+          await getIt<WikiRepository>().updateCategory(
+            widget.guildId,
+            categories[i].id,
+            position: i,
+          );
         }
       }
     } catch (_) {
@@ -57,27 +63,40 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
     final name = await _promptForName(title: 'New category');
     if (name == null || name.trim().isEmpty) return;
     try {
-      await getIt<WikiRepository>()
-          .createCategory(widget.guildId, name: name.trim(), position: (_categories?.length ?? 0));
+      await getIt<WikiRepository>().createCategory(
+        widget.guildId,
+        name: name.trim(),
+        position: (_categories?.length ?? 0),
+      );
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not create that category.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not create that category.')),
+        );
       }
     }
   }
 
   Future<void> _rename(WikiCategoryDto category) async {
-    final name = await _promptForName(title: 'Rename category', initial: category.name);
-    if (name == null || name.trim().isEmpty || name.trim() == category.name) return;
+    final name = await _promptForName(
+      title: 'Rename category',
+      initial: category.name,
+    );
+    if (name == null || name.trim().isEmpty || name.trim() == category.name)
+      return;
     try {
-      await getIt<WikiRepository>().updateCategory(widget.guildId, category.id, name: name.trim());
+      await getIt<WikiRepository>().updateCategory(
+        widget.guildId,
+        category.id,
+        name: name.trim(),
+      );
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not rename that category.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not rename that category.')),
+        );
       }
     }
   }
@@ -87,11 +106,18 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete category?'),
-        content: Text('Pages in "${category.name}" become uncategorized, not deleted.'),
+        content: Text(
+          'Pages in "${category.name}" become uncategorized, not deleted.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),
@@ -104,8 +130,9 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Could not delete that category.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete that category.')),
+        );
       }
     }
   }
@@ -116,9 +143,16 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(hintText: 'Category name')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Category name'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
             child: const Text('Save'),
@@ -136,33 +170,33 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
       body: categories == null
           ? const Center(child: CircularProgressIndicator())
           : categories.isEmpty
-              ? const Center(child: Text('No categories yet.'))
-              : ReorderableListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
-                  itemCount: categories.length,
-                  onReorderItem: _reorder,
-                  itemBuilder: (context, index) {
-                    final category = categories[index];
-                    return ListTile(
-                      key: ValueKey(category.id),
-                      leading: const Icon(Icons.drag_handle),
-                      title: Text(category.name),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => _rename(category),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _delete(category),
-                          ),
-                        ],
+          ? const Center(child: Text('No categories yet.'))
+          : ReorderableListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+              itemCount: categories.length,
+              onReorderItem: _reorder,
+              itemBuilder: (context, index) {
+                final category = categories[index];
+                return ListTile(
+                  key: ValueKey(category.id),
+                  leading: const Icon(Icons.drag_handle),
+                  title: Text(category.name),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined),
+                        onPressed: () => _rename(category),
                       ),
-                    );
-                  },
-                ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _delete(category),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: _create,
         tooltip: 'New category',

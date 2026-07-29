@@ -39,7 +39,8 @@ sealed class GuildMemberDto with _$GuildMemberDto {
     @Default(<RoleMembershipDto>[]) List<RoleMembershipDto> roleMembers,
   }) = _GuildMemberDto;
 
-  factory GuildMemberDto.fromJson(Map<String, dynamic> json) => _$GuildMemberDtoFromJson(json);
+  factory GuildMemberDto.fromJson(Map<String, dynamic> json) =>
+      _$GuildMemberDtoFromJson(json);
 }
 
 extension GuildMemberEffectivePermissions on GuildMemberDto {

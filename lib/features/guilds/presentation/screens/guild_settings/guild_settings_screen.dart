@@ -31,7 +31,12 @@ class GuildSettingsScreen extends StatelessWidget {
             preferredSize: const Size.fromHeight(kTextTabBarHeight),
             child: ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
-                colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
+                colors: [
+                  Colors.transparent,
+                  Colors.black,
+                  Colors.black,
+                  Colors.transparent,
+                ],
                 stops: [0.0, 0.04, 0.92, 1.0],
               ).createShader(rect),
               blendMode: BlendMode.dstIn,

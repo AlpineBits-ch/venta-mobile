@@ -36,7 +36,17 @@ class _ElapsedTimeLabelState extends State<ElapsedTimeLabel> {
     final elapsed = DateTime.now().difference(widget.since);
     final seconds = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
     final minutes = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
-    final text = elapsed.inHours > 0 ? '${elapsed.inHours}:$minutes:$seconds' : '$minutes:$seconds';
-    return Text(text, style: widget.style ?? const TextStyle(color: Colors.white54, fontSize: 13));
+    final text = elapsed.inHours > 0
+        ? '${elapsed.inHours}:$minutes:$seconds'
+        : '$minutes:$seconds';
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style:
+          widget.style ??
+          theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+    );
   }
 }

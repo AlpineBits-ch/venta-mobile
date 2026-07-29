@@ -45,5 +45,6 @@ sealed class ProfileDto with _$ProfileDto {
     @Default(OnlineStatus.offline) OnlineStatus onlineStatus,
   }) = _ProfileDto;
 
-  factory ProfileDto.fromJson(Map<String, dynamic> json) => _$ProfileDtoFromJson(json);
+  factory ProfileDto.fromJson(Map<String, dynamic> json) =>
+      _$ProfileDtoFromJson(json);
 }

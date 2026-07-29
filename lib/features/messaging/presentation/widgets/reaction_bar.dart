@@ -34,7 +34,10 @@ class MessageReactionBar extends StatelessWidget {
 
     final groups = <String, _ReactionGroup>{};
     for (final reaction in reactions) {
-      final group = groups.putIfAbsent(reaction.emoji, () => _ReactionGroup(reaction.emoji));
+      final group = groups.putIfAbsent(
+        reaction.emoji,
+        () => _ReactionGroup(reaction.emoji),
+      );
       group.count++;
       if (reaction.userId == myUserId) group.hasOwn = true;
     }

@@ -24,20 +24,20 @@ class SelfProfileState extends Equatable {
     ProfileDto? profile,
     bool? isSaving,
     String? errorMessage,
-  }) =>
-      SelfProfileState(
-        status: status ?? this.status,
-        profile: profile ?? this.profile,
-        isSaving: isSaving ?? false,
-        errorMessage: errorMessage,
-      );
+  }) => SelfProfileState(
+    status: status ?? this.status,
+    profile: profile ?? this.profile,
+    isSaving: isSaving ?? false,
+    errorMessage: errorMessage,
+  );
 
   @override
   List<Object?> get props => [status, profile, isSaving, errorMessage];
 }
 
 class SelfProfileCubit extends Cubit<SelfProfileState> {
-  SelfProfileCubit({required this.repository}) : super(const SelfProfileState()) {
+  SelfProfileCubit({required this.repository})
+    : super(const SelfProfileState()) {
     _load();
   }
 
@@ -61,14 +61,32 @@ class SelfProfileCubit extends Cubit<SelfProfileState> {
     }
   }
 
-  Future<void> updateProfile({String? bio, String? accentColor, ProfileFont? font}) async {
+  Future<void> updateProfile({
+    String? bio,
+    String? accentColor,
+    ProfileFont? font,
+  }) async {
     emit(state.copyWith(isSaving: true));
     try {
-      final profile =
-          await repository.updateProfile(bio: bio, accentColor: accentColor, font: font);
-      emit(state.copyWith(status: SelfProfileStatus.loaded, profile: profile, isSaving: false));
+      final profile = await repository.updateProfile(
+        bio: bio,
+        accentColor: accentColor,
+        font: font,
+      );
+      emit(
+        state.copyWith(
+          status: SelfProfileStatus.loaded,
+          profile: profile,
+          isSaving: false,
+        ),
+      );
     } catch (_) {
-      emit(state.copyWith(isSaving: false, errorMessage: 'Could not save your profile.'));
+      emit(
+        state.copyWith(
+          isSaving: false,
+          errorMessage: 'Could not save your profile.',
+        ),
+      );
     }
   }
 
@@ -76,9 +94,20 @@ class SelfProfileCubit extends Cubit<SelfProfileState> {
     emit(state.copyWith(isSaving: true));
     try {
       final profile = await repository.uploadAvatar(filePath);
-      emit(state.copyWith(status: SelfProfileStatus.loaded, profile: profile, isSaving: false));
+      emit(
+        state.copyWith(
+          status: SelfProfileStatus.loaded,
+          profile: profile,
+          isSaving: false,
+        ),
+      );
     } catch (_) {
-      emit(state.copyWith(isSaving: false, errorMessage: 'Could not upload that image.'));
+      emit(
+        state.copyWith(
+          isSaving: false,
+          errorMessage: 'Could not upload that image.',
+        ),
+      );
     }
   }
 
@@ -86,9 +115,20 @@ class SelfProfileCubit extends Cubit<SelfProfileState> {
     emit(state.copyWith(isSaving: true));
     try {
       final profile = await repository.uploadBanner(filePath);
-      emit(state.copyWith(status: SelfProfileStatus.loaded, profile: profile, isSaving: false));
+      emit(
+        state.copyWith(
+          status: SelfProfileStatus.loaded,
+          profile: profile,
+          isSaving: false,
+        ),
+      );
     } catch (_) {
-      emit(state.copyWith(isSaving: false, errorMessage: 'Could not upload that image.'));
+      emit(
+        state.copyWith(
+          isSaving: false,
+          errorMessage: 'Could not upload that image.',
+        ),
+      );
     }
   }
 
@@ -96,9 +136,20 @@ class SelfProfileCubit extends Cubit<SelfProfileState> {
     emit(state.copyWith(isSaving: true));
     try {
       final profile = await repository.removeAvatar();
-      emit(state.copyWith(status: SelfProfileStatus.loaded, profile: profile, isSaving: false));
+      emit(
+        state.copyWith(
+          status: SelfProfileStatus.loaded,
+          profile: profile,
+          isSaving: false,
+        ),
+      );
     } catch (_) {
-      emit(state.copyWith(isSaving: false, errorMessage: 'Could not remove your avatar.'));
+      emit(
+        state.copyWith(
+          isSaving: false,
+          errorMessage: 'Could not remove your avatar.',
+        ),
+      );
     }
   }
 }
