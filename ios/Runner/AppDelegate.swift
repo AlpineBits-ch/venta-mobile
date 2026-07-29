@@ -39,6 +39,34 @@ import flutter_callkit_incoming
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
 
+  // The UIScene-based implicit engine (didInitializeImplicitFlutterEngine
+  // above) only gets created once a scene connects
+  // (scene:willConnectToSession:options:) - see Flutter's UIScene migration
+  // guide. A PushKit VoIP relaunch creates this process with no scene/window
+  // at all, so that never fires, GeneratedPluginRegistrant.register never
+  // runs, and SwiftFlutterCallkitIncomingPlugin.sharedInstance stays nil.
+  // That silently no-ops every `sharedInstance?.` call below via optional
+  // chaining - including the completion() inside showCallkitIncoming's
+  // trailing closure, which PushKit requires be called synchronously, every
+  // time, with no exceptions. Skipping it gets the process SIGKILLed by
+  // FrontBoard (0xbaadca11 - "bad call") for violating the VoIP push
+  // contract, which is indistinguishable from "no popup ever appears".
+  // Booting this headless engine first guarantees the plugin is registered
+  // (and sharedInstance non-nil) before we try to report the call, with no
+  // dependency on any scene ever connecting.
+  private lazy var voipEngine: FlutterEngine = {
+    let engine = FlutterEngine(name: "venta_voip_engine")
+    engine.run()
+    GeneratedPluginRegistrant.register(with: engine)
+    return engine
+  }()
+
+  private func ensureFlutterEngineForCallKitReporting() {
+    if SwiftFlutterCallkitIncomingPlugin.sharedInstance == nil {
+      _ = voipEngine
+    }
+  }
+
   // Missed-call notification support (shown when the call rings out).
   override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
@@ -85,6 +113,8 @@ import flutter_callkit_incoming
       completion()
       return
     }
+
+    ensureFlutterEngineForCallKitReporting()
 
     let id = payload.dictionaryPayload["callId"] as? String ?? UUID().uuidString
 
