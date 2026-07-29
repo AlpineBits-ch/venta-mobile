@@ -8,6 +8,7 @@ import '../../features/auth/data/auth_repository.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/data/models/call_dto.dart';
+import '../storage/secure_storage_service.dart';
 import 'push_token_api.dart';
 
 /// Marks a push as call-signaling — see `PushNotificationService`'s matching
@@ -43,6 +44,31 @@ Future<void> showCallKitFromPushData(Map<String, dynamic> data) async {
   );
 }
 
+/// Android only (see [CallKitService.start]) — must be a top-level function
+/// for the same reason as [firebaseMessagingBackgroundHandler]: the plugin
+/// relaunches a separate, throwaway background isolate to run it whenever an
+/// accept/decline/timeout fires natively with no live [FlutterCallkitIncoming.onEvent]
+/// listener attached (i.e. the app process was killed). That's the normal
+/// resting state of a phone, and without this the tap is silently dropped —
+/// the plugin's own event dispatch only reaches a listener or a registered
+/// background handler, never both, and never queues for later.
+///
+/// This can't reach [CallCubit] or make the authenticated accept/decline API
+/// call itself (no [getIt], no running app) — it only records which call was
+/// acted on so [CallKitService.start] can finish the job once the real app
+/// engine boots moments later via the plugin's own relaunch of `MainActivity`.
+@pragma('vm:entry-point')
+Future<void> callKitBackgroundMessageHandler(CallEvent event) async {
+  final (callId, action) = switch (event) {
+    CallEventActionCallAccept(:final callKitParams) => (callKitParams.id, 'accept'),
+    CallEventActionCallDecline(:final callKitParams) => (callKitParams.id, 'decline'),
+    CallEventActionCallTimeout(:final id) => (id, 'decline'),
+    _ => (null, null),
+  };
+  if (callId == null || action == null) return;
+  await SecureStorageService().writePendingCallAction(callId: callId, action: action);
+}
+
 /// Bridges the native CallKit/Android-incoming-call UI (`flutter_callkit_incoming`)
 /// to [CallCubit] — the single source of truth for actual call state. This
 /// service never decides call state itself; it only forwards native UI
@@ -57,12 +83,14 @@ class CallKitService {
     required this.authRepository,
     required this.profileRepository,
     required this.pushTokenApi,
+    required this.secureStorage,
   });
 
   final CallCubit callCubit;
   final AuthRepository authRepository;
   final ProfileRepository profileRepository;
   final PushTokenApi pushTokenApi;
+  final SecureStorageService secureStorage;
 
   StreamSubscription<CallEvent?>? _eventSub;
   StreamSubscription<CallState>? _callCubitSub;
@@ -71,7 +99,30 @@ class CallKitService {
   Future<void> start() async {
     _eventSub = FlutterCallkitIncoming.onEvent.listen(_handleEvent);
     _callCubitSub = callCubit.stream.listen(_handleCallCubitState);
-    if (Platform.isIOS) await _registerVoipToken();
+    if (Platform.isIOS) {
+      await _registerVoipToken();
+    } else {
+      // iOS's PushKit contract forces the Dart engine to boot (and this
+      // listener to attach) before the system CallKit UI can even be shown
+      // — see AppDelegate.swift — so only Android needs the background
+      // hand-off registered/consumed. See callKitBackgroundMessageHandler.
+      await FlutterCallkitIncoming.onBackgroundMessage(callKitBackgroundMessageHandler);
+      await _resumePendingCallAction();
+    }
+  }
+
+  /// Finishes handling an accept/decline that [callKitBackgroundMessageHandler]
+  /// caught while this engine wasn't running yet.
+  Future<void> _resumePendingCallAction() async {
+    final pending = await secureStorage.readPendingCallAction();
+    if (pending == null) return;
+    await secureStorage.clearPendingCallAction();
+    final (callId, action) = pending;
+    if (action == 'accept') {
+      _accept(callId);
+    } else {
+      _decline(callId);
+    }
   }
 
   Future<void> _registerVoipToken() async {

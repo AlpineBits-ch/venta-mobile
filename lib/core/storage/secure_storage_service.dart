@@ -16,9 +16,33 @@ class SecureStorageService {
   static const _refreshTokenKey = 'venta.auth.refresh_token';
   static const _serverUrlKey = 'venta.auth.server_url';
 
+  static const _pendingCallActionKey = 'venta.call.pending_action';
+  static const _pendingCallIdKey = 'venta.call.pending_call_id';
+
   Future<String?> readAccessToken() => _storage.read(key: _accessTokenKey);
   Future<String?> readRefreshToken() => _storage.read(key: _refreshTokenKey);
   Future<String?> readServerUrl() => _storage.read(key: _serverUrlKey);
+
+  /// A call action (accept/decline) that a [CallKitService] background
+  /// isolate captured while the main Flutter engine wasn't running yet — see
+  /// `call_kit_service.dart`'s background handler for why this hand-off is
+  /// needed instead of just acting on it directly from that isolate.
+  Future<void> writePendingCallAction({required String callId, required String action}) async {
+    await _storage.write(key: _pendingCallIdKey, value: callId);
+    await _storage.write(key: _pendingCallActionKey, value: action);
+  }
+
+  Future<(String callId, String action)?> readPendingCallAction() async {
+    final callId = await _storage.read(key: _pendingCallIdKey);
+    final action = await _storage.read(key: _pendingCallActionKey);
+    if (callId == null || action == null) return null;
+    return (callId, action);
+  }
+
+  Future<void> clearPendingCallAction() async {
+    await _storage.delete(key: _pendingCallIdKey);
+    await _storage.delete(key: _pendingCallActionKey);
+  }
 
   Future<void> writeTokens({
     required String accessToken,

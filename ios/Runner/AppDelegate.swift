@@ -91,10 +91,24 @@ import flutter_callkit_incoming
     // was answered/declined/timed out on another device or by the caller.
     // Without this a phantom CallKit ring sits there until its own ~30s
     // timeout. See docs/native-call-push-backend-spec.md.
+    //
+    // We still have to report a NEW call via showCallkitIncoming here, even
+    // though we're immediately ending it: PushKit requires every VoIP push
+    // to result in a CallKit report before completion(), with no exceptions
+    // (Apple enforces this with -[PKPushRegistry
+    // _terminateAppIfThereAreUnhandledVoIPPushes], which kills the process).
+    // Calling plugin.endCall() alone only works if this process already has
+    // a call reported for this id (i.e. showCallkitIncoming ran earlier in
+    // this launch) — when PushKit relaunches a killed app for this exact
+    // "end" push, self.data inside the plugin is nil, endCall() silently
+    // no-ops, and the push goes unreported, crashing the app on the next
+    // suspend. Reporting-then-ending guarantees a report always happens.
     if payload.dictionaryPayload["type"] as? String == "end" {
       let endData = flutter_callkit_incoming.Data(id: id, nameCaller: "", handle: "", type: 0)
-      SwiftFlutterCallkitIncomingPlugin.sharedInstance?.endCall(endData)
-      completion()
+      SwiftFlutterCallkitIncomingPlugin.sharedInstance?.showCallkitIncoming(endData, fromPushKit: true) {
+        SwiftFlutterCallkitIncomingPlugin.sharedInstance?.endCall(endData)
+        completion()
+      }
       return
     }
 

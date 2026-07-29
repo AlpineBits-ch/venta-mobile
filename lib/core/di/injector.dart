@@ -104,6 +104,7 @@ Future<void> configureDependencies() async {
       authRepository: getIt(),
       profileRepository: getIt(),
       pushTokenApi: getIt(),
+      secureStorage: getIt(),
     ),
   );
 }
