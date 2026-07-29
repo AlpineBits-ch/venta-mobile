@@ -304,7 +304,14 @@ public class SwiftFlutterCallkitIncomingPlugin: NSObject, FlutterPlugin, CXProvi
     }
     
     @objc public func showCallkitIncoming(_ data: Data, fromPushKit: Bool) {
-        self.showCallkitIncoming(data, fromPushKit: fromPushKit, onError: nil)
+        // Was `onError: nil` — reportNewIncomingCall's CXError was silently
+        // dropped on failure (e.g. .unentitled, .filteredByDoNotDisturb),
+        // making a call that never rings indistinguishable from one that
+        // succeeded. Logging it here is the only way to see why the native
+        // UI didn't appear when this path is driven from Dart (foreground).
+        self.showCallkitIncoming(data, fromPushKit: fromPushKit, onError: { error in
+            NSLog("[CallkitIncoming] reportNewIncomingCall failed (no PushKit): \(String(describing: error))")
+        })
     }
     
     @objc public func showCallkitIncoming(_ data: Data, fromPushKit: Bool, completion: @escaping () -> Void) {
@@ -348,6 +355,11 @@ public class SwiftFlutterCallkitIncomingPlugin: NSObject, FlutterPlugin, CXProvi
                 self.callManager.addCall(call)
                 self.sendEvent(SwiftFlutterCallkitIncomingPlugin.ACTION_CALL_INCOMING, data.toJSON())
                 self.endCallNotExist(data)
+            } else {
+                // Was silently dropped here (completion() still had to fire
+                // either way, per the PushKit contract) — logging it is the
+                // only way to see why a VoIP-push-triggered call never rang.
+                NSLog("[CallkitIncoming] reportNewIncomingCall failed (PushKit): \(String(describing: error))")
             }
             completion()
         }
