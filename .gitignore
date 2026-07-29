@@ -51,3 +51,4 @@ ios/ExportOptions.plist
 /ios/fastlane/report.xml
 /ios/vendor/
 /android/app/release
+packages/*/pubspec.lock

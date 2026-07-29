@@ -24,16 +24,29 @@ class GuildSettingsScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Server Settings'),
-          bottom: const TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: 'Overview'),
-              Tab(text: 'Roles'),
-              Tab(text: 'Members'),
-              Tab(text: 'Bans'),
-              Tab(text: 'Audit Log'),
-              Tab(text: 'Invites'),
-            ],
+          // The tab strip doesn't fit on a phone width, so it's scrollable —
+          // this fade hints that without it, "Audit Log"/"Invites" just look
+          // like they're cut off at the edge with no way to reach them.
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(kTextTabBarHeight),
+            child: ShaderMask(
+              shaderCallback: (rect) => const LinearGradient(
+                colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
+                stops: [0.0, 0.04, 0.92, 1.0],
+              ).createShader(rect),
+              blendMode: BlendMode.dstIn,
+              child: const TabBar(
+                isScrollable: true,
+                tabs: [
+                  Tab(text: 'Overview'),
+                  Tab(text: 'Roles'),
+                  Tab(text: 'Members'),
+                  Tab(text: 'Bans'),
+                  Tab(text: 'Audit Log'),
+                  Tab(text: 'Invites'),
+                ],
+              ),
+            ),
           ),
         ),
         body: TabBarView(

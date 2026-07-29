@@ -153,11 +153,12 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
         children: [
           for (final channel in uncategorized)
             _ChannelTile(guildId: guild.id, guildName: guild.name, channel: channel),
-          for (final category in sortedCategories) ...[
-            _CategoryHeader(category: category),
-            for (final channel in byCategory[category.id] ?? const <ChannelDto>[])
-              _ChannelTile(guildId: guild.id, guildName: guild.name, channel: channel),
-          ],
+          for (final category in sortedCategories)
+            if ((byCategory[category.id] ?? const <ChannelDto>[]).isNotEmpty) ...[
+              _CategoryHeader(category: category),
+              for (final channel in byCategory[category.id]!)
+                _ChannelTile(guildId: guild.id, guildName: guild.name, channel: channel),
+            ],
         ],
       ),
       floatingActionButton: FloatingActionButton(

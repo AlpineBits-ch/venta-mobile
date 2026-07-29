@@ -9,7 +9,13 @@ extension RelationshipModelX on RelationshipModel {
   /// The API returns `status` already relative to the querying user
   /// (e.g. `pendingIncoming` means incoming *to me*), but `owner`/`target`
   /// are absolute — this picks whichever side isn't me, for display.
-  MinimalProfileId otherParty(String myUserId) => ownerId == myUserId ? target : owner;
+  ///
+  /// Compares against `owner.userId`, not the top-level `ownerId` — the
+  /// latter is the Social service's profile id (`prfl_...`), a different
+  /// namespace than `myUserId` (the Identity JWT `sub`), so it never
+  /// matched and this always fell back to `owner`, showing yourself as
+  /// every friend.
+  MinimalProfileId otherParty(String myUserId) => owner.userId == myUserId ? target : owner;
 }
 
 /// REST relationship list merged with realtime friend-request events. The

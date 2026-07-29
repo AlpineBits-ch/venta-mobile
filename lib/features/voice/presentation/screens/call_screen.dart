@@ -26,7 +26,7 @@ class CallScreen extends StatelessWidget {
           child: BlocBuilder<CallCubit, CallState>(
             builder: (context, state) {
               return switch (state.phase) {
-                CallPhase.incoming => _IncomingCallView(state: state),
+                CallPhase.incoming => _IncomingCallView(state: state, myUserId: myUserId),
                 CallPhase.idle => const SizedBox.shrink(),
                 CallPhase.connecting || CallPhase.active => _ActiveCallView(
                     state: state,
@@ -42,21 +42,25 @@ class CallScreen extends StatelessWidget {
 }
 
 class _IncomingCallView extends StatelessWidget {
-  const _IncomingCallView({required this.state});
+  const _IncomingCallView({required this.state, required this.myUserId});
   final CallState state;
+  final String myUserId;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final callerId = state.call?.participants.firstOrNull?.userId;
+    final callerId = state.call?.participants
+        .map((p) => p.userId)
+        .firstWhere((id) => id != myUserId, orElse: () => '');
+    final hasCaller = callerId != null && callerId.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.l),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (callerId != null) UserAvatar(userId: callerId, radius: 56, onTap: () {}),
+          if (hasCaller) UserAvatar(userId: callerId, radius: 56, onTap: () {}),
           const SizedBox(height: AppSpacing.l),
-          if (callerId != null)
+          if (hasCaller)
             ProfileResolver(
               userId: callerId,
               builder: (context, profile) => Text(
