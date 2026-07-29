@@ -81,6 +81,12 @@ class GuildVoiceScreen extends StatelessWidget {
                         onTap: () => getIt<GuildVoiceCubit>().toggleDeafen(),
                       ),
                       _ActionButton(
+                        icon: state.isSpeakerOn ? Icons.volume_up : Icons.hearing,
+                        background: state.isSpeakerOn ? Colors.white24 : Colors.white,
+                        iconColor: state.isSpeakerOn ? Colors.white : Colors.black,
+                        onTap: () => getIt<GuildVoiceCubit>().toggleSpeaker(),
+                      ),
+                      _ActionButton(
                         icon: Icons.call_end,
                         background: Colors.red,
                         onTap: () {

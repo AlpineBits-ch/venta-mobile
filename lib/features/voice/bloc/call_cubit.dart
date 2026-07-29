@@ -30,6 +30,7 @@ class CallState extends Equatable {
     this.participants = const [],
     this.isMuted = false,
     this.isDeafened = false,
+    this.isSpeakerOn = true,
     this.errorMessage,
   });
 
@@ -38,6 +39,12 @@ class CallState extends Equatable {
   final List<CallParticipantState> participants;
   final bool isMuted;
   final bool isDeafened;
+
+  /// Whether output is routed to the loud/speakerphone output rather than
+  /// the quiet call (earpiece) speaker. Defaults on — with no headset
+  /// connected, calls were otherwise landing on the quiet earpiece route
+  /// with no way to switch, unlike every other calling app.
+  final bool isSpeakerOn;
   final String? errorMessage;
 
   /// [errorMessage] is always set as given (including `null`), never
@@ -49,6 +56,7 @@ class CallState extends Equatable {
     List<CallParticipantState>? participants,
     bool? isMuted,
     bool? isDeafened,
+    bool? isSpeakerOn,
     String? errorMessage,
   }) =>
       CallState(
@@ -57,11 +65,13 @@ class CallState extends Equatable {
         participants: participants ?? this.participants,
         isMuted: isMuted ?? this.isMuted,
         isDeafened: isDeafened ?? this.isDeafened,
+        isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
         errorMessage: errorMessage,
       );
 
   @override
-  List<Object?> get props => [phase, call, participants, isMuted, isDeafened, errorMessage];
+  List<Object?> get props =>
+      [phase, call, participants, isMuted, isDeafened, isSpeakerOn, errorMessage];
 }
 
 /// App-lifetime singleton owning the one call the app can be in at a time —
@@ -199,6 +209,13 @@ class CallCubit extends Cubit<CallState> {
     _webRtc?.setDeafened(isDeafened);
   }
 
+  Future<void> toggleSpeaker() async {
+    if (state.phase != CallPhase.active) return;
+    final isSpeakerOn = !state.isSpeakerOn;
+    emit(state.copyWith(isSpeakerOn: isSpeakerOn));
+    await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
+  }
+
   Future<void> _connect(CallDto call) async {
     final webRtc = _webRtcServiceFactory();
     _webRtc = webRtc;
@@ -208,6 +225,7 @@ class CallCubit extends Cubit<CallState> {
       await webRtc.connect(call.id);
       webRtc.setMuted(state.isMuted);
       webRtc.setDeafened(state.isDeafened);
+      await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
     } catch (_) {
       emit(state.copyWith(errorMessage: 'Could not connect audio.'));
     }

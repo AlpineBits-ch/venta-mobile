@@ -144,6 +144,12 @@ class _ActiveCallView extends StatelessWidget {
                 onTap: () => context.read<CallCubit>().toggleDeafen(),
               ),
               _CallActionButton(
+                icon: state.isSpeakerOn ? Icons.volume_up : Icons.hearing,
+                background: state.isSpeakerOn ? Colors.white24 : Colors.white,
+                iconColor: state.isSpeakerOn ? Colors.white : Colors.black,
+                onTap: () => context.read<CallCubit>().toggleSpeaker(),
+              ),
+              _CallActionButton(
                 icon: Icons.call_end,
                 background: Colors.red,
                 onTap: () => context.read<CallCubit>().endCall(),

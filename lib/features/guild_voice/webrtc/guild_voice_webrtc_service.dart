@@ -137,12 +137,22 @@ class GuildVoiceWebRtcService {
   // always sends an empty mid, which Cloudflare Calls rejects outright
   // ("Missing mid in track") — see venta_mobile's "no audio in/out"
   // investigation. getTransceivers() makes a fresh native call and returns
-  // the real, current mid; transceiverId is stable across that call so we
-  // can find the same transceiver again.
+  // the real, current mid.
+  //
+  // transceiverId can't be used to find the same transceiver again — on
+  // Android (PeerConnectionObserver.java) it's *derived from* mid itself
+  // (`transceiver.getMid() ?? randomUUID()`), so it's a fresh random value
+  // every time it's read before mid is assigned, and a *different* value
+  // (the real mid) once mid becomes available. The "same" transceiver
+  // therefore never compares equal to itself across this before/after gap.
+  // The sender's local track id is what's actually stable.
   Future<String?> _resolveMid(RTCPeerConnection pc, RTCRtpTransceiver original) async {
+    final trackId = original.sender.track?.id;
     final transceivers = await pc.getTransceivers();
-    for (final t in transceivers) {
-      if (t.transceiverId == original.transceiverId) return t.mid;
+    if (trackId != null) {
+      for (final t in transceivers) {
+        if (t.sender.track?.id == trackId) return t.mid;
+      }
     }
     return original.mid;
   }
@@ -155,6 +165,8 @@ class GuildVoiceWebRtcService {
   void setMuted(bool isMuted) {
     _localAudioTrack?.enabled = !isMuted;
   }
+
+  Future<void> setSpeakerphoneOn(bool enable) => Helper.setSpeakerphoneOn(enable);
 
   void setDeafened(bool isDeafened) {
     _deafened = isDeafened;

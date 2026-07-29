@@ -44,6 +44,7 @@ class GuildVoiceState extends Equatable {
     this.guildName,
     this.isMuted = false,
     this.isDeafened = false,
+    this.isSpeakerOn = true,
     this.rosters = const {},
     this.errorMessage,
   });
@@ -55,6 +56,12 @@ class GuildVoiceState extends Equatable {
   final String? guildName;
   final bool isMuted;
   final bool isDeafened;
+
+  /// Whether output is routed to the loud/speakerphone output rather than
+  /// the quiet call (earpiece) speaker. Defaults on — with no headset
+  /// connected, calls were otherwise landing on the quiet earpiece route
+  /// with no way to switch, unlike every other calling app.
+  final bool isSpeakerOn;
 
   /// Every voice channel's roster, keyed by channelId — not just the one
   /// the local user has joined. This is what lets the sidebar show live
@@ -77,6 +84,7 @@ class GuildVoiceState extends Equatable {
     String? guildName,
     bool? isMuted,
     bool? isDeafened,
+    bool? isSpeakerOn,
     Map<String, List<VoiceParticipantState>>? rosters,
     String? errorMessage,
   }) =>
@@ -88,6 +96,7 @@ class GuildVoiceState extends Equatable {
         guildName: guildName ?? this.guildName,
         isMuted: isMuted ?? this.isMuted,
         isDeafened: isDeafened ?? this.isDeafened,
+        isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
         rosters: rosters ?? this.rosters,
         errorMessage: errorMessage,
       );
@@ -101,6 +110,7 @@ class GuildVoiceState extends Equatable {
         guildName,
         isMuted,
         isDeafened,
+        isSpeakerOn,
         rosters,
         errorMessage,
       ];
@@ -214,6 +224,13 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     }
   }
 
+  Future<void> toggleSpeaker() async {
+    if (state.phase != GuildVoicePhase.active) return;
+    final isSpeakerOn = !state.isSpeakerOn;
+    emit(state.copyWith(isSpeakerOn: isSpeakerOn));
+    await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
+  }
+
   Future<void> _connect(String guildId, String channelId, VoiceStateDto voiceState) async {
     final webRtc = _webRtcServiceFactory();
     _webRtc = webRtc;
@@ -231,6 +248,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       await webRtc.connect(guildId, channelId);
       webRtc.setMuted(state.isMuted);
       webRtc.setDeafened(state.isDeafened);
+      await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
       for (final p in voiceState.participants) {
         final cfSessionId = p.cfSessionId;
         final trackName = p.audioTrackName;
