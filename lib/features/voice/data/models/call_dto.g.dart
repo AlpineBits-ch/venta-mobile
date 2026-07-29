@@ -7,10 +7,18 @@ part of 'call_dto.dart';
 // **************************************************************************
 
 _CallParticipantDto _$CallParticipantDtoFromJson(Map<String, dynamic> json) =>
-    _CallParticipantDto(userId: json['userId'] as String);
+    _CallParticipantDto(
+      userId: json['userId'] as String,
+      cfSessionId: json['cfSessionId'] as String?,
+      audioTrackName: json['audioTrackName'] as String?,
+    );
 
 Map<String, dynamic> _$CallParticipantDtoToJson(_CallParticipantDto instance) =>
-    <String, dynamic>{'userId': instance.userId};
+    <String, dynamic>{
+      'userId': instance.userId,
+      'cfSessionId': instance.cfSessionId,
+      'audioTrackName': instance.audioTrackName,
+    };
 
 _CallTrackDto _$CallTrackDtoFromJson(Map<String, dynamic> json) =>
     _CallTrackDto(
@@ -29,6 +37,7 @@ Map<String, dynamic> _$CallTrackDtoToJson(_CallTrackDto instance) =>
 _CallDto _$CallDtoFromJson(Map<String, dynamic> json) => _CallDto(
   id: json['id'] as String,
   conversationId: json['conversationId'] as String,
+  status: json['status'] as String?,
   createdAt: json['createdAt'] == null
       ? null
       : DateTime.parse(json['createdAt'] as String),
@@ -50,6 +59,7 @@ _CallDto _$CallDtoFromJson(Map<String, dynamic> json) => _CallDto(
 Map<String, dynamic> _$CallDtoToJson(_CallDto instance) => <String, dynamic>{
   'id': instance.id,
   'conversationId': instance.conversationId,
+  'status': instance.status,
   'createdAt': instance.createdAt?.toIso8601String(),
   'updatedAt': instance.updatedAt?.toIso8601String(),
   'tracks': instance.tracks,

@@ -5,7 +5,15 @@ part 'call_dto.g.dart';
 
 @freezed
 sealed class CallParticipantDto with _$CallParticipantDto {
-  const factory CallParticipantDto({required String userId}) = _CallParticipantDto;
+  /// [cfSessionId]/[audioTrackName] are only set once this participant has
+  /// actually published an audio track — used to backfill-subscribe on
+  /// connect/reconnect without waiting for a live `call.ParticipantJoined`
+  /// event, which can be missed across a SignalR reconnect gap.
+  const factory CallParticipantDto({
+    required String userId,
+    String? cfSessionId,
+    String? audioTrackName,
+  }) = _CallParticipantDto;
 
   factory CallParticipantDto.fromJson(Map<String, dynamic> json) =>
       _$CallParticipantDtoFromJson(json);
@@ -24,9 +32,13 @@ sealed class CallTrackDto with _$CallTrackDto {
 
 @freezed
 sealed class CallDto with _$CallDto {
+  /// [status] is the backend's `CallStatus` enum as a string (Pending,
+  /// Ringing, Rejected, Connected, Completed) — used to detect a missed
+  /// `call.CallEnded` event on reconnect.
   const factory CallDto({
     required String id,
     required String conversationId,
+    String? status,
     DateTime? createdAt,
     DateTime? updatedAt,
     @Default(<CallTrackDto>[]) List<CallTrackDto> tracks,

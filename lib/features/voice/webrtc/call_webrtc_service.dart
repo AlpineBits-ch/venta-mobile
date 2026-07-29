@@ -30,6 +30,10 @@ class CallWebRtcService {
 
   // MID -> userId, so ontrack can route inbound audio to the right participant.
   final Map<String, String> _midToUserId = {};
+  // Participants already subscribed to — makes subscribeToParticipant safe to
+  // call more than once for the same user (e.g. both the live
+  // `ParticipantJoined` event and a reconcile-on-reconnect backfill racing).
+  final Set<String> _subscribedUserIds = {};
   final Map<String, MediaStreamTrack> _remoteAudioTracks = {};
   final List<RTCTrackEvent> _pendingTracks = [];
 
@@ -108,7 +112,7 @@ class CallWebRtcService {
     required String trackName,
   }) async {
     final pc = _pc;
-    if (pc == null) return;
+    if (pc == null || !_subscribedUserIds.add(userId)) return;
 
     final transceiver = await pc.addTransceiver(
       kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
@@ -159,6 +163,7 @@ class CallWebRtcService {
   }
 
   void unsubscribeParticipant(String userId) {
+    _subscribedUserIds.remove(userId);
     _remoteAudioTracks.remove(userId);
     _midToUserId.removeWhere((mid, id) => id == userId);
   }
@@ -190,6 +195,7 @@ class CallWebRtcService {
     _midToUserId.clear();
     _remoteAudioTracks.clear();
     _pendingTracks.clear();
+    _subscribedUserIds.clear();
     _deafened = false;
     _negotiationChain = Future.value();
   }

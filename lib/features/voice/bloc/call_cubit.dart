@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/realtime/realtime_transport.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/models/call_dto.dart';
 import '../data/voice_repository.dart';
@@ -93,12 +94,14 @@ class CallCubit extends Cubit<CallState> {
   })  : _webRtcServiceFactory = webRtcServiceFactory,
         super(const CallState()) {
     _sub = repository.events.listen(_handleEvent);
+    _connectionSub = repository.connectionStatus.listen(_handleConnectionStatus);
   }
 
   final VoiceRepository repository;
   final AuthRepository authRepository;
   final CallWebRtcService Function() _webRtcServiceFactory;
   late final StreamSubscription<VoiceRepositoryEvent> _sub;
+  late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
   CallWebRtcService? _webRtc;
 
   String get _myUserId => authRepository.currentUserId ?? '';
@@ -240,9 +243,72 @@ class CallCubit extends Cubit<CallState> {
       webRtc.setMuted(state.isMuted);
       webRtc.setDeafened(state.isDeafened);
       await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
+      // Backfill-subscribe to anyone already publishing audio, rather than
+      // relying solely on the live `call.ParticipantJoined` event — that
+      // event can be missed (e.g. joining a group call already in progress,
+      // or a SignalR gap right around connect). Mirrors GuildVoiceCubit.
+      for (final p in call.participants) {
+        final cfSessionId = p.cfSessionId;
+        final trackName = p.audioTrackName;
+        if (p.userId != _myUserId && cfSessionId != null && trackName != null) {
+          unawaited(
+            webRtc.subscribeToParticipant(userId: p.userId, cfSessionId: cfSessionId, trackName: trackName),
+          );
+        }
+      }
     } catch (_) {
       emit(state.copyWith(errorMessage: 'Could not connect audio.'));
     }
+  }
+
+  /// A reconnect is the signal that any `call.*` events broadcast during the
+  /// gap were dropped — SignalR doesn't queue undelivered messages. Re-fetches
+  /// authoritative state and reconciles: subscribes to participants we never
+  /// heard about, unsubscribes from ones who left, and hangs up locally if the
+  /// call ended (or we were removed) while disconnected.
+  Future<void> _handleConnectionStatus(RealtimeConnectionStatus status) async {
+    if (status != RealtimeConnectionStatus.connected) return;
+    if (state.phase != CallPhase.active) return;
+    final call = state.call;
+    final webRtc = _webRtc;
+    if (call == null || webRtc == null) return;
+
+    CallDto fresh;
+    try {
+      fresh = await repository.getCall(call.id);
+    } catch (_) {
+      return; // Best-effort — a later reconnect or live event will catch up.
+    }
+    if (state.phase != CallPhase.active || state.call?.id != call.id) return;
+
+    if (fresh.status == 'Completed' ||
+        fresh.status == 'Rejected' ||
+        !fresh.participants.any((p) => p.userId == _myUserId)) {
+      _webRtc = null;
+      emit(const CallState());
+      unawaited(webRtc.disconnect());
+      return;
+    }
+
+    final freshIds = fresh.participants.map((p) => p.userId).toSet();
+    for (final gone in state.participants.where((p) => !freshIds.contains(p.userId))) {
+      webRtc.unsubscribeParticipant(gone.userId);
+    }
+    final remaining = state.participants.where((p) => freshIds.contains(p.userId)).toList();
+    final knownIds = remaining.map((p) => p.userId).toSet();
+
+    final newParticipants = <CallParticipantState>[];
+    for (final p in fresh.participants) {
+      if (p.userId == _myUserId || knownIds.contains(p.userId)) continue;
+      newParticipants.add(CallParticipantState(userId: p.userId));
+      final cfSessionId = p.cfSessionId;
+      final trackName = p.audioTrackName;
+      if (cfSessionId != null && trackName != null) {
+        unawaited(webRtc.subscribeToParticipant(userId: p.userId, cfSessionId: cfSessionId, trackName: trackName));
+      }
+    }
+
+    emit(state.copyWith(call: fresh, participants: [...remaining, ...newParticipants]));
   }
 
   void _handleEvent(VoiceRepositoryEvent event) {
@@ -292,6 +358,7 @@ class CallCubit extends Cubit<CallState> {
   @override
   Future<void> close() {
     unawaited(_sub.cancel());
+    unawaited(_connectionSub.cancel());
     return super.close();
   }
 }

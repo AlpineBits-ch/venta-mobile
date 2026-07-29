@@ -12,6 +12,13 @@ class VoiceApi {
 
   static const _base = '/api/v1/messaging/voice';
 
+  /// Authoritative current-state fetch — the catch-up path when a live
+  /// `call.*` SignalR event may have been missed (e.g. a reconnect gap).
+  Future<CallDto> getCall(String callId) async {
+    final response = await client.dio.get<Map<String, dynamic>>(client.url('$_base/call/$callId'));
+    return CallDto.fromJson(response.data!);
+  }
+
   Future<CallDto> createCall({
     required String conversationId,
     required List<String> participantUserIds,

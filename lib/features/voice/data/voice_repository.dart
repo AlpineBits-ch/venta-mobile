@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
+import '../../../core/realtime/realtime_transport.dart';
 import 'models/call_dto.dart';
 import 'voice_api.dart';
 
@@ -61,6 +62,11 @@ class VoiceRepository {
   final _eventsController = StreamController<VoiceRepositoryEvent>.broadcast();
   Stream<VoiceRepositoryEvent> get events => _eventsController.stream;
 
+  /// Drives [CallCubit]'s reconcile-on-reconnect — a transition back to
+  /// [RealtimeConnectionStatus.connected] is the signal that any `call.*`
+  /// events broadcast during the gap were silently dropped.
+  Stream<RealtimeConnectionStatus> get connectionStatus => _realtimeService.connectionStatus;
+
   void _handleRealtimeEvent(RealtimeEvent event) {
     final payload = event.objectPayload;
     switch (event.name) {
@@ -93,6 +99,8 @@ class VoiceRepository {
   Future<CallDto> declineCall(String callId) => api.declineCall(callId);
 
   Future<CallDto> endCall(String callId) => api.endCall(callId);
+
+  Future<CallDto> getCall(String callId) => api.getCall(callId);
 
   Future<void> invokeMuteChanged({required String callId, required bool isMuted}) => _realtimeService.invoke(
         'call.MuteChanged',
