@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/realtime/realtime_event.dart';
+import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/status_dot.dart';
 import '../../../profile/data/models/profile_dto.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/guild_member_dto.dart';
@@ -26,12 +31,47 @@ class GuildMembersScreen extends StatefulWidget {
 class _GuildMembersScreenState extends State<GuildMembersScreen> {
   List<GuildMemberDto>? _members;
   String? _error;
+  late final StreamSubscription<RealtimeEvent> _presenceSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _presenceSub = getIt<RealtimeService>()
+        .events
+        .where((e) => e.name == 'guild.PresenceChanged')
+        .listen(_onPresenceChanged);
   }
+
+  @override
+  void dispose() {
+    unawaited(_presenceSub.cancel());
+    super.dispose();
+  }
+
+  void _onPresenceChanged(RealtimeEvent event) {
+    final payload = event.objectPayload;
+    if (payload['guildId'] != widget.guildId) return;
+    final userId = payload['userId'] as String?;
+    final statusName = payload['status'] as String?;
+    final members = _members;
+    if (userId == null || statusName == null || members == null) return;
+    final status = _parseOnlineStatus(statusName);
+    setState(() {
+      _members = [
+        for (final member in members)
+          if (member.userId == userId) member.copyWith(status: status) else member,
+      ];
+    });
+  }
+
+  static OnlineStatus _parseOnlineStatus(String wire) => switch (wire) {
+        'Online' => OnlineStatus.online,
+        'Idle' => OnlineStatus.idle,
+        'DoNotDisturb' => OnlineStatus.doNotDisturb,
+        'Hidden' => OnlineStatus.hidden,
+        _ => OnlineStatus.offline,
+      };
 
   Future<void> _load() async {
     try {
@@ -169,14 +209,25 @@ class _MemberTile extends StatelessWidget {
     final baseColor = dimmed ? theme.colorScheme.onSurface.withValues(alpha: 0.5) : null;
 
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: context.statusColors.hover,
-        backgroundImage: member.profile?.avatarUrl != null
-            ? NetworkImage(member.profile!.avatarUrl!)
-            : null,
-        child: member.profile?.avatarUrl == null
-            ? Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')
-            : null,
+      leading: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            backgroundColor: context.statusColors.hover,
+            backgroundImage: member.profile?.avatarUrl != null
+                ? NetworkImage(member.profile!.avatarUrl!)
+                : null,
+            child: member.profile?.avatarUrl == null
+                ? Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')
+                : null,
+          ),
+          if (!isBot)
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: StatusDot(status: member.status),
+            ),
+        ],
       ),
       title: Row(
         mainAxisSize: MainAxisSize.min,

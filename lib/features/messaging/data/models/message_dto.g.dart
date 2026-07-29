@@ -26,6 +26,11 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
           ?.map((e) => AttachmentDto.fromJson(e as Map<String, dynamic>))
           .toList() ??
       const <AttachmentDto>[],
+  reactions:
+      (json['reactions'] as List<dynamic>?)
+          ?.map((e) => MessageReactionDto.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const <MessageReactionDto>[],
   encryptionState:
       $enumDecodeNullable(
         _$MessageEncryptionStateEnumMap,
@@ -58,6 +63,7 @@ Map<String, dynamic> _$MessageDtoToJson(
   'inReplyTo': instance.inReplyTo,
   'mentions': instance.mentions,
   'attachments': instance.attachments,
+  'reactions': instance.reactions,
   'encryptionState': _$MessageEncryptionStateEnumMap[instance.encryptionState]!,
   'type': _$MessageTypeEnumMap[instance.type]!,
   'authorIdType': _$MessageAuthorTypeEnumMap[instance.authorIdType]!,

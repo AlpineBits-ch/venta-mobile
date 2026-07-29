@@ -7,6 +7,7 @@ import '../data/message_content_codec.dart';
 import '../data/message_repository.dart';
 import '../data/models/attachment_dto.dart';
 import '../data/models/message_dto.dart';
+import '../data/models/message_reaction_dto.dart';
 
 sealed class ThreadEvent extends Equatable {
   const ThreadEvent();
@@ -34,6 +35,19 @@ class ThreadMessageSubmitted extends ThreadEvent {
 
 class ThreadTypingNotified extends ThreadEvent {
   const ThreadTypingNotified();
+}
+
+/// Toggles the caller's own reaction on a message — adds it if they haven't
+/// reacted with this emoji yet, removes it if they have. Applied optimistic-
+/// first (mirrors Alpine's `toggleReaction`), rolled back if the HTTP call
+/// fails.
+class ReactionToggled extends ThreadEvent {
+  const ReactionToggled({required this.messageId, required this.emoji});
+  final String messageId;
+  final String emoji;
+
+  @override
+  List<Object?> get props => [messageId, emoji];
 }
 
 /// Registers a synthetic "the bot is working on it" row while a slash
@@ -101,6 +115,30 @@ class _UserTypingRemote extends ThreadEvent {
 
   @override
   List<Object?> get props => [userId];
+}
+
+class _ReactionAddedRemote extends ThreadEvent {
+  const _ReactionAddedRemote({required this.messageId, required this.emoji, required this.userId});
+  final String messageId;
+  final String emoji;
+  final String userId;
+
+  @override
+  List<Object?> get props => [messageId, emoji, userId];
+}
+
+class _ReactionRemovedRemote extends ThreadEvent {
+  const _ReactionRemovedRemote({
+    required this.messageId,
+    required this.emoji,
+    required this.userId,
+  });
+  final String messageId;
+  final String emoji;
+  final String userId;
+
+  @override
+  List<Object?> get props => [messageId, emoji, userId];
 }
 
 class _TypingExpired extends ThreadEvent {
@@ -178,6 +216,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<ThreadLoadMoreRequested>(_onLoadMoreRequested);
     on<ThreadMessageSubmitted>(_onMessageSubmitted);
     on<ThreadTypingNotified>(_onTypingNotified);
+    on<ReactionToggled>(_onReactionToggled);
     on<ThreadBotPlaceholderAdded>(_onBotPlaceholderAdded);
     on<ThreadBotPlaceholderFailed>(_onBotPlaceholderFailed);
     on<_BotPlaceholderTimedOut>(_onBotPlaceholderTimedOut);
@@ -186,6 +225,8 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<_MessageDeletedRemote>(_onMessageDeletedRemote);
     on<_UserTypingRemote>(_onUserTypingRemote);
     on<_TypingExpired>(_onTypingExpired);
+    on<_ReactionAddedRemote>(_onReactionAddedRemote);
+    on<_ReactionRemovedRemote>(_onReactionRemovedRemote);
 
     _repoSub = repository.events.listen((event) {
       switch (event) {
@@ -197,6 +238,22 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           add(_MessageDeletedRemote(event.messageId));
         case RemoteUserTyping():
           add(_UserTypingRemote(event.userId));
+        case RemoteReactionAdded():
+          add(
+            _ReactionAddedRemote(
+              messageId: event.messageId,
+              emoji: event.emoji,
+              userId: event.userId,
+            ),
+          );
+        case RemoteReactionRemoved():
+          add(
+            _ReactionRemovedRemote(
+              messageId: event.messageId,
+              emoji: event.emoji,
+              userId: event.userId,
+            ),
+          );
       }
     });
 
@@ -292,6 +349,109 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
   Future<void> _onTypingNotified(ThreadTypingNotified event, Emitter<ThreadState> emit) async {
     await repository.sendTypingIndicator();
+  }
+
+  Future<void> _onReactionToggled(ReactionToggled event, Emitter<ThreadState> emit) async {
+    final hasOwn = state.messages.any(
+      (m) =>
+          m.id == event.messageId &&
+          m.reactions.any((r) => r.emoji == event.emoji && r.userId == myUserId),
+    );
+
+    emit(
+      state.copyWith(
+        messages: _withReactions(
+          event.messageId,
+          (reactions) => hasOwn
+              ? reactions.where((r) => !(r.emoji == event.emoji && r.userId == myUserId)).toList()
+              : [
+                  ...reactions,
+                  MessageReactionDto(
+                    messageId: event.messageId,
+                    emoji: event.emoji,
+                    userId: myUserId,
+                    createdAt: DateTime.now(),
+                  ),
+                ],
+        ),
+      ),
+    );
+
+    try {
+      if (hasOwn) {
+        await repository.removeReaction(event.messageId, event.emoji);
+      } else {
+        await repository.addReaction(event.messageId, event.emoji);
+      }
+    } catch (_) {
+      // Roll back to the pre-toggle state.
+      emit(
+        state.copyWith(
+          messages: _withReactions(
+            event.messageId,
+            (reactions) => hasOwn
+                ? [
+                    ...reactions,
+                    MessageReactionDto(
+                      messageId: event.messageId,
+                      emoji: event.emoji,
+                      userId: myUserId,
+                      createdAt: DateTime.now(),
+                    ),
+                  ]
+                : reactions
+                    .where((r) => !(r.emoji == event.emoji && r.userId == myUserId))
+                    .toList(),
+          ),
+        ),
+      );
+    }
+  }
+
+  void _onReactionAddedRemote(_ReactionAddedRemote event, Emitter<ThreadState> emit) {
+    emit(
+      state.copyWith(
+        messages: _withReactions(event.messageId, (reactions) {
+          if (reactions.any((r) => r.emoji == event.emoji && r.userId == event.userId)) {
+            return reactions;
+          }
+          return [
+            ...reactions,
+            MessageReactionDto(
+              messageId: event.messageId,
+              emoji: event.emoji,
+              userId: event.userId,
+              createdAt: DateTime.now(),
+            ),
+          ];
+        }),
+      ),
+    );
+  }
+
+  void _onReactionRemovedRemote(_ReactionRemovedRemote event, Emitter<ThreadState> emit) {
+    emit(
+      state.copyWith(
+        messages: _withReactions(
+          event.messageId,
+          (reactions) =>
+              reactions.where((r) => !(r.emoji == event.emoji && r.userId == event.userId)).toList(),
+        ),
+      ),
+    );
+  }
+
+  /// Returns [state.messages] with [messageId]'s `reactions` list replaced by
+  /// running [update] over its current reactions — a no-op if the message
+  /// isn't currently loaded (e.g. it scrolled out of the fetched page).
+  List<MessageDto> _withReactions(
+    String messageId,
+    List<MessageReactionDto> Function(List<MessageReactionDto>) update,
+  ) {
+    return [
+      for (final m in state.messages)
+        if (m.id == messageId) m.copyWith(reactions: update(m.reactions)) else m,
+    ];
   }
 
   void _onBotPlaceholderAdded(ThreadBotPlaceholderAdded event, Emitter<ThreadState> emit) {

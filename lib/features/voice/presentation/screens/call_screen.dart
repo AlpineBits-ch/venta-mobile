@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/countdown_label.dart';
 import '../../../../core/widgets/elapsed_time_label.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -119,6 +120,20 @@ class _ActiveCallView extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             ElapsedTimeLabel(since: state.connectedAt!),
           ],
+          if (state.aloneDeadline != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text('Waiting for others to rejoin — call ends in ', style: TextStyle(color: Colors.amber)),
+                CountdownLabel(
+                  deadline: state.aloneDeadline!,
+                  style: const TextStyle(color: Colors.amber, fontSize: 13),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpacing.xl),
           Expanded(
             child: Center(
@@ -128,7 +143,10 @@ class _ActiveCallView extends StatelessWidget {
                 alignment: WrapAlignment.center,
                 children: [
                   if (others.isEmpty)
-                    const Text('Ringing…', style: TextStyle(color: Colors.white70))
+                    Text(
+                      state.aloneDeadline != null ? 'You\'re the only one here…' : 'Ringing…',
+                      style: const TextStyle(color: Colors.white70),
+                    )
                   else
                     for (final participant in others) _ParticipantTile(participant: participant),
                 ],

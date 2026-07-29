@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../voice/data/models/cf_signaling_dto.dart';
 import 'models/guild_voice_dto.dart';
@@ -16,16 +18,21 @@ class GuildVoiceApi {
   String _base(String guildId, String channelId) =>
       client.url('/api/v1/guild/guilds/$guildId/channels/$channelId/voice');
 
-  Future<VoiceStateDto> join(String guildId, String channelId) async {
+  Future<VoiceStateDto> join(String guildId, String channelId, {required String deviceId}) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       '${_base(guildId, channelId)}/join',
       data: const {},
+      options: Options(headers: {'X-Device-Id': deviceId}),
     );
     return VoiceStateDto.fromJson(response.data!);
   }
 
-  Future<void> leave(String guildId, String channelId) async {
-    await client.dio.post<void>('${_base(guildId, channelId)}/leave', data: const {});
+  Future<void> leave(String guildId, String channelId, {String? deviceId}) async {
+    await client.dio.post<void>(
+      '${_base(guildId, channelId)}/leave',
+      data: const {},
+      options: deviceId != null ? Options(headers: {'X-Device-Id': deviceId}) : null,
+    );
   }
 
   /// Roster-only fetch, without joining — used to populate participant

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
 import 'core/di/injector.dart';
+import 'core/device/device_id_service.dart';
 import 'core/push/push_notification_service.dart';
 import 'core/realtime/realtime_service.dart';
 import 'features/auth/data/auth_repository.dart';
@@ -22,6 +23,7 @@ Future<void> main() async {
     ),
   );
   await configureDependencies();
+  await getIt<DeviceIdService>().init();
   await getIt<AuthRepository>().init();
   if (getIt<AuthRepository>().isAuthenticated) {
     unawaited(getIt<RealtimeService>().start());

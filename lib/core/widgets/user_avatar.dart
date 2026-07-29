@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../routing/route_paths.dart';
 import '../theme/status_colors_extension.dart';
 import 'profile_resolver.dart';
+import 'status_dot.dart';
 
 /// Circular avatar resolved by user id via [ProfileResolver]. Tapping opens
 /// that user's profile unless [onTap] is overridden.
@@ -14,6 +15,7 @@ class UserAvatar extends StatelessWidget {
     this.radius = 20,
     this.onTap,
     this.fallbackLabel,
+    this.showStatus = false,
   });
 
   final String userId;
@@ -22,6 +24,12 @@ class UserAvatar extends StatelessWidget {
 
   /// Shown while no profile/avatar is available. Defaults to `?`.
   final String? fallbackLabel;
+
+  /// Overlays a [StatusDot] driven by the same cached profile — off by
+  /// default so avatars in dense rows (voice participant lists, etc.) don't
+  /// change size/shape unexpectedly; opt in where presence is meaningful
+  /// (DM lists, message authors).
+  final bool showStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -32,16 +40,30 @@ class UserAvatar extends StatelessWidget {
             ? profile!.userName[0].toUpperCase()
             : (fallbackLabel ?? '?');
 
+        final avatar = CircleAvatar(
+          radius: radius,
+          backgroundColor: context.statusColors.hover,
+          backgroundImage: profile?.avatarUrl != null ? NetworkImage(profile!.avatarUrl!) : null,
+          child: profile?.avatarUrl == null
+              ? Text(label, style: TextStyle(fontSize: radius * 0.7))
+              : null,
+        );
+
         return GestureDetector(
           onTap: onTap ?? () => context.push(RoutePaths.userProfilePath(userId)),
-          child: CircleAvatar(
-            radius: radius,
-            backgroundColor: context.statusColors.hover,
-            backgroundImage: profile?.avatarUrl != null ? NetworkImage(profile!.avatarUrl!) : null,
-            child: profile?.avatarUrl == null
-                ? Text(label, style: TextStyle(fontSize: radius * 0.7))
-                : null,
-          ),
+          child: showStatus && profile != null
+              ? Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    avatar,
+                    Positioned(
+                      right: -1,
+                      bottom: -1,
+                      child: StatusDot(status: profile.onlineStatus, size: radius * 0.5),
+                    ),
+                  ],
+                )
+              : avatar,
         );
       },
     );

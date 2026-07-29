@@ -34,6 +34,8 @@ class CallState extends Equatable {
     this.isSpeakerOn = true,
     this.connectedAt,
     this.errorMessage,
+    this.disconnectNotice,
+    this.aloneDeadline,
   });
 
   final CallPhase phase;
@@ -53,9 +55,23 @@ class CallState extends Equatable {
   final DateTime? connectedAt;
   final String? errorMessage;
 
-  /// [errorMessage] is always set as given (including `null`), never
-  /// falling back to the current value — every emitting call site
-  /// recomputes it, and `null` there means "no error", not "unchanged".
+  /// One-shot, non-error explanation for why the call just ended/was torn
+  /// down locally — e.g. "You joined this call on another device." or a
+  /// `call.CallEnded` reason translated to copy. `null` means nothing to show.
+  final String? disconnectNotice;
+
+  /// Set from `call.CallAlone` while this is the sole connected participant
+  /// — the deadline (~5 min out) the server will force-end the call at if
+  /// nobody rejoins. Cleared once another participant is observed.
+  final DateTime? aloneDeadline;
+
+  /// [errorMessage]/[disconnectNotice] are always set as given (including
+  /// `null`), never falling back to the current value — every emitting call
+  /// site recomputes them, and `null` there means "nothing to show", not
+  /// "unchanged". [aloneDeadline] is the opposite: it coalesces like most
+  /// other fields so unrelated updates (mute/deafen toggles) don't
+  /// accidentally clear an active countdown — pass [clearAloneDeadline] to
+  /// clear it explicitly.
   CallState copyWith({
     CallPhase? phase,
     CallDto? call,
@@ -65,6 +81,9 @@ class CallState extends Equatable {
     bool? isSpeakerOn,
     DateTime? connectedAt,
     String? errorMessage,
+    String? disconnectNotice,
+    DateTime? aloneDeadline,
+    bool clearAloneDeadline = false,
   }) =>
       CallState(
         phase: phase ?? this.phase,
@@ -75,11 +94,23 @@ class CallState extends Equatable {
         isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
         connectedAt: connectedAt ?? this.connectedAt,
         errorMessage: errorMessage,
+        disconnectNotice: disconnectNotice,
+        aloneDeadline: clearAloneDeadline ? null : (aloneDeadline ?? this.aloneDeadline),
       );
 
   @override
-  List<Object?> get props =>
-      [phase, call, participants, isMuted, isDeafened, isSpeakerOn, connectedAt, errorMessage];
+  List<Object?> get props => [
+        phase,
+        call,
+        participants,
+        isMuted,
+        isDeafened,
+        isSpeakerOn,
+        connectedAt,
+        errorMessage,
+        disconnectNotice,
+        aloneDeadline,
+      ];
 }
 
 /// App-lifetime singleton owning the one call the app can be in at a time —
@@ -173,20 +204,28 @@ class CallCubit extends Cubit<CallState> {
     }
   }
 
-  /// Ends a call by id regardless of whether it was ever loaded into
+  /// Hangs up a call by id regardless of whether it was ever loaded into
   /// [state.call] — the native CallKit "end" action carries only the id.
+  /// This is a local hang-up (removes just this user), not a force-end for
+  /// everyone — see [endCall].
   Future<void> endCallById(String callId) async {
     if (state.call?.id == callId) {
       await endCall();
       return;
     }
     try {
-      await repository.endCall(callId);
+      await repository.leaveCall(callId);
     } catch (_) {
       // Best-effort — nothing local to tear down for a call we never loaded.
     }
   }
 
+  /// Hangs up the current call. Calls the `leave` endpoint — this removes
+  /// just the local user, it does not end the call for anyone still
+  /// connected (a 1:1 call still ends almost immediately in practice once
+  /// the other side also leaves/was never connected, but the mechanism is
+  /// the same as a group call). There's no "end call for everyone" action in
+  /// this UI, so that's the only teardown path this cubit exposes.
   Future<void> endCall() async {
     final call = state.call;
     if (call == null) return;
@@ -195,7 +234,7 @@ class CallCubit extends Cubit<CallState> {
     emit(const CallState());
     await webRtc?.disconnect();
     try {
-      await repository.endCall(call.id);
+      await repository.leaveCall(call.id);
     } catch (_) {
       // Best-effort — we've already torn down locally.
     }
@@ -322,7 +361,12 @@ class CallCubit extends Cubit<CallState> {
       case CallParticipantJoined(:final userId, :final cfSessionId, :final audioTrackName):
         if (userId == _myUserId || state.phase != CallPhase.active) return;
         if (!state.participants.any((p) => p.userId == userId)) {
-          emit(state.copyWith(participants: [...state.participants, CallParticipantState(userId: userId)]));
+          emit(
+            state.copyWith(
+              participants: [...state.participants, CallParticipantState(userId: userId)],
+              clearAloneDeadline: true,
+            ),
+          );
         }
         unawaited(
           _webRtc?.subscribeToParticipant(
@@ -336,6 +380,12 @@ class CallCubit extends Cubit<CallState> {
         emit(state.copyWith(participants: state.participants.where((p) => p.userId != userId).toList()));
         _webRtc?.unsubscribeParticipant(userId);
 
+      case CallLifecycleParticipantLeft(:final userId):
+        // Roster-level counterpart to CallParticipantLeft above — handled
+        // identically (idempotent either way, whichever actually fires).
+        emit(state.copyWith(participants: state.participants.where((p) => p.userId != userId).toList()));
+        _webRtc?.unsubscribeParticipant(userId);
+
       case CallMuteChanged(:final userId, :final isMuted):
         emit(
           state.copyWith(
@@ -345,15 +395,42 @@ class CallCubit extends Cubit<CallState> {
           ),
         );
 
-      case CallEndedRemotely(:final callId):
+      case CallAcceptedElsewhere(:final callId):
+      case CallDeviceDismissed(:final callId):
+        // Another device resolved the ring (accepted, or this device's own
+        // decline raced a takeover) — dismiss silently, no "ended" messaging.
+        if (state.phase == CallPhase.incoming && state.call?.id == callId) {
+          emit(const CallState());
+        }
+
+      case CallDeviceTakeover(:final callId):
         if (state.call?.id == callId) {
           final webRtc = _webRtc;
           _webRtc = null;
-          emit(const CallState());
+          emit(const CallState(disconnectNotice: 'You joined this call on another device.'));
+          unawaited(webRtc?.disconnect());
+        }
+
+      case CallAlone(:final callId, :final deadline):
+        if (state.call?.id == callId && state.phase == CallPhase.active) {
+          emit(state.copyWith(aloneDeadline: deadline));
+        }
+
+      case CallEndedRemotely(:final callId, :final reason):
+        if (state.call?.id == callId) {
+          final webRtc = _webRtc;
+          _webRtc = null;
+          emit(CallState(disconnectNotice: _endedNoticeFor(reason)));
           unawaited(webRtc?.disconnect());
         }
     }
   }
+
+  String? _endedNoticeFor(String? reason) => switch (reason) {
+        'Declined' => 'Call declined.',
+        'AloneTimeout' => 'Call ended — nobody rejoined in time.',
+        _ => null,
+      };
 
   @override
   Future<void> close() {

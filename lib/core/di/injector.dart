@@ -20,6 +20,9 @@ import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/data/voice_api.dart';
 import '../../features/voice/data/voice_repository.dart';
 import '../../features/voice/webrtc/call_webrtc_service.dart';
+import '../../features/wiki/data/wiki_api.dart';
+import '../../features/wiki/data/wiki_repository.dart';
+import '../device/device_id_service.dart';
 import '../network/api_client.dart';
 import '../push/call_kit_service.dart';
 import '../push/push_notification_service.dart';
@@ -39,6 +42,9 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<SecureStorageService>(
     () => SecureStorageService(),
   );
+  getIt.registerLazySingleton<DeviceIdService>(
+    () => DeviceIdService(secureStorage: getIt()),
+  );
   getIt.registerLazySingleton<AuthApi>(() => AuthApi());
   getIt.registerLazySingleton<AuthRepository>(
     () => AuthRepository(api: getIt(), secureStorage: getIt()),
@@ -48,7 +54,7 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<RealtimeTransport>(() => SignalrNetcoreTransport());
   getIt.registerLazySingleton<RealtimeService>(
-    () => RealtimeService(transport: getIt(), authRepository: getIt()),
+    () => RealtimeService(transport: getIt(), authRepository: getIt(), deviceIdService: getIt()),
   );
   getIt.registerLazySingleton<ProfileApi>(() => ProfileApi(client: getIt()));
   getIt.registerLazySingleton<ProfileRepository>(
@@ -74,7 +80,7 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<VoiceApi>(() => VoiceApi(client: getIt()));
   getIt.registerLazySingleton<VoiceRepository>(
-    () => VoiceRepository(api: getIt(), realtimeService: getIt()),
+    () => VoiceRepository(api: getIt(), realtimeService: getIt(), deviceIdService: getIt()),
   );
   getIt.registerLazySingleton<CallCubit>(
     () => CallCubit(
@@ -85,7 +91,7 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<GuildVoiceApi>(() => GuildVoiceApi(client: getIt()));
   getIt.registerLazySingleton<GuildVoiceRepository>(
-    () => GuildVoiceRepository(api: getIt(), realtimeService: getIt()),
+    () => GuildVoiceRepository(api: getIt(), realtimeService: getIt(), deviceIdService: getIt()),
   );
   getIt.registerLazySingleton<GuildVoiceCubit>(
     () => GuildVoiceCubit(
@@ -93,6 +99,10 @@ Future<void> configureDependencies() async {
       authRepository: getIt(),
       webRtcServiceFactory: () => GuildVoiceWebRtcService(api: getIt()),
     ),
+  );
+  getIt.registerLazySingleton<WikiApi>(() => WikiApi(client: getIt()));
+  getIt.registerLazySingleton<WikiRepository>(
+    () => WikiRepository(api: getIt(), realtimeService: getIt()),
   );
   getIt.registerLazySingleton<PushTokenApi>(() => PushTokenApi(client: getIt()));
   getIt.registerLazySingleton<PushNotificationService>(

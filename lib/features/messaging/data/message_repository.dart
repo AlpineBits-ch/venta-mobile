@@ -31,6 +31,24 @@ class RemoteUserTyping extends MessageRepositoryEvent {
   final String userId;
 }
 
+class RemoteReactionAdded extends MessageRepositoryEvent {
+  const RemoteReactionAdded({required this.messageId, required this.emoji, required this.userId});
+  final String messageId;
+  final String emoji;
+  final String userId;
+}
+
+class RemoteReactionRemoved extends MessageRepositoryEvent {
+  const RemoteReactionRemoved({
+    required this.messageId,
+    required this.emoji,
+    required this.userId,
+  });
+  final String messageId;
+  final String emoji;
+  final String userId;
+}
+
 /// One instance per open thread (unlike the app-lifetime singleton
 /// repositories) — messages are inherently scoped to a single thread and
 /// there's no benefit to sharing state across threads that aren't open at
@@ -109,6 +127,22 @@ class MessageRepository {
         _eventsController.add(RemoteMessageDeleted(payload['messageId'] as String));
       case 'conversation.UserTyping' || 'guild.UserTyping':
         _eventsController.add(RemoteUserTyping(payload['userId'] as String));
+      case 'conversation.ReactionCreated' || 'guild.ReactionCreated':
+        _eventsController.add(
+          RemoteReactionAdded(
+            messageId: payload['messageId'] as String,
+            emoji: payload['emoji'] as String,
+            userId: payload['userId'] as String,
+          ),
+        );
+      case 'conversation.ReactionRemoved' || 'guild.ReactionRemoved':
+        _eventsController.add(
+          RemoteReactionRemoved(
+            messageId: payload['messageId'] as String,
+            emoji: payload['emoji'] as String,
+            userId: payload['userId'] as String,
+          ),
+        );
     }
   }
 
@@ -164,6 +198,16 @@ class MessageRepository {
       attachments: attachments,
     );
   }
+
+  Future<void> addReaction(String messageId, String emoji) => api.addReaction(
+        messageId: messageId,
+        emoji: emoji,
+        conversationId: conversationId,
+        channelId: channelId,
+      );
+
+  Future<void> removeReaction(String messageId, String emoji) =>
+      api.removeReaction(messageId: messageId, emoji: emoji, contextId: _contextId);
 
   Future<void> sendTypingIndicator() =>
       _realtimeService.invoke('$_methodPrefix.StartTyping', args: [_contextId]);

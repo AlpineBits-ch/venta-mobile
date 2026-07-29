@@ -6,6 +6,7 @@ import '../../features/guilds/data/guild_repository.dart';
 import '../../features/guilds/data/models/guild_dto.dart';
 import '../../features/profile/data/models/profile_dto.dart';
 import '../../features/profile/data/profile_repository.dart';
+import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
 import '../../features/guild_voice/presentation/widgets/voice_status_bar.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/presentation/screens/call_screen.dart';
@@ -155,6 +156,13 @@ class _AppShellState extends State<AppShell> {
       _callScreenShown = false;
       Navigator.of(context, rootNavigator: true).pop();
     }
+    // Shown from the shell's own context, not `CallScreen`'s — its route is
+    // being popped in the same beat this fires, so a SnackBar raised from
+    // inside it would vanish with the route before anyone saw it.
+    final notice = state.disconnectNotice;
+    if (notice != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(notice)));
+    }
   }
 
   @override
@@ -169,7 +177,14 @@ class _AppShellState extends State<AppShell> {
       listenWhen: (previous, current) =>
           (previous.phase == CallPhase.idle) != (current.phase == CallPhase.idle),
       listener: _syncCallScreen,
-      child: _buildShellScaffold(theme, onHome, currentGuildId, profile),
+      child: BlocListener<GuildVoiceCubit, GuildVoiceState>(
+        bloc: getIt<GuildVoiceCubit>(),
+        listenWhen: (previous, current) =>
+            current.errorMessage != null && current.errorMessage != previous.errorMessage,
+        listener: (context, state) => ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(state.errorMessage!))),
+        child: _buildShellScaffold(theme, onHome, currentGuildId, profile),
+      ),
     );
   }
 

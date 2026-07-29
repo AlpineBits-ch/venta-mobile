@@ -330,6 +330,21 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
             ),
           );
         }
+
+      case VoiceKickedByOtherDevice(:final channelId):
+        if (channelId != state.channelId) return;
+        _stopHeartbeat();
+        final webRtc = _webRtc;
+        _webRtc = null;
+        final rosters = Map<String, List<VoiceParticipantState>>.from(state.rosters);
+        rosters[channelId] = (rosters[channelId] ?? const []).where((p) => p.userId != _myUserId).toList();
+        emit(
+          GuildVoiceState(
+            rosters: rosters,
+            errorMessage: 'You joined this channel from another device.',
+          ),
+        );
+        unawaited(webRtc?.disconnect());
     }
   }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../features/auth/data/auth_repository.dart';
+import '../device/device_id_service.dart';
 import 'realtime_event.dart';
 import 'realtime_transport.dart';
 
@@ -10,10 +11,11 @@ import 'realtime_transport.dart';
 /// broadcast [Stream<RealtimeEvent>] that feature repositories subscribe to
 /// and interpret.
 class RealtimeService {
-  RealtimeService({required this.transport, required this.authRepository});
+  RealtimeService({required this.transport, required this.authRepository, required this.deviceIdService});
 
   final RealtimeTransport transport;
   final AuthRepository authRepository;
+  final DeviceIdService deviceIdService;
   bool _configured = false;
 
   static const _watchedEvents = [
@@ -28,6 +30,11 @@ class RealtimeService {
     'conversation.ReactionRemoved',
     'conversation.FriendRequestReceived',
     'conversation.FriendRequestAccepted',
+    // MLS (E2EE) key-exchange bootstrap signal, not a hydration event
+    // despite the name — Alpine's handler fetches "pending welcomes" and
+    // joins an MLS group for this conversationId. venta_mobile has no MLS
+    // yet (plaintext-first v1 scope), so this stays watched-but-unconsumed
+    // until E2EE lands rather than being wired to a no-op MLS stub.
     'conversation.Welcome',
     'presence.UserOnline',
     'presence.UserOffline',
@@ -47,11 +54,25 @@ class RealtimeService {
     'guild.PresenceChanged',
     'guild.ReactionCreated',
     'guild.ReactionRemoved',
+    'guild.WikiPageCreated',
+    'guild.WikiPageUpdated',
+    'guild.WikiPageDeleted',
+    'guild.WikiCategoryCreated',
+    'guild.WikiCategoryUpdated',
+    'guild.WikiCategoryDeleted',
     'call.IncomingCall',
     'call.ParticipantJoined',
     'call.ParticipantLeft',
     'call.MuteChanged',
     'call.CallEnded',
+    // Multi-device calling (see docs/multi-device-calls-client-spec.md):
+    // dismissing a ringing device's UI when another of the user's devices
+    // accepted/took over, plus the new group-leave/alone-timeout lifecycle.
+    'call.CallAccepted',
+    'call.CallDeviceDismissed',
+    'call.CallDeviceTakeover',
+    'call.CallParticipantLeft',
+    'call.CallAlone',
     'guild.voice.UserJoinedVoice',
     'guild.voice.UserLeftVoice',
     'guild.voice.ParticipantJoined',
@@ -63,6 +84,7 @@ class RealtimeService {
     'guild.voice.ScreenShareStarted',
     'guild.voice.ScreenShareStopped',
     'guild.voice.MovedToChannel',
+    'guild.voice.KickedByOtherDevice',
   ];
 
   final _eventsController = StreamController<RealtimeEvent>.broadcast();
@@ -78,7 +100,7 @@ class RealtimeService {
   Future<void> start() async {
     if (!_configured) {
       transport.configure(
-        hubUrl: '${authRepository.baseUrl}/api/v1/ws/hub',
+        hubUrl: '${authRepository.baseUrl}/api/v1/ws/hub?deviceId=${deviceIdService.deviceId}',
         accessTokenFactory: () => authRepository.ensureValidToken(),
       );
       for (final event in _watchedEvents) {

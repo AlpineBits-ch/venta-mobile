@@ -1,6 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import 'attachment_dto.dart';
+import 'message_reaction_dto.dart';
 
 part 'message_dto.freezed.dart';
 part 'message_dto.g.dart';
@@ -50,6 +51,7 @@ sealed class MessageDto with _$MessageDto {
     String? inReplyTo,
     @Default(<String>[]) List<String> mentions,
     @Default(<AttachmentDto>[]) List<AttachmentDto> attachments,
+    @Default(<MessageReactionDto>[]) List<MessageReactionDto> reactions,
     @Default(MessageEncryptionState.plain) MessageEncryptionState encryptionState,
     @Default(MessageType.message) MessageType type,
     @Default(MessageAuthorType.standard)

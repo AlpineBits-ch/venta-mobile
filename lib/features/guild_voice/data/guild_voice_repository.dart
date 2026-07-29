@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../../core/device/device_id_service.dart';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import 'guild_voice_api.dart';
@@ -133,13 +134,26 @@ class VoiceMovedToChannel extends GuildVoiceEvent {
   final String movedBy;
 }
 
+/// This device's session in [channelId] was just taken over by another of
+/// the user's own devices joining the same channel. Must tear down local
+/// WebRTC/audio without calling leave — the server already removed it.
+class VoiceKickedByOtherDevice extends GuildVoiceEvent {
+  const VoiceKickedByOtherDevice({required this.channelId, required this.guildId});
+  final String channelId;
+  final String guildId;
+}
+
 /// App-lifetime singleton (like `GuildRepository`/`VoiceRepository`) — voice
 /// rosters for every voice channel in every guild the user can see need to
 /// stay live even when no voice screen is on-screen, so this can't be scoped
 /// to one joined channel.
 class GuildVoiceRepository {
-  GuildVoiceRepository({required this.api, required RealtimeService realtimeService})
-      : _realtimeService = realtimeService {
+  GuildVoiceRepository({
+    required this.api,
+    required RealtimeService realtimeService,
+    required DeviceIdService deviceIdService,
+  })  : _realtimeService = realtimeService,
+        _deviceIdService = deviceIdService {
     _realtimeSub = realtimeService.events
         .where((e) => e.name.startsWith('guild.voice.'))
         .listen(_handleRealtimeEvent);
@@ -147,6 +161,7 @@ class GuildVoiceRepository {
 
   final GuildVoiceApi api;
   final RealtimeService _realtimeService;
+  final DeviceIdService _deviceIdService;
   late final StreamSubscription<RealtimeEvent> _realtimeSub;
 
   final _eventsController = StreamController<GuildVoiceEvent>.broadcast();
@@ -249,12 +264,21 @@ class GuildVoiceRepository {
             movedBy: payload['movedBy'] as String,
           ),
         );
+      case 'guild.voice.KickedByOtherDevice':
+        _eventsController.add(
+          VoiceKickedByOtherDevice(
+            channelId: payload['channelId'] as String,
+            guildId: payload['guildId'] as String,
+          ),
+        );
     }
   }
 
-  Future<VoiceStateDto> join(String guildId, String channelId) => api.join(guildId, channelId);
+  Future<VoiceStateDto> join(String guildId, String channelId) =>
+      api.join(guildId, channelId, deviceId: _deviceIdService.deviceId);
 
-  Future<void> leave(String guildId, String channelId) => api.leave(guildId, channelId);
+  Future<void> leave(String guildId, String channelId) =>
+      api.leave(guildId, channelId, deviceId: _deviceIdService.deviceId);
 
   Future<VoiceStateDto> getState(String guildId, String channelId) => api.getState(guildId, channelId);
 

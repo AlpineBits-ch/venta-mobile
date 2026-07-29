@@ -16,6 +16,7 @@ import '../../data/guild_repository.dart';
 import '../../data/models/category_dto.dart';
 import '../../data/models/channel_dto.dart';
 import '../../data/models/guild_dto.dart';
+import '../../data/models/guild_permissions.dart';
 
 /// Content pane shown inside `AppShell` when a server is selected from the
 /// rail — categories/channels for that guild. Tapping a channel pushes the
@@ -32,7 +33,7 @@ class GuildDetailScreen extends StatefulWidget {
 
 class _GuildDetailScreenState extends State<GuildDetailScreen> {
   GuildDto? _guild;
-  bool _canManageGuild = false;
+  GuildPermissions _permissions = GuildPermissions.none;
 
   @override
   void initState() {
@@ -44,10 +45,10 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     try {
       final self = await getIt<GuildRepository>().getOwnMember(widget.guildId);
       if (!mounted) return;
-      setState(() => _canManageGuild = self.effectivePermissions(ownerId).has('ManageGuild'));
+      setState(() => _permissions = self.effectivePermissions(ownerId));
     } catch (_) {
-      // Leave the settings entry hidden — the tab itself is still
-      // permission-checked server-side on every write regardless.
+      // Leave permission-gated entries hidden — they're still enforced
+      // server-side on every write regardless.
     }
   }
 
@@ -137,11 +138,17 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
       appBar: AppBar(
         title: Text(guild.name),
         actions: [
+          if (_permissions.has('ViewWiki'))
+            IconButton(
+              icon: const Icon(Icons.menu_book_outlined),
+              tooltip: 'Wiki',
+              onPressed: () => context.push(RoutePaths.serverWikiPath(guild.id)),
+            ),
           IconButton(
             icon: const Icon(Icons.people_outline),
             onPressed: () => context.push(RoutePaths.serverMembersPath(guild.id)),
           ),
-          if (_canManageGuild)
+          if (_permissions.has('ManageGuild'))
             IconButton(
               icon: const Icon(Icons.settings_outlined),
               onPressed: () => context.push(RoutePaths.serverSettingsPath(guild.id)),

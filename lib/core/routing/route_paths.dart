@@ -11,6 +11,15 @@ abstract final class RoutePaths {
   static const serverChannel = '/server/:guildId/channel/:channelId';
   static const serverMembers = '/server/:guildId/members';
   static const serverSettings = '/server/:guildId/settings';
+  static const serverWiki = '/server/:guildId/wiki';
+  /// Declared/registered before [serverWikiPage] in `app_router.dart` — both
+  /// match a 4-segment `/server/:guildId/wiki/*` location, and go_router
+  /// picks the first declared match, so this literal `new` segment must be
+  /// tried before the `:pageId` wildcard swallows it.
+  static const serverWikiNewPage = '/server/:guildId/wiki/new';
+  static const serverWikiPage = '/server/:guildId/wiki/:pageId';
+  static const serverWikiPageEdit = '/server/:guildId/wiki/:pageId/edit';
+  static const serverWikiHistory = '/server/:guildId/wiki/:pageId/history';
 
   static const profileSettings = '/profile-settings';
   static const userProfile = '/user/:userId';
@@ -28,4 +37,17 @@ abstract final class RoutePaths {
   static String serverMembersPath(String guildId) => '/server/$guildId/members';
 
   static String serverSettingsPath(String guildId) => '/server/$guildId/settings';
+
+  static String serverWikiPath(String guildId) => '/server/$guildId/wiki';
+
+  static String serverWikiNewPagePath(String guildId) => '/server/$guildId/wiki/new';
+
+  static String serverWikiPagePath(String guildId, String pageId) =>
+      '/server/$guildId/wiki/$pageId';
+
+  static String serverWikiPageEditPath(String guildId, String pageId) =>
+      '/server/$guildId/wiki/$pageId/edit';
+
+  static String serverWikiHistoryPath(String guildId, String pageId) =>
+      '/server/$guildId/wiki/$pageId/history';
 }

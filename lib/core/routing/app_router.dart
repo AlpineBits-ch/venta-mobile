@@ -17,6 +17,10 @@ import '../../features/guilds/presentation/screens/guild_detail_screen.dart';
 import '../../features/guilds/presentation/screens/guild_members_screen.dart';
 import '../../features/guilds/presentation/screens/guild_settings/guild_settings_screen.dart';
 import '../../features/messaging/presentation/screens/conversation_screen.dart';
+import '../../features/wiki/presentation/screens/wiki_editor_screen.dart';
+import '../../features/wiki/presentation/screens/wiki_history_screen.dart';
+import '../../features/wiki/presentation/screens/wiki_home_screen.dart';
+import '../../features/wiki/presentation/screens/wiki_page_view_screen.dart';
 import '../../features/profile/bloc/self_profile_cubit.dart';
 import '../../features/profile/presentation/screens/profile_settings_screen.dart';
 import '../../features/profile/presentation/screens/user_profile_screen.dart';
@@ -143,6 +147,42 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         path: RoutePaths.serverSettings,
         builder: (context, state) => GuildSettingsScreen(
           guildId: state.pathParameters['guildId']!,
+        ),
+      ),
+      GoRoute(
+        path: RoutePaths.serverWiki,
+        builder: (context, state) => WikiHomeScreen(
+          guildId: state.pathParameters['guildId']!,
+        ),
+      ),
+      // Declared before serverWikiPage — see the comment on
+      // RoutePaths.serverWikiNewPage for why literal `new` must be tried
+      // before the `:pageId` wildcard.
+      GoRoute(
+        path: RoutePaths.serverWikiNewPage,
+        builder: (context, state) => WikiEditorScreen(
+          guildId: state.pathParameters['guildId']!,
+        ),
+      ),
+      GoRoute(
+        path: RoutePaths.serverWikiPageEdit,
+        builder: (context, state) => WikiEditorScreen(
+          guildId: state.pathParameters['guildId']!,
+          pageId: state.pathParameters['pageId']!,
+        ),
+      ),
+      GoRoute(
+        path: RoutePaths.serverWikiHistory,
+        builder: (context, state) => WikiHistoryScreen(
+          guildId: state.pathParameters['guildId']!,
+          pageId: state.pathParameters['pageId']!,
+        ),
+      ),
+      GoRoute(
+        path: RoutePaths.serverWikiPage,
+        builder: (context, state) => WikiPageViewScreen(
+          guildId: state.pathParameters['guildId']!,
+          pageId: state.pathParameters['pageId']!,
         ),
       ),
       GoRoute(

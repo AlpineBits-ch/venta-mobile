@@ -83,6 +83,39 @@ class MessageApi {
   String thumbnailUrl(String attachmentId) =>
       client.url('/api/v1/messaging/attachments/$attachmentId/thumbnail');
 
+  /// `conversationId` is sent even for a channel reaction (as `''`) to match
+  /// the request shape the server expects — mirrors Alpine's
+  /// `CreateReactionDto`.
+  Future<void> addReaction({
+    required String messageId,
+    required String emoji,
+    String? conversationId,
+    String? channelId,
+  }) {
+    return client.dio.post<void>(
+      client.url('/api/v1/messaging/messages/$messageId/reactions'),
+      data: {
+        'conversationId': conversationId ?? '',
+        'reaction': emoji,
+        if (channelId != null) 'channelId': channelId,
+      },
+    );
+  }
+
+  /// `contextId` is the conversationId or channelId the message belongs to
+  /// — mirrors Alpine's `RemoveReactionDto`. Dio's `delete` accepts a body
+  /// via `data`, matching the server's DELETE-with-body contract.
+  Future<void> removeReaction({
+    required String messageId,
+    required String emoji,
+    required String contextId,
+  }) {
+    return client.dio.delete<void>(
+      client.url('/api/v1/messaging/messages/$messageId/reactions'),
+      data: {'reaction': emoji, 'contextId': contextId},
+    );
+  }
+
   Future<List<MessageDto>> getForConversation(
     String conversationId, {
     int offset = 0,

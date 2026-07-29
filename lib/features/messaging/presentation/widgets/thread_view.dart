@@ -22,6 +22,8 @@ import '../../data/models/message_dto.dart';
 import 'bot_command_options_dialog.dart';
 import 'gif_picker_sheet.dart';
 import 'message_attachment_view.dart';
+import 'reaction_bar.dart';
+import 'reaction_picker_sheet.dart';
 
 const _imageExtensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'bmp'};
 
@@ -354,7 +356,22 @@ class _ThreadViewState extends State<ThreadView> {
                       final message = state.messages[index];
                       final isMe = message.authorId == widget.myUserId;
                       final failed = state.failedSendIds.contains(message.id);
-                      return _MessageBubble(message: message, isMe: isMe, failed: failed);
+                      return _MessageBubble(
+                        message: message,
+                        isMe: isMe,
+                        failed: failed,
+                        myUserId: widget.myUserId,
+                        onReactionToggle: (emoji) => context
+                            .read<MessageThreadBloc>()
+                            .add(ReactionToggled(messageId: message.id, emoji: emoji)),
+                        onAddReaction: () async {
+                          final emoji = await showReactionPickerSheet(context);
+                          if (emoji == null || !context.mounted) return;
+                          context
+                              .read<MessageThreadBloc>()
+                              .add(ReactionToggled(messageId: message.id, emoji: emoji));
+                        },
+                      );
                     },
                   ),
                 );
@@ -576,11 +593,21 @@ class _PendingAttachmentChip extends StatelessWidget {
 /// Discord-style row: avatar on the left, author name (bold, a step above
 /// body size) above the message text on the right — plain text, no bubble.
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.isMe, required this.failed});
+  const _MessageBubble({
+    required this.message,
+    required this.isMe,
+    required this.failed,
+    required this.myUserId,
+    required this.onReactionToggle,
+    required this.onAddReaction,
+  });
 
   final MessageDto message;
   final bool isMe;
   final bool failed;
+  final String myUserId;
+  final ValueChanged<String> onReactionToggle;
+  final VoidCallback onAddReaction;
 
   @override
   Widget build(BuildContext context) {
@@ -591,12 +618,13 @@ class _MessageBubble extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => context.push(RoutePaths.userProfilePath(message.authorId)),
+      onLongPress: message.isPending || message.isBotCommandPlaceholder ? null : onAddReaction,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            UserAvatar(userId: message.authorId, radius: AppRadii.avatarMedium),
+            UserAvatar(userId: message.authorId, radius: AppRadii.avatarMedium, showStatus: true),
             const SizedBox(width: AppSpacing.s),
             Expanded(
               child: Column(
@@ -649,6 +677,12 @@ class _MessageBubble extends StatelessWidget {
                   else if (text.isNotEmpty)
                     Text(text, style: theme.textTheme.bodyMedium),
                   MessageAttachmentsView(attachments: message.attachments),
+                  MessageReactionBar(
+                    reactions: message.reactions,
+                    myUserId: myUserId,
+                    onToggle: onReactionToggle,
+                    onAddPressed: onAddReaction,
+                  ),
                   if (message.isPending || failed)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
