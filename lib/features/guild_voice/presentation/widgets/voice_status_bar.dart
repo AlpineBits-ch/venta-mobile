@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/elapsed_time_label.dart';
 import '../../bloc/guild_voice_cubit.dart';
 import '../screens/guild_voice_screen.dart';
 
@@ -43,11 +44,19 @@ class VoiceStatusBar extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          state.phase == GuildVoicePhase.connecting
-                              ? 'Connecting…'
-                              : 'Voice connected',
-                          style: theme.textTheme.labelMedium,
+                        Row(
+                          children: [
+                            Text(
+                              state.phase == GuildVoicePhase.connecting
+                                  ? 'Connecting…'
+                                  : 'Voice connected',
+                              style: theme.textTheme.labelMedium,
+                            ),
+                            if (state.phase == GuildVoicePhase.active && state.connectedAt != null) ...[
+                              const Text(' · ', style: TextStyle(color: Colors.white54)),
+                              ElapsedTimeLabel(since: state.connectedAt!, style: theme.textTheme.labelMedium),
+                            ],
+                          ],
                         ),
                         Text(
                           '${state.channelName ?? ''} · ${state.guildName ?? ''}',

@@ -6,6 +6,17 @@ abstract final class AppTypography {
   static TextTheme textTheme(Color primary, Color secondary, Color muted) {
     final base = GoogleFonts.interTextTheme();
     return base.copyWith(
+      // Dialog titles (AlertDialog's Material 3 default reads headlineSmall)
+      // and any other display/headline text — left uncolored here before,
+      // these stayed at Google Fonts' default near-black regardless of
+      // theme brightness, rendering as black-on-black in dialogs like
+      // "Create a server"/"Create a channel" on the dark theme.
+      displayLarge: base.displayLarge?.copyWith(color: primary),
+      displayMedium: base.displayMedium?.copyWith(color: primary),
+      displaySmall: base.displaySmall?.copyWith(color: primary),
+      headlineLarge: base.headlineLarge?.copyWith(color: primary),
+      headlineMedium: base.headlineMedium?.copyWith(color: primary),
+      headlineSmall: base.headlineSmall?.copyWith(color: primary),
       // Channel / server names, screen titles
       titleLarge: base.titleLarge?.copyWith(
         fontWeight: FontWeight.w700,

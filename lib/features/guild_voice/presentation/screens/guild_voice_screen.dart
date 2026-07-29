@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/elapsed_time_label.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../bloc/guild_voice_cubit.dart';
@@ -47,6 +48,10 @@ class GuildVoiceScreen extends StatelessWidget {
                     state.guildName ?? '',
                     style: const TextStyle(color: Colors.white70),
                   ),
+                  if (state.phase == GuildVoicePhase.active && state.connectedAt != null) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    ElapsedTimeLabel(since: state.connectedAt!),
+                  ],
                   const SizedBox(height: AppSpacing.xl),
                   Expanded(
                     child: state.phase == GuildVoicePhase.connecting
@@ -70,24 +75,28 @@ class GuildVoiceScreen extends StatelessWidget {
                     children: [
                       _ActionButton(
                         icon: state.isMuted ? Icons.mic_off : Icons.mic,
+                        label: state.isMuted ? 'Unmute' : 'Mute',
                         background: state.isMuted ? Colors.white : Colors.white24,
                         iconColor: state.isMuted ? Colors.black : Colors.white,
                         onTap: () => getIt<GuildVoiceCubit>().toggleMute(),
                       ),
                       _ActionButton(
-                        icon: state.isDeafened ? Icons.headset_off : Icons.headset,
+                        icon: state.isDeafened ? Icons.hearing_disabled : Icons.headset,
+                        label: state.isDeafened ? 'Undeafen' : 'Deafen',
                         background: state.isDeafened ? Colors.white : Colors.white24,
                         iconColor: state.isDeafened ? Colors.black : Colors.white,
                         onTap: () => getIt<GuildVoiceCubit>().toggleDeafen(),
                       ),
                       _ActionButton(
-                        icon: state.isSpeakerOn ? Icons.volume_up : Icons.hearing,
+                        icon: state.isSpeakerOn ? Icons.volume_up : Icons.phone_in_talk,
+                        label: state.isSpeakerOn ? 'Speaker' : 'Earpiece',
                         background: state.isSpeakerOn ? Colors.white24 : Colors.white,
                         iconColor: state.isSpeakerOn ? Colors.white : Colors.black,
                         onTap: () => getIt<GuildVoiceCubit>().toggleSpeaker(),
                       ),
                       _ActionButton(
                         icon: Icons.call_end,
+                        label: 'Leave',
                         background: Colors.red,
                         onTap: () {
                           getIt<GuildVoiceCubit>().leave();
@@ -149,18 +158,29 @@ class _ActionButton extends StatelessWidget {
     required this.background,
     required this.onTap,
     this.iconColor = Colors.white,
+    this.label,
   });
 
   final IconData icon;
   final Color background;
   final Color iconColor;
   final VoidCallback onTap;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: CircleAvatar(radius: 30, backgroundColor: background, child: Icon(icon, color: iconColor)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(radius: 30, backgroundColor: background, child: Icon(icon, color: iconColor)),
+          if (label != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ],
+        ],
+      ),
     );
   }
 }

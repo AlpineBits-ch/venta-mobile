@@ -31,6 +31,7 @@ class CallState extends Equatable {
     this.isMuted = false,
     this.isDeafened = false,
     this.isSpeakerOn = true,
+    this.connectedAt,
     this.errorMessage,
   });
 
@@ -45,6 +46,10 @@ class CallState extends Equatable {
   /// connected, calls were otherwise landing on the quiet earpiece route
   /// with no way to switch, unlike every other calling app.
   final bool isSpeakerOn;
+
+  /// Set once, the moment the call becomes [CallPhase.active] — drives the
+  /// elapsed-time display. Never touched again for the life of the call.
+  final DateTime? connectedAt;
   final String? errorMessage;
 
   /// [errorMessage] is always set as given (including `null`), never
@@ -57,6 +62,7 @@ class CallState extends Equatable {
     bool? isMuted,
     bool? isDeafened,
     bool? isSpeakerOn,
+    DateTime? connectedAt,
     String? errorMessage,
   }) =>
       CallState(
@@ -66,12 +72,13 @@ class CallState extends Equatable {
         isMuted: isMuted ?? this.isMuted,
         isDeafened: isDeafened ?? this.isDeafened,
         isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
+        connectedAt: connectedAt ?? this.connectedAt,
         errorMessage: errorMessage,
       );
 
   @override
   List<Object?> get props =>
-      [phase, call, participants, isMuted, isDeafened, isSpeakerOn, errorMessage];
+      [phase, call, participants, isMuted, isDeafened, isSpeakerOn, connectedAt, errorMessage];
 }
 
 /// App-lifetime singleton owning the one call the app can be in at a time —
@@ -220,7 +227,14 @@ class CallCubit extends Cubit<CallState> {
     final webRtc = _webRtcServiceFactory();
     _webRtc = webRtc;
     final participants = call.participants.map((p) => CallParticipantState(userId: p.userId)).toList();
-    emit(state.copyWith(phase: CallPhase.active, call: call, participants: participants));
+    emit(
+      state.copyWith(
+        phase: CallPhase.active,
+        call: call,
+        participants: participants,
+        connectedAt: DateTime.now(),
+      ),
+    );
     try {
       await webRtc.connect(call.id);
       webRtc.setMuted(state.isMuted);

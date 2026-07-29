@@ -45,6 +45,7 @@ class GuildVoiceState extends Equatable {
     this.isMuted = false,
     this.isDeafened = false,
     this.isSpeakerOn = true,
+    this.connectedAt,
     this.rosters = const {},
     this.errorMessage,
   });
@@ -62,6 +63,11 @@ class GuildVoiceState extends Equatable {
   /// connected, calls were otherwise landing on the quiet earpiece route
   /// with no way to switch, unlike every other calling app.
   final bool isSpeakerOn;
+
+  /// Set once, the moment the channel join reaches [GuildVoicePhase.active]
+  /// — drives the elapsed-time display. Never touched again until the next
+  /// join (leave/error reset to a fresh [GuildVoiceState] with this null).
+  final DateTime? connectedAt;
 
   /// Every voice channel's roster, keyed by channelId — not just the one
   /// the local user has joined. This is what lets the sidebar show live
@@ -85,6 +91,7 @@ class GuildVoiceState extends Equatable {
     bool? isMuted,
     bool? isDeafened,
     bool? isSpeakerOn,
+    DateTime? connectedAt,
     Map<String, List<VoiceParticipantState>>? rosters,
     String? errorMessage,
   }) =>
@@ -97,6 +104,7 @@ class GuildVoiceState extends Equatable {
         isMuted: isMuted ?? this.isMuted,
         isDeafened: isDeafened ?? this.isDeafened,
         isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
+        connectedAt: connectedAt ?? this.connectedAt,
         rosters: rosters ?? this.rosters,
         errorMessage: errorMessage,
       );
@@ -111,6 +119,7 @@ class GuildVoiceState extends Equatable {
         isMuted,
         isDeafened,
         isSpeakerOn,
+        connectedAt,
         rosters,
         errorMessage,
       ];
@@ -241,7 +250,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       for (final p in voiceState.participants)
         if (p.userId != _myUserId) _toParticipantState(p),
     ];
-    emit(state.copyWith(phase: GuildVoicePhase.active, rosters: rosters));
+    emit(state.copyWith(phase: GuildVoicePhase.active, rosters: rosters, connectedAt: DateTime.now()));
     _startHeartbeat();
 
     try {

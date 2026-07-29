@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/elapsed_time_label.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
@@ -76,11 +77,13 @@ class _IncomingCallView extends StatelessWidget {
             children: [
               _CallActionButton(
                 icon: Icons.call_end,
+                label: 'Decline',
                 background: Colors.red,
                 onTap: () => context.read<CallCubit>().declineIncomingCall(),
               ),
               _CallActionButton(
                 icon: Icons.call,
+                label: 'Accept',
                 background: Colors.green,
                 onTap: () => context.read<CallCubit>().acceptIncomingCall(),
               ),
@@ -112,6 +115,10 @@ class _ActiveCallView extends StatelessWidget {
             state.phase == CallPhase.connecting ? 'Connecting…' : 'Voice call',
             style: theme.textTheme.titleMedium?.copyWith(color: Colors.white70),
           ),
+          if (state.phase == CallPhase.active && state.connectedAt != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            ElapsedTimeLabel(since: state.connectedAt!),
+          ],
           const SizedBox(height: AppSpacing.xl),
           Expanded(
             child: Center(
@@ -133,24 +140,28 @@ class _ActiveCallView extends StatelessWidget {
             children: [
               _CallActionButton(
                 icon: state.isMuted ? Icons.mic_off : Icons.mic,
+                label: state.isMuted ? 'Unmute' : 'Mute',
                 background: state.isMuted ? Colors.white : Colors.white24,
                 iconColor: state.isMuted ? Colors.black : Colors.white,
                 onTap: () => context.read<CallCubit>().toggleMute(),
               ),
               _CallActionButton(
-                icon: state.isDeafened ? Icons.headset_off : Icons.headset,
+                icon: state.isDeafened ? Icons.hearing_disabled : Icons.headset,
+                label: state.isDeafened ? 'Undeafen' : 'Deafen',
                 background: state.isDeafened ? Colors.white : Colors.white24,
                 iconColor: state.isDeafened ? Colors.black : Colors.white,
                 onTap: () => context.read<CallCubit>().toggleDeafen(),
               ),
               _CallActionButton(
-                icon: state.isSpeakerOn ? Icons.volume_up : Icons.hearing,
+                icon: state.isSpeakerOn ? Icons.volume_up : Icons.phone_in_talk,
+                label: state.isSpeakerOn ? 'Speaker' : 'Earpiece',
                 background: state.isSpeakerOn ? Colors.white24 : Colors.white,
                 iconColor: state.isSpeakerOn ? Colors.white : Colors.black,
                 onTap: () => context.read<CallCubit>().toggleSpeaker(),
               ),
               _CallActionButton(
                 icon: Icons.call_end,
+                label: 'End',
                 background: Colors.red,
                 onTap: () => context.read<CallCubit>().endCall(),
               ),
@@ -207,22 +218,34 @@ class _CallActionButton extends StatelessWidget {
     required this.background,
     required this.onTap,
     this.iconColor = Colors.white,
+    this.label,
   });
 
   final IconData icon;
   final Color background;
   final Color iconColor;
   final VoidCallback onTap;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: CircleAvatar(
-        radius: 30,
-        backgroundColor: background,
-        child: Icon(icon, color: iconColor),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 30,
+            backgroundColor: background,
+            child: Icon(icon, color: iconColor),
+          ),
+          if (label != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ],
+        ],
       ),
     );
   }
 }
+
