@@ -54,9 +54,19 @@ import flutter_callkit_incoming
   // Booting this headless engine first guarantees the plugin is registered
   // (and sharedInstance non-nil) before we try to report the call, with no
   // dependency on any scene ever connecting.
+  //
+  // Runs the dedicated `voipHeadlessMain` entrypoint (lib/main.dart), NOT
+  // the app's real `main()` - GeneratedPluginRegistrant.register is a
+  // native-side operation that doesn't need the Dart isolate to have done
+  // anything, but the real main() does Firebase init, HydratedStorage disk
+  // I/O, the full DI graph, and an auth token refresh, which together are
+  // slow enough on a cold headless engine to blow straight past
+  // FrontBoard's watchdog anyway - confirmed by a crash report showing a
+  // fully-booted Dart VM (worker threads and all) still getting
+  // 0xbaadca11'd ~7s in, on the build that first shipped this engine.
   private lazy var voipEngine: FlutterEngine = {
     let engine = FlutterEngine(name: "venta_voip_engine")
-    engine.run()
+    engine.run(withEntrypoint: "voipHeadlessMain")
     GeneratedPluginRegistrant.register(with: engine)
     return engine
   }()

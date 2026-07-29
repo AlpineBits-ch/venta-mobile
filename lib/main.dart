@@ -12,6 +12,20 @@ import 'core/push/push_notification_service.dart';
 import 'core/realtime/realtime_service.dart';
 import 'features/auth/data/auth_repository.dart';
 
+/// Dedicated entrypoint for AppDelegate.swift's headless `voipEngine` -
+/// exists purely to let a PushKit-triggered engine finish native plugin
+/// registration (GeneratedPluginRegistrant.register, which needs a running
+/// engine but not a running Dart isolate to have done anything) fast enough
+/// to beat FrontBoard's watchdog. Running the real `main()` there instead
+/// - Firebase, HydratedStorage disk I/O, the full DI graph, an auth token
+/// refresh - took long enough to get the process SIGKILLed with
+/// FRONTBOARD 0xbaadca11 before it ever finished, even though the plugin
+/// registration itself completes near-instantly. Must stay a trivial,
+/// top-level, `vm:entry-point`-annotated function or the AOT compiler tree-
+/// shakes it and `FlutterEngine.run(withEntrypoint:)` fails to find it.
+@pragma('vm:entry-point')
+void voipHeadlessMain() {}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
