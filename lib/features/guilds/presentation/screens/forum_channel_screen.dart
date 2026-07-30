@@ -64,9 +64,7 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
   Future<void> _load() async {
     if (mounted) setState(() => _loadFailed = false);
     try {
-      final posts = await getIt<GuildRepository>().getThreads(
-        widget.channelId,
-      );
+      final posts = await getIt<GuildRepository>().getThreads(widget.channelId);
       if (mounted) {
         setState(() {
           _posts = posts;
@@ -137,10 +135,7 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _loadFailed
-          ? LoadFailureView(
-              message: 'Couldn\'t load posts.',
-              onRetry: _load,
-            )
+          ? LoadFailureView(message: 'Couldn\'t load posts.', onRetry: _load)
           : posts == null || posts.isEmpty
           ? Center(
               child: Text(

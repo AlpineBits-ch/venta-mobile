@@ -216,7 +216,10 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.waving_hand_outlined, color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.waving_hand_outlined,
+                      color: theme.colorScheme.primary,
+                    ),
                     const SizedBox(width: AppSpacing.s),
                     Expanded(
                       child: Text(
@@ -621,9 +624,7 @@ class _ChannelTile extends StatelessWidget {
       title: Text(
         channel.name,
         style: isUnread
-            ? theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              )
+            ? theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)
             : theme.textTheme.bodyMedium,
       ),
       trailing: mentionCount > 0

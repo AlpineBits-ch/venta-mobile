@@ -3,24 +3,30 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/button_progress_indicator.dart';
+import '../../../auth/data/account_repository.dart';
 import '../../../auth/data/identity_api.dart';
 
-/// Enroll/disable authenticator-app 2FA and manage recovery codes. Pushed
-/// from `ProfileSettingsScreen`'s security section rather than a go_router
-/// route - nothing deep-links into it.
+/// Enroll/disable authenticator-app 2FA and manage recovery codes. Reached
+/// from the settings index (`RoutePaths.mfaSettings`).
 class MfaSettingsScreen extends StatefulWidget {
-  const MfaSettingsScreen({super.key, required this.enabled});
+  const MfaSettingsScreen({super.key, this.enabled});
 
-  final bool enabled;
+  /// Current 2FA state when the caller already has the account loaded. `null`
+  /// means "look it up yourself" - a route restored from a cold start has no
+  /// caller to ask, and guessing `false` would offer to enroll someone who is
+  /// already enrolled.
+  final bool? enabled;
 
   @override
   State<MfaSettingsScreen> createState() => _MfaSettingsScreenState();
 }
 
 class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
-  late bool _enabled = widget.enabled;
+  late bool _enabled = widget.enabled ?? false;
   MfaEnrollment? _enrollment;
   bool _enrolling = false;
   final _codeController = TextEditingController();
@@ -28,6 +34,22 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
   List<String>? _recoveryCodes;
   bool _busy = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.enabled == null) _loadEnabled();
+  }
+
+  Future<void> _loadEnabled() async {
+    try {
+      final account = await getIt<AccountRepository>().getSelf();
+      if (mounted) setState(() => _enabled = account.mfaEnabled);
+    } catch (_) {
+      // Overview stays on the "set up" path; enrolling while already enrolled
+      // is rejected by the server rather than silently doing the wrong thing.
+    }
+  }
 
   @override
   void dispose() {
@@ -120,9 +142,9 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
     } catch (_) {
       if (mounted) {
         setState(() => _busy = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not disable 2FA.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not disable 2FA.')));
       }
     }
   }
@@ -200,7 +222,10 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Two-Factor Authentication')),
+      appBar: AppBar(
+        leading: const AppBackButton(fallbackLocation: RoutePaths.settings),
+        title: const Text('Two-Factor Authentication'),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.l),
@@ -359,10 +384,7 @@ class _EnrollView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.m),
-        Text(
-          'Or enter this code manually:',
-          style: theme.textTheme.bodySmall,
-        ),
+        Text('Or enter this code manually:', style: theme.textTheme.bodySmall),
         const SizedBox(height: AppSpacing.xs),
         SelectableText(
           enrollment.secret,
@@ -462,10 +484,7 @@ class _RecoveryCodesView extends StatelessWidget {
           label: const Text('Copy all'),
         ),
         const SizedBox(height: AppSpacing.l),
-        FilledButton(
-          onPressed: onDone,
-          child: const Text('I\'ve saved these'),
-        ),
+        FilledButton(onPressed: onDone, child: const Text('I\'ve saved these')),
       ],
     );
   }

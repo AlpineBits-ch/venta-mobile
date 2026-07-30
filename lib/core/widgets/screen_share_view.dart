@@ -28,7 +28,11 @@ class ScreenShareView extends StatelessWidget {
         return Stack(
           alignment: Alignment.bottomLeft,
           children: [
-            VideoParticipantTile(track: track, width: width, height: width * 9 / 16),
+            VideoParticipantTile(
+              track: track,
+              width: width,
+              height: width * 9 / 16,
+            ),
             Padding(
               padding: const EdgeInsets.all(8),
               child: DecoratedBox(

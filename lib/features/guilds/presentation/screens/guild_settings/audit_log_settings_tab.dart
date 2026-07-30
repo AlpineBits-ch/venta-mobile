@@ -75,7 +75,8 @@ String _describeKnown(AuditActionType type, bool hasTarget) => switch (type) {
   AuditActionType.guildDeleted => 'deleted the server',
   AuditActionType.inviteCreated => 'created an invite',
   AuditActionType.inviteDeleted => 'deleted an invite',
-  AuditActionType.botInstalled => hasTarget ? 'installed bot' : 'installed a bot',
+  AuditActionType.botInstalled =>
+    hasTarget ? 'installed bot' : 'installed a bot',
   AuditActionType.botUninstalled =>
     hasTarget ? 'uninstalled bot' : 'uninstalled a bot',
   AuditActionType.guildImportedFromDiscord =>
@@ -89,7 +90,9 @@ String _describeKnown(AuditActionType type, bool hasTarget) => switch (type) {
   // Note the actor here is the member who tripped auto-mod, not a moderator -
   // phrased passively so the row doesn't read as if they moderated someone.
   AuditActionType.autoModMessageBlocked =>
-    hasTarget ? 'had a message blocked in' : 'had a message blocked by auto-mod',
+    hasTarget
+        ? 'had a message blocked in'
+        : 'had a message blocked by auto-mod',
   AuditActionType.onboardingConfigUpdated => 'updated onboarding',
   AuditActionType.scheduledEventCreated => 'created an event',
   AuditActionType.scheduledEventUpdated => 'updated an event',
@@ -228,17 +231,14 @@ class _AuditRow extends StatelessWidget {
     final targetId = entry.targetId;
 
     final resolvedName =
-        targetId == null ||
-            kind == _TargetKind.none ||
-            kind == _TargetKind.user
+        targetId == null || kind == _TargetKind.none || kind == _TargetKind.user
         ? null
         : cachedTargetName(kind, targetId);
 
     // User targets resolve asynchronously, so the phrase is built knowing a
     // name is coming even before it arrives.
     final hasTarget =
-        targetId != null &&
-        (kind == _TargetKind.user || resolvedName != null);
+        targetId != null && (kind == _TargetKind.user || resolvedName != null);
 
     return ListTile(
       isThreeLine: summary != null,

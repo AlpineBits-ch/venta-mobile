@@ -14,8 +14,7 @@ import 'package:hydrated_bloc/hydrated_bloc.dart';
 abstract final class RoutePersistence {
   static const _key = 'last_route_location';
 
-  static String? get lastLocation =>
-      HydratedBloc.storage.read(_key) as String?;
+  static String? get lastLocation => HydratedBloc.storage.read(_key) as String?;
 
   static void save(String location) {
     unawaited(HydratedBloc.storage.write(_key, location));

@@ -120,9 +120,7 @@ class _OnboardingSettingsTabState extends State<OnboardingSettingsTab> {
           // Inert while onboarding is off - the rules and suggested channels
           // only apply once the master switch is on.
           enabled: config.enabled,
-          decoration: const InputDecoration(
-            hintText: '1. Be nice\n2. ...',
-          ),
+          decoration: const InputDecoration(hintText: '1. Be nice\n2. ...'),
         ),
         if (channels.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.l),

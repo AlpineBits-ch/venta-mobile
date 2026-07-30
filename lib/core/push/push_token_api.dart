@@ -32,7 +32,9 @@ class PushTokenApi {
         return;
       } catch (e) {
         if (attempt >= 3) {
-          debugPrint('PushTokenApi: giving up on $path after $attempt attempts: $e');
+          debugPrint(
+            'PushTokenApi: giving up on $path after $attempt attempts: $e',
+          );
           return;
         }
         await Future<void>.delayed(Duration(seconds: attempt * 2));

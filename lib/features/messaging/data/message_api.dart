@@ -14,8 +14,9 @@ class AutoModBlockedException implements Exception {
 
   String get message => switch (reason) {
     'blocked_word' => 'Your message contains a word that isn\'t allowed here.',
-    'rate_limited' => 'You\'re sending messages too quickly - try again in '
-        'a moment.',
+    'rate_limited' =>
+      'You\'re sending messages too quickly - try again in '
+          'a moment.',
     _ => 'That message was blocked by this server\'s auto-moderation.',
   };
 }

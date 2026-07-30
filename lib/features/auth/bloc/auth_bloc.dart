@@ -78,9 +78,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required this.realtimeService,
   }) : super(const AuthState()) {
     on<LoginSubmitted>(_onLoginSubmitted);
-    on<LoginCancelled>(
-      (_, emit) => emit(const AuthState()),
-    );
+    on<LoginCancelled>((_, emit) => emit(const AuthState()));
     on<RegisterSubmitted>(_onRegisterSubmitted);
   }
 

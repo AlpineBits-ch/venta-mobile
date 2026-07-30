@@ -307,10 +307,10 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     final channelId = state.channelId;
     if (channelId == null) return false;
     return state
-        .rosterFor(channelId)
-        .where((p) => p.userId == _myUserId)
-        .firstOrNull
-        ?.hasCamera ??
+            .rosterFor(channelId)
+            .where((p) => p.userId == _myUserId)
+            .firstOrNull
+            ?.hasCamera ??
         false;
   }
 
@@ -578,7 +578,11 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
           ),
         );
 
-      case VoiceCameraChanged(:final userId, :final channelId, :final isCameraOn):
+      case VoiceCameraChanged(
+        :final userId,
+        :final channelId,
+        :final isCameraOn,
+      ):
         if (userId == _myUserId) return;
         _updateParticipant(
           channelId,

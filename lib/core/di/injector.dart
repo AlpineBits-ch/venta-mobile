@@ -55,9 +55,7 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<ApiClient>(
     () => ApiClient(authRepository: getIt()),
   );
-  getIt.registerLazySingleton<IdentityApi>(
-    () => IdentityApi(client: getIt()),
-  );
+  getIt.registerLazySingleton<IdentityApi>(() => IdentityApi(client: getIt()));
   getIt.registerLazySingleton<AccountRepository>(
     () => AccountRepository(api: getIt()),
   );

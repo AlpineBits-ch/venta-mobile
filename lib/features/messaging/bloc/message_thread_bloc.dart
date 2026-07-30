@@ -59,10 +59,7 @@ class ThreadMessageSubmitted extends ThreadEvent {
 /// Edits an existing message's content - optimistic-first like reactions,
 /// rolled back to [previousText] if the HTTP call fails.
 class MessageEditRequested extends ThreadEvent {
-  const MessageEditRequested({
-    required this.messageId,
-    required this.newText,
-  });
+  const MessageEditRequested({required this.messageId, required this.newText});
   final String messageId;
   final String newText;
 
@@ -669,10 +666,13 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   /// - custom guild emoji are matched by id (the `emoji` field is just a
   /// text fallback and can collide across different custom emoji with the
   /// same name), Unicode reactions by the literal glyph.
-  bool _sameReaction(MessageReactionDto reaction, String emoji, String? emojiId) =>
-      emojiId != null
-          ? reaction.emojiId == emojiId
-          : reaction.emoji == emoji && reaction.emojiId == null;
+  bool _sameReaction(
+    MessageReactionDto reaction,
+    String emoji,
+    String? emojiId,
+  ) => emojiId != null
+      ? reaction.emojiId == emojiId
+      : reaction.emoji == emoji && reaction.emojiId == null;
 
   Future<void> _onMessageEditRequested(
     MessageEditRequested event,

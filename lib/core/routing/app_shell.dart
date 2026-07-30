@@ -1,33 +1,31 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/auth/data/auth_repository.dart';
 import '../../features/guilds/data/guild_repository.dart';
 import '../../features/guilds/data/models/guild_dto.dart';
 import '../../features/guilds/data/models/guild_template_dto.dart';
-import '../../features/profile/data/models/profile_dto.dart';
-import '../../features/profile/data/profile_repository.dart';
 import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
 import '../../features/guild_voice/presentation/widgets/voice_status_bar.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/presentation/screens/call_screen.dart';
 import '../di/injector.dart';
-import '../theme/avatar_palette.dart';
 import '../theme/status_colors_extension.dart';
 import '../theme/widget_styles.dart';
 import '../widgets/connection_status_banner.dart';
 import '../widgets/server_rail_icon.dart';
+import '../widgets/user_banner.dart';
 import 'route_paths.dart';
 
 /// Persistent chrome for the authenticated app: a docked server-icon rail on
 /// the left (always visible - Discord mobile does *not* hide this behind a
-/// drawer) with the current nav branch's content pane to its right. Tapping
-/// into an actual conversation/channel pushes a full-screen route *outside*
-/// this shell (see `RoutePaths.conversation`/`.serverChannel` in
-/// `app_router.dart`), which is where the back button belongs - going back
-/// returns here with the rail still in place.
+/// drawer) with the current nav branch's content pane to its right, and the
+/// [UserBanner] pinned across the bottom. Tapping into an actual
+/// conversation/channel pushes a full-screen route *outside* this shell (see
+/// `RoutePaths.conversation`/`.serverChannel` in `app_router.dart`), which is
+/// where the back button belongs - going back returns here with the rail and
+/// banner still in place, and no screen that needs the vertical space has to
+/// opt out of them.
 class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
@@ -43,23 +41,12 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  ProfileDto? _selfProfile;
   List<GuildDto> _guilds = const [];
   bool _callScreenShown = false;
 
   @override
   void initState() {
     super.initState();
-
-    final profileRepo = getIt<ProfileRepository>();
-    final cachedProfile = profileRepo.cachedSelf;
-    if (cachedProfile != null) {
-      _selfProfile = cachedProfile;
-    } else {
-      profileRepo.getSelf().then((profile) {
-        if (mounted) setState(() => _selfProfile = profile);
-      });
-    }
 
     final guildRepo = getIt<GuildRepository>();
     _guilds = guildRepo.cached;
@@ -130,13 +117,13 @@ class _AppShellState extends State<AppShell> {
     if (templateId == null || templateId.trim().isEmpty || !mounted) return;
     GuildTemplateDetailDto template;
     try {
-      template = await getIt<GuildRepository>().getTemplate(
-        templateId.trim(),
-      );
+      template = await getIt<GuildRepository>().getTemplate(templateId.trim());
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('That template id doesn\'t look valid.')),
+          const SnackBar(
+            content: Text('That template id doesn\'t look valid.'),
+          ),
         );
       }
       return;
@@ -229,7 +216,6 @@ class _AppShellState extends State<AppShell> {
     final theme = Theme.of(context);
     final onHome = widget.currentLocation.startsWith(RoutePaths.home);
     final currentGuildId = _guildIdFromLocation(widget.currentLocation);
-    final profile = _selfProfile;
 
     return BlocListener<CallCubit, CallState>(
       bloc: getIt<CallCubit>(),
@@ -245,7 +231,7 @@ class _AppShellState extends State<AppShell> {
         listener: (context, state) => ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(state.errorMessage!))),
-        child: _buildShellScaffold(theme, onHome, currentGuildId, profile),
+        child: _buildShellScaffold(theme, onHome, currentGuildId),
       ),
     );
   }
@@ -254,16 +240,41 @@ class _AppShellState extends State<AppShell> {
     ThemeData theme,
     bool onHome,
     String? currentGuildId,
-    ProfileDto? profile,
   ) {
+    // The rail and content pane run the *full* height and the banner floats on
+    // top of them, so the sidebar tone reaches the bottom edge of the screen
+    // instead of stopping short at a seam. Both get bottom padding equal to the
+    // card, so it only ever floats over background - never over a list row or
+    // the add-server button.
+    final bannerInset = UserBanner.heightFor(context);
+
     return Scaffold(
       body: Column(
         children: [
           const ConnectionStatusBanner(),
           Expanded(
-            child: _buildRailAndContent(theme, onHome, currentGuildId, profile),
+            child: Stack(
+              children: [
+                _buildRailAndContent(
+                  theme,
+                  onHome,
+                  currentGuildId,
+                  bannerInset,
+                ),
+                // Voice sits *above* the user banner, same as Discord; the
+                // banner is the bottom-most thing and owns the bottom inset.
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [VoiceStatusBar(), UserBanner()],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SafeArea(top: false, child: VoiceStatusBar()),
         ],
       ),
     );
@@ -273,7 +284,7 @@ class _AppShellState extends State<AppShell> {
     ThemeData theme,
     bool onHome,
     String? currentGuildId,
-    ProfileDto? profile,
+    double bannerInset,
   ) {
     return Row(
       children: [
@@ -303,7 +314,7 @@ class _AppShellState extends State<AppShell> {
                 ),
                 Expanded(
                   child: ListView(
-                    padding: EdgeInsets.zero,
+                    padding: EdgeInsets.only(bottom: bannerInset),
                     children: [
                       for (final guild in _guilds)
                         ServerRailIcon(
@@ -325,36 +336,20 @@ class _AppShellState extends State<AppShell> {
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
-                  child: GestureDetector(
-                    onTap: () => context.push(RoutePaths.profileSettings),
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor: AvatarPalette.colorForUserId(
-                        getIt<AuthRepository>().currentUserId ?? '',
-                      ),
-                      backgroundImage: profile?.avatarUrl != null
-                          ? CachedNetworkImageProvider(profile!.avatarUrl!)
-                          : null,
-                      child: profile?.avatarUrl == null
-                          ? Text(
-                              (profile?.userName.isNotEmpty ?? false)
-                                  ? profile!.userName[0].toUpperCase()
-                                  : '?',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                color: Colors.white,
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
+                // No self-avatar down here any more - it moved into the
+                // full-width `UserBanner` floating over the bottom of the
+                // rail, which has room for the name and status the bare avatar
+                // could never show.
               ],
             ),
           ),
         ),
-        Expanded(child: widget.child),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: bannerInset),
+            child: widget.child,
+          ),
+        ),
       ],
     );
   }
@@ -421,8 +416,7 @@ class _TemplatePreviewDialog extends StatefulWidget {
   final GuildTemplateDetailDto template;
 
   @override
-  State<_TemplatePreviewDialog> createState() =>
-      _TemplatePreviewDialogState();
+  State<_TemplatePreviewDialog> createState() => _TemplatePreviewDialogState();
 }
 
 class _TemplatePreviewDialogState extends State<_TemplatePreviewDialog> {

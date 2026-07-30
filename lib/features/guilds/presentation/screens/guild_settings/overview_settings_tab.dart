@@ -374,11 +374,12 @@ String _verificationLevelLabel(VerificationLevel level) => switch (level) {
 
 /// Mirrors the backend's join-time requirement for each tier - v1 gates
 /// joining only, it doesn't retroactively restrict already-joined members.
-String _verificationLevelDescription(VerificationLevel level) => switch (level) {
-  VerificationLevel.none => 'Anyone with a valid invite can join.',
-  VerificationLevel.low => 'Requires a verified email to join.',
-  VerificationLevel.medium =>
-    'Requires a verified email and an account registered 5+ minutes ago.',
-  VerificationLevel.high =>
-    'Requires a verified email and an account registered 10+ minutes ago.',
-};
+String _verificationLevelDescription(VerificationLevel level) =>
+    switch (level) {
+      VerificationLevel.none => 'Anyone with a valid invite can join.',
+      VerificationLevel.low => 'Requires a verified email to join.',
+      VerificationLevel.medium =>
+        'Requires a verified email and an account registered 5+ minutes ago.',
+      VerificationLevel.high =>
+        'Requires a verified email and an account registered 10+ minutes ago.',
+    };

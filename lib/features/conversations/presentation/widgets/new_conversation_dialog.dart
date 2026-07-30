@@ -29,8 +29,7 @@ class _NewConversationDialog extends StatefulWidget {
   const _NewConversationDialog();
 
   @override
-  State<_NewConversationDialog> createState() =>
-      _NewConversationDialogState();
+  State<_NewConversationDialog> createState() => _NewConversationDialogState();
 }
 
 class _NewConversationDialogState extends State<_NewConversationDialog> {

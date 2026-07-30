@@ -116,9 +116,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                     Icon(
                       Icons.lock_outline,
                       size: 32,
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.4,
-                      ),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                     ),
                     const SizedBox(height: AppSpacing.s),
                     Text(
@@ -179,8 +177,9 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                         theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.bold,
-                          backgroundColor: theme.colorScheme.primary
-                              .withValues(alpha: 0.12),
+                          backgroundColor: theme.colorScheme.primary.withValues(
+                            alpha: 0.12,
+                          ),
                         ),
                       ),
                     ),
@@ -227,10 +226,15 @@ List<TextSpan> _highlightedSpans(
   var cursor = 0;
   for (final match in pattern.allMatches(text)) {
     if (match.start > cursor) {
-      spans.add(TextSpan(text: text.substring(cursor, match.start), style: baseStyle));
+      spans.add(
+        TextSpan(text: text.substring(cursor, match.start), style: baseStyle),
+      );
     }
     spans.add(
-      TextSpan(text: text.substring(match.start, match.end), style: highlightStyle),
+      TextSpan(
+        text: text.substring(match.start, match.end),
+        style: highlightStyle,
+      ),
     );
     cursor = match.end;
   }

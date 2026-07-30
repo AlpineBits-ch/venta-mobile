@@ -274,9 +274,7 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
                     'Channels (in other servers) that receive published '
                     'posts from here.',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.6,
-                      ),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.s),

@@ -130,7 +130,8 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   Future<void> _openEditor([ScheduledEventDto? existing]) async {
-    final voiceChannels = getIt<GuildRepository>()
+    final voiceChannels =
+        getIt<GuildRepository>()
             .cachedById(widget.guildId)
             ?.channels
             .where((c) => c.type == ChannelType.voice)
@@ -196,10 +197,7 @@ class _EventsScreenState extends State<EventsScreen> {
         title: const Text('Events'),
       ),
       body: _loadFailed
-          ? LoadFailureView(
-              message: 'Couldn\'t load events.',
-              onRetry: _load,
-            )
+          ? LoadFailureView(message: 'Couldn\'t load events.', onRetry: _load)
           : events == null
           ? const Center(child: CircularProgressIndicator())
           : events.isEmpty
@@ -225,9 +223,7 @@ class _EventsScreenState extends State<EventsScreen> {
                   onJoinVoice: events[index].voiceChannelId != null
                       ? () => _joinVoice(events[index].voiceChannelId!)
                       : null,
-                  onEdit: canManage
-                      ? () => _openEditor(events[index])
-                      : null,
+                  onEdit: canManage ? () => _openEditor(events[index]) : null,
                   onCancel: canManage
                       ? () => _confirmCancel(events[index])
                       : null,
@@ -271,106 +267,104 @@ class _EventCard extends StatelessWidget {
       // need to read as inactive rather than sitting there looking bookable.
       opacity: cancelled ? 0.6 : 1,
       child: Container(
-      padding: const EdgeInsets.all(AppSpacing.m),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppRadii.card),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  event.title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    decoration: cancelled ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-              ),
-              if (canManage && !cancelled)
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  onSelected: (value) => switch (value) {
-                    'edit' => onEdit?.call(),
-                    'cancel' => onCancel?.call(),
-                    _ => null,
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    const PopupMenuItem(
-                      value: 'cancel',
-                      child: Text('Cancel event'),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            children: [
-              if (cancelled) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xs + 2,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.error.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(AppRadii.badge),
-                  ),
+        padding: const EdgeInsets.all(AppSpacing.m),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(AppRadii.card),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
                   child: Text(
-                    'CANCELLED',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.error,
-                      fontWeight: FontWeight.w700,
+                    event.title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      decoration: cancelled ? TextDecoration.lineThrough : null,
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.s),
+                if (canManage && !cancelled)
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) => switch (value) {
+                      'edit' => onEdit?.call(),
+                      'cancel' => onCancel?.call(),
+                      _ => null,
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      const PopupMenuItem(
+                        value: 'cancel',
+                        child: Text('Cancel event'),
+                      ),
+                    ],
+                  ),
               ],
-              Text(
-                formatShortDateTime(event.startsAt),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-          if (event.location != null) ...[
+            ),
             const SizedBox(height: AppSpacing.xs),
-            Text(event.location!, style: theme.textTheme.bodySmall),
-          ],
-          if (event.description != null) ...[
-            const SizedBox(height: AppSpacing.s),
-            Text(event.description!, style: theme.textTheme.bodyMedium),
-          ],
-          const SizedBox(height: AppSpacing.s),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: cancelled ? null : onToggleInterest,
-                icon: Icon(
-                  event.isInterested
-                      ? Icons.favorite
-                      : Icons.favorite_border,
-                  size: 18,
-                ),
-                label: Text('${event.interestedCount}'),
-              ),
-              if (onJoinVoice != null && !cancelled) ...[
-                const SizedBox(width: AppSpacing.s),
-                OutlinedButton.icon(
-                  onPressed: onJoinVoice,
-                  icon: const Icon(Icons.call, size: 18),
-                  label: const Text('Join voice'),
+            Row(
+              children: [
+                if (cancelled) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xs + 2,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.error.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(AppRadii.badge),
+                    ),
+                    child: Text(
+                      'CANCELLED',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.error,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                ],
+                Text(
+                  formatShortDateTime(event.startsAt),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                 ),
               ],
+            ),
+            if (event.location != null) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(event.location!, style: theme.textTheme.bodySmall),
             ],
-          ),
-        ],
-      ),
+            if (event.description != null) ...[
+              const SizedBox(height: AppSpacing.s),
+              Text(event.description!, style: theme.textTheme.bodyMedium),
+            ],
+            const SizedBox(height: AppSpacing.s),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: cancelled ? null : onToggleInterest,
+                  icon: Icon(
+                    event.isInterested ? Icons.favorite : Icons.favorite_border,
+                    size: 18,
+                  ),
+                  label: Text('${event.interestedCount}'),
+                ),
+                if (onJoinVoice != null && !cancelled) ...[
+                  const SizedBox(width: AppSpacing.s),
+                  OutlinedButton.icon(
+                    onPressed: onJoinVoice,
+                    icon: const Icon(Icons.call, size: 18),
+                    label: const Text('Join voice'),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -402,8 +396,7 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
     text: widget.existing?.location ?? '',
   );
   late DateTime _startsAt =
-      widget.existing?.startsAt ??
-      DateTime.now().add(const Duration(hours: 1));
+      widget.existing?.startsAt ?? DateTime.now().add(const Duration(hours: 1));
   String? _voiceChannelId;
   bool _saving = false;
 

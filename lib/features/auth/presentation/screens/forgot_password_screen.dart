@@ -97,7 +97,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (mounted) {
         setState(() {
           _submitting = false;
-          _error = 'Invalid or expired code, or that password doesn\'t '
+          _error =
+              'Invalid or expired code, or that password doesn\'t '
               'meet requirements.';
         });
       }

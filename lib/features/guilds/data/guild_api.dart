@@ -77,12 +77,13 @@ class GuildApi {
     return GuildDto.fromJson(response.data!);
   }
 
-  String _verificationLevelWireValue(VerificationLevel level) => switch (level) {
-    VerificationLevel.none => 'None',
-    VerificationLevel.low => 'Low',
-    VerificationLevel.medium => 'Medium',
-    VerificationLevel.high => 'High',
-  };
+  String _verificationLevelWireValue(VerificationLevel level) =>
+      switch (level) {
+        VerificationLevel.none => 'None',
+        VerificationLevel.low => 'Low',
+        VerificationLevel.medium => 'Medium',
+        VerificationLevel.high => 'High',
+      };
 
   Future<GuildDto> uploadGuildIcon(
     String guildId, {
@@ -267,8 +268,7 @@ class GuildApi {
     );
     return response.data!
         .map(
-          (json) =>
-              ChannelFollowerDto.fromJson(json as Map<String, dynamic>),
+          (json) => ChannelFollowerDto.fromJson(json as Map<String, dynamic>),
         )
         .toList();
   }
@@ -287,9 +287,7 @@ class GuildApi {
       '$_base/guilds/$guildId/events',
     );
     return response.data!
-        .map(
-          (json) => ScheduledEventDto.fromJson(json as Map<String, dynamic>),
-        )
+        .map((json) => ScheduledEventDto.fromJson(json as Map<String, dynamic>))
         .toList();
   }
 

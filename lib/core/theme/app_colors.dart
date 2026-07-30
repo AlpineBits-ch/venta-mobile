@@ -45,8 +45,18 @@ abstract final class AppColors {
   // Presence / status - same across both themes
   static const statusOnline = Color(0xFF34D399);
   static const statusIdle = Color(0xFFFBBF24);
-  static const statusOffline = Color(0xFFF43F5E);
+  // Grey, not the DnD red it used to duplicate: nothing rendered this colour
+  // while `StatusDot` skipped offline/invisible entirely, but the user banner
+  // always draws a dot beside the written status - and a red dot next to the
+  // word "Offline" reads as Do Not Disturb.
+  static const statusOffline = Color(0xFF80848E);
   static const statusDnd = Color(0xFFF43F5E);
+
+  /// `ColorScheme.error` - destructive buttons, danger zones, unread mention
+  /// badges. Its own constant rather than an alias of [statusOffline], which
+  /// it used to share: presence-offline wants grey and errors want red, and
+  /// one token cannot be both.
+  static const error = Color(0xFFF43F5E);
 
   // Avatar-placeholder accent palette - deterministic per-user fallback fill
   // (see AvatarPalette.colorForUserId), kept hue-distinct from the presence

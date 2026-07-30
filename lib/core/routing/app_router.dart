@@ -28,8 +28,14 @@ import '../../features/wiki/presentation/screens/wiki_history_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_home_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_page_view_screen.dart';
 import '../../features/profile/bloc/self_profile_cubit.dart';
-import '../../features/profile/presentation/screens/profile_settings_screen.dart';
+import '../../features/profile/presentation/screens/edit_profile_screen.dart';
+import '../../features/profile/presentation/screens/mfa_settings_screen.dart';
+import '../../features/profile/presentation/screens/self_profile_screen.dart';
 import '../../features/profile/presentation/screens/user_profile_screen.dart';
+import '../../features/settings/presentation/screens/account_settings_screen.dart';
+import '../../features/settings/presentation/screens/appearance_settings_screen.dart';
+import '../../features/settings/presentation/screens/notification_settings_screen.dart';
+import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../di/injector.dart';
 import '../realtime/realtime_service.dart';
 import '../session/session_cubit.dart';
@@ -80,9 +86,8 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         SessionUnknown() => null,
         SessionUnauthenticated() ||
         SessionServerMisconfigured() => loggingIn ? null : RoutePaths.login,
-        SessionAuthenticated() => loggingIn
-            ? (RoutePersistence.lastLocation ?? RoutePaths.home)
-            : null,
+        SessionAuthenticated() =>
+          loggingIn ? (RoutePersistence.lastLocation ?? RoutePaths.home) : null,
       };
     },
     routes: [
@@ -230,12 +235,52 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
           pageId: state.pathParameters['pageId']!,
         ),
       ),
+      // Your own profile and the form that edits it each get their own cubit -
+      // both stay in sync through `ProfileRepository.selfStream`, so pushing
+      // the editor on top of the profile doesn't need shared bloc scope.
       GoRoute(
-        path: RoutePaths.profileSettings,
+        path: RoutePaths.selfProfile,
         builder: (context, state) => BlocProvider(
           create: (_) => SelfProfileCubit(repository: getIt()),
-          child: const ProfileSettingsScreen(),
+          child: const SelfProfileScreen(),
         ),
+      ),
+      GoRoute(
+        path: RoutePaths.editProfile,
+        builder: (context, state) => BlocProvider(
+          create: (_) => SelfProfileCubit(repository: getIt()),
+          child: const EditProfileScreen(),
+        ),
+      ),
+      // Where profile *and* settings used to live as one screen. Kept as a
+      // redirect because `RoutePersistence` may have saved it as the last
+      // location, and an unmatched path on cold start is an error page.
+      GoRoute(
+        path: RoutePaths.legacyProfileSettings,
+        redirect: (context, state) => RoutePaths.selfProfile,
+      ),
+      GoRoute(
+        path: RoutePaths.settings,
+        builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.accountSettings,
+        builder: (context, state) => const AccountSettingsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.mfaSettings,
+        // `enabled` comes from the caller's already-loaded account when there
+        // is one; a restored route has no caller and the screen looks it up.
+        builder: (context, state) =>
+            MfaSettingsScreen(enabled: state.extra as bool?),
+      ),
+      GoRoute(
+        path: RoutePaths.notificationSettings,
+        builder: (context, state) => const NotificationSettingsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.appearanceSettings,
+        builder: (context, state) => const AppearanceSettingsScreen(),
       ),
       GoRoute(
         path: RoutePaths.userProfile,

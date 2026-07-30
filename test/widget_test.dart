@@ -14,12 +14,14 @@ void main() {
     // flutter_secure_storage talks to a platform channel that doesn't exist
     // in the widget-test harness; stub it out so SessionCubit's restore()
     // call resolves instead of throwing MissingPluginException.
-    const channel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+    const channel = MethodChannel(
+      'plugins.it_nomads.com/flutter_secure_storage',
+    );
     TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'readAll') return <String, String>{};
-      return null;
-    });
+          if (call.method == 'readAll') return <String, String>{};
+          return null;
+        });
 
     final storage = _InMemoryStorage();
     when(() => storage.write(any(), any())).thenAnswer((_) async {});
@@ -31,8 +33,9 @@ void main() {
     await configureDependencies();
   });
 
-  testWidgets('unauthenticated launch lands on the themed login screen',
-      (tester) async {
+  testWidgets('unauthenticated launch lands on the themed login screen', (
+    tester,
+  ) async {
     await tester.pumpWidget(const App());
     await tester.pumpAndSettle();
 

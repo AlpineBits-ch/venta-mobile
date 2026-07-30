@@ -327,9 +327,10 @@ class _InviteDialogState extends State<InviteDialog> {
 /// Turns a `requiredLevel` wire value (`"Low"`/`"Medium"`/`"High"`) into the
 /// plain-language requirement it maps to - see the guild verification-level
 /// spec's join-gating table.
-String _verificationRequirementText(String requiredLevel) => switch (requiredLevel) {
-  'Low' => 'a verified email',
-  'Medium' => 'a verified email and an account at least 5 minutes old',
-  'High' => 'a verified email and an account at least 10 minutes old',
-  _ => 'additional account verification',
-};
+String _verificationRequirementText(String requiredLevel) =>
+    switch (requiredLevel) {
+      'Low' => 'a verified email',
+      'Medium' => 'a verified email and an account at least 5 minutes old',
+      'High' => 'a verified email and an account at least 10 minutes old',
+      _ => 'additional account verification',
+    };

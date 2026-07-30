@@ -351,10 +351,7 @@ class CallCubit extends Cubit<CallState> {
       ),
     );
     _bumpVideoRevision();
-    await repository.invokeCameraChanged(
-      callId: callId,
-      isCameraOn: turningOn,
-    );
+    await repository.invokeCameraChanged(callId: callId, isCameraOn: turningOn);
   }
 
   /// Mirrors [isCameraOn] for screen sharing - Android only (see

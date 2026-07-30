@@ -15,8 +15,7 @@ class ConnectionStatusBanner extends StatefulWidget {
   const ConnectionStatusBanner({super.key});
 
   @override
-  State<ConnectionStatusBanner> createState() =>
-      _ConnectionStatusBannerState();
+  State<ConnectionStatusBanner> createState() => _ConnectionStatusBannerState();
 }
 
 class _ConnectionStatusBannerState extends State<ConnectionStatusBanner> {

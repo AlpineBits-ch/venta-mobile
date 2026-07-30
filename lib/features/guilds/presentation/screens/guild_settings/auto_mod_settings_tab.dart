@@ -44,9 +44,7 @@ class _AutoModSettingsTabState extends State<AutoModSettingsTab> {
 
   Future<void> _load() async {
     try {
-      final config = await getIt<GuildRepository>().getAutoMod(
-        widget.guildId,
-      );
+      final config = await getIt<GuildRepository>().getAutoMod(widget.guildId);
       if (mounted) _applyConfig(config);
     } catch (_) {
       // Falls back to the defaults already held in state.

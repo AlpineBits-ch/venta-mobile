@@ -15,27 +15,11 @@ import '../../../friends/data/relationship_repository.dart';
 import '../../bloc/user_profile_cubit.dart';
 import '../../data/models/profile_dto.dart';
 import '../../data/profile_repository.dart';
-
-Color _statusDotColor(BuildContext context, OnlineStatus status) =>
-    switch (status) {
-      OnlineStatus.online => context.statusColors.online,
-      OnlineStatus.idle => context.statusColors.idle,
-      OnlineStatus.doNotDisturb => context.statusColors.doNotDisturb,
-      OnlineStatus.hidden ||
-      OnlineStatus.offline => context.statusColors.offline,
-    };
-
-String _statusLabel(OnlineStatus status) => switch (status) {
-  OnlineStatus.online => 'Online',
-  OnlineStatus.idle => 'Idle',
-  OnlineStatus.doNotDisturb => 'Do Not Disturb',
-  OnlineStatus.hidden => 'Invisible',
-  OnlineStatus.offline => 'Offline',
-};
+import '../widgets/status_label.dart';
 
 /// Read-only view of *another* user's profile - the counterpart to
-/// `ProfileSettingsScreen` (which is self-only and editable). Reached by
-/// tapping a `UserAvatar` or a message bubble anywhere in the app.
+/// `SelfProfileScreen`. Reached by tapping a `UserAvatar` or a message bubble
+/// anywhere in the app.
 class UserProfileScreen extends StatelessWidget {
   const UserProfileScreen({super.key, required this.userId});
 
@@ -132,15 +116,12 @@ class _UserProfileView extends StatelessWidget {
                           height: 10,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: _statusDotColor(
-                              context,
-                              profile.onlineStatus,
-                            ),
+                            color: statusColor(context, profile.onlineStatus),
                           ),
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          _statusLabel(profile.onlineStatus),
+                          statusLabel(profile.onlineStatus),
                           style: theme.textTheme.labelSmall,
                         ),
                       ],
@@ -183,7 +164,7 @@ class _ActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isSelf) {
       return OutlinedButton.icon(
-        onPressed: () => context.push(RoutePaths.profileSettings),
+        onPressed: () => context.push(RoutePaths.editProfile),
         icon: const Icon(Icons.edit_outlined),
         label: const Text('Edit Profile'),
       );

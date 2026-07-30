@@ -277,9 +277,7 @@ class _ThreadViewState extends State<ThreadView> {
             if (_canPinMessages)
               ListTile(
                 leading: Icon(
-                  message.isPinned
-                      ? Icons.push_pin
-                      : Icons.push_pin_outlined,
+                  message.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
                 ),
                 title: Text(message.isPinned ? 'Unpin' : 'Pin'),
                 onTap: () => Navigator.pop(context, 'pin'),
@@ -596,16 +594,11 @@ class _ThreadViewState extends State<ThreadView> {
     if (query == null) return const [];
     final lower = query.toLowerCase();
     if (_mentionTrigger == '#') {
-      final channelEntries =
-          [
-              for (final entry in _channelCandidateNames.entries)
-                if (entry.key.toLowerCase().startsWith(lower))
-                  _ChannelMentionEntry(
-                    name: entry.key,
-                    channelId: entry.value,
-                  ),
-            ]
-            ..sort((a, b) => a.name.compareTo(b.name));
+      final channelEntries = [
+        for (final entry in _channelCandidateNames.entries)
+          if (entry.key.toLowerCase().startsWith(lower))
+            _ChannelMentionEntry(name: entry.key, channelId: entry.value),
+      ]..sort((a, b) => a.name.compareTo(b.name));
       return channelEntries.take(8).toList();
     }
     final entries = [
@@ -967,7 +960,8 @@ class _ThreadViewState extends State<ThreadView> {
             // Guild channels are titled "#channel-name", which already
             // carries its own identity - only DMs get a leading avatar,
             // matching Discord's conversation header.
-            if (widget.guildId == null && widget.mentionableUserIds.isNotEmpty) ...[
+            if (widget.guildId == null &&
+                widget.mentionableUserIds.isNotEmpty) ...[
               UserAvatar(
                 userId: widget.mentionableUserIds.first,
                 radius: AppRadii.avatarSmall,
@@ -1803,19 +1797,17 @@ class _MessageBody extends StatelessWidget {
                 data: text,
                 softLineBreak: true,
                 shrinkWrap: true,
-                extensionSet: md.ExtensionSet(
-                  md.ExtensionSet.gitHubWeb.blockSyntaxes,
-                  [
-                    _MentionSyntax(
-                      userNames: userNames,
-                      roleNames: roleNames,
-                      channelNames: channelNames,
-                      everyone: message.mentionsEveryone,
-                      here: message.mentionsHere,
-                    ),
-                    ...md.ExtensionSet.gitHubWeb.inlineSyntaxes,
-                  ],
-                ),
+                extensionSet:
+                    md.ExtensionSet(md.ExtensionSet.gitHubWeb.blockSyntaxes, [
+                      _MentionSyntax(
+                        userNames: userNames,
+                        roleNames: roleNames,
+                        channelNames: channelNames,
+                        everyone: message.mentionsEveryone,
+                        here: message.mentionsHere,
+                      ),
+                      ...md.ExtensionSet.gitHubWeb.inlineSyntaxes,
+                    ]),
                 builders: {
                   'mention': _MentionElementBuilder(
                     theme: theme,
@@ -1862,9 +1854,7 @@ class _MentionSyntax extends md.InlineSyntax {
     required this.channelNames,
     required this.everyone,
     required this.here,
-  }) : super(
-         _buildPattern(userNames, roleNames, channelNames, everyone, here),
-       );
+  }) : super(_buildPattern(userNames, roleNames, channelNames, everyone, here));
 
   final Map<String, String> userNames;
   final Map<String, String> roleNames;
@@ -2133,8 +2123,7 @@ class _SystemMessageRow extends StatelessWidget {
                       ? _leaveVariants
                       : _joinVariants;
                   final index = message.systemMessageVariant ?? 0;
-                  final template =
-                      index >= 0 && index < variants.length
+                  final template = index >= 0 && index < variants.length
                       ? variants[index]
                       : variants[0];
                   final name = profile?.userName ?? '…';
@@ -2165,8 +2154,10 @@ class _InviteMessageCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadii.card),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadii.card),
-        onTap: () =>
-            showDialog(context: context, builder: (_) => InviteDialog(code: code)),
+        onTap: () => showDialog(
+          context: context,
+          builder: (_) => InviteDialog(code: code),
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.m,

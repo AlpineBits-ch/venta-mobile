@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../../core/realtime/realtime_service.dart';
 import 'profile_api.dart';
 import 'models/profile_dto.dart';
@@ -28,22 +30,28 @@ class ProfileRepository {
   final Map<String, ProfileDto> _byUserId = {};
   ProfileDto? _self;
 
+  final _selfController = StreamController<ProfileDto>.broadcast();
+
   ProfileDto? get cachedSelf => _self;
   ProfileDto? cachedByUserId(String userId) => _byUserId[userId];
 
-  Future<ProfileDto> getSelf() async {
-    final profile = await api.getSelf();
+  /// Every change to the signed-in user's own profile - avatar, banner, bio,
+  /// status. The persistent user banner in `AppShell` and any open profile
+  /// screen both listen here, so a status set from one surface shows up on
+  /// the other without either knowing the other exists.
+  Stream<ProfileDto> get selfStream => _selfController.stream;
+
+  ProfileDto _cacheSelf(ProfileDto profile) {
     _self = profile;
     _byUserId[profile.userId] = profile;
+    _selfController.add(profile);
     return profile;
   }
 
-  Future<ProfileDto> setSelfStatus(OnlineStatus status) async {
-    final profile = await api.setSelfStatus(status);
-    _self = profile;
-    _byUserId[profile.userId] = profile;
-    return profile;
-  }
+  Future<ProfileDto> getSelf() async => _cacheSelf(await api.getSelf());
+
+  Future<ProfileDto> setSelfStatus(OnlineStatus status) async =>
+      _cacheSelf(await api.setSelfStatus(status));
 
   Future<ProfileDto> getByUserId(
     String userId, {
@@ -98,6 +106,13 @@ class ProfileRepository {
   void updateOnlineStatus(String userId, OnlineStatus status) {
     final cached = _byUserId[userId];
     if (cached == null) return;
-    _byUserId[userId] = cached.copyWith(onlineStatus: status);
+    final updated = cached.copyWith(onlineStatus: status);
+    _byUserId[userId] = updated;
+    // Presence events cover *every* user including ourselves, and the two
+    // caches must not drift - `_self` is what the user banner renders.
+    if (_self?.userId == userId) {
+      _self = updated;
+      _selfController.add(updated);
+    }
   }
 }

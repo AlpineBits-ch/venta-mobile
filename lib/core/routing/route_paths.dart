@@ -26,8 +26,24 @@ abstract final class RoutePaths {
   static const serverWikiPageEdit = '/server/:guildId/wiki/:pageId/edit';
   static const serverWikiHistory = '/server/:guildId/wiki/:pageId/history';
 
-  static const profileSettings = '/profile-settings';
+  /// Your own profile, read-only - the "view" half of what used to be one
+  /// crammed `/profile-settings` page. [editProfile] is the "edit" half and
+  /// [settings] is everything that isn't profile at all.
+  static const selfProfile = '/me';
+  static const editProfile = '/me/edit';
   static const userProfile = '/user/:userId';
+
+  static const settings = '/settings';
+  static const accountSettings = '/settings/account';
+  static const mfaSettings = '/settings/mfa';
+  static const notificationSettings = '/settings/notifications';
+  static const appearanceSettings = '/settings/appearance';
+
+  /// Where the profile *and* settings used to live together. Kept only as a
+  /// redirect target: [RoutePersistence] may have saved it as the last visited
+  /// location, and a cold start on an unmatched path lands on go_router's
+  /// error page.
+  static const legacyProfileSettings = '/profile-settings';
 
   static String conversationPath(String conversationId) =>
       '/home/conversation/$conversationId';

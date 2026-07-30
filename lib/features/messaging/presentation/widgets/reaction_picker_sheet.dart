@@ -120,9 +120,7 @@ class _ReactionPickerSheetState extends State<_ReactionPickerSheet> {
                     height: 4,
                     margin: const EdgeInsets.only(bottom: AppSpacing.m),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.2,
-                      ),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -200,9 +198,8 @@ class _ServerEmojiGrid extends StatelessWidget {
         final emoji = list[index];
         return InkWell(
           borderRadius: BorderRadius.circular(AppRadii.chip),
-          onTap: () => Navigator.of(
-            context,
-          ).pop((emoji: emoji.name, emojiId: emoji.id)),
+          onTap: () =>
+              Navigator.of(context).pop((emoji: emoji.name, emojiId: emoji.id)),
           child: Tooltip(
             message: emoji.name,
             child: Image.network(

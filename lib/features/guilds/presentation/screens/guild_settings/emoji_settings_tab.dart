@@ -72,8 +72,7 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Animated'),
                   value: animated,
-                  onChanged: (value) =>
-                      setDialogState(() => animated = value),
+                  onChanged: (value) => setDialogState(() => animated = value),
                 ),
               ],
             ),
@@ -137,9 +136,9 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Could not upload emoji.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not upload emoji.')),
+        );
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -176,9 +175,9 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Could not delete emoji.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete emoji.')),
+        );
       }
     }
   }
@@ -188,10 +187,7 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
     final theme = Theme.of(context);
     final emojis = _emojis;
     if (_loadFailed) {
-      return LoadFailureView(
-        message: 'Couldn\'t load emoji.',
-        onRetry: _load,
-      );
+      return LoadFailureView(message: 'Couldn\'t load emoji.', onRetry: _load);
     }
     if (emojis == null) return const Center(child: CircularProgressIndicator());
     return Scaffold(
@@ -219,9 +215,7 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
                   child: Text(
                     'Long-press an emoji to delete it.',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.6,
-                      ),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ),
@@ -249,8 +243,9 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
                                 emoji.imageUrl,
                                 errorBuilder: (context, error, stack) => Icon(
                                   Icons.broken_image_outlined,
-                                  color: theme.colorScheme.onSurface
-                                      .withValues(alpha: 0.4),
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.4,
+                                  ),
                                 ),
                               ),
                             ),

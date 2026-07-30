@@ -97,7 +97,9 @@ class GuildRepository {
 
   final Map<String, List<GuildEmojiDto>> _emojiCache = {};
   final _emojiUpdatesController =
-      StreamController<({String guildId, List<GuildEmojiDto> emojis})>.broadcast();
+      StreamController<
+        ({String guildId, List<GuildEmojiDto> emojis})
+      >.broadcast();
 
   Stream<List<GuildDto>> get guildsStream => _guildsController.stream;
 
@@ -156,7 +158,10 @@ class GuildRepository {
     if (event.name == 'guild.GuildCreated') return event.stringField('id');
 
     final referencedIds = switch (event.name) {
-      'guild.ChannelReordered' => _idsFrom(event.field('channels'), 'channelId'),
+      'guild.ChannelReordered' => _idsFrom(
+        event.field('channels'),
+        'channelId',
+      ),
       'guild.RolesReordered' => _idsFrom(event.field('roles'), 'roleId'),
       _ => const <String>[],
     };
@@ -175,13 +180,12 @@ class GuildRepository {
     if (list is! List) return const [];
     return [
       for (final item in list)
-        if (item is Map)
-          ...[
-            for (final entry in item.entries)
-              if (entry.key.toString().toLowerCase() == key.toLowerCase() &&
-                  entry.value is String)
-                entry.value as String,
-          ],
+        if (item is Map) ...[
+          for (final entry in item.entries)
+            if (entry.key.toString().toLowerCase() == key.toLowerCase() &&
+                entry.value is String)
+              entry.value as String,
+        ],
     ];
   }
 
@@ -469,7 +473,11 @@ class GuildRepository {
         const [],
     List<({String categoryId, int position})> categories = const [],
   }) async {
-    await api.reorderChannels(guildId, channels: channels, categories: categories);
+    await api.reorderChannels(
+      guildId,
+      channels: channels,
+      categories: categories,
+    );
     await _refreshGuild(guildId);
   }
 
@@ -518,7 +526,8 @@ class GuildRepository {
   Future<void> unfollowChannel({
     required String sourceChannelId,
     required String followId,
-  }) => api.unfollowChannel(sourceChannelId: sourceChannelId, followId: followId);
+  }) =>
+      api.unfollowChannel(sourceChannelId: sourceChannelId, followId: followId);
 
   Future<List<ScheduledEventDto>> getEvents(String guildId) =>
       api.getEvents(guildId);

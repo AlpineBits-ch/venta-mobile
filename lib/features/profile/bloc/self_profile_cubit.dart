@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -38,10 +40,23 @@ class SelfProfileState extends Equatable {
 class SelfProfileCubit extends Cubit<SelfProfileState> {
   SelfProfileCubit({required this.repository})
     : super(const SelfProfileState()) {
+    // The profile page and the edit page each own a cubit, and the persistent
+    // user banner writes straight to the repository - listening here keeps
+    // whichever of them is on screen current no matter who made the change.
+    _selfSub = repository.selfStream.listen(
+      (profile) => emit(
+        state.copyWith(status: SelfProfileStatus.loaded, profile: profile),
+      ),
+    );
+    final cached = repository.cachedSelf;
+    if (cached != null) {
+      emit(state.copyWith(status: SelfProfileStatus.loaded, profile: cached));
+    }
     _load();
   }
 
   final ProfileRepository repository;
+  late final StreamSubscription<ProfileDto> _selfSub;
 
   Future<void> _load() async {
     try {
@@ -130,6 +145,12 @@ class SelfProfileCubit extends Cubit<SelfProfileState> {
         ),
       );
     }
+  }
+
+  @override
+  Future<void> close() {
+    unawaited(_selfSub.cancel());
+    return super.close();
   }
 
   Future<void> removeAvatar() async {
