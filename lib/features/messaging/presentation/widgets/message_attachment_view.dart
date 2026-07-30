@@ -14,13 +14,21 @@ import '../../data/models/attachment_dto.dart';
 String _resolveUrl(AttachmentDto attachment) =>
     attachment.url ?? getIt<MessageApi>().downloadUrl(attachment.id);
 
-String? _resolveThumbnail(AttachmentDto attachment) {
+/// A displayable thumbnail URL for [attachment], or null when it isn't an
+/// image. Public because forum post cards preview the first message's image
+/// and must resolve it exactly the way the message list does - the fallback
+/// chain matters (embedded attachments carry no `url`).
+String? resolveAttachmentThumbnailUrl(AttachmentDto attachment) {
   if (attachment.thumbnailUrl != null) return attachment.thumbnailUrl;
   if (attachment.url != null) return attachment.url;
-  if (attachment.isImage)
+  if (attachment.isImage) {
     return getIt<MessageApi>().thumbnailUrl(attachment.id);
+  }
   return null;
 }
+
+String? _resolveThumbnail(AttachmentDto attachment) =>
+    resolveAttachmentThumbnailUrl(attachment);
 
 /// Renders one message's attachments: images as tappable thumbnails (opens
 /// a full-screen viewer), everything else as a file chip that opens

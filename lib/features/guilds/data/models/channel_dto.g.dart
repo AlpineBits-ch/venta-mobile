@@ -51,6 +51,19 @@ _ChannelDto _$ChannelDtoFromJson(Map<String, dynamic> json) => _ChannelDto(
   position: (json['position'] as num?)?.toInt() ?? 0,
   slowModeSeconds: (json['slowModeSeconds'] as num?)?.toInt() ?? 0,
   parentChannelId: json['parentChannelId'] as String?,
+  tagIds:
+      (json['tagIds'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+      const <String>[],
+  isPinned: json['isPinned'] as bool? ?? false,
+  isLocked: json['isLocked'] as bool? ?? false,
+  isArchived: json['isArchived'] as bool? ?? false,
+  lastActivityAt: json['lastActivityAt'] == null
+      ? null
+      : DateTime.parse(json['lastActivityAt'] as String),
+  messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
+  autoArchiveAt: json['autoArchiveAt'] == null
+      ? null
+      : DateTime.parse(json['autoArchiveAt'] as String),
 );
 
 Map<String, dynamic> _$ChannelDtoToJson(_ChannelDto instance) =>
@@ -67,6 +80,13 @@ Map<String, dynamic> _$ChannelDtoToJson(_ChannelDto instance) =>
       'position': instance.position,
       'slowModeSeconds': instance.slowModeSeconds,
       'parentChannelId': instance.parentChannelId,
+      'tagIds': instance.tagIds,
+      'isPinned': instance.isPinned,
+      'isLocked': instance.isLocked,
+      'isArchived': instance.isArchived,
+      'lastActivityAt': instance.lastActivityAt?.toIso8601String(),
+      'messageCount': instance.messageCount,
+      'autoArchiveAt': instance.autoArchiveAt?.toIso8601String(),
     };
 
 const _$ChannelTypeEnumMap = {
@@ -75,4 +95,5 @@ const _$ChannelTypeEnumMap = {
   ChannelType.thread: 'Thread',
   ChannelType.announcement: 'Announcement',
   ChannelType.forum: 'Forum',
+  ChannelType.media: 'Media',
 };

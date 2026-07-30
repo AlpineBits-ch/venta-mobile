@@ -25,6 +25,19 @@ String formatShortDateTime(DateTime dateTime) {
       '${formatTimeOfDay(local)}';
 }
 
+/// e.g. `now`, `5m`, `3h`, `2d`, `6w` - the terse elapsed-time label forum
+/// post cards and similar dense list rows use, where a full timestamp would
+/// crowd out the content. Falls back to [formatShortDateTime] past a year.
+String formatCompactAgo(DateTime dateTime, {DateTime? now}) {
+  final elapsed = (now ?? DateTime.now()).difference(dateTime.toLocal());
+  if (elapsed.isNegative || elapsed.inMinutes < 1) return 'now';
+  if (elapsed.inHours < 1) return '${elapsed.inMinutes}m';
+  if (elapsed.inDays < 1) return '${elapsed.inHours}h';
+  if (elapsed.inDays < 7) return '${elapsed.inDays}d';
+  if (elapsed.inDays < 365) return '${elapsed.inDays ~/ 7}w';
+  return formatShortDateTime(dateTime);
+}
+
 /// Same as [formatShortDateTime] but collapses to just the time for today's
 /// timestamps, so recent rows don't repeat today's date on every line.
 String formatRelativeDateTime(DateTime dateTime, {DateTime? now}) {

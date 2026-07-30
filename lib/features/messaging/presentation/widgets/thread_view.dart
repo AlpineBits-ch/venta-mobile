@@ -140,11 +140,17 @@ class ThreadView extends StatefulWidget {
     this.actions,
     this.guildId,
     this.mentionableUserIds = const [],
+    this.banner,
   });
 
   final String title;
   final String myUserId;
   final List<Widget>? actions;
+
+  /// Pinned directly under the app bar, above the message list - used by forum
+  /// posts to show their applied tags and archived state, which have no home
+  /// in the message stream itself.
+  final Widget? banner;
 
   /// Set only for guild channels - gates bot-command discovery/autocomplete,
   /// since bots (and therefore slash commands) only exist inside guilds.
@@ -467,6 +473,11 @@ class _ThreadViewState extends State<ThreadView> {
 
   bool get _isAnnouncementChannel =>
       _currentChannel?.type == ChannelType.announcement;
+
+  /// A forum post a moderator has locked: still readable, but closed to new
+  /// messages. Distinct from archived, which stays writable (posting is what
+  /// revives it), so only this one kills the composer.
+  bool get _isLockedPost => _currentChannel?.isLocked ?? false;
 
   Future<void> _publishMessage(MessageDto message) async {
     try {
@@ -996,6 +1007,7 @@ class _ThreadViewState extends State<ThreadView> {
       ),
       body: Column(
         children: [
+          ?widget.banner,
           Expanded(
             child: BlocBuilder<MessageThreadBloc, ThreadState>(
               builder: (context, state) {
@@ -1227,58 +1239,95 @@ class _ThreadViewState extends State<ThreadView> {
                         ),
                       ),
                     ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.xs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(
-                        AppRadii.composerPill,
+                  if (_isLockedPost)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.m,
+                        vertical: 14,
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          onPressed: _showAttachMenu,
-                          icon: const Icon(Icons.add_circle_outline),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(
+                          AppRadii.composerPill,
                         ),
-                        Expanded(
-                          child: TextField(
-                            controller: _textController,
-                            minLines: 1,
-                            maxLines: 5,
-                            textInputAction: TextInputAction.send,
-                            autofillHints: const [],
-                            onChanged: (_) => context
-                                .read<MessageThreadBloc>()
-                                .add(const ThreadTypingNotified()),
-                            onSubmitted: (_) => _submit(),
-                            decoration: const InputDecoration(
-                              hintText: 'Message',
-                              filled: false,
-                              isCollapsed: true,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              errorBorder: InputBorder.none,
-                              disabledBorder: InputBorder.none,
-                              focusedErrorBorder: InputBorder.none,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.lock_outline,
+                            size: 18,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
                             ),
                           ),
+                          const SizedBox(width: AppSpacing.s),
+                          Expanded(
+                            child: Text(
+                              'This post is locked. Nobody can send new '
+                              'messages here.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(
+                          AppRadii.composerPill,
                         ),
-                        IconButton(
-                          onPressed: _pickEmojiForComposer,
-                          icon: const Icon(Icons.emoji_emotions_outlined),
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        IconButton.filled(
-                          onPressed: _submit,
-                          icon: const Icon(Icons.send_rounded),
-                        ),
-                      ],
+                      ),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            onPressed: _showAttachMenu,
+                            icon: const Icon(Icons.add_circle_outline),
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller: _textController,
+                              minLines: 1,
+                              maxLines: 5,
+                              textInputAction: TextInputAction.send,
+                              autofillHints: const [],
+                              onChanged: (_) => context
+                                  .read<MessageThreadBloc>()
+                                  .add(const ThreadTypingNotified()),
+                              onSubmitted: (_) => _submit(),
+                              decoration: const InputDecoration(
+                                hintText: 'Message',
+                                filled: false,
+                                isCollapsed: true,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                errorBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                                focusedErrorBorder: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _pickEmojiForComposer,
+                            icon: const Icon(Icons.emoji_emotions_outlined),
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          IconButton.filled(
+                            onPressed: _submit,
+                            icon: const Icon(Icons.send_rounded),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

@@ -7,8 +7,12 @@ import 'models/ban_dto.dart';
 import 'models/category_dto.dart';
 import 'models/channel_dto.dart';
 import 'models/channel_follower_dto.dart';
+import 'models/forum_config_dto.dart';
+import 'models/forum_post_dto.dart';
+import 'models/forum_tag_dto.dart';
 import 'models/guild_dto.dart';
 import 'models/guild_emoji_dto.dart';
+import 'models/guild_features.dart';
 import 'models/guild_template_dto.dart';
 import 'models/guild_member_dto.dart';
 import 'models/guild_permissions.dart';
@@ -17,6 +21,7 @@ import 'models/invite_dto.dart';
 import 'models/onboarding_dto.dart';
 import 'models/role_dto.dart';
 import 'models/scheduled_event_dto.dart';
+import 'models/welcome_screen_dto.dart';
 
 /// `{baseUrl}/api/v1/guild` is genuinely the base segment (singular) -
 /// Alpine's own `GuildService` uses it as-is, endpoints then append
@@ -28,13 +33,21 @@ class GuildApi {
 
   String get _base => client.url('/api/v1/guild');
 
+  /// [kind] seeds the guild's `features` from that kind's preset - the module
+  /// set can't be set directly at creation, only PATCHed afterwards. Omitting
+  /// it gives a `Community`, which gates nothing.
   Future<GuildDto> createGuild({
     required String name,
     String? description,
+    GuildKind? kind,
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       '$_base/guilds',
-      data: {'name': name, 'description': description},
+      data: {
+        'name': name,
+        'description': description,
+        if (kind != null) 'kind': kind.wireValue,
+      },
     );
     return GuildDto.fromJson(response.data!);
   }
@@ -57,12 +70,20 @@ class GuildApi {
     await client.dio.delete<void>('$_base/guilds/$guildId/members/me');
   }
 
+  /// [kind] and [features] are independent, with one trap: sending [kind]
+  /// *alone* re-seeds `features` from that kind's preset, wiping a
+  /// customised module set. Send both when you only mean to relabel.
+  ///
+  /// Effects are immediate server-side, so callers refetch the guild and its
+  /// channels afterwards.
   Future<GuildDto> updateGuild(
     String guildId, {
     String? name,
     String? description,
     String? systemChannelId,
     VerificationLevel? verificationLevel,
+    GuildKind? kind,
+    GuildFeatures? features,
   }) async {
     final response = await client.dio.patch<Map<String, dynamic>>(
       '$_base/guilds/$guildId',
@@ -72,6 +93,10 @@ class GuildApi {
         if (systemChannelId != null) 'systemChannelId': systemChannelId,
         if (verificationLevel != null)
           'verificationLevel': _verificationLevelWireValue(verificationLevel),
+        if (kind != null) 'kind': kind.wireValue,
+        // Names, not the numeric mask - readable in a network log and immune
+        // to a flag being renumbered server-side.
+        if (features != null) 'features': features.toWireString(),
       },
     );
     return GuildDto.fromJson(response.data!);
@@ -410,8 +435,83 @@ class GuildApi {
     return OnboardingStatusDto.fromJson(response.data!);
   }
 
-  Future<void> acceptOnboarding(String guildId) async {
-    await client.dio.post<void>('$_base/guilds/$guildId/onboarding/accept');
+  /// Idempotent - accepting twice is a no-op, and the second call does *not*
+  /// re-apply [responses]. On success roles and channel access are live
+  /// immediately, but the guild's channel list and the member's own roles
+  /// both need refetching.
+  Future<void> acceptOnboarding(
+    String guildId, {
+    List<OnboardingResponseDto> responses = const [],
+  }) async {
+    await client.dio.post<void>(
+      '$_base/guilds/$guildId/onboarding/accept',
+      // A JSON body is required even with nothing to answer - an entirely
+      // empty request is rejected by the model binder before the endpoint
+      // runs, so a rules-only guild still sends `{"responses": []}`.
+      data: {
+        'responses': [for (final r in responses) r.toJson()],
+      },
+    );
+  }
+
+  /// Every prompt - join-flow and Channels & Roles alike - with the calling
+  /// member's current picks marked on each option.
+  Future<List<OnboardingPromptDto>> getOnboardingPrompts(String guildId) async {
+    final response = await client.dio.get<List<dynamic>>(
+      '$_base/guilds/$guildId/onboarding/prompts',
+    );
+    return response.data!
+        .map(
+          (json) => OnboardingPromptDto.fromJson(json as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  /// Full replace of this member's picks across *all* prompts - a prompt left
+  /// out counts as "nothing selected" and its grants are revoked.
+  Future<void> updateOwnOnboardingResponses(
+    String guildId,
+    List<OnboardingResponseDto> responses,
+  ) async {
+    await client.dio.put<void>(
+      '$_base/guilds/$guildId/onboarding/me/responses',
+      data: {
+        'responses': [for (final r in responses) r.toJson()],
+      },
+    );
+  }
+
+  Future<WelcomeScreenDto> getWelcomeScreen(String guildId) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/welcome-screen',
+    );
+    return WelcomeScreenDto.fromJson(response.data!);
+  }
+
+  Future<WelcomeScreenDto> updateWelcomeScreen(
+    String guildId,
+    WelcomeScreenDto screen,
+  ) async {
+    final response = await client.dio.put<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/welcome-screen',
+      data: screen.toJson(),
+    );
+    return WelcomeScreenDto.fromJson(response.data!);
+  }
+
+  /// Members who joined while onboarding was enabled and haven't finished it.
+  /// Requires `ModerateMembers` or `ManageGuild`.
+  Future<List<PendingMemberDto>> getPendingMembers(
+    String guildId, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final response = await client.dio.get<List<dynamic>>(
+      '$_base/guilds/$guildId/members/pending?limit=$limit&offset=$offset',
+    );
+    return response.data!
+        .map((json) => PendingMemberDto.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<AuditLogEntryDto>> getAuditLog(
@@ -615,6 +715,7 @@ class GuildApi {
     ChannelType.thread => 'Thread',
     ChannelType.announcement => 'Announcement',
     ChannelType.forum => 'Forum',
+    ChannelType.media => 'Media',
   };
 
   Future<List<GuildEmojiDto>> getEmojis(String guildId) async {
@@ -652,18 +753,33 @@ class GuildApi {
   /// Creates a "post" (a `Thread`-typed channel parented to a Forum channel)
   /// - identical shape to a Text-channel thread. When [content] is present
   /// it's posted as the first message automatically, server-side.
+  ///
+  /// [tagIds] applies forum tags at creation; it's required (non-empty) when
+  /// the forum's config has `requireTag`, and applying a `moderated` tag needs
+  /// `ManageChannel`/`ManageAnyThread` or the whole call is refused - hence
+  /// the picker hides moderated chips from non-moderators rather than letting
+  /// the request fail.
   Future<ChannelDto> createThread(
     String channelId, {
     required String name,
     String? content,
+    List<String> tagIds = const [],
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       '$_base/channels/$channelId/threads',
-      data: {'name': name, if (content != null) 'content': content},
+      data: {
+        'name': name,
+        if (content != null) 'content': content,
+        if (tagIds.isNotEmpty) 'tagIds': tagIds,
+      },
     );
     return ChannelDto.fromJson(response.data!);
   }
 
+  /// The legacy thread list - **capped at the 50 most recent** and with no tag
+  /// filtering, activity sort, pinning awareness or pagination. Still the
+  /// right call for a text channel's thread sidebar; forums use
+  /// [getForumPosts] instead.
   Future<List<ChannelDto>> getThreads(String channelId) async {
     final response = await client.dio.get<List<dynamic>>(
       '$_base/channels/$channelId/threads',
@@ -676,6 +792,243 @@ class GuildApi {
   Future<void> archiveThread(String threadId) async {
     await client.dio.patch<void>('$_base/threads/$threadId/archive');
   }
+
+  // ---------------------------------------------------------------------
+  // Forum tags, config and posts
+  //
+  // Every endpoint below works identically for `Forum` and `Media` channels
+  // (see `ChannelTypeX.isForumLike`) and reuses existing permission bits -
+  // `ViewChannel` to read, `ManageChannel`/`ManageAnyThread` to write - so
+  // nothing needs granting before forums work.
+  // ---------------------------------------------------------------------
+
+  Future<List<ForumTagDto>> getForumTags(String forumChannelId) async {
+    final response = await client.dio.get<List<dynamic>>(
+      '$_base/channels/$forumChannelId/tags',
+    );
+    return response.data!
+        .map((json) => ForumTagDto.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Throws [ForumTagNameTakenException] on the `409` a duplicate name gets -
+  /// the one error users hit routinely, so it's surfaced inline on the name
+  /// field rather than as a toast.
+  Future<ForumTagDto> createForumTag(
+    String forumChannelId, {
+    required String name,
+    String? emojiId,
+    String? emojiName,
+    String? color,
+    bool moderated = false,
+  }) async {
+    try {
+      final response = await client.dio.post<Map<String, dynamic>>(
+        '$_base/channels/$forumChannelId/tags',
+        data: {
+          'name': name,
+          if (emojiId != null) 'emojiId': emojiId,
+          if (emojiName != null) 'emojiName': emojiName,
+          if (color != null) 'color': color,
+          'moderated': moderated,
+        },
+      );
+      return ForumTagDto.fromJson(response.data!);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        throw ForumTagNameTakenException(name);
+      }
+      rethrow;
+    }
+  }
+
+  /// Only the fields you pass are touched. To *clear* an emoji send an empty
+  /// string rather than null - null is this API's "leave unchanged".
+  Future<ForumTagDto> updateForumTag(
+    String tagId, {
+    String? name,
+    String? emojiId,
+    String? emojiName,
+    String? color,
+    bool? moderated,
+  }) async {
+    try {
+      final response = await client.dio.patch<Map<String, dynamic>>(
+        '$_base/forum-tags/$tagId',
+        data: {
+          if (name != null) 'name': name,
+          if (emojiId != null) 'emojiId': emojiId,
+          if (emojiName != null) 'emojiName': emojiName,
+          if (color != null) 'color': color,
+          if (moderated != null) 'moderated': moderated,
+        },
+      );
+      return ForumTagDto.fromJson(response.data!);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409 && name != null) {
+        throw ForumTagNameTakenException(name);
+      }
+      rethrow;
+    }
+  }
+
+  /// The tag is removed from every post carrying it, in the same transaction.
+  Future<void> deleteForumTag(String tagId) async {
+    await client.dio.delete<void>('$_base/forum-tags/$tagId');
+  }
+
+  /// Send the forum's **complete** ordered tag id list - positions come from
+  /// the array index and a partial list is rejected with `400`.
+  Future<void> reorderForumTags(
+    String forumChannelId,
+    List<String> tagIds,
+  ) async {
+    await client.dio.patch<void>(
+      '$_base/channels/$forumChannelId/tags/reorder',
+      data: {'tagIds': tagIds},
+    );
+  }
+
+  Future<ForumConfigDto> getForumConfig(String forumChannelId) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/channels/$forumChannelId/forum-config',
+    );
+    return ForumConfigDto.fromJson(response.data!);
+  }
+
+  Future<ForumConfigDto> updateForumConfig(
+    String forumChannelId, {
+    bool? requireTag,
+    ForumSortOrder? defaultSortOrder,
+    ForumLayout? defaultLayout,
+    String? defaultReactionEmojiId,
+    String? defaultReactionEmojiName,
+    int? defaultThreadSlowModeSeconds,
+    int? defaultAutoArchiveMinutes,
+  }) async {
+    final response = await client.dio.patch<Map<String, dynamic>>(
+      '$_base/channels/$forumChannelId/forum-config',
+      data: {
+        if (requireTag != null) 'requireTag': requireTag,
+        if (defaultSortOrder != null)
+          'defaultSortOrder': defaultSortOrder == ForumSortOrder.latestActivity
+              ? 'LatestActivity'
+              : 'CreationDate',
+        if (defaultLayout != null)
+          'defaultLayout': defaultLayout == ForumLayout.gallery
+              ? 'Gallery'
+              : 'List',
+        if (defaultReactionEmojiId != null)
+          'defaultReactionEmojiId': defaultReactionEmojiId,
+        if (defaultReactionEmojiName != null)
+          'defaultReactionEmojiName': defaultReactionEmojiName,
+        if (defaultThreadSlowModeSeconds != null)
+          'defaultThreadSlowModeSeconds': defaultThreadSlowModeSeconds,
+        if (defaultAutoArchiveMinutes != null)
+          'defaultAutoArchiveMinutes': defaultAutoArchiveMinutes,
+      },
+    );
+    return ForumConfigDto.fromJson(response.data!);
+  }
+
+  /// One keyset-paginated page of posts. Pinned posts are hoisted ahead of
+  /// pagination and so only appear on the first page - never re-sort the
+  /// result client-side or the ordering breaks across pages.
+  ///
+  /// [cursor] must be a `nextCursor` handed back by a previous call made with
+  /// the *same* sort and filters; changing any of them means starting over.
+  Future<ForumPostPageDto> getForumPosts(
+    String forumChannelId, {
+    List<String> tagIds = const [],
+    bool matchAll = false,
+    ForumSortOrder? sort,
+    ForumArchiveFilter archived = ForumArchiveFilter.active,
+    int limit = 25,
+    String? cursor,
+  }) async {
+    try {
+      final response = await client.dio.get<Map<String, dynamic>>(
+        '$_base/channels/$forumChannelId/posts',
+        queryParameters: {
+          if (tagIds.isNotEmpty) ...{
+            'tagIds': tagIds.join(','),
+            'match': matchAll ? 'all' : 'any',
+          },
+          if (sort != null) 'sort': sort.querySortValue,
+          'archived': archived.wireValue,
+          'limit': limit,
+          if (cursor != null) 'cursor': cursor,
+        },
+      );
+      return ForumPostPageDto.fromJson(response.data!);
+    } on DioException catch (e) {
+      // Transitional: `/posts` ships with the forum-parity work, and until
+      // that's deployed the route simply isn't there. Rather than showing a
+      // dead forum on older servers, fall back to the v1 thread list - one
+      // unfiltered, unpaginated page, which is exactly what forums did
+      // before. Remove once every server this client talks to has `/posts`.
+      final status = e.response?.statusCode;
+      if (status == 404 || status == 405) {
+        final threads = await getThreads(forumChannelId);
+        return ForumPostPageDto(
+          posts: [
+            for (final thread in threads)
+              ForumPostDto(
+                id: thread.id,
+                guildId: thread.guildId,
+                parentChannelId: thread.parentChannelId,
+                name: thread.name,
+                description: thread.description,
+                tagIds: thread.tagIds,
+                isPinned: thread.isPinned,
+                isLocked: thread.isLocked,
+                isArchived: thread.isArchived,
+                lastActivityAt: thread.lastActivityAt,
+                messageCount: thread.messageCount,
+                autoArchiveAt: thread.autoArchiveAt,
+                isAgeRestricted: thread.isAgeRestricted,
+                isPrivate: thread.isPrivate,
+                slowModeSeconds: thread.slowModeSeconds,
+              ),
+          ],
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// **Replace semantics** - send the complete desired set, not a delta, which
+  /// is what makes a retry after a network blip safe.
+  Future<ForumPostDto> setPostTags(String threadId, List<String> tagIds) async {
+    final response = await client.dio.put<Map<String, dynamic>>(
+      '$_base/threads/$threadId/tags',
+      data: {'tagIds': tagIds},
+    );
+    return ForumPostDto.fromJson(response.data!);
+  }
+
+  /// Post pinning - entirely separate from pinning a *message inside* a post,
+  /// which is the messaging service's own feature.
+  Future<void> setPostPinned(String threadId, bool pinned) async {
+    await client.dio.patch<void>(
+      '$_base/threads/$threadId/pin',
+      data: {'pinned': pinned},
+    );
+  }
+
+  Future<void> setPostLocked(String threadId, bool locked) async {
+    await client.dio.patch<void>(
+      '$_base/threads/$threadId/lock',
+      data: {'locked': locked},
+    );
+  }
+}
+
+/// Thrown by the tag create/rename calls on the `409` a name collision gets -
+/// names are unique per forum, case-insensitively.
+class ForumTagNameTakenException implements Exception {
+  const ForumTagNameTakenException(this.name);
+  final String name;
 }
 
 /// Thrown by [GuildApi.redeemInvite] when the guild's `verificationLevel`

@@ -9,7 +9,6 @@ import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
-import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -20,8 +19,10 @@ import '../../data/guild_repository.dart';
 import '../../data/models/category_dto.dart';
 import '../../data/models/channel_dto.dart';
 import '../../data/models/guild_dto.dart';
+import '../../data/models/guild_features.dart';
 import '../../data/models/guild_permissions.dart';
 import '../../data/models/onboarding_dto.dart';
+import 'onboarding_wizard_screen.dart';
 
 /// Per-channel read state tracked locally in [_GuildDetailScreenState] -
 /// [isUnread] drives the bold channel-name styling, [mentionCount] the red
@@ -46,6 +47,20 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   GuildPermissions _permissions = GuildPermissions.none;
   Map<String, _ChannelReadState> _unread = {};
   late final StreamSubscription<RealtimeEvent> _messageSub;
+
+  /// This member's onboarding state, when the guild has onboarding at all.
+  OnboardingStatusDto? _onboarding;
+
+  /// The wizard opens itself once per visit to this screen; after that the
+  /// banner is the way back in, so re-entering a channel doesn't relaunch it.
+  bool _onboardingShown = false;
+
+  /// Whether the guild has any onboarding prompts - the Channels & Roles entry
+  /// only makes sense when there's something to pick.
+  bool _hasSelfServePrompts = false;
+
+  bool get _onboardingPending =>
+      (_onboarding?.enabled ?? false) && !(_onboarding?.completed ?? true);
 
   @override
   void initState() {
@@ -183,112 +198,66 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     unawaited(_checkOnboarding());
   }
 
-  /// Cheap enough to call on every guild-open per the backend guide - shows
-  /// the rules gate once per membership (never again once `completed`).
+  /// Cheap enough to call on every guild-open per the backend guide.
+  ///
+  /// Gated on `enabled` as well as `completed`: a member who joined while
+  /// onboarding was on and had it switched off underneath them reads as
+  /// `completed: false` forever, and is not actually restricted - showing them
+  /// a rules screen they can't get rid of was exactly the bug `enabled` was
+  /// added to fix.
   Future<void> _checkOnboarding() async {
+    final repository = getIt<GuildRepository>();
+    // Onboarding is a module: with it off there is no rules gate, no prompts
+    // and no Channels & Roles, so neither request is worth making.
+    if (!(_guild?.hasFeature(GuildFeature.onboarding) ?? true)) {
+      if (mounted && (_onboarding != null || _hasSelfServePrompts)) {
+        setState(() {
+          _onboarding = null;
+          _hasSelfServePrompts = false;
+        });
+      }
+      return;
+    }
     try {
-      final status = await getIt<GuildRepository>().getOwnOnboardingStatus(
-        widget.guildId,
-      );
-      if (!status.completed && mounted) await _showOnboardingSheet(status);
+      final status = await repository.getOwnOnboardingStatus(widget.guildId);
+      if (!mounted) return;
+      setState(() => _onboarding = status);
+      if (status.enabled && !status.completed && !_onboardingShown) {
+        _onboardingShown = true;
+        await _openOnboarding();
+      }
     } catch (_) {
       // No onboarding configured for this guild, or the check failed -
       // either way, don't block on it.
     }
+    try {
+      // Channels & Roles covers every prompt, including the ones that never
+      // appear in the join flow - so its entry point can't be inferred from
+      // the join-flow status above.
+      final prompts = await repository.getOnboardingPrompts(widget.guildId);
+      if (mounted) setState(() => _hasSelfServePrompts = prompts.isNotEmpty);
+    } catch (_) {
+      // Leave the Channels & Roles row hidden.
+    }
   }
 
-  Future<void> _showOnboardingSheet(OnboardingStatusDto status) async {
-    final theme = Theme.of(context);
-    var accepting = false;
-    await showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      isDismissible: false,
-      enableDrag: false,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.l),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.waving_hand_outlined,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: AppSpacing.s),
-                    Expanded(
-                      child: Text(
-                        'Welcome! Read the rules to get started',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.l),
-                Text(
-                  'RULES',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 260),
-                  padding: const EdgeInsets.all(AppSpacing.m),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(AppRadii.card),
-                  ),
-                  child: SingleChildScrollView(
-                    child: Text(
-                      status.rulesText ?? '',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.l),
-                FilledButton(
-                  onPressed: accepting
-                      ? null
-                      : () async {
-                          setSheetState(() => accepting = true);
-                          try {
-                            await getIt<GuildRepository>().acceptOnboarding(
-                              widget.guildId,
-                            );
-                            if (sheetContext.mounted) {
-                              Navigator.of(sheetContext).pop();
-                            }
-                          } catch (_) {
-                            setSheetState(() => accepting = false);
-                            if (sheetContext.mounted) {
-                              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Could not accept - please try again.',
-                                  ),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                  child: accepting
-                      ? const ButtonProgressIndicator()
-                      : const Text('I understand and agree'),
-                ),
-              ],
-            ),
+  Future<void> _openOnboarding() async {
+    final status = _onboarding;
+    if (status == null) return;
+    final completed = await Navigator.of(context, rootNavigator: true)
+        .push<bool>(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) =>
+                OnboardingWizardScreen(guildId: widget.guildId, status: status),
           ),
-        ),
-      ),
-    );
+        );
+    if (completed == true && mounted) {
+      // Accepting can add roles and channel overwrites, so both the guild and
+      // this member's own permissions may have changed.
+      setState(() => _onboarding = status.copyWith(completed: true));
+      await _load();
+    }
   }
 
   void _hydrateVoiceRosters(GuildDto guild) {
@@ -335,7 +304,10 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     if (guild == null) return;
     final input = await showDialog<_NewChannelInput>(
       context: context,
-      builder: (context) => _CreateChannelDialog(categories: guild.categories),
+      builder: (context) => _CreateChannelDialog(
+        categories: guild.categories,
+        features: guild.featureSet,
+      ),
     );
     if (input == null || input.name.trim().isEmpty) return;
     try {
@@ -476,19 +448,24 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
       appBar: AppBar(
         title: Text(guild.name),
         actions: [
-          if (_permissions.has('ViewWiki'))
+          // Modules are hidden, never greyed out - a household should not see
+          // a wiki button it can't press. The owner is not exempt either:
+          // a disabled module is a product state, not a permission level.
+          if (guild.hasFeature(GuildFeature.wiki) &&
+              _permissions.has('ViewWiki'))
             IconButton(
               icon: const Icon(Icons.menu_book_outlined),
               tooltip: 'Wiki',
               onPressed: () =>
                   context.push(RoutePaths.serverWikiPath(guild.id)),
             ),
-          IconButton(
-            icon: const Icon(Icons.event_outlined),
-            tooltip: 'Events',
-            onPressed: () =>
-                context.push(RoutePaths.serverEventsPath(guild.id)),
-          ),
+          if (guild.hasFeature(GuildFeature.events))
+            IconButton(
+              icon: const Icon(Icons.event_outlined),
+              tooltip: 'Events',
+              onPressed: () =>
+                  context.push(RoutePaths.serverEventsPath(guild.id)),
+            ),
           IconButton(
             icon: const Icon(Icons.people_outline),
             onPressed: () =>
@@ -508,6 +485,22 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
           key: const ValueKey('loaded'),
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
           children: [
+            // A pending member can read everything but can't post, react or
+            // join voice - so the way back into the wizard has to stay in
+            // front of them rather than being a modal they dismissed once.
+            if (_onboardingPending) _OnboardingBanner(onTap: _openOnboarding),
+            if (_hasSelfServePrompts)
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.checklist_outlined),
+                title: Text(
+                  'Channels & Roles',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () =>
+                    context.push(RoutePaths.serverChannelsRolesPath(guild.id)),
+              ),
             for (final channel in uncategorized)
               _ChannelTile(
                 guildId: guild.id,
@@ -559,6 +552,71 @@ class _NewChannelInput {
   final String name;
   final ChannelType type;
   final String? categoryId;
+}
+
+/// The standing "you haven't finished onboarding" prompt at the top of a
+/// pending member's channel list. Deliberately a banner rather than a blocking
+/// modal: they can look around, they just can't participate yet.
+class _OnboardingBanner extends StatelessWidget {
+  const _OnboardingBanner({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.m,
+        AppSpacing.xs,
+        AppSpacing.m,
+        AppSpacing.s,
+      ),
+      child: Material(
+        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadii.card),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadii.card),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.m),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.waving_hand_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: AppSpacing.m),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Finish getting set up',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'You can look around, but you can\'t post yet.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: theme.colorScheme.primary),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _CategoryHeader extends StatelessWidget {
@@ -618,9 +676,12 @@ class _ChannelTile extends StatelessWidget {
     final mentionCount = unread?.mentionCount ?? 0;
     return ListTile(
       dense: true,
-      leading: Icon(
-        channel.type == ChannelType.forum ? Icons.forum_outlined : Icons.tag,
-      ),
+      leading: Icon(switch (channel.type) {
+        ChannelType.forum => Icons.forum_outlined,
+        ChannelType.media => Icons.perm_media_outlined,
+        ChannelType.announcement => Icons.campaign_outlined,
+        _ => Icons.tag,
+      }),
       title: Text(
         channel.name,
         style: isUnread
@@ -748,13 +809,20 @@ class _VoiceChannelTile extends StatelessWidget {
   }
 }
 
-/// Name + type (Text/Voice/Forum - matches desktop's own create-channel
+/// Name + type (Text/Voice/Forum/Media - matches desktop's own create-channel
 /// modal, which likewise doesn't offer Announcement/Thread as user-creatable
 /// types) + optional category, mirroring `CreateChannelModalComponent`.
 class _CreateChannelDialog extends StatefulWidget {
-  const _CreateChannelDialog({required this.categories});
+  const _CreateChannelDialog({
+    required this.categories,
+    required this.features,
+  });
 
   final List<CategoryDto> categories;
+
+  /// Channel types belonging to a disabled module aren't offered at all -
+  /// creating one would be refused with a `400` anyway.
+  final GuildFeatures features;
 
   @override
   State<_CreateChannelDialog> createState() => _CreateChannelDialogState();
@@ -814,22 +882,36 @@ class _CreateChannelDialogState extends State<_CreateChannelDialog> {
                       selected: _type == ChannelType.text,
                       onTap: () => setState(() => _type = ChannelType.text),
                     ),
-                    divider,
-                    _ChannelTypeOption(
-                      icon: Icons.volume_up_outlined,
-                      title: 'Voice',
-                      subtitle: 'Hang out together with voice chat',
-                      selected: _type == ChannelType.voice,
-                      onTap: () => setState(() => _type = ChannelType.voice),
-                    ),
-                    divider,
-                    _ChannelTypeOption(
-                      icon: Icons.forum_outlined,
-                      title: 'Forum',
-                      subtitle: 'Organize discussion into posts',
-                      selected: _type == ChannelType.forum,
-                      onTap: () => setState(() => _type = ChannelType.forum),
-                    ),
+                    if (widget.features.has(GuildFeature.voiceChannels)) ...[
+                      divider,
+                      _ChannelTypeOption(
+                        icon: Icons.volume_up_outlined,
+                        title: 'Voice',
+                        subtitle: 'Hang out together with voice chat',
+                        selected: _type == ChannelType.voice,
+                        onTap: () => setState(() => _type = ChannelType.voice),
+                      ),
+                    ],
+                    // One flag covers Forum *and* Media.
+                    if (widget.features.has(GuildFeature.forums)) ...[
+                      divider,
+                      _ChannelTypeOption(
+                        icon: Icons.forum_outlined,
+                        title: 'Forum',
+                        subtitle: 'Organize discussion into posts',
+                        selected: _type == ChannelType.forum,
+                        onTap: () => setState(() => _type = ChannelType.forum),
+                      ),
+                      divider,
+                      _ChannelTypeOption(
+                        icon: Icons.perm_media_outlined,
+                        title: 'Media',
+                        subtitle:
+                            'A forum for images and clips, shown as a grid',
+                        selected: _type == ChannelType.media,
+                        onTap: () => setState(() => _type = ChannelType.media),
+                      ),
+                    ],
                   ],
                 ),
               ),

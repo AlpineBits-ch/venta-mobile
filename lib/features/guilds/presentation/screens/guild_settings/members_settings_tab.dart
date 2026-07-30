@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/widget_styles.dart';
 import '../../../data/guild_repository.dart';
+import '../../../data/models/guild_dto.dart';
+import '../../../data/models/guild_features.dart';
 import '../../../data/models/guild_member_dto.dart';
 
 class MembersSettingsTab extends StatefulWidget {
@@ -156,11 +158,20 @@ class _MembersSettingsTabState extends State<MembersSettingsTab> {
                           ],
                         ],
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.person_remove_outlined),
-                        tooltip: 'Kick',
-                        onPressed: () => _kick(member),
-                      ),
+                      // Kicking belongs to the Moderation module - a guild
+                      // without it has no kick affordance at all, owner
+                      // included.
+                      trailing:
+                          (getIt<GuildRepository>()
+                                  .cachedById(widget.guildId)
+                                  ?.hasFeature(GuildFeature.moderation) ??
+                              true)
+                          ? IconButton(
+                              icon: const Icon(Icons.person_remove_outlined),
+                              tooltip: 'Kick',
+                              onPressed: () => _kick(member),
+                            )
+                          : null,
                     );
                   },
                 ),

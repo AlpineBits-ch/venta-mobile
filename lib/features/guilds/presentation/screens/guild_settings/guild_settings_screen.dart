@@ -1,35 +1,91 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../core/di/injector.dart';
 import '../../../../../core/routing/route_paths.dart';
 import '../../../../../core/widgets/app_back_button.dart';
+import '../../../data/guild_repository.dart';
+import '../../../data/models/guild_dto.dart';
+import '../../../data/models/guild_features.dart';
 import 'audit_log_settings_tab.dart';
 import 'auto_mod_settings_tab.dart';
 import 'bans_settings_tab.dart';
 import 'emoji_settings_tab.dart';
 import 'invites_settings_tab.dart';
 import 'members_settings_tab.dart';
+import 'modules_settings_tab.dart';
 import 'onboarding_settings_tab.dart';
 import 'overview_settings_tab.dart';
 import 'roles_settings_tab.dart';
 
 /// Discord-style server settings - tabbed, matching desktop's
-/// `GuildSettingsModalComponent` nav (Overview/Roles/Members/Bans/Audit
-/// Log/Invites/Emoji; desktop's separate "Community" group with Discord
-/// Sync is out of scope here). Reachable only from a `ManageGuild`-gated
-/// entry point on `GuildDetailScreen`.
-class GuildSettingsScreen extends StatelessWidget {
+/// `GuildSettingsModalComponent` nav. Reachable only from a
+/// `ManageGuild`-gated entry point on `GuildDetailScreen`.
+///
+/// Which tabs exist depends on the guild's modules: a household has no Bans,
+/// Audit Log, Auto-Mod or Onboarding tab at all. Hidden rather than disabled -
+/// a tab you can't press is worse than one that isn't there. Overview,
+/// Roles, Members, Invites and Modules are always present, because
+/// `ManageGuild` is never gated: it's how a module gets switched back on.
+class GuildSettingsScreen extends StatefulWidget {
   const GuildSettingsScreen({super.key, required this.guildId});
 
   final String guildId;
 
   @override
+  State<GuildSettingsScreen> createState() => _GuildSettingsScreenState();
+}
+
+class _GuildSettingsScreenState extends State<GuildSettingsScreen> {
+  GuildDto? _guild;
+
+  @override
+  void initState() {
+    super.initState();
+    _guild = getIt<GuildRepository>().cachedById(widget.guildId);
+    // Toggling a module rebuilds this tab set, so the screen tracks the guild
+    // rather than reading the cache once.
+    getIt<GuildRepository>().guildsStream.listen((guilds) {
+      if (!mounted) return;
+      final updated = guilds.where((g) => g.id == widget.guildId).firstOrNull;
+      if (updated != null) setState(() => _guild = updated);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final guild = _guild;
+    final features = guild?.featureSet ?? GuildFeatures.communityPreset;
+
+    final tabs = <({String label, Widget view})>[
+      (label: 'Overview', view: OverviewSettingsTab(guildId: widget.guildId)),
+      (label: 'Roles', view: RolesSettingsTab(guildId: widget.guildId)),
+      (label: 'Members', view: MembersSettingsTab(guildId: widget.guildId)),
+      if (features.has(GuildFeature.moderation)) ...[
+        (label: 'Bans', view: BansSettingsTab(guildId: widget.guildId)),
+        (
+          label: 'Audit Log',
+          view: AuditLogSettingsTab(guildId: widget.guildId),
+        ),
+      ],
+      (label: 'Invites', view: InvitesSettingsTab(guildId: widget.guildId)),
+      if (features.has(GuildFeature.emojis))
+        (label: 'Emoji', view: EmojiSettingsTab(guildId: widget.guildId)),
+      if (features.has(GuildFeature.autoMod))
+        (label: 'Auto-Mod', view: AutoModSettingsTab(guildId: widget.guildId)),
+      if (features.has(GuildFeature.onboarding))
+        (
+          label: 'Onboarding',
+          view: OnboardingSettingsTab(guildId: widget.guildId),
+        ),
+      (label: 'Modules', view: ModulesSettingsTab(guildId: widget.guildId)),
+    ];
+
     return DefaultTabController(
-      length: 9,
+      length: tabs.length,
       child: Scaffold(
         appBar: AppBar(
           leading: AppBackButton(
-            fallbackLocation: RoutePaths.serverPath(guildId),
+            fallbackLocation: RoutePaths.serverPath(widget.guildId),
           ),
           title: const Text('Server Settings'),
           // The tab strip doesn't fit on a phone width, so it's scrollable -
@@ -48,36 +104,14 @@ class GuildSettingsScreen extends StatelessWidget {
                 stops: [0.0, 0.04, 0.92, 1.0],
               ).createShader(rect),
               blendMode: BlendMode.dstIn,
-              child: const TabBar(
+              child: TabBar(
                 isScrollable: true,
-                tabs: [
-                  Tab(text: 'Overview'),
-                  Tab(text: 'Roles'),
-                  Tab(text: 'Members'),
-                  Tab(text: 'Bans'),
-                  Tab(text: 'Audit Log'),
-                  Tab(text: 'Invites'),
-                  Tab(text: 'Emoji'),
-                  Tab(text: 'Auto-Mod'),
-                  Tab(text: 'Onboarding'),
-                ],
+                tabs: [for (final tab in tabs) Tab(text: tab.label)],
               ),
             ),
           ),
         ),
-        body: TabBarView(
-          children: [
-            OverviewSettingsTab(guildId: guildId),
-            RolesSettingsTab(guildId: guildId),
-            MembersSettingsTab(guildId: guildId),
-            BansSettingsTab(guildId: guildId),
-            AuditLogSettingsTab(guildId: guildId),
-            InvitesSettingsTab(guildId: guildId),
-            EmojiSettingsTab(guildId: guildId),
-            AutoModSettingsTab(guildId: guildId),
-            OnboardingSettingsTab(guildId: guildId),
-          ],
-        ),
+        body: TabBarView(children: [for (final tab in tabs) tab.view]),
       ),
     );
   }

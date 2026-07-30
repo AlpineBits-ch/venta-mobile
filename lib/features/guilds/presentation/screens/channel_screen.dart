@@ -10,7 +10,9 @@ import '../../../messaging/data/message_api.dart';
 import '../../../messaging/data/message_repository.dart';
 import '../../../messaging/presentation/widgets/thread_view.dart';
 import '../../data/guild_repository.dart';
+import '../../data/models/channel_dto.dart';
 import '../../data/models/guild_dto.dart';
+import '../widgets/forum_post_header.dart';
 
 /// Full-screen channel thread - reuses `ThreadView`/`MessageThreadBloc`
 /// unchanged from DM messaging, just constructed with `channelId` instead
@@ -59,12 +61,36 @@ class _ChannelScreenState extends State<ChannelScreen> {
     super.dispose();
   }
 
+  ChannelDto? get _channel => getIt<GuildRepository>()
+      .cachedById(widget.guildId)
+      ?.channels
+      .where((c) => c.id == widget.channelId)
+      .firstOrNull;
+
+  /// A forum post is titled like the post, not like a channel - it's a
+  /// sentence, and `#dark-mode-is-too-bright` reads wrong.
   String _title() {
-    final guild = getIt<GuildRepository>().cachedById(widget.guildId);
-    final channel = guild?.channels
-        .where((c) => c.id == widget.channelId)
+    final channel = _channel;
+    if (channel == null) return 'Channel';
+    return channel.type == ChannelType.thread
+        ? channel.name
+        : '#${channel.name}';
+  }
+
+  /// Present only for a post inside a Forum/Media channel - see
+  /// [ForumPostHeader], which renders nothing when there's nothing to say.
+  Widget? _banner() {
+    final channel = _channel;
+    if (channel == null || channel.type != ChannelType.thread) return null;
+    final parentId = channel.parentChannelId;
+    if (parentId == null) return null;
+    final parent = getIt<GuildRepository>()
+        .cachedById(widget.guildId)
+        ?.channels
+        .where((c) => c.id == parentId)
         .firstOrNull;
-    return channel != null ? '#${channel.name}' : 'Channel';
+    if (!(parent?.type.isForumLike ?? false)) return null;
+    return ForumPostHeader(guildId: widget.guildId, post: channel);
   }
 
   @override
@@ -84,6 +110,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
         title: _title(),
         myUserId: myUserId,
         guildId: widget.guildId,
+        banner: _banner(),
       ),
     );
   }

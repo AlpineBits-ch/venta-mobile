@@ -55,8 +55,17 @@ class RealtimeService {
     'guild.CategoryCreated',
     'guild.CategoryDeleted',
     'guild.CategoryUpdated',
+    // Forum posts ride the thread events - `ThreadCreated` now carries
+    // `tagIds`, and applied-tag changes, pins, locks and archives all arrive
+    // as one `ThreadUpdated` carrying the full current state of those flags
+    // (a replace, not a patch), rather than as separate events.
     'guild.ThreadCreated',
     'guild.ThreadUpdated',
+    'guild.ForumTagCreated',
+    'guild.ForumTagUpdated',
+    'guild.ForumTagDeleted',
+    'guild.ForumTagsReordered',
+    'guild.ForumConfigUpdated',
     'guild.GuildCreated',
     'guild.GuildDeleted',
     'guild.GuildUpdated',

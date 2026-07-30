@@ -294,10 +294,9 @@ class _NewEmojiDialogState extends State<_NewEmojiDialog> {
           // the upload had simply failed silently.
           onPressed: _nameController.text.trim().isEmpty
               ? null
-              : () => Navigator.of(context).pop((
-                  name: _nameController.text.trim(),
-                  animated: _animated,
-                )),
+              : () => Navigator.of(
+                  context,
+                ).pop((name: _nameController.text.trim(), animated: _animated)),
           child: const Text('Upload'),
         ),
       ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
@@ -264,6 +265,28 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
                       ? const ButtonProgressIndicator()
                       : const Text('Save changes'),
                 ),
+                if (channel.type.isForumLike) ...[
+                  const SizedBox(height: AppSpacing.l),
+                  const Divider(),
+                  const SizedBox(height: AppSpacing.s),
+                  Text('FORUM', style: theme.textTheme.labelSmall),
+                  const SizedBox(height: AppSpacing.xs),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.sell_outlined),
+                    title: const Text('Tags & posting settings'),
+                    subtitle: const Text(
+                      'Post tags, required tagging, default sort and layout',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push(
+                      RoutePaths.serverChannelForumSettingsPath(
+                        widget.guildId,
+                        widget.channelId,
+                      ),
+                    ),
+                  ),
+                ],
                 if (channel.type == ChannelType.announcement) ...[
                   const SizedBox(height: AppSpacing.l),
                   const Divider(),

@@ -16,6 +16,19 @@ enum ChannelType {
   announcement,
   @JsonValue('Forum')
   forum,
+
+  /// A forum variant - same tags, same posts, same endpoints; only the
+  /// intended rendering differs (gallery-first, media-forward). Everywhere the
+  /// forum docs say "forum", read "forum or media channel".
+  @JsonValue('Media')
+  media,
+}
+
+extension ChannelTypeX on ChannelType {
+  /// Forum and Media channels are both post containers driven by the same
+  /// `/posts`, `/tags` and `/forum-config` endpoints.
+  bool get isForumLike =>
+      this == ChannelType.forum || this == ChannelType.media;
 }
 
 @freezed
@@ -54,6 +67,21 @@ sealed class ChannelDto with _$ChannelDto {
     @Default(0) int position,
     @Default(0) int slowModeSeconds,
     String? parentChannelId,
+
+    // Forum-parity additions, all only meaningful on a `Thread` (i.e. a forum
+    // post - see `ForumPostDto`, which is this same entity as returned by the
+    // richer `/posts` endpoint). Additive: a `Thread` from the plain
+    // `/threads` list simply leaves them at their defaults.
+    @Default(<String>[]) List<String> tagIds,
+    @Default(false) bool isPinned,
+
+    /// No new messages, by moderator decision - distinct from archived, and
+    /// persisting independently of it.
+    @Default(false) bool isLocked,
+    @Default(false) bool isArchived,
+    DateTime? lastActivityAt,
+    @Default(0) int messageCount,
+    DateTime? autoArchiveAt,
   }) = _ChannelDto;
 
   factory ChannelDto.fromJson(Map<String, dynamic> json) =>

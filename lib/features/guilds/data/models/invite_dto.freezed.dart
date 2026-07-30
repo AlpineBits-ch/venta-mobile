@@ -15,7 +15,11 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$InviteDto {
 
- String get id; InviteType get type; InviteState get state; String get guildId; GuildDto? get guild; String get code; String? get expiresAt; int? get maxUses; int get useCount;
+ String get id; InviteType get type; InviteState get state; String get guildId; GuildDto? get guild; String get code; String? get expiresAt; int? get maxUses; int get useCount;/// The guild's welcome splash, present only when it has one and it's
+/// enabled. Carried inline here because the dedicated welcome-screen
+/// endpoint is members-only and whoever is looking at an invite isn't one
+/// yet.
+ WelcomeScreenDto? get welcomeScreen;
 /// Create a copy of InviteDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +32,16 @@ $InviteDtoCopyWith<InviteDto> get copyWith => _$InviteDtoCopyWithImpl<InviteDto>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is InviteDto&&(identical(other.id, id) || other.id == id)&&(identical(other.type, type) || other.type == type)&&(identical(other.state, state) || other.state == state)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.guild, guild) || other.guild == guild)&&(identical(other.code, code) || other.code == code)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses)&&(identical(other.useCount, useCount) || other.useCount == useCount));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is InviteDto&&(identical(other.id, id) || other.id == id)&&(identical(other.type, type) || other.type == type)&&(identical(other.state, state) || other.state == state)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.guild, guild) || other.guild == guild)&&(identical(other.code, code) || other.code == code)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses)&&(identical(other.useCount, useCount) || other.useCount == useCount)&&(identical(other.welcomeScreen, welcomeScreen) || other.welcomeScreen == welcomeScreen));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,type,state,guildId,guild,code,expiresAt,maxUses,useCount);
+int get hashCode => Object.hash(runtimeType,id,type,state,guildId,guild,code,expiresAt,maxUses,useCount,welcomeScreen);
 
 @override
 String toString() {
-  return 'InviteDto(id: $id, type: $type, state: $state, guildId: $guildId, guild: $guild, code: $code, expiresAt: $expiresAt, maxUses: $maxUses, useCount: $useCount)';
+  return 'InviteDto(id: $id, type: $type, state: $state, guildId: $guildId, guild: $guild, code: $code, expiresAt: $expiresAt, maxUses: $maxUses, useCount: $useCount, welcomeScreen: $welcomeScreen)';
 }
 
 
@@ -48,11 +52,11 @@ abstract mixin class $InviteDtoCopyWith<$Res>  {
   factory $InviteDtoCopyWith(InviteDto value, $Res Function(InviteDto) _then) = _$InviteDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, InviteType type, InviteState state, String guildId, GuildDto? guild, String code, String? expiresAt, int? maxUses, int useCount
+ String id, InviteType type, InviteState state, String guildId, GuildDto? guild, String code, String? expiresAt, int? maxUses, int useCount, WelcomeScreenDto? welcomeScreen
 });
 
 
-$GuildDtoCopyWith<$Res>? get guild;
+$GuildDtoCopyWith<$Res>? get guild;$WelcomeScreenDtoCopyWith<$Res>? get welcomeScreen;
 
 }
 /// @nodoc
@@ -65,7 +69,7 @@ class _$InviteDtoCopyWithImpl<$Res>
 
 /// Create a copy of InviteDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? type = null,Object? state = null,Object? guildId = null,Object? guild = freezed,Object? code = null,Object? expiresAt = freezed,Object? maxUses = freezed,Object? useCount = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? type = null,Object? state = null,Object? guildId = null,Object? guild = freezed,Object? code = null,Object? expiresAt = freezed,Object? maxUses = freezed,Object? useCount = null,Object? welcomeScreen = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,type: null == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
@@ -76,7 +80,8 @@ as GuildDto?,code: null == code ? _self.code : code // ignore: cast_nullable_to_
 as String,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
 as String?,maxUses: freezed == maxUses ? _self.maxUses : maxUses // ignore: cast_nullable_to_non_nullable
 as int?,useCount: null == useCount ? _self.useCount : useCount // ignore: cast_nullable_to_non_nullable
-as int,
+as int,welcomeScreen: freezed == welcomeScreen ? _self.welcomeScreen : welcomeScreen // ignore: cast_nullable_to_non_nullable
+as WelcomeScreenDto?,
   ));
 }
 /// Create a copy of InviteDto
@@ -90,6 +95,18 @@ $GuildDtoCopyWith<$Res>? get guild {
 
   return $GuildDtoCopyWith<$Res>(_self.guild!, (value) {
     return _then(_self.copyWith(guild: value));
+  });
+}/// Create a copy of InviteDto
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$WelcomeScreenDtoCopyWith<$Res>? get welcomeScreen {
+    if (_self.welcomeScreen == null) {
+    return null;
+  }
+
+  return $WelcomeScreenDtoCopyWith<$Res>(_self.welcomeScreen!, (value) {
+    return _then(_self.copyWith(welcomeScreen: value));
   });
 }
 }
@@ -170,10 +187,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  InviteType type,  InviteState state,  String guildId,  GuildDto? guild,  String code,  String? expiresAt,  int? maxUses,  int useCount)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  InviteType type,  InviteState state,  String guildId,  GuildDto? guild,  String code,  String? expiresAt,  int? maxUses,  int useCount,  WelcomeScreenDto? welcomeScreen)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _InviteDto() when $default != null:
-return $default(_that.id,_that.type,_that.state,_that.guildId,_that.guild,_that.code,_that.expiresAt,_that.maxUses,_that.useCount);case _:
+return $default(_that.id,_that.type,_that.state,_that.guildId,_that.guild,_that.code,_that.expiresAt,_that.maxUses,_that.useCount,_that.welcomeScreen);case _:
   return orElse();
 
 }
@@ -191,10 +208,10 @@ return $default(_that.id,_that.type,_that.state,_that.guildId,_that.guild,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  InviteType type,  InviteState state,  String guildId,  GuildDto? guild,  String code,  String? expiresAt,  int? maxUses,  int useCount)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  InviteType type,  InviteState state,  String guildId,  GuildDto? guild,  String code,  String? expiresAt,  int? maxUses,  int useCount,  WelcomeScreenDto? welcomeScreen)  $default,) {final _that = this;
 switch (_that) {
 case _InviteDto():
-return $default(_that.id,_that.type,_that.state,_that.guildId,_that.guild,_that.code,_that.expiresAt,_that.maxUses,_that.useCount);}
+return $default(_that.id,_that.type,_that.state,_that.guildId,_that.guild,_that.code,_that.expiresAt,_that.maxUses,_that.useCount,_that.welcomeScreen);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -208,10 +225,10 @@ return $default(_that.id,_that.type,_that.state,_that.guildId,_that.guild,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  InviteType type,  InviteState state,  String guildId,  GuildDto? guild,  String code,  String? expiresAt,  int? maxUses,  int useCount)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  InviteType type,  InviteState state,  String guildId,  GuildDto? guild,  String code,  String? expiresAt,  int? maxUses,  int useCount,  WelcomeScreenDto? welcomeScreen)?  $default,) {final _that = this;
 switch (_that) {
 case _InviteDto() when $default != null:
-return $default(_that.id,_that.type,_that.state,_that.guildId,_that.guild,_that.code,_that.expiresAt,_that.maxUses,_that.useCount);case _:
+return $default(_that.id,_that.type,_that.state,_that.guildId,_that.guild,_that.code,_that.expiresAt,_that.maxUses,_that.useCount,_that.welcomeScreen);case _:
   return null;
 
 }
@@ -223,7 +240,7 @@ return $default(_that.id,_that.type,_that.state,_that.guildId,_that.guild,_that.
 @JsonSerializable()
 
 class _InviteDto implements InviteDto {
-  const _InviteDto({required this.id, required this.type, required this.state, required this.guildId, this.guild, required this.code, this.expiresAt, this.maxUses, this.useCount = 0});
+  const _InviteDto({required this.id, required this.type, required this.state, required this.guildId, this.guild, required this.code, this.expiresAt, this.maxUses, this.useCount = 0, this.welcomeScreen});
   factory _InviteDto.fromJson(Map<String, dynamic> json) => _$InviteDtoFromJson(json);
 
 @override final  String id;
@@ -235,6 +252,11 @@ class _InviteDto implements InviteDto {
 @override final  String? expiresAt;
 @override final  int? maxUses;
 @override@JsonKey() final  int useCount;
+/// The guild's welcome splash, present only when it has one and it's
+/// enabled. Carried inline here because the dedicated welcome-screen
+/// endpoint is members-only and whoever is looking at an invite isn't one
+/// yet.
+@override final  WelcomeScreenDto? welcomeScreen;
 
 /// Create a copy of InviteDto
 /// with the given fields replaced by the non-null parameter values.
@@ -249,16 +271,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _InviteDto&&(identical(other.id, id) || other.id == id)&&(identical(other.type, type) || other.type == type)&&(identical(other.state, state) || other.state == state)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.guild, guild) || other.guild == guild)&&(identical(other.code, code) || other.code == code)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses)&&(identical(other.useCount, useCount) || other.useCount == useCount));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _InviteDto&&(identical(other.id, id) || other.id == id)&&(identical(other.type, type) || other.type == type)&&(identical(other.state, state) || other.state == state)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.guild, guild) || other.guild == guild)&&(identical(other.code, code) || other.code == code)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses)&&(identical(other.useCount, useCount) || other.useCount == useCount)&&(identical(other.welcomeScreen, welcomeScreen) || other.welcomeScreen == welcomeScreen));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,type,state,guildId,guild,code,expiresAt,maxUses,useCount);
+int get hashCode => Object.hash(runtimeType,id,type,state,guildId,guild,code,expiresAt,maxUses,useCount,welcomeScreen);
 
 @override
 String toString() {
-  return 'InviteDto(id: $id, type: $type, state: $state, guildId: $guildId, guild: $guild, code: $code, expiresAt: $expiresAt, maxUses: $maxUses, useCount: $useCount)';
+  return 'InviteDto(id: $id, type: $type, state: $state, guildId: $guildId, guild: $guild, code: $code, expiresAt: $expiresAt, maxUses: $maxUses, useCount: $useCount, welcomeScreen: $welcomeScreen)';
 }
 
 
@@ -269,11 +291,11 @@ abstract mixin class _$InviteDtoCopyWith<$Res> implements $InviteDtoCopyWith<$Re
   factory _$InviteDtoCopyWith(_InviteDto value, $Res Function(_InviteDto) _then) = __$InviteDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, InviteType type, InviteState state, String guildId, GuildDto? guild, String code, String? expiresAt, int? maxUses, int useCount
+ String id, InviteType type, InviteState state, String guildId, GuildDto? guild, String code, String? expiresAt, int? maxUses, int useCount, WelcomeScreenDto? welcomeScreen
 });
 
 
-@override $GuildDtoCopyWith<$Res>? get guild;
+@override $GuildDtoCopyWith<$Res>? get guild;@override $WelcomeScreenDtoCopyWith<$Res>? get welcomeScreen;
 
 }
 /// @nodoc
@@ -286,7 +308,7 @@ class __$InviteDtoCopyWithImpl<$Res>
 
 /// Create a copy of InviteDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? type = null,Object? state = null,Object? guildId = null,Object? guild = freezed,Object? code = null,Object? expiresAt = freezed,Object? maxUses = freezed,Object? useCount = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? type = null,Object? state = null,Object? guildId = null,Object? guild = freezed,Object? code = null,Object? expiresAt = freezed,Object? maxUses = freezed,Object? useCount = null,Object? welcomeScreen = freezed,}) {
   return _then(_InviteDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,type: null == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
@@ -297,7 +319,8 @@ as GuildDto?,code: null == code ? _self.code : code // ignore: cast_nullable_to_
 as String,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
 as String?,maxUses: freezed == maxUses ? _self.maxUses : maxUses // ignore: cast_nullable_to_non_nullable
 as int?,useCount: null == useCount ? _self.useCount : useCount // ignore: cast_nullable_to_non_nullable
-as int,
+as int,welcomeScreen: freezed == welcomeScreen ? _self.welcomeScreen : welcomeScreen // ignore: cast_nullable_to_non_nullable
+as WelcomeScreenDto?,
   ));
 }
 
@@ -312,6 +335,18 @@ $GuildDtoCopyWith<$Res>? get guild {
 
   return $GuildDtoCopyWith<$Res>(_self.guild!, (value) {
     return _then(_self.copyWith(guild: value));
+  });
+}/// Create a copy of InviteDto
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$WelcomeScreenDtoCopyWith<$Res>? get welcomeScreen {
+    if (_self.welcomeScreen == null) {
+    return null;
+  }
+
+  return $WelcomeScreenDtoCopyWith<$Res>(_self.welcomeScreen!, (value) {
+    return _then(_self.copyWith(welcomeScreen: value));
   });
 }
 }

@@ -18,6 +18,11 @@ _InviteDto _$InviteDtoFromJson(Map<String, dynamic> json) => _InviteDto(
   expiresAt: json['expiresAt'] as String?,
   maxUses: (json['maxUses'] as num?)?.toInt(),
   useCount: (json['useCount'] as num?)?.toInt() ?? 0,
+  welcomeScreen: json['welcomeScreen'] == null
+      ? null
+      : WelcomeScreenDto.fromJson(
+          json['welcomeScreen'] as Map<String, dynamic>,
+        ),
 );
 
 Map<String, dynamic> _$InviteDtoToJson(_InviteDto instance) =>
@@ -31,6 +36,7 @@ Map<String, dynamic> _$InviteDtoToJson(_InviteDto instance) =>
       'expiresAt': instance.expiresAt,
       'maxUses': instance.maxUses,
       'useCount': instance.useCount,
+      'welcomeScreen': instance.welcomeScreen,
     };
 
 const _$InviteTypeEnumMap = {

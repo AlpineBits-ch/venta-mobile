@@ -36,6 +36,14 @@ _GuildDto _$GuildDtoFromJson(Map<String, dynamic> json) => _GuildDto(
         unknownValue: VerificationLevel.none,
       ) ??
       VerificationLevel.none,
+  kind:
+      $enumDecodeNullable(
+        _$GuildKindEnumMap,
+        json['kind'],
+        unknownValue: GuildKind.community,
+      ) ??
+      GuildKind.community,
+  features: json['features'] as String?,
 );
 
 Map<String, dynamic> _$GuildDtoToJson(_GuildDto instance) => <String, dynamic>{
@@ -50,6 +58,8 @@ Map<String, dynamic> _$GuildDtoToJson(_GuildDto instance) => <String, dynamic>{
   'iconUrl': instance.iconUrl,
   'systemChannelId': instance.systemChannelId,
   'verificationLevel': _$VerificationLevelEnumMap[instance.verificationLevel]!,
+  'kind': _$GuildKindEnumMap[instance.kind]!,
+  'features': instance.features,
 };
 
 const _$VerificationLevelEnumMap = {
@@ -57,4 +67,12 @@ const _$VerificationLevelEnumMap = {
   VerificationLevel.low: 'Low',
   VerificationLevel.medium: 'Medium',
   VerificationLevel.high: 'High',
+};
+
+const _$GuildKindEnumMap = {
+  GuildKind.community: 'Community',
+  GuildKind.household: 'Household',
+  GuildKind.team: 'Team',
+  GuildKind.study: 'Study',
+  GuildKind.event: 'Event',
 };

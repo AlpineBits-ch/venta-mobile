@@ -290,7 +290,9 @@ as String,
 /// @nodoc
 mixin _$ChannelDto {
 
- String get id; String get name; String? get description;@JsonKey(unknownEnumValue: ChannelType.text) ChannelType get type; String get guildId; bool get isAgeRestricted; bool get isPrivate; String? get categoryId; List<ChannelPermissionDto> get permissions; int get position; int get slowModeSeconds; String? get parentChannelId;
+ String get id; String get name; String? get description;@JsonKey(unknownEnumValue: ChannelType.text) ChannelType get type; String get guildId; bool get isAgeRestricted; bool get isPrivate; String? get categoryId; List<ChannelPermissionDto> get permissions; int get position; int get slowModeSeconds; String? get parentChannelId; List<String> get tagIds; bool get isPinned;/// No new messages, by moderator decision - distinct from archived, and
+/// persisting independently of it.
+ bool get isLocked; bool get isArchived; DateTime? get lastActivityAt; int get messageCount; DateTime? get autoArchiveAt;
 /// Create a copy of ChannelDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -303,16 +305,16 @@ $ChannelDtoCopyWith<ChannelDto> get copyWith => _$ChannelDtoCopyWithImpl<Channel
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChannelDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.type, type) || other.type == type)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.isAgeRestricted, isAgeRestricted) || other.isAgeRestricted == isAgeRestricted)&&(identical(other.isPrivate, isPrivate) || other.isPrivate == isPrivate)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&const DeepCollectionEquality().equals(other.permissions, permissions)&&(identical(other.position, position) || other.position == position)&&(identical(other.slowModeSeconds, slowModeSeconds) || other.slowModeSeconds == slowModeSeconds)&&(identical(other.parentChannelId, parentChannelId) || other.parentChannelId == parentChannelId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChannelDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.type, type) || other.type == type)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.isAgeRestricted, isAgeRestricted) || other.isAgeRestricted == isAgeRestricted)&&(identical(other.isPrivate, isPrivate) || other.isPrivate == isPrivate)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&const DeepCollectionEquality().equals(other.permissions, permissions)&&(identical(other.position, position) || other.position == position)&&(identical(other.slowModeSeconds, slowModeSeconds) || other.slowModeSeconds == slowModeSeconds)&&(identical(other.parentChannelId, parentChannelId) || other.parentChannelId == parentChannelId)&&const DeepCollectionEquality().equals(other.tagIds, tagIds)&&(identical(other.isPinned, isPinned) || other.isPinned == isPinned)&&(identical(other.isLocked, isLocked) || other.isLocked == isLocked)&&(identical(other.isArchived, isArchived) || other.isArchived == isArchived)&&(identical(other.lastActivityAt, lastActivityAt) || other.lastActivityAt == lastActivityAt)&&(identical(other.messageCount, messageCount) || other.messageCount == messageCount)&&(identical(other.autoArchiveAt, autoArchiveAt) || other.autoArchiveAt == autoArchiveAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,description,type,guildId,isAgeRestricted,isPrivate,categoryId,const DeepCollectionEquality().hash(permissions),position,slowModeSeconds,parentChannelId);
+int get hashCode => Object.hashAll([runtimeType,id,name,description,type,guildId,isAgeRestricted,isPrivate,categoryId,const DeepCollectionEquality().hash(permissions),position,slowModeSeconds,parentChannelId,const DeepCollectionEquality().hash(tagIds),isPinned,isLocked,isArchived,lastActivityAt,messageCount,autoArchiveAt]);
 
 @override
 String toString() {
-  return 'ChannelDto(id: $id, name: $name, description: $description, type: $type, guildId: $guildId, isAgeRestricted: $isAgeRestricted, isPrivate: $isPrivate, categoryId: $categoryId, permissions: $permissions, position: $position, slowModeSeconds: $slowModeSeconds, parentChannelId: $parentChannelId)';
+  return 'ChannelDto(id: $id, name: $name, description: $description, type: $type, guildId: $guildId, isAgeRestricted: $isAgeRestricted, isPrivate: $isPrivate, categoryId: $categoryId, permissions: $permissions, position: $position, slowModeSeconds: $slowModeSeconds, parentChannelId: $parentChannelId, tagIds: $tagIds, isPinned: $isPinned, isLocked: $isLocked, isArchived: $isArchived, lastActivityAt: $lastActivityAt, messageCount: $messageCount, autoArchiveAt: $autoArchiveAt)';
 }
 
 
@@ -323,7 +325,7 @@ abstract mixin class $ChannelDtoCopyWith<$Res>  {
   factory $ChannelDtoCopyWith(ChannelDto value, $Res Function(ChannelDto) _then) = _$ChannelDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String? description,@JsonKey(unknownEnumValue: ChannelType.text) ChannelType type, String guildId, bool isAgeRestricted, bool isPrivate, String? categoryId, List<ChannelPermissionDto> permissions, int position, int slowModeSeconds, String? parentChannelId
+ String id, String name, String? description,@JsonKey(unknownEnumValue: ChannelType.text) ChannelType type, String guildId, bool isAgeRestricted, bool isPrivate, String? categoryId, List<ChannelPermissionDto> permissions, int position, int slowModeSeconds, String? parentChannelId, List<String> tagIds, bool isPinned, bool isLocked, bool isArchived, DateTime? lastActivityAt, int messageCount, DateTime? autoArchiveAt
 });
 
 
@@ -340,7 +342,7 @@ class _$ChannelDtoCopyWithImpl<$Res>
 
 /// Create a copy of ChannelDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? type = null,Object? guildId = null,Object? isAgeRestricted = null,Object? isPrivate = null,Object? categoryId = freezed,Object? permissions = null,Object? position = null,Object? slowModeSeconds = null,Object? parentChannelId = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? type = null,Object? guildId = null,Object? isAgeRestricted = null,Object? isPrivate = null,Object? categoryId = freezed,Object? permissions = null,Object? position = null,Object? slowModeSeconds = null,Object? parentChannelId = freezed,Object? tagIds = null,Object? isPinned = null,Object? isLocked = null,Object? isArchived = null,Object? lastActivityAt = freezed,Object? messageCount = null,Object? autoArchiveAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -354,7 +356,14 @@ as String?,permissions: null == permissions ? _self.permissions : permissions //
 as List<ChannelPermissionDto>,position: null == position ? _self.position : position // ignore: cast_nullable_to_non_nullable
 as int,slowModeSeconds: null == slowModeSeconds ? _self.slowModeSeconds : slowModeSeconds // ignore: cast_nullable_to_non_nullable
 as int,parentChannelId: freezed == parentChannelId ? _self.parentChannelId : parentChannelId // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,tagIds: null == tagIds ? _self.tagIds : tagIds // ignore: cast_nullable_to_non_nullable
+as List<String>,isPinned: null == isPinned ? _self.isPinned : isPinned // ignore: cast_nullable_to_non_nullable
+as bool,isLocked: null == isLocked ? _self.isLocked : isLocked // ignore: cast_nullable_to_non_nullable
+as bool,isArchived: null == isArchived ? _self.isArchived : isArchived // ignore: cast_nullable_to_non_nullable
+as bool,lastActivityAt: freezed == lastActivityAt ? _self.lastActivityAt : lastActivityAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,messageCount: null == messageCount ? _self.messageCount : messageCount // ignore: cast_nullable_to_non_nullable
+as int,autoArchiveAt: freezed == autoArchiveAt ? _self.autoArchiveAt : autoArchiveAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 
@@ -436,10 +445,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.text)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.text)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId,  List<String> tagIds,  bool isPinned,  bool isLocked,  bool isArchived,  DateTime? lastActivityAt,  int messageCount,  DateTime? autoArchiveAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ChannelDto() when $default != null:
-return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_that.isAgeRestricted,_that.isPrivate,_that.categoryId,_that.permissions,_that.position,_that.slowModeSeconds,_that.parentChannelId);case _:
+return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_that.isAgeRestricted,_that.isPrivate,_that.categoryId,_that.permissions,_that.position,_that.slowModeSeconds,_that.parentChannelId,_that.tagIds,_that.isPinned,_that.isLocked,_that.isArchived,_that.lastActivityAt,_that.messageCount,_that.autoArchiveAt);case _:
   return orElse();
 
 }
@@ -457,10 +466,10 @@ return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.text)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.text)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId,  List<String> tagIds,  bool isPinned,  bool isLocked,  bool isArchived,  DateTime? lastActivityAt,  int messageCount,  DateTime? autoArchiveAt)  $default,) {final _that = this;
 switch (_that) {
 case _ChannelDto():
-return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_that.isAgeRestricted,_that.isPrivate,_that.categoryId,_that.permissions,_that.position,_that.slowModeSeconds,_that.parentChannelId);}
+return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_that.isAgeRestricted,_that.isPrivate,_that.categoryId,_that.permissions,_that.position,_that.slowModeSeconds,_that.parentChannelId,_that.tagIds,_that.isPinned,_that.isLocked,_that.isArchived,_that.lastActivityAt,_that.messageCount,_that.autoArchiveAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -474,10 +483,10 @@ return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.text)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.text)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId,  List<String> tagIds,  bool isPinned,  bool isLocked,  bool isArchived,  DateTime? lastActivityAt,  int messageCount,  DateTime? autoArchiveAt)?  $default,) {final _that = this;
 switch (_that) {
 case _ChannelDto() when $default != null:
-return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_that.isAgeRestricted,_that.isPrivate,_that.categoryId,_that.permissions,_that.position,_that.slowModeSeconds,_that.parentChannelId);case _:
+return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_that.isAgeRestricted,_that.isPrivate,_that.categoryId,_that.permissions,_that.position,_that.slowModeSeconds,_that.parentChannelId,_that.tagIds,_that.isPinned,_that.isLocked,_that.isArchived,_that.lastActivityAt,_that.messageCount,_that.autoArchiveAt);case _:
   return null;
 
 }
@@ -489,7 +498,7 @@ return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_
 @JsonSerializable()
 
 class _ChannelDto implements ChannelDto {
-  const _ChannelDto({required this.id, required this.name, this.description, @JsonKey(unknownEnumValue: ChannelType.text) required this.type, required this.guildId, this.isAgeRestricted = false, this.isPrivate = false, this.categoryId, final  List<ChannelPermissionDto> permissions = const <ChannelPermissionDto>[], this.position = 0, this.slowModeSeconds = 0, this.parentChannelId}): _permissions = permissions;
+  const _ChannelDto({required this.id, required this.name, this.description, @JsonKey(unknownEnumValue: ChannelType.text) required this.type, required this.guildId, this.isAgeRestricted = false, this.isPrivate = false, this.categoryId, final  List<ChannelPermissionDto> permissions = const <ChannelPermissionDto>[], this.position = 0, this.slowModeSeconds = 0, this.parentChannelId, final  List<String> tagIds = const <String>[], this.isPinned = false, this.isLocked = false, this.isArchived = false, this.lastActivityAt, this.messageCount = 0, this.autoArchiveAt}): _permissions = permissions,_tagIds = tagIds;
   factory _ChannelDto.fromJson(Map<String, dynamic> json) => _$ChannelDtoFromJson(json);
 
 @override final  String id;
@@ -510,6 +519,21 @@ class _ChannelDto implements ChannelDto {
 @override@JsonKey() final  int position;
 @override@JsonKey() final  int slowModeSeconds;
 @override final  String? parentChannelId;
+ final  List<String> _tagIds;
+@override@JsonKey() List<String> get tagIds {
+  if (_tagIds is EqualUnmodifiableListView) return _tagIds;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_tagIds);
+}
+
+@override@JsonKey() final  bool isPinned;
+/// No new messages, by moderator decision - distinct from archived, and
+/// persisting independently of it.
+@override@JsonKey() final  bool isLocked;
+@override@JsonKey() final  bool isArchived;
+@override final  DateTime? lastActivityAt;
+@override@JsonKey() final  int messageCount;
+@override final  DateTime? autoArchiveAt;
 
 /// Create a copy of ChannelDto
 /// with the given fields replaced by the non-null parameter values.
@@ -524,16 +548,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChannelDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.type, type) || other.type == type)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.isAgeRestricted, isAgeRestricted) || other.isAgeRestricted == isAgeRestricted)&&(identical(other.isPrivate, isPrivate) || other.isPrivate == isPrivate)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&const DeepCollectionEquality().equals(other._permissions, _permissions)&&(identical(other.position, position) || other.position == position)&&(identical(other.slowModeSeconds, slowModeSeconds) || other.slowModeSeconds == slowModeSeconds)&&(identical(other.parentChannelId, parentChannelId) || other.parentChannelId == parentChannelId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChannelDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.type, type) || other.type == type)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.isAgeRestricted, isAgeRestricted) || other.isAgeRestricted == isAgeRestricted)&&(identical(other.isPrivate, isPrivate) || other.isPrivate == isPrivate)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&const DeepCollectionEquality().equals(other._permissions, _permissions)&&(identical(other.position, position) || other.position == position)&&(identical(other.slowModeSeconds, slowModeSeconds) || other.slowModeSeconds == slowModeSeconds)&&(identical(other.parentChannelId, parentChannelId) || other.parentChannelId == parentChannelId)&&const DeepCollectionEquality().equals(other._tagIds, _tagIds)&&(identical(other.isPinned, isPinned) || other.isPinned == isPinned)&&(identical(other.isLocked, isLocked) || other.isLocked == isLocked)&&(identical(other.isArchived, isArchived) || other.isArchived == isArchived)&&(identical(other.lastActivityAt, lastActivityAt) || other.lastActivityAt == lastActivityAt)&&(identical(other.messageCount, messageCount) || other.messageCount == messageCount)&&(identical(other.autoArchiveAt, autoArchiveAt) || other.autoArchiveAt == autoArchiveAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,description,type,guildId,isAgeRestricted,isPrivate,categoryId,const DeepCollectionEquality().hash(_permissions),position,slowModeSeconds,parentChannelId);
+int get hashCode => Object.hashAll([runtimeType,id,name,description,type,guildId,isAgeRestricted,isPrivate,categoryId,const DeepCollectionEquality().hash(_permissions),position,slowModeSeconds,parentChannelId,const DeepCollectionEquality().hash(_tagIds),isPinned,isLocked,isArchived,lastActivityAt,messageCount,autoArchiveAt]);
 
 @override
 String toString() {
-  return 'ChannelDto(id: $id, name: $name, description: $description, type: $type, guildId: $guildId, isAgeRestricted: $isAgeRestricted, isPrivate: $isPrivate, categoryId: $categoryId, permissions: $permissions, position: $position, slowModeSeconds: $slowModeSeconds, parentChannelId: $parentChannelId)';
+  return 'ChannelDto(id: $id, name: $name, description: $description, type: $type, guildId: $guildId, isAgeRestricted: $isAgeRestricted, isPrivate: $isPrivate, categoryId: $categoryId, permissions: $permissions, position: $position, slowModeSeconds: $slowModeSeconds, parentChannelId: $parentChannelId, tagIds: $tagIds, isPinned: $isPinned, isLocked: $isLocked, isArchived: $isArchived, lastActivityAt: $lastActivityAt, messageCount: $messageCount, autoArchiveAt: $autoArchiveAt)';
 }
 
 
@@ -544,7 +568,7 @@ abstract mixin class _$ChannelDtoCopyWith<$Res> implements $ChannelDtoCopyWith<$
   factory _$ChannelDtoCopyWith(_ChannelDto value, $Res Function(_ChannelDto) _then) = __$ChannelDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String? description,@JsonKey(unknownEnumValue: ChannelType.text) ChannelType type, String guildId, bool isAgeRestricted, bool isPrivate, String? categoryId, List<ChannelPermissionDto> permissions, int position, int slowModeSeconds, String? parentChannelId
+ String id, String name, String? description,@JsonKey(unknownEnumValue: ChannelType.text) ChannelType type, String guildId, bool isAgeRestricted, bool isPrivate, String? categoryId, List<ChannelPermissionDto> permissions, int position, int slowModeSeconds, String? parentChannelId, List<String> tagIds, bool isPinned, bool isLocked, bool isArchived, DateTime? lastActivityAt, int messageCount, DateTime? autoArchiveAt
 });
 
 
@@ -561,7 +585,7 @@ class __$ChannelDtoCopyWithImpl<$Res>
 
 /// Create a copy of ChannelDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? type = null,Object? guildId = null,Object? isAgeRestricted = null,Object? isPrivate = null,Object? categoryId = freezed,Object? permissions = null,Object? position = null,Object? slowModeSeconds = null,Object? parentChannelId = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? description = freezed,Object? type = null,Object? guildId = null,Object? isAgeRestricted = null,Object? isPrivate = null,Object? categoryId = freezed,Object? permissions = null,Object? position = null,Object? slowModeSeconds = null,Object? parentChannelId = freezed,Object? tagIds = null,Object? isPinned = null,Object? isLocked = null,Object? isArchived = null,Object? lastActivityAt = freezed,Object? messageCount = null,Object? autoArchiveAt = freezed,}) {
   return _then(_ChannelDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -575,7 +599,14 @@ as String?,permissions: null == permissions ? _self._permissions : permissions /
 as List<ChannelPermissionDto>,position: null == position ? _self.position : position // ignore: cast_nullable_to_non_nullable
 as int,slowModeSeconds: null == slowModeSeconds ? _self.slowModeSeconds : slowModeSeconds // ignore: cast_nullable_to_non_nullable
 as int,parentChannelId: freezed == parentChannelId ? _self.parentChannelId : parentChannelId // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,tagIds: null == tagIds ? _self._tagIds : tagIds // ignore: cast_nullable_to_non_nullable
+as List<String>,isPinned: null == isPinned ? _self.isPinned : isPinned // ignore: cast_nullable_to_non_nullable
+as bool,isLocked: null == isLocked ? _self.isLocked : isLocked // ignore: cast_nullable_to_non_nullable
+as bool,isArchived: null == isArchived ? _self.isArchived : isArchived // ignore: cast_nullable_to_non_nullable
+as bool,lastActivityAt: freezed == lastActivityAt ? _self.lastActivityAt : lastActivityAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,messageCount: null == messageCount ? _self.messageCount : messageCount // ignore: cast_nullable_to_non_nullable
+as int,autoArchiveAt: freezed == autoArchiveAt ? _self.autoArchiveAt : autoArchiveAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 

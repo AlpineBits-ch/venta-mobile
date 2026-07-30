@@ -129,7 +129,9 @@ class _QrLoginScreenState extends State<QrLoginScreen> {
         _stage = _Stage.confirming;
       });
     } on QrLoginCodeInvalidException {
-      _fail('This code is no longer valid. Ask the other device for a new one.');
+      _fail(
+        'This code is no longer valid. Ask the other device for a new one.',
+      );
     } catch (_) {
       _fail('Could not check that code - try again.');
     }
@@ -143,14 +145,13 @@ class _QrLoginScreenState extends State<QrLoginScreen> {
       _error = null;
     });
     try {
-      await getIt<IdentityApi>().respondToQrLogin(
-        code: code,
-        approve: approve,
-      );
+      await getIt<IdentityApi>().respondToQrLogin(code: code, approve: approve);
       if (!mounted) return;
       setState(() => _stage = _Stage.finished);
     } on QrLoginCodeInvalidException {
-      _fail('This code is no longer valid. Ask the other device for a new one.');
+      _fail(
+        'This code is no longer valid. Ask the other device for a new one.',
+      );
     } on QrLoginNotYoursException {
       _fail('This code was scanned by a different account.');
     } catch (_) {

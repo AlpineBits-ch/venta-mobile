@@ -6,14 +6,19 @@ import 'guild_api.dart';
 import 'models/audit_log_entry_dto.dart';
 import 'models/auto_mod_config_dto.dart';
 import 'models/channel_follower_dto.dart';
+import 'models/forum_config_dto.dart';
+import 'models/forum_post_dto.dart';
+import 'models/forum_tag_dto.dart';
 import 'models/guild_template_dto.dart';
 import 'models/onboarding_dto.dart';
 import 'models/scheduled_event_dto.dart';
+import 'models/welcome_screen_dto.dart';
 import 'models/ban_dto.dart';
 import 'models/category_dto.dart';
 import 'models/channel_dto.dart';
 import 'models/guild_dto.dart';
 import 'models/guild_emoji_dto.dart';
+import 'models/guild_features.dart';
 import 'models/guild_member_dto.dart';
 import 'models/guild_permissions.dart';
 import 'models/guild_self_permissions.dart';
@@ -209,8 +214,13 @@ class GuildRepository {
   Future<GuildDto> createGuild({
     required String name,
     String? description,
+    GuildKind? kind,
   }) async {
-    final guild = await api.createGuild(name: name, description: description);
+    final guild = await api.createGuild(
+      name: name,
+      description: description,
+      kind: kind,
+    );
     await fetch();
     return guild;
   }
@@ -320,12 +330,16 @@ class GuildRepository {
   Future<void> kickMember(String guildId, String memberId) =>
       api.kickMember(guildId, memberId);
 
+  /// Changing modules can add or remove whole channel types, so this refetches
+  /// the guild rather than trusting the PATCH response's channel list.
   Future<GuildDto> updateGuild(
     String guildId, {
     String? name,
     String? description,
     String? systemChannelId,
     VerificationLevel? verificationLevel,
+    GuildKind? kind,
+    GuildFeatures? features,
   }) async {
     final updated = await api.updateGuild(
       guildId,
@@ -333,8 +347,11 @@ class GuildRepository {
       description: description,
       systemChannelId: systemChannelId,
       verificationLevel: verificationLevel,
+      kind: kind,
+      features: features,
     );
     _replaceCached(updated);
+    if (kind != null || features != null) await _refreshGuild(guildId);
     return updated;
   }
 
@@ -382,12 +399,104 @@ class GuildRepository {
     String channelId, {
     required String name,
     String? content,
-  }) => api.createThread(channelId, name: name, content: content);
+    List<String> tagIds = const [],
+  }) =>
+      api.createThread(channelId, name: name, content: content, tagIds: tagIds);
 
   Future<List<ChannelDto>> getThreads(String channelId) =>
       api.getThreads(channelId);
 
   Future<void> archiveThread(String threadId) => api.archiveThread(threadId);
+
+  Future<List<ForumTagDto>> getForumTags(String forumChannelId) =>
+      api.getForumTags(forumChannelId);
+
+  Future<ForumTagDto> createForumTag(
+    String forumChannelId, {
+    required String name,
+    String? emojiId,
+    String? emojiName,
+    String? color,
+    bool moderated = false,
+  }) => api.createForumTag(
+    forumChannelId,
+    name: name,
+    emojiId: emojiId,
+    emojiName: emojiName,
+    color: color,
+    moderated: moderated,
+  );
+
+  Future<ForumTagDto> updateForumTag(
+    String tagId, {
+    String? name,
+    String? emojiId,
+    String? emojiName,
+    String? color,
+    bool? moderated,
+  }) => api.updateForumTag(
+    tagId,
+    name: name,
+    emojiId: emojiId,
+    emojiName: emojiName,
+    color: color,
+    moderated: moderated,
+  );
+
+  Future<void> deleteForumTag(String tagId) => api.deleteForumTag(tagId);
+
+  Future<void> reorderForumTags(String forumChannelId, List<String> tagIds) =>
+      api.reorderForumTags(forumChannelId, tagIds);
+
+  Future<ForumConfigDto> getForumConfig(String forumChannelId) =>
+      api.getForumConfig(forumChannelId);
+
+  Future<ForumConfigDto> updateForumConfig(
+    String forumChannelId, {
+    bool? requireTag,
+    ForumSortOrder? defaultSortOrder,
+    ForumLayout? defaultLayout,
+    String? defaultReactionEmojiId,
+    String? defaultReactionEmojiName,
+    int? defaultThreadSlowModeSeconds,
+    int? defaultAutoArchiveMinutes,
+  }) => api.updateForumConfig(
+    forumChannelId,
+    requireTag: requireTag,
+    defaultSortOrder: defaultSortOrder,
+    defaultLayout: defaultLayout,
+    defaultReactionEmojiId: defaultReactionEmojiId,
+    defaultReactionEmojiName: defaultReactionEmojiName,
+    defaultThreadSlowModeSeconds: defaultThreadSlowModeSeconds,
+    defaultAutoArchiveMinutes: defaultAutoArchiveMinutes,
+  );
+
+  Future<ForumPostPageDto> getForumPosts(
+    String forumChannelId, {
+    List<String> tagIds = const [],
+    bool matchAll = false,
+    ForumSortOrder? sort,
+    ForumArchiveFilter archived = ForumArchiveFilter.active,
+    int limit = 25,
+    String? cursor,
+  }) => api.getForumPosts(
+    forumChannelId,
+    tagIds: tagIds,
+    matchAll: matchAll,
+    sort: sort,
+    archived: archived,
+    limit: limit,
+    cursor: cursor,
+  );
+
+  Future<ForumPostDto> setPostTags(String threadId, List<String> tagIds) =>
+      api.setPostTags(threadId, tagIds);
+
+  Future<void> setPostPinned(String threadId, bool pinned) =>
+      api.setPostPinned(threadId, pinned);
+
+  Future<void> setPostLocked(String threadId, bool locked) =>
+      api.setPostLocked(threadId, locked);
 
   Future<GuildDto> uploadGuildIcon(
     String guildId, {
@@ -602,8 +711,43 @@ class GuildRepository {
   Future<OnboardingStatusDto> getOwnOnboardingStatus(String guildId) =>
       api.getOwnOnboardingStatus(guildId);
 
-  Future<void> acceptOnboarding(String guildId) =>
-      api.acceptOnboarding(guildId);
+  /// Accepting grants roles and channel overwrites, so the guild is refetched
+  /// afterwards - the member may now see channels that weren't in the cached
+  /// copy at all.
+  Future<void> acceptOnboarding(
+    String guildId, {
+    List<OnboardingResponseDto> responses = const [],
+  }) async {
+    await api.acceptOnboarding(guildId, responses: responses);
+    await _refreshGuild(guildId);
+  }
+
+  Future<List<OnboardingPromptDto>> getOnboardingPrompts(String guildId) =>
+      api.getOnboardingPrompts(guildId);
+
+  /// Same visibility consequences as [acceptOnboarding], in both directions:
+  /// deselecting an option revokes the channels it granted.
+  Future<void> updateOwnOnboardingResponses(
+    String guildId,
+    List<OnboardingResponseDto> responses,
+  ) async {
+    await api.updateOwnOnboardingResponses(guildId, responses);
+    await _refreshGuild(guildId);
+  }
+
+  Future<WelcomeScreenDto> getWelcomeScreen(String guildId) =>
+      api.getWelcomeScreen(guildId);
+
+  Future<WelcomeScreenDto> updateWelcomeScreen(
+    String guildId,
+    WelcomeScreenDto screen,
+  ) => api.updateWelcomeScreen(guildId, screen);
+
+  Future<List<PendingMemberDto>> getPendingMembers(
+    String guildId, {
+    int limit = 100,
+    int offset = 0,
+  }) => api.getPendingMembers(guildId, limit: limit, offset: offset);
 
   Future<List<AuditLogEntryDto>> getAuditLog(
     String guildId, {

@@ -18,7 +18,9 @@ import '../../features/guilds/data/models/channel_dto.dart';
 import '../../features/guilds/presentation/screens/channel_screen.dart';
 import '../../features/guilds/presentation/screens/channel_settings_screen.dart';
 import '../../features/guilds/presentation/screens/events_screen.dart';
+import '../../features/guilds/presentation/screens/channels_and_roles_screen.dart';
 import '../../features/guilds/presentation/screens/forum_channel_screen.dart';
+import '../../features/guilds/presentation/screens/forum_settings_screen.dart';
 import '../../features/guilds/presentation/screens/guild_detail_screen.dart';
 import '../../features/guilds/presentation/screens/guild_members_screen.dart';
 import '../../features/guilds/presentation/screens/guild_settings/guild_settings_screen.dart';
@@ -167,19 +169,26 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         builder: (context, state) {
           final guildId = state.pathParameters['guildId']!;
           final channelId = state.pathParameters['channelId']!;
-          // A Forum channel is a post list, not a message thread - every
-          // other channel type (including a post itself, which is just a
+          // A Forum (or Media) channel is a post list, not a message thread -
+          // every other channel type (including a post itself, which is just a
           // Thread channel) opens the normal ChannelScreen.
           final channel = getIt<GuildRepository>()
               .cachedById(guildId)
               ?.channels
               .where((c) => c.id == channelId)
               .firstOrNull;
-          if (channel?.type == ChannelType.forum) {
+          if (channel?.type.isForumLike ?? false) {
             return ForumChannelScreen(guildId: guildId, channelId: channelId);
           }
           return ChannelScreen(guildId: guildId, channelId: channelId);
         },
+      ),
+      GoRoute(
+        path: RoutePaths.serverChannelForumSettings,
+        builder: (context, state) => ForumSettingsScreen(
+          guildId: state.pathParameters['guildId']!,
+          channelId: state.pathParameters['channelId']!,
+        ),
       ),
       GoRoute(
         path: RoutePaths.serverChannelSettings,
@@ -192,6 +201,11 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         path: RoutePaths.serverMembers,
         builder: (context, state) =>
             GuildMembersScreen(guildId: state.pathParameters['guildId']!),
+      ),
+      GoRoute(
+        path: RoutePaths.serverChannelsRoles,
+        builder: (context, state) =>
+            ChannelsAndRolesScreen(guildId: state.pathParameters['guildId']!),
       ),
       GoRoute(
         path: RoutePaths.serverEvents,

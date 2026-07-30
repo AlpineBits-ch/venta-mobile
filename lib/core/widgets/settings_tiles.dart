@@ -72,6 +72,34 @@ class SettingsSection extends StatelessWidget {
   }
 }
 
+/// The explanatory line under a [SettingsSection] - deliberately outside the
+/// card, so the card stays a clean list of rows and the prose doesn't read as
+/// one of them.
+class SettingsFootnote extends StatelessWidget {
+  const SettingsFootnote(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xs,
+        AppSpacing.s,
+        AppSpacing.xs,
+        0,
+      ),
+      child: Text(
+        text,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
+    );
+  }
+}
+
 /// One tappable row inside a [SettingsSection]. Kept separate from [ListTile]
 /// so the icon column, chevron and destructive variant stay identical across
 /// every settings page.

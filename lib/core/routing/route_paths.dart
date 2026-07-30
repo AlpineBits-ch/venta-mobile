@@ -12,7 +12,18 @@ abstract final class RoutePaths {
   static const serverChannel = '/server/:guildId/channel/:channelId';
   static const serverChannelSettings =
       '/server/:guildId/channel/:channelId/settings';
+
+  /// A Forum/Media channel's tag editor and posting config - separate from
+  /// [serverChannelSettings] (name/topic/slowmode/delete), which every channel
+  /// type shares.
+  static const serverChannelForumSettings =
+      '/server/:guildId/channel/:channelId/forum';
   static const serverMembers = '/server/:guildId/members';
+
+  /// Where a member changes the onboarding answers that granted them roles and
+  /// channels - Discord's "Channels & Roles". Only reachable in guilds that
+  /// actually have prompts configured.
+  static const serverChannelsRoles = '/server/:guildId/channels-roles';
   static const serverSettings = '/server/:guildId/settings';
   static const serverEvents = '/server/:guildId/events';
   static const serverWiki = '/server/:guildId/wiki';
@@ -65,7 +76,15 @@ abstract final class RoutePaths {
   static String serverChannelSettingsPath(String guildId, String channelId) =>
       '/server/$guildId/channel/$channelId/settings';
 
+  static String serverChannelForumSettingsPath(
+    String guildId,
+    String channelId,
+  ) => '/server/$guildId/channel/$channelId/forum';
+
   static String serverMembersPath(String guildId) => '/server/$guildId/members';
+
+  static String serverChannelsRolesPath(String guildId) =>
+      '/server/$guildId/channels-roles';
 
   static String serverSettingsPath(String guildId) =>
       '/server/$guildId/settings';

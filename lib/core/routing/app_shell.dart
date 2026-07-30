@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/guilds/data/guild_repository.dart';
 import '../../features/guilds/data/models/guild_dto.dart';
 import '../../features/guilds/data/models/guild_template_dto.dart';
+import '../../features/guilds/presentation/screens/create_guild_screen.dart';
 import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
 import '../../features/guild_voice/presentation/widgets/voice_status_bar.dart';
 import '../../features/voice/bloc/call_cubit.dart';
@@ -70,22 +71,18 @@ class _AppShellState extends State<AppShell> {
 
     switch (action) {
       case _CreateServerAction():
-        final name = await _promptForText(
-          title: 'Create a server',
-          hint: 'Server name',
-        );
-        if (name == null || name.trim().isEmpty || !mounted) return;
-        try {
-          final guild = await getIt<GuildRepository>().createGuild(
-            name: name.trim(),
-          );
-          if (mounted) context.push(RoutePaths.serverPath(guild.id));
-        } catch (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not create that server.')),
+        // A stepped screen rather than a name prompt: the kind picked here
+        // seeds the guild's whole module set, so it's worth a screen of its
+        // own. It reports its own failures and pops the created guild.
+        final guild = await Navigator.of(context, rootNavigator: true)
+            .push<GuildDto>(
+              MaterialPageRoute(
+                fullscreenDialog: true,
+                builder: (_) => const CreateGuildScreen(),
+              ),
             );
-          }
+        if (guild != null && mounted) {
+          context.push(RoutePaths.serverPath(guild.id));
         }
       case _JoinServerAction():
         final input = await _promptForText(
