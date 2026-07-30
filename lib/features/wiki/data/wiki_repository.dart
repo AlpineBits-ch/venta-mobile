@@ -34,7 +34,7 @@ class WikiRepository {
           }.contains(e.name),
         )
         .listen((event) {
-          final guildId = event.objectPayload['guildId'] as String?;
+          final guildId = event.stringField('guildId');
           if (guildId != null) _invalidatedController.add(guildId);
         });
   }

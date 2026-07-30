@@ -9,6 +9,7 @@ import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -276,11 +277,7 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
                           }
                         },
                   child: accepting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const ButtonProgressIndicator()
                       : const Text('I understand and agree'),
                 ),
               ],

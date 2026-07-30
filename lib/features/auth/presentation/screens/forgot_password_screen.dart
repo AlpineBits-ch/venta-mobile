@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../data/auth_repository.dart';
 
 enum _Step { email, codeAndPassword, done }
@@ -24,6 +25,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _submitting = false;
   String? _error;
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Both steps gate their submit button on the current field contents, so
+    // the buttons have to re-evaluate as the user types.
+    for (final controller in [
+      _emailController,
+      _codeController,
+      _newPasswordController,
+    ]) {
+      controller.addListener(() => setState(() {}));
+    }
+  }
 
   @override
   void dispose() {
@@ -72,7 +87,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         code: code,
         newPassword: newPassword,
       );
-      if (mounted) setState(() => _step = _Step.done);
+      if (mounted) {
+        setState(() {
+          _step = _Step.done;
+          _submitting = false;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -86,45 +106,36 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Reset password')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.l),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              switch (_step) {
-                _Step.email => _EmailStep(
-                  controller: _emailController,
-                  submitting: _submitting,
-                  onSubmit: _requestCode,
-                ),
-                _Step.codeAndPassword => _CodeAndPasswordStep(
-                  email: _emailController.text.trim(),
-                  codeController: _codeController,
-                  newPasswordController: _newPasswordController,
-                  obscurePassword: _obscurePassword,
-                  onToggleObscure: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                  submitting: _submitting,
-                  onSubmit: _resetPassword,
-                  onResend: _requestCode,
-                ),
-                _Step.done => _DoneStep(theme: theme),
-              },
-              if (_error != null) ...[
-                const SizedBox(height: AppSpacing.m),
-                Text(
-                  _error!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ],
-            ],
-          ),
+          child: switch (_step) {
+            _Step.email => _EmailStep(
+              controller: _emailController,
+              submitting: _submitting,
+              error: _error,
+              canSubmit: _emailController.text.trim().isNotEmpty,
+              onSubmit: _requestCode,
+            ),
+            _Step.codeAndPassword => _CodeAndPasswordStep(
+              email: _emailController.text.trim(),
+              codeController: _codeController,
+              newPasswordController: _newPasswordController,
+              obscurePassword: _obscurePassword,
+              onToggleObscure: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+              submitting: _submitting,
+              error: _error,
+              canSubmit:
+                  _codeController.text.trim().isNotEmpty &&
+                  _newPasswordController.text.length >= 8,
+              onSubmit: _resetPassword,
+              onResend: _requestCode,
+            ),
+            _Step.done => const _DoneStep(),
+          },
         ),
       ),
     );
@@ -135,11 +146,15 @@ class _EmailStep extends StatelessWidget {
   const _EmailStep({
     required this.controller,
     required this.submitting,
+    required this.error,
+    required this.canSubmit,
     required this.onSubmit,
   });
 
   final TextEditingController controller;
   final bool submitting;
+  final String? error;
+  final bool canSubmit;
   final VoidCallback onSubmit;
 
   @override
@@ -160,18 +175,23 @@ class _EmailStep extends StatelessWidget {
           controller: controller,
           autocorrect: false,
           keyboardType: TextInputType.emailAddress,
-          onSubmitted: (_) => submitting ? null : onSubmit(),
+          onSubmitted: (_) => submitting || !canSubmit ? null : onSubmit(),
           decoration: const InputDecoration(hintText: 'you@example.com'),
         ),
+        if (error != null) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            error!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.l),
         FilledButton(
-          onPressed: submitting ? null : onSubmit,
+          onPressed: submitting || !canSubmit ? null : onSubmit,
           child: submitting
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const ButtonProgressIndicator()
               : const Text('Send code'),
         ),
       ],
@@ -187,6 +207,8 @@ class _CodeAndPasswordStep extends StatelessWidget {
     required this.obscurePassword,
     required this.onToggleObscure,
     required this.submitting,
+    required this.error,
+    required this.canSubmit,
     required this.onSubmit,
     required this.onResend,
   });
@@ -197,6 +219,8 @@ class _CodeAndPasswordStep extends StatelessWidget {
   final bool obscurePassword;
   final VoidCallback onToggleObscure;
   final bool submitting;
+  final String? error;
+  final bool canSubmit;
   final VoidCallback onSubmit;
   final VoidCallback onResend;
 
@@ -226,7 +250,7 @@ class _CodeAndPasswordStep extends StatelessWidget {
         TextField(
           controller: newPasswordController,
           obscureText: obscurePassword,
-          onSubmitted: (_) => submitting ? null : onSubmit(),
+          onSubmitted: (_) => submitting || !canSubmit ? null : onSubmit(),
           decoration: InputDecoration(
             hintText: 'At least 8 characters',
             suffixIcon: IconButton(
@@ -239,15 +263,20 @@ class _CodeAndPasswordStep extends StatelessWidget {
             ),
           ),
         ),
+        if (error != null) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            error!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.l),
         FilledButton(
-          onPressed: submitting ? null : onSubmit,
+          onPressed: submitting || !canSubmit ? null : onSubmit,
           child: submitting
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const ButtonProgressIndicator()
               : const Text('Reset password'),
         ),
         const SizedBox(height: AppSpacing.s),
@@ -264,12 +293,11 @@ class _CodeAndPasswordStep extends StatelessWidget {
 }
 
 class _DoneStep extends StatelessWidget {
-  const _DoneStep({required this.theme});
-
-  final ThemeData theme;
+  const _DoneStep();
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

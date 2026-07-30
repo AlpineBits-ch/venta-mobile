@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/widget_styles.dart';
+import '../../../../../core/widgets/button_progress_indicator.dart';
 import '../../../data/guild_repository.dart';
 import '../../../data/models/auto_mod_config_dto.dart';
 
@@ -151,12 +152,16 @@ class _AutoModSettingsTabState extends State<AutoModSettingsTab> {
               child: TextField(
                 controller: _wordController,
                 autocorrect: false,
+                enabled: config.enabled,
                 onSubmitted: (_) => _addWord(),
                 decoration: const InputDecoration(hintText: 'Add a word'),
               ),
             ),
             const SizedBox(width: AppSpacing.s),
-            IconButton.filled(onPressed: _addWord, icon: const Icon(Icons.add)),
+            IconButton.filled(
+              onPressed: config.enabled ? _addWord : null,
+              icon: const Icon(Icons.add),
+            ),
           ],
         ),
         if (config.blockedWords.isNotEmpty) ...[
@@ -168,7 +173,7 @@ class _AutoModSettingsTabState extends State<AutoModSettingsTab> {
               for (final word in config.blockedWords)
                 Chip(
                   label: Text(word),
-                  onDeleted: () => _removeWord(word),
+                  onDeleted: config.enabled ? () => _removeWord(word) : null,
                 ),
             ],
           ),
@@ -179,9 +184,15 @@ class _AutoModSettingsTabState extends State<AutoModSettingsTab> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Rate limit'),
-          subtitle: const Text('Cap how many messages a member can send at once'),
+          subtitle: const Text(
+            'Cap how many messages a member can send at once',
+          ),
           value: _rateLimited,
-          onChanged: (value) => setState(() => _rateLimited = value),
+          // Both sections below the master switch stay visible but go inert
+          // when auto-mod is off - editing them implied they'd take effect.
+          onChanged: config.enabled
+              ? (value) => setState(() => _rateLimited = value)
+              : null,
         ),
         if (_rateLimited) ...[
           const SizedBox(height: AppSpacing.s),
@@ -195,22 +206,18 @@ class _AutoModSettingsTabState extends State<AutoModSettingsTab> {
                   child: Text('${option.$1} messages / ${option.$2}s'),
                 ),
             ],
-            onChanged: (value) =>
-                setState(() => _rateLimit = value ?? _rateLimitOptions.first),
+            onChanged: config.enabled
+                ? (value) => setState(
+                    () => _rateLimit = value ?? _rateLimitOptions.first,
+                  )
+                : null,
           ),
         ],
         const SizedBox(height: AppSpacing.l),
         FilledButton(
           onPressed: _saving ? null : _save,
           child: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+              ? const ButtonProgressIndicator()
               : const Text('Save changes'),
         ),
       ],

@@ -21,9 +21,8 @@ import 'models/invite_dto.dart';
 import 'models/role_dto.dart';
 
 /// REST joined-guilds list merged with realtime structural events
-/// (`guild.GuildDeleted/Updated`, `guild.ChannelCreated/Deleted/Updated`,
-/// `guild.CategoryCreated/Deleted`, `guild.MemberJoined/Left` for the
-/// current user leaving/joining). Same invalidate-and-refetch pattern as
+/// (`guild.Guild*`, `guild.Channel*`, `guild.Category*`, `guild.Thread*`,
+/// `guild.Member*`, `guild.Bot*`). Same invalidate-and-refetch pattern as
 /// `ConversationRepository`/`RelationshipRepository` - these events are
 /// infrequent enough that a full refetch per event is simple and correct
 /// rather than hand-patching nested categories/channels/roles.
@@ -36,21 +35,33 @@ class GuildRepository {
     _realtimeSub = realtimeService.events
         .where(
           (e) => const {
+            'guild.GuildCreated',
             'guild.GuildDeleted',
             'guild.GuildUpdated',
             'guild.ChannelCreated',
             'guild.ChannelDeleted',
             'guild.ChannelUpdated',
+            'guild.ChannelReordered',
             'guild.CategoryCreated',
             'guild.CategoryDeleted',
+            'guild.CategoryUpdated',
+            'guild.ThreadCreated',
+            'guild.ThreadUpdated',
+            'guild.RolesReordered',
             'guild.MemberJoined',
             'guild.MemberLeft',
+            'guild.MemberBanned',
+            'guild.MemberKicked',
+            'guild.MemberMuted',
+            'guild.MemberUnmuted',
+            'guild.BotInstalled',
+            'guild.BotUninstalled',
             'guild.EmojiCreated',
             'guild.EmojiDeleted',
           }.contains(e.name),
         )
         .listen((event) {
-          final guildId = event.objectPayload['guildId'] as String?;
+          final guildId = _guildIdFor(event);
           if (event.name == 'guild.EmojiCreated' ||
               event.name == 'guild.EmojiDeleted') {
             if (guildId != null) {
@@ -58,8 +69,17 @@ class GuildRepository {
             }
             return;
           }
-          if (event.name == 'guild.MemberLeft' &&
-              event.objectPayload['userId'] == myUserId) {
+          // Being removed from a guild has no guild left to refetch - drop it
+          // from the cache directly. Ban/kick land here too when they're
+          // aimed at us; for anyone else they just restructure the member
+          // list, which the refetch below picks up.
+          final isSelf = event.stringField('userId') == myUserId;
+          if (isSelf &&
+              const {
+                'guild.MemberLeft',
+                'guild.MemberBanned',
+                'guild.MemberKicked',
+              }.contains(event.name)) {
             _guilds.removeWhere((g) => g.id == guildId);
             _guildsController.add(List.unmodifiable(_guilds));
             return;
@@ -119,6 +139,50 @@ class GuildRepository {
     }
     _guildsController.add(List.unmodifiable(_guilds));
     return updated;
+  }
+
+  /// Works out which guild an event belongs to.
+  ///
+  /// Most hub payloads carry `guildId` outright. Two don't:
+  /// `guild.ChannelReordered`/`guild.RolesReordered` send a bare
+  /// `Reorder*Dto` (just positions), and `guild.GuildCreated` sends a whole
+  /// `GuildDto` whose id is `id`. Rather than ignore the reorder events, the
+  /// owning guild is recovered from the cache via one of the ids they do
+  /// carry - see the note in the class doc about the backend gap.
+  String? _guildIdFor(RealtimeEvent event) {
+    final direct = event.stringField('guildId');
+    if (direct != null) return direct;
+
+    if (event.name == 'guild.GuildCreated') return event.stringField('id');
+
+    final referencedIds = switch (event.name) {
+      'guild.ChannelReordered' => _idsFrom(event.field('channels'), 'channelId'),
+      'guild.RolesReordered' => _idsFrom(event.field('roles'), 'roleId'),
+      _ => const <String>[],
+    };
+    if (referencedIds.isEmpty) return null;
+
+    for (final guild in _guilds) {
+      final owns = event.name == 'guild.RolesReordered'
+          ? guild.roles.any((r) => referencedIds.contains(r.id))
+          : guild.channels.any((c) => referencedIds.contains(c.id));
+      if (owns) return guild.id;
+    }
+    return null;
+  }
+
+  List<String> _idsFrom(Object? list, String key) {
+    if (list is! List) return const [];
+    return [
+      for (final item in list)
+        if (item is Map)
+          ...[
+            for (final entry in item.entries)
+              if (entry.key.toString().toLowerCase() == key.toLowerCase() &&
+                  entry.value is String)
+                entry.value as String,
+          ],
+    ];
   }
 
   Future<void> _refreshGuild(String? guildId) async {

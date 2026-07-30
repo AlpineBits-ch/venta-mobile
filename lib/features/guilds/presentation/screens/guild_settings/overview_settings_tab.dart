@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/widget_styles.dart';
+import '../../../../../core/widgets/button_progress_indicator.dart';
 import '../../../data/guild_repository.dart';
 import '../../../data/models/channel_dto.dart';
 import '../../../data/models/guild_dto.dart';
@@ -339,14 +340,7 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
         FilledButton(
           onPressed: _saving ? null : _save,
           child: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+              ? const ButtonProgressIndicator()
               : const Text('Save changes'),
         ),
         const SizedBox(height: AppSpacing.l),

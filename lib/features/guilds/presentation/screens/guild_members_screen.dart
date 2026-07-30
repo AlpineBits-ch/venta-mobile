@@ -36,6 +36,7 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
   List<GuildMemberDto>? _members;
   String? _error;
   late final StreamSubscription<RealtimeEvent> _presenceSub;
+  late final StreamSubscription<RealtimeEvent> _rosterSub;
 
   @override
   void initState() {
@@ -44,19 +45,36 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
     _presenceSub = getIt<RealtimeService>().events
         .where((e) => e.name == 'guild.PresenceChanged')
         .listen(_onPresenceChanged);
+    // Presence alone kept the dots live but left the roster stale - someone
+    // joining, leaving, or being banned/kicked didn't show up until the
+    // screen was reopened.
+    _rosterSub = getIt<RealtimeService>().events
+        .where(
+          (e) =>
+              const {
+                'guild.MemberJoined',
+                'guild.MemberLeft',
+                'guild.MemberBanned',
+                'guild.MemberKicked',
+                'guild.MemberMuted',
+                'guild.MemberUnmuted',
+              }.contains(e.name) &&
+              e.stringField('guildId') == widget.guildId,
+        )
+        .listen((_) => _load());
   }
 
   @override
   void dispose() {
     unawaited(_presenceSub.cancel());
+    unawaited(_rosterSub.cancel());
     super.dispose();
   }
 
   void _onPresenceChanged(RealtimeEvent event) {
-    final payload = event.objectPayload;
-    if (payload['guildId'] != widget.guildId) return;
-    final userId = payload['userId'] as String?;
-    final statusName = payload['status'] as String?;
+    if (event.stringField('guildId') != widget.guildId) return;
+    final userId = event.stringField('userId');
+    final statusName = event.stringField('status');
     final members = _members;
     if (userId == null || statusName == null || members == null) return;
     final status = _parseOnlineStatus(statusName);

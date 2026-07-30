@@ -5,6 +5,7 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../friends/data/models/relationship_model.dart';
 import '../../../friends/data/relationship_repository.dart';
@@ -187,11 +188,7 @@ class _NewConversationDialogState extends State<_NewConversationDialog> {
         FilledButton(
           onPressed: _selectedIds.isEmpty || _creating ? null : _create,
           child: _creating
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const ButtonProgressIndicator()
               : Text(isGroup ? 'Create Group' : 'Start'),
         ),
       ],

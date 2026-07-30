@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../bloc/auth_bloc.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -105,6 +106,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             loading: loading,
                             errorMessage: state.errorMessage,
                             onSubmit: _submitMfaCode,
+                            onCancel: () {
+                              _mfaCodeController.clear();
+                              context.read<AuthBloc>().add(
+                                const LoginCancelled(),
+                              );
+                            },
                           );
                         }
                         return _CredentialsForm(
@@ -124,11 +131,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Need an account? ',
+                          'Need an account?',
                           style: theme.textTheme.bodySmall,
                         ),
-                        GestureDetector(
-                          onTap: () => context.push(RoutePaths.register),
+                        // A `TextButton` rather than a bare tappable `Text` so
+                        // the link gets a full-height touch target and ink
+                        // feedback - as text alone it was a ~16px-tall hit box.
+                        TextButton(
+                          onPressed: () => context.push(RoutePaths.register),
                           child: Text(
                             'Register',
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -213,14 +223,7 @@ class _CredentialsForm extends StatelessWidget {
         ElevatedButton(
           onPressed: loading ? null : onSubmit,
           child: loading
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: theme.colorScheme.onPrimary,
-                  ),
-                )
+              ? const ButtonProgressIndicator()
               : const Text('Log In'),
         ),
       ],
@@ -234,12 +237,14 @@ class _MfaCodeForm extends StatelessWidget {
     required this.loading,
     required this.errorMessage,
     required this.onSubmit,
+    required this.onCancel,
   });
 
   final TextEditingController controller;
   final bool loading;
   final String? errorMessage;
   final VoidCallback onSubmit;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -275,15 +280,13 @@ class _MfaCodeForm extends StatelessWidget {
         ElevatedButton(
           onPressed: loading ? null : onSubmit,
           child: loading
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: theme.colorScheme.onPrimary,
-                  ),
-                )
+              ? const ButtonProgressIndicator()
               : const Text('Verify'),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        TextButton(
+          onPressed: loading ? null : onCancel,
+          child: const Text('Use a different account'),
         ),
       ],
     );

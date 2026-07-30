@@ -32,6 +32,13 @@ class LoginSubmitted extends AuthEvent {
   List<Object?> get props => [input, password, mfaCode];
 }
 
+/// Backs out of the [AuthStatus.mfaRequired] prompt to the credentials form.
+/// Without this the code screen is a dead end - someone who can't reach their
+/// authenticator has no way back short of killing the app.
+class LoginCancelled extends AuthEvent {
+  const LoginCancelled();
+}
+
 class RegisterSubmitted extends AuthEvent {
   const RegisterSubmitted({
     required this.email,
@@ -71,6 +78,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required this.realtimeService,
   }) : super(const AuthState()) {
     on<LoginSubmitted>(_onLoginSubmitted);
+    on<LoginCancelled>(
+      (_, emit) => emit(const AuthState()),
+    );
     on<RegisterSubmitted>(_onRegisterSubmitted);
   }
 

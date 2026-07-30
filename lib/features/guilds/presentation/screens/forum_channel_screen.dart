@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/realtime/realtime_event.dart';
+import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
+import '../../../../core/widgets/load_failure_view.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
 
@@ -29,15 +34,35 @@ class ForumChannelScreen extends StatefulWidget {
 class _ForumChannelScreenState extends State<ForumChannelScreen> {
   List<ChannelDto>? _posts;
   bool _loading = true;
+  bool _loadFailed = false;
   bool _creating = false;
+  late final StreamSubscription<RealtimeEvent> _threadsSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Posts come from `getThreads(channelId)`, not the cached guild, so
+    // `GuildRepository`'s refetch doesn't reach this list - it needs its own
+    // subscription to pick up posts other people create.
+    _threadsSub = getIt<RealtimeService>().events
+        .where(
+          (e) =>
+              (e.name == 'guild.ThreadCreated' ||
+                  e.name == 'guild.ThreadUpdated') &&
+              e.stringField('parentChannelId') == widget.channelId,
+        )
+        .listen((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    unawaited(_threadsSub.cancel());
+    super.dispose();
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _loadFailed = false);
     try {
       final posts = await getIt<GuildRepository>().getThreads(
         widget.channelId,
@@ -49,7 +74,15 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      // A failed fetch left `_posts` null, which the body rendered as the
+      // "no posts yet" empty state - telling people the forum was empty when
+      // the request had simply failed.
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadFailed = _posts == null;
+        });
+      }
     }
   }
 
@@ -103,6 +136,11 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _loadFailed
+          ? LoadFailureView(
+              message: 'Couldn\'t load posts.',
+              onRetry: _load,
+            )
           : posts == null || posts.isEmpty
           ? Center(
               child: Text(
@@ -164,6 +202,13 @@ class _CreatePostDialogState extends State<_CreatePostDialog> {
   final _contentController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    // "Post" is disabled without a title; re-evaluate as the user types.
+    _nameController.addListener(() => setState(() {}));
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _contentController.dispose();
@@ -197,12 +242,14 @@ class _CreatePostDialogState extends State<_CreatePostDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(
-            _NewPostInput(
-              name: _nameController.text,
-              content: _contentController.text,
-            ),
-          ),
+          onPressed: _nameController.text.trim().isEmpty
+              ? null
+              : () => Navigator.of(context).pop(
+                  _NewPostInput(
+                    name: _nameController.text,
+                    content: _contentController.text,
+                  ),
+                ),
           child: const Text('Post'),
         ),
       ],

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/format/date_time_format.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../data/message_content_codec.dart';
 import '../../data/message_repository.dart';
@@ -135,7 +137,10 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           : _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-          ? Center(child: Text(_error!))
+          ? LoadFailureView(
+              message: _error!,
+              onRetry: () => _search(_controller.text),
+            )
           : !_searched
           ? Center(
               child: Text(
@@ -184,9 +189,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                   ),
                   trailing: message.createdAt != null
                       ? Text(
-                          message.createdAt!.toLocal().toString().split(
-                            '.',
-                          )[0],
+                          formatRelativeDateTime(message.createdAt!),
                           style: theme.textTheme.labelSmall,
                         )
                       : null,

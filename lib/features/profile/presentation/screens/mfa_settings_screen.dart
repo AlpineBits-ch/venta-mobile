@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../../auth/data/identity_api.dart';
 
 /// Enroll/disable authenticator-app 2FA and manage recovery codes. Pushed
@@ -77,10 +78,12 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
         });
       }
     } on MfaActionFailedException catch (e) {
-      if (mounted) setState(() {
-        _busy = false;
-        _error = e.message;
-      });
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = e.message;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -94,7 +97,10 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
   Future<void> _disable() async {
     final password = await _promptPassword('Disable two-factor authentication');
     if (password == null || !mounted) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       await getIt<IdentityApi>().disableMfa(password);
       if (mounted) {
@@ -124,7 +130,10 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
   Future<void> _regenerateCodes() async {
     final password = await _promptPassword('Generate new recovery codes');
     if (password == null || !mounted) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final codes = await getIt<IdentityApi>().regenerateRecoveryCodes(
         password,
@@ -162,6 +171,8 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
           controller: _passwordController,
           obscureText: true,
           autofocus: true,
+          onSubmitted: (text) =>
+              text.isEmpty ? null : Navigator.of(context).pop(text),
           decoration: const InputDecoration(hintText: 'Your password'),
         ),
         actions: [
@@ -169,10 +180,17 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.of(context).pop(_passwordController.text),
-            child: const Text('Confirm'),
+          // Rebuilds on each keystroke so Confirm stays disabled until there's
+          // actually a password to send - otherwise it fired an empty string
+          // at the API and came back as a generic failure snackbar.
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _passwordController,
+            builder: (context, value, _) => FilledButton(
+              onPressed: value.text.isEmpty
+                  ? null
+                  : () => Navigator.of(context).pop(value.text),
+              child: const Text('Confirm'),
+            ),
           ),
         ],
       ),
@@ -198,7 +216,13 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
                   busy: _busy,
                   error: _error,
                   onConfirm: _confirmEnroll,
-                  onCancel: () => setState(() => _enrolling = false),
+                  onCancel: () => setState(() {
+                    _enrolling = false;
+                    // Both views render `_error`; without clearing it here a
+                    // failed code check follows you back to the overview.
+                    _error = null;
+                    _codeController.clear();
+                  }),
                 )
               : _OverviewView(
                   enabled: _enabled,
@@ -318,9 +342,15 @@ class _EnrollView extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.l),
         Center(
+          // Stays white in both themes - QR scanners need the light quiet
+          // zone - but takes the app's card radius so it doesn't read as a
+          // bare rectangle pasted onto a rounded layout.
           child: Container(
             padding: const EdgeInsets.all(AppSpacing.m),
-            color: Colors.white,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppRadii.card),
+            ),
             child: QrImageView(
               data: enrollment.otpAuthUri,
               size: 200,
@@ -349,6 +379,7 @@ class _EnrollView extends StatelessWidget {
         TextField(
           controller: codeController,
           autocorrect: false,
+          keyboardType: TextInputType.number,
           onSubmitted: (_) => busy ? null : onConfirm(),
           decoration: const InputDecoration(hintText: '123456'),
         ),
@@ -365,11 +396,7 @@ class _EnrollView extends StatelessWidget {
         FilledButton(
           onPressed: busy ? null : onConfirm,
           child: busy
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const ButtonProgressIndicator()
               : const Text('Verify and enable'),
         ),
         const SizedBox(height: AppSpacing.s),
@@ -424,8 +451,13 @@ class _RecoveryCodesView extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.m),
         OutlinedButton.icon(
-          onPressed: () =>
-              Clipboard.setData(ClipboardData(text: codes.join('\n'))),
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: codes.join('\n')));
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Recovery codes copied.')),
+            );
+          },
           icon: const Icon(Icons.copy_outlined),
           label: const Text('Copy all'),
         ),

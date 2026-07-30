@@ -4,6 +4,7 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
+import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
 import '../../data/models/channel_follower_dto.dart';
@@ -260,14 +261,7 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
                 FilledButton(
                   onPressed: _saving ? null : _save,
                   child: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                      ? const ButtonProgressIndicator()
                       : const Text('Save changes'),
                 ),
                 if (channel.type == ChannelType.announcement) ...[

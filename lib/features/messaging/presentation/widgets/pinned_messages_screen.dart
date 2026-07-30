@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/format/date_time_format.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../data/message_content_codec.dart';
 import '../../data/message_repository.dart';
@@ -55,7 +57,7 @@ class _PinnedMessagesScreenState extends State<PinnedMessagesScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-          ? Center(child: Text(_error!))
+          ? LoadFailureView(message: _error!, onRetry: _load)
           : pins == null || pins.isEmpty
           ? Center(
               child: Text(
@@ -73,15 +75,37 @@ class _PinnedMessagesScreenState extends State<PinnedMessagesScreen> {
                 final message = pins[index];
                 final text = MessageContentCodec.decode(message.content);
                 return ListTile(
+                  isThreeLine: message.pinnedById != null,
                   title: ProfileResolver(
                     userId: message.authorId,
                     builder: (context, profile) =>
                         Text(profile?.userName ?? '…'),
                   ),
-                  subtitle: Text(
-                    text.isEmpty ? '(attachment)' : text,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        text.isEmpty ? '(attachment)' : text,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      // The DTO carries `pinnedById` and this screen's whole
+                      // reason for existing is moderator attribution, but the
+                      // row only ever showed the message's author.
+                      if (message.pinnedById != null)
+                        ProfileResolver(
+                          userId: message.pinnedById!,
+                          builder: (context, profile) => Text(
+                            'Pinned by ${profile?.userName ?? '…'}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -92,10 +116,12 @@ class _PinnedMessagesScreenState extends State<PinnedMessagesScreen> {
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
-                            message.pinnedAt!.toLocal().toString().split(
-                              '.',
-                            )[0],
-                            style: theme.textTheme.labelSmall,
+                            formatRelativeDateTime(message.pinnedAt!),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
                           ),
                         ),
                     ],

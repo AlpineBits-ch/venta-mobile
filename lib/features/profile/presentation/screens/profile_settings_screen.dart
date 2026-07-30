@@ -11,6 +11,7 @@ import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
+import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../../auth/data/account_repository.dart';
 import '../../../auth/data/identity_api.dart';
 import '../../../auth/data/models/notification_settings_dto.dart';
@@ -478,10 +479,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                           ? null
                           : _confirmSignOutOthers,
                       child: _signingOutOthers
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                          ? ButtonProgressIndicator(
+                              onColor: theme.colorScheme.onSurface,
                             )
                           : const Text('Sign out of all other devices'),
                     ),

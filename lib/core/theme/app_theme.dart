@@ -143,6 +143,37 @@ abstract final class AppTheme {
           ),
         ),
       ),
+      // `FilledButton` is the primary action across most of the app, but
+      // Material 3 defaults it to a stadium (pill) shape - which sat next to
+      // the `AppRadii.input`-cornered `ElevatedButton` on the login/register
+      // screens as two different-looking primary buttons. Mirror the elevated
+      // style so "primary button" reads the same everywhere.
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
+          disabledBackgroundColor: colorScheme.primary.withValues(alpha: 0.4),
+          disabledForegroundColor: colorScheme.onPrimary.withValues(alpha: 0.7),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.input),
+          ),
+          textStyle: textTheme.titleSmall?.copyWith(
+            color: colorScheme.onPrimary,
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: colorScheme.onSurface,
+          side: BorderSide(color: dividerColor),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.input),
+          ),
+          textStyle: textTheme.titleSmall,
+        ),
+      ),
       listTileTheme: ListTileThemeData(
         iconColor: colorScheme.onSurface.withValues(alpha: 0.6),
         selectedTileColor: statusColors.hover,

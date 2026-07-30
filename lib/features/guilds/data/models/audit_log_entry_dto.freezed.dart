@@ -15,7 +15,15 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$AuditLogEntryDto {
 
- String get id; String get guildId; String get actorUserId;@JsonKey(unknownEnumValue: AuditActionType.unknown) AuditActionType get actionType; String? get targetId;/// Raw JSON string, shape varies per [actionType] - parsed defensively.
+ String get id; String get guildId; String get actorUserId;@JsonKey(unknownEnumValue: AuditActionType.unknown) AuditActionType get actionType;/// The server's raw `actionType` string, kept alongside the parsed enum.
+///
+/// `unknownEnumValue` throws away what it couldn't match, so every action
+/// this client doesn't know about collapsed into a single indistinguishable
+/// [AuditActionType.unknown] - and the log rendered "did something" for all
+/// of them. Holding the original string lets the UI still say *which*
+/// action it was, and means server-side additions degrade to a readable
+/// label instead of requiring a client release to be legible at all.
+@JsonKey(name: 'actionType', includeToJson: false) String get rawActionType; String? get targetId;/// Raw JSON string, shape varies per [actionType] - parsed defensively.
  String? get metadata; DateTime? get createdAt;
 /// Create a copy of AuditLogEntryDto
 /// with the given fields replaced by the non-null parameter values.
@@ -29,16 +37,16 @@ $AuditLogEntryDtoCopyWith<AuditLogEntryDto> get copyWith => _$AuditLogEntryDtoCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AuditLogEntryDto&&(identical(other.id, id) || other.id == id)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.actorUserId, actorUserId) || other.actorUserId == actorUserId)&&(identical(other.actionType, actionType) || other.actionType == actionType)&&(identical(other.targetId, targetId) || other.targetId == targetId)&&(identical(other.metadata, metadata) || other.metadata == metadata)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AuditLogEntryDto&&(identical(other.id, id) || other.id == id)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.actorUserId, actorUserId) || other.actorUserId == actorUserId)&&(identical(other.actionType, actionType) || other.actionType == actionType)&&(identical(other.rawActionType, rawActionType) || other.rawActionType == rawActionType)&&(identical(other.targetId, targetId) || other.targetId == targetId)&&(identical(other.metadata, metadata) || other.metadata == metadata)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,guildId,actorUserId,actionType,targetId,metadata,createdAt);
+int get hashCode => Object.hash(runtimeType,id,guildId,actorUserId,actionType,rawActionType,targetId,metadata,createdAt);
 
 @override
 String toString() {
-  return 'AuditLogEntryDto(id: $id, guildId: $guildId, actorUserId: $actorUserId, actionType: $actionType, targetId: $targetId, metadata: $metadata, createdAt: $createdAt)';
+  return 'AuditLogEntryDto(id: $id, guildId: $guildId, actorUserId: $actorUserId, actionType: $actionType, rawActionType: $rawActionType, targetId: $targetId, metadata: $metadata, createdAt: $createdAt)';
 }
 
 
@@ -49,7 +57,7 @@ abstract mixin class $AuditLogEntryDtoCopyWith<$Res>  {
   factory $AuditLogEntryDtoCopyWith(AuditLogEntryDto value, $Res Function(AuditLogEntryDto) _then) = _$AuditLogEntryDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String guildId, String actorUserId,@JsonKey(unknownEnumValue: AuditActionType.unknown) AuditActionType actionType, String? targetId, String? metadata, DateTime? createdAt
+ String id, String guildId, String actorUserId,@JsonKey(unknownEnumValue: AuditActionType.unknown) AuditActionType actionType,@JsonKey(name: 'actionType', includeToJson: false) String rawActionType, String? targetId, String? metadata, DateTime? createdAt
 });
 
 
@@ -66,13 +74,14 @@ class _$AuditLogEntryDtoCopyWithImpl<$Res>
 
 /// Create a copy of AuditLogEntryDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? guildId = null,Object? actorUserId = null,Object? actionType = null,Object? targetId = freezed,Object? metadata = freezed,Object? createdAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? guildId = null,Object? actorUserId = null,Object? actionType = null,Object? rawActionType = null,Object? targetId = freezed,Object? metadata = freezed,Object? createdAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,guildId: null == guildId ? _self.guildId : guildId // ignore: cast_nullable_to_non_nullable
 as String,actorUserId: null == actorUserId ? _self.actorUserId : actorUserId // ignore: cast_nullable_to_non_nullable
 as String,actionType: null == actionType ? _self.actionType : actionType // ignore: cast_nullable_to_non_nullable
-as AuditActionType,targetId: freezed == targetId ? _self.targetId : targetId // ignore: cast_nullable_to_non_nullable
+as AuditActionType,rawActionType: null == rawActionType ? _self.rawActionType : rawActionType // ignore: cast_nullable_to_non_nullable
+as String,targetId: freezed == targetId ? _self.targetId : targetId // ignore: cast_nullable_to_non_nullable
 as String?,metadata: freezed == metadata ? _self.metadata : metadata // ignore: cast_nullable_to_non_nullable
 as String?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
@@ -157,10 +166,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String guildId,  String actorUserId, @JsonKey(unknownEnumValue: AuditActionType.unknown)  AuditActionType actionType,  String? targetId,  String? metadata,  DateTime? createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String guildId,  String actorUserId, @JsonKey(unknownEnumValue: AuditActionType.unknown)  AuditActionType actionType, @JsonKey(name: 'actionType', includeToJson: false)  String rawActionType,  String? targetId,  String? metadata,  DateTime? createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _AuditLogEntryDto() when $default != null:
-return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.targetId,_that.metadata,_that.createdAt);case _:
+return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.rawActionType,_that.targetId,_that.metadata,_that.createdAt);case _:
   return orElse();
 
 }
@@ -178,10 +187,10 @@ return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String guildId,  String actorUserId, @JsonKey(unknownEnumValue: AuditActionType.unknown)  AuditActionType actionType,  String? targetId,  String? metadata,  DateTime? createdAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String guildId,  String actorUserId, @JsonKey(unknownEnumValue: AuditActionType.unknown)  AuditActionType actionType, @JsonKey(name: 'actionType', includeToJson: false)  String rawActionType,  String? targetId,  String? metadata,  DateTime? createdAt)  $default,) {final _that = this;
 switch (_that) {
 case _AuditLogEntryDto():
-return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.targetId,_that.metadata,_that.createdAt);}
+return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.rawActionType,_that.targetId,_that.metadata,_that.createdAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -195,10 +204,10 @@ return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String guildId,  String actorUserId, @JsonKey(unknownEnumValue: AuditActionType.unknown)  AuditActionType actionType,  String? targetId,  String? metadata,  DateTime? createdAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String guildId,  String actorUserId, @JsonKey(unknownEnumValue: AuditActionType.unknown)  AuditActionType actionType, @JsonKey(name: 'actionType', includeToJson: false)  String rawActionType,  String? targetId,  String? metadata,  DateTime? createdAt)?  $default,) {final _that = this;
 switch (_that) {
 case _AuditLogEntryDto() when $default != null:
-return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.targetId,_that.metadata,_that.createdAt);case _:
+return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.rawActionType,_that.targetId,_that.metadata,_that.createdAt);case _:
   return null;
 
 }
@@ -210,13 +219,22 @@ return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.
 @JsonSerializable()
 
 class _AuditLogEntryDto implements AuditLogEntryDto {
-  const _AuditLogEntryDto({required this.id, required this.guildId, required this.actorUserId, @JsonKey(unknownEnumValue: AuditActionType.unknown) required this.actionType, this.targetId, this.metadata, this.createdAt});
+  const _AuditLogEntryDto({required this.id, required this.guildId, required this.actorUserId, @JsonKey(unknownEnumValue: AuditActionType.unknown) required this.actionType, @JsonKey(name: 'actionType', includeToJson: false) this.rawActionType = '', this.targetId, this.metadata, this.createdAt});
   factory _AuditLogEntryDto.fromJson(Map<String, dynamic> json) => _$AuditLogEntryDtoFromJson(json);
 
 @override final  String id;
 @override final  String guildId;
 @override final  String actorUserId;
 @override@JsonKey(unknownEnumValue: AuditActionType.unknown) final  AuditActionType actionType;
+/// The server's raw `actionType` string, kept alongside the parsed enum.
+///
+/// `unknownEnumValue` throws away what it couldn't match, so every action
+/// this client doesn't know about collapsed into a single indistinguishable
+/// [AuditActionType.unknown] - and the log rendered "did something" for all
+/// of them. Holding the original string lets the UI still say *which*
+/// action it was, and means server-side additions degrade to a readable
+/// label instead of requiring a client release to be legible at all.
+@override@JsonKey(name: 'actionType', includeToJson: false) final  String rawActionType;
 @override final  String? targetId;
 /// Raw JSON string, shape varies per [actionType] - parsed defensively.
 @override final  String? metadata;
@@ -235,16 +253,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AuditLogEntryDto&&(identical(other.id, id) || other.id == id)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.actorUserId, actorUserId) || other.actorUserId == actorUserId)&&(identical(other.actionType, actionType) || other.actionType == actionType)&&(identical(other.targetId, targetId) || other.targetId == targetId)&&(identical(other.metadata, metadata) || other.metadata == metadata)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AuditLogEntryDto&&(identical(other.id, id) || other.id == id)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.actorUserId, actorUserId) || other.actorUserId == actorUserId)&&(identical(other.actionType, actionType) || other.actionType == actionType)&&(identical(other.rawActionType, rawActionType) || other.rawActionType == rawActionType)&&(identical(other.targetId, targetId) || other.targetId == targetId)&&(identical(other.metadata, metadata) || other.metadata == metadata)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,guildId,actorUserId,actionType,targetId,metadata,createdAt);
+int get hashCode => Object.hash(runtimeType,id,guildId,actorUserId,actionType,rawActionType,targetId,metadata,createdAt);
 
 @override
 String toString() {
-  return 'AuditLogEntryDto(id: $id, guildId: $guildId, actorUserId: $actorUserId, actionType: $actionType, targetId: $targetId, metadata: $metadata, createdAt: $createdAt)';
+  return 'AuditLogEntryDto(id: $id, guildId: $guildId, actorUserId: $actorUserId, actionType: $actionType, rawActionType: $rawActionType, targetId: $targetId, metadata: $metadata, createdAt: $createdAt)';
 }
 
 
@@ -255,7 +273,7 @@ abstract mixin class _$AuditLogEntryDtoCopyWith<$Res> implements $AuditLogEntryD
   factory _$AuditLogEntryDtoCopyWith(_AuditLogEntryDto value, $Res Function(_AuditLogEntryDto) _then) = __$AuditLogEntryDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String guildId, String actorUserId,@JsonKey(unknownEnumValue: AuditActionType.unknown) AuditActionType actionType, String? targetId, String? metadata, DateTime? createdAt
+ String id, String guildId, String actorUserId,@JsonKey(unknownEnumValue: AuditActionType.unknown) AuditActionType actionType,@JsonKey(name: 'actionType', includeToJson: false) String rawActionType, String? targetId, String? metadata, DateTime? createdAt
 });
 
 
@@ -272,13 +290,14 @@ class __$AuditLogEntryDtoCopyWithImpl<$Res>
 
 /// Create a copy of AuditLogEntryDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? guildId = null,Object? actorUserId = null,Object? actionType = null,Object? targetId = freezed,Object? metadata = freezed,Object? createdAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? guildId = null,Object? actorUserId = null,Object? actionType = null,Object? rawActionType = null,Object? targetId = freezed,Object? metadata = freezed,Object? createdAt = freezed,}) {
   return _then(_AuditLogEntryDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,guildId: null == guildId ? _self.guildId : guildId // ignore: cast_nullable_to_non_nullable
 as String,actorUserId: null == actorUserId ? _self.actorUserId : actorUserId // ignore: cast_nullable_to_non_nullable
 as String,actionType: null == actionType ? _self.actionType : actionType // ignore: cast_nullable_to_non_nullable
-as AuditActionType,targetId: freezed == targetId ? _self.targetId : targetId // ignore: cast_nullable_to_non_nullable
+as AuditActionType,rawActionType: null == rawActionType ? _self.rawActionType : rawActionType // ignore: cast_nullable_to_non_nullable
+as String,targetId: freezed == targetId ? _self.targetId : targetId // ignore: cast_nullable_to_non_nullable
 as String?,metadata: freezed == metadata ? _self.metadata : metadata // ignore: cast_nullable_to_non_nullable
 as String?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,

@@ -3,29 +3,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/format/date_time_format.dart';
 import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
+import '../../../../core/widgets/button_progress_indicator.dart';
+import '../../../../core/widgets/load_failure_view.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
 import '../../data/models/guild_permissions.dart';
 import '../../data/models/scheduled_event_dto.dart';
-
-String _formatWhen(DateTime dateTime) {
-  final local = dateTime.toLocal();
-  const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-  final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
-  final minute = local.minute.toString().padLeft(2, '0');
-  final period = local.hour < 12 ? 'AM' : 'PM';
-  return '${months[local.month - 1]} ${local.day}, $hour12:$minute $period';
-}
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key, required this.guildId});
@@ -38,6 +29,7 @@ class EventsScreen extends StatefulWidget {
 
 class _EventsScreenState extends State<EventsScreen> {
   List<ScheduledEventDto>? _events;
+  bool _loadFailed = false;
   GuildPermissions _permissions = GuildPermissions.none;
   late final StreamSubscription<RealtimeEvent> _eventsSub;
 
@@ -52,7 +44,7 @@ class _EventsScreenState extends State<EventsScreen> {
               (e.name == 'guild.EventCreated' ||
                   e.name == 'guild.EventUpdated' ||
                   e.name == 'guild.EventCancelled') &&
-              e.objectPayload['guildId'] == widget.guildId,
+              e.stringField('guildId') == widget.guildId,
         )
         .listen((_) => _load());
   }
@@ -66,9 +58,16 @@ class _EventsScreenState extends State<EventsScreen> {
   Future<void> _load() async {
     try {
       final events = await getIt<GuildRepository>().getEvents(widget.guildId);
-      if (mounted) setState(() => _events = events);
+      if (mounted) {
+        setState(() {
+          _events = events;
+          _loadFailed = false;
+        });
+      }
     } catch (_) {
-      // Keep whatever was already loaded.
+      // Keep whatever was already loaded - but if that's nothing, the screen
+      // would otherwise sit on its spinner forever with no way to retry.
+      if (mounted && _events == null) setState(() => _loadFailed = true);
     }
   }
 
@@ -196,7 +195,12 @@ class _EventsScreenState extends State<EventsScreen> {
         ),
         title: const Text('Events'),
       ),
-      body: events == null
+      body: _loadFailed
+          ? LoadFailureView(
+              message: 'Couldn\'t load events.',
+              onRetry: _load,
+            )
+          : events == null
           ? const Center(child: CircularProgressIndicator())
           : events.isEmpty
           ? Center(
@@ -261,7 +265,12 @@ class _EventCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    final cancelled = event.status == EventStatus.cancelled;
+    return Opacity(
+      // Cancelled events stay in the list (the backend keeps them), so they
+      // need to read as inactive rather than sitting there looking bookable.
+      opacity: cancelled ? 0.6 : 1,
+      child: Container(
       padding: const EdgeInsets.all(AppSpacing.m),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
@@ -273,9 +282,14 @@ class _EventCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(event.title, style: theme.textTheme.titleSmall),
+                child: Text(
+                  event.title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    decoration: cancelled ? TextDecoration.lineThrough : null,
+                  ),
+                ),
               ),
-              if (canManage)
+              if (canManage && !cancelled)
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
                   onSelected: (value) => switch (value) {
@@ -293,15 +307,39 @@ class _EventCard extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            _formatWhen(event.startsAt),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: [
+              if (cancelled) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xs + 2,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(AppRadii.badge),
+                  ),
+                  child: Text(
+                    'CANCELLED',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s),
+              ],
+              Text(
+                formatShortDateTime(event.startsAt),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
           ),
           if (event.location != null) ...[
-            const SizedBox(height: 2),
+            const SizedBox(height: AppSpacing.xs),
             Text(event.location!, style: theme.textTheme.bodySmall),
           ],
           if (event.description != null) ...[
@@ -312,7 +350,7 @@ class _EventCard extends StatelessWidget {
           Row(
             children: [
               OutlinedButton.icon(
-                onPressed: onToggleInterest,
+                onPressed: cancelled ? null : onToggleInterest,
                 icon: Icon(
                   event.isInterested
                       ? Icons.favorite
@@ -321,7 +359,7 @@ class _EventCard extends StatelessWidget {
                 ),
                 label: Text('${event.interestedCount}'),
               ),
-              if (onJoinVoice != null) ...[
+              if (onJoinVoice != null && !cancelled) ...[
                 const SizedBox(width: AppSpacing.s),
                 OutlinedButton.icon(
                   onPressed: onJoinVoice,
@@ -332,6 +370,7 @@ class _EventCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
       ),
     );
   }
@@ -372,6 +411,8 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
   void initState() {
     super.initState();
     _voiceChannelId = widget.existing?.voiceChannelId;
+    // Save is gated on a non-empty title; re-evaluate as the user types.
+    _titleController.addListener(() => setState(() {}));
   }
 
   @override
@@ -383,11 +424,16 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
   }
 
   Future<void> _pickStartsAt() async {
+    // An event that already started is still editable, and `showDatePicker`
+    // asserts `initialDate >= firstDate` - so anchor the range at whichever of
+    // "now" and the existing start is earlier rather than crashing on it.
+    final now = DateTime.now();
+    final firstDate = _startsAt.isBefore(now) ? _startsAt : now;
     final date = await showDatePicker(
       context: context,
       initialDate: _startsAt,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: firstDate,
+      lastDate: now.add(const Duration(days: 365)),
     );
     if (date == null || !mounted) return;
     final time = await showTimePicker(
@@ -396,7 +442,13 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
     );
     if (time == null) return;
     setState(() {
-      _startsAt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _startsAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
     });
   }
 
@@ -527,7 +579,7 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
                                 children: [
                                   Text('Starts at', style: labelStyle),
                                   const SizedBox(height: 2),
-                                  Text(_formatWhen(_startsAt)),
+                                  Text(formatShortDateTime(_startsAt)),
                                 ],
                               ),
                             ),
@@ -546,7 +598,7 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
                       Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.m,
-                          vertical: 2,
+                          vertical: AppSpacing.s,
                         ),
                         child: Row(
                           children: [
@@ -561,8 +613,14 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
                               child: DropdownButtonFormField<String?>(
                                 initialValue: _voiceChannelId,
                                 isExpanded: true,
+                                // Zero content padding: the theme's default
+                                // (16h) would indent this label past the
+                                // "Starts at" label in the row above, which
+                                // shares the same icon gutter.
                                 decoration: const InputDecoration(
                                   border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
                                   labelText: 'Voice channel (optional)',
                                 ),
                                 items: [
@@ -591,16 +649,11 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: _saving ? null : _save,
+                onPressed: _saving || _titleController.text.trim().isEmpty
+                    ? null
+                    : _save,
                 child: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
+                    ? const ButtonProgressIndicator()
                     : const Text('Save'),
               ),
             ),

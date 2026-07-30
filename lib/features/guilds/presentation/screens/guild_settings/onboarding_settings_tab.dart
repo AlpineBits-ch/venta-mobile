@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/widget_styles.dart';
+import '../../../../../core/widgets/button_progress_indicator.dart';
 import '../../../data/guild_repository.dart';
 import '../../../data/models/channel_dto.dart';
 import '../../../data/models/onboarding_dto.dart';
@@ -116,6 +117,9 @@ class _OnboardingSettingsTabState extends State<OnboardingSettingsTab> {
           controller: _rulesController,
           minLines: 4,
           maxLines: 10,
+          // Inert while onboarding is off - the rules and suggested channels
+          // only apply once the master switch is on.
+          enabled: config.enabled,
           decoration: const InputDecoration(
             hintText: '1. Be nice\n2. ...',
           ),
@@ -123,7 +127,7 @@ class _OnboardingSettingsTabState extends State<OnboardingSettingsTab> {
         if (channels.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.l),
           Text('SUGGESTED CHANNELS', style: theme.textTheme.labelSmall),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             'Highlighted for new members - doesn\'t change who can see them.',
             style: theme.textTheme.bodySmall?.copyWith(
@@ -139,14 +143,16 @@ class _OnboardingSettingsTabState extends State<OnboardingSettingsTab> {
                 FilterChip(
                   label: Text('#${channel.name}'),
                   selected: _defaultChannelIds.contains(channel.id),
-                  onSelected: (selected) => setState(() {
-                    _defaultChannelIds = {..._defaultChannelIds};
-                    if (selected) {
-                      _defaultChannelIds.add(channel.id);
-                    } else {
-                      _defaultChannelIds.remove(channel.id);
-                    }
-                  }),
+                  onSelected: config.enabled
+                      ? (selected) => setState(() {
+                          _defaultChannelIds = {..._defaultChannelIds};
+                          if (selected) {
+                            _defaultChannelIds.add(channel.id);
+                          } else {
+                            _defaultChannelIds.remove(channel.id);
+                          }
+                        })
+                      : null,
                 ),
             ],
           ),
@@ -155,14 +161,7 @@ class _OnboardingSettingsTabState extends State<OnboardingSettingsTab> {
         FilledButton(
           onPressed: _saving ? null : _save,
           child: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+              ? const ButtonProgressIndicator()
               : const Text('Save changes'),
         ),
       ],
