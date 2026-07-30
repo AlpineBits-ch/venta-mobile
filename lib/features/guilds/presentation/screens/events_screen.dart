@@ -444,6 +444,16 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final labelStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.5,
+    );
+    final divider = Divider(
+      height: 1,
+      thickness: 1,
+      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+    );
     return Padding(
       padding: EdgeInsets.only(
         left: AppSpacing.l,
@@ -454,74 +464,145 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               widget.existing == null ? 'New event' : 'Edit event',
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: AppSpacing.l),
+            Text('TITLE', style: labelStyle),
+            const SizedBox(height: 6),
             TextField(
               controller: _titleController,
               autofocus: widget.existing == null,
-              decoration: const InputDecoration(labelText: 'Title'),
+              decoration: const InputDecoration(hintText: 'Game night'),
             ),
-            const SizedBox(height: AppSpacing.s),
+            const SizedBox(height: AppSpacing.l),
+            Text('DETAILS', style: labelStyle),
+            const SizedBox(height: 6),
             TextField(
               controller: _descriptionController,
               minLines: 2,
               maxLines: 4,
               decoration: const InputDecoration(
-                labelText: 'Description (optional)',
+                hintText: 'Description (optional)',
               ),
             ),
             const SizedBox(height: AppSpacing.s),
             TextField(
               controller: _locationController,
               decoration: const InputDecoration(
-                labelText: 'Location (optional)',
+                hintText: 'Location (optional)',
               ),
             ),
-            const SizedBox(height: AppSpacing.s),
-            InkWell(
-              onTap: _pickStartsAt,
-              borderRadius: BorderRadius.circular(AppRadii.input),
-              child: InputDecorator(
-                decoration: const InputDecoration(labelText: 'Starts at'),
-                child: Text(_formatWhen(_startsAt)),
-              ),
-            ),
-            if (widget.voiceChannels.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.s),
-              DropdownButtonFormField<String?>(
-                initialValue: _voiceChannelId,
-                decoration: const InputDecoration(
-                  labelText: 'Voice channel (optional)',
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(child: Text('None')),
-                  for (final channel in widget.voiceChannels)
-                    DropdownMenuItem<String?>(
-                      value: channel.id,
-                      child: Text(channel.name),
-                    ),
-                ],
-                onChanged: (value) => setState(() => _voiceChannelId = value),
-              ),
-            ],
             const SizedBox(height: AppSpacing.l),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+            Text('SCHEDULE', style: labelStyle),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadii.card),
+              child: ColoredBox(
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: Column(
+                  children: [
+                    InkWell(
+                      onTap: _pickStartsAt,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.m,
+                          vertical: AppSpacing.s + 2,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.schedule,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.7,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.m),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Starts at', style: labelStyle),
+                                  const SizedBox(height: 2),
+                                  Text(_formatWhen(_startsAt)),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.4,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    )
-                  : const Text('Save'),
+                    ),
+                    if (widget.voiceChannels.isNotEmpty) ...[
+                      divider,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.m,
+                          vertical: 2,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.volume_up_outlined,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.7,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.m),
+                            Expanded(
+                              child: DropdownButtonFormField<String?>(
+                                initialValue: _voiceChannelId,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  labelText: 'Voice channel (optional)',
+                                ),
+                                items: [
+                                  const DropdownMenuItem<String?>(
+                                    child: Text('None'),
+                                  ),
+                                  for (final channel in widget.voiceChannels)
+                                    DropdownMenuItem<String?>(
+                                      value: channel.id,
+                                      child: Text(channel.name),
+                                    ),
+                                ],
+                                onChanged: (value) =>
+                                    setState(() => _voiceChannelId = value),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.l),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Save'),
+              ),
             ),
           ],
         ),

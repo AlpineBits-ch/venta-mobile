@@ -446,28 +446,62 @@ class _TemplatePreviewDialogState extends State<_TemplatePreviewDialog> {
           0,
           (sum, category) => sum + category.channels.length,
         );
+    final labelStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.5,
+    );
     return AlertDialog(
       title: Text(widget.template.name),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (widget.template.description != null) ...[
-            Text(widget.template.description!, style: theme.textTheme.bodyMedium),
-            const SizedBox(height: AppSpacing.s),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.template.description != null) ...[
+              Text(
+                widget.template.description!,
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: AppSpacing.m),
+            ],
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.m,
+                vertical: AppSpacing.s,
+              ),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(AppRadii.chip),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.dashboard_customize_outlined,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  Expanded(
+                    child: Text(
+                      'Creates ${snapshot.categories.length} categories, '
+                      '$channelCount channels, ${snapshot.roles.length} roles',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.l),
+            Text('NEW SERVER NAME', style: labelStyle),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: 'My New Server'),
+            ),
           ],
-          Text(
-            'Creates ${snapshot.categories.length} categories, '
-            '$channelCount channels, ${snapshot.roles.length} roles.',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: AppSpacing.m),
-          TextField(
-            controller: _nameController,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'New server name'),
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(

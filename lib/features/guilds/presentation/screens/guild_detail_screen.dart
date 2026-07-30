@@ -213,10 +213,35 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Welcome! Read the rules to get started', style: theme.textTheme.titleMedium),
-                const SizedBox(height: AppSpacing.m),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 300),
+                Row(
+                  children: [
+                    Icon(Icons.waving_hand_outlined, color: theme.colorScheme.primary),
+                    const SizedBox(width: AppSpacing.s),
+                    Expanded(
+                      child: Text(
+                        'Welcome! Read the rules to get started',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.l),
+                Text(
+                  'RULES',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  padding: const EdgeInsets.all(AppSpacing.m),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(AppRadii.card),
+                  ),
                   child: SingleChildScrollView(
                     child: Text(
                       status.rulesText ?? '',
