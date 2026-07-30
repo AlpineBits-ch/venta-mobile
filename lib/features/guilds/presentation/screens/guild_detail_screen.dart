@@ -16,6 +16,7 @@ import '../../../auth/data/auth_repository.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
 import '../../../household/presentation/widgets/home_status_board.dart';
+import '../../data/forum_visits.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/category_dto.dart';
 import '../../data/models/channel_dto.dart';
@@ -67,6 +68,9 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   void initState() {
     super.initState();
     _load();
+    // Opening a post happens on a screen pushed over this one, so the nested
+    // post rows have to update from underneath rather than on the next build.
+    ForumVisits.revision.addListener(_onVisitsChanged);
     final myUserId = getIt<AuthRepository>().currentUserId;
     _messageSub = getIt<RealtimeService>().events
         .where((e) => e.name == 'guild.MessageCreated')
@@ -186,7 +190,12 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   @override
   void dispose() {
     _messageSub.cancel();
+    ForumVisits.revision.removeListener(_onVisitsChanged);
     super.dispose();
+  }
+
+  void _onVisitsChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -422,6 +431,64 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     );
   }
 
+  /// One channel row - plus, for a forum, the posts in it this member has
+  /// already opened, nested underneath it like Discord's sidebar.
+  ///
+  /// The nested rows are the only way back into a post without going through
+  /// the forum's post list first, which is the point: a forum you're following
+  /// two conversations in otherwise costs two taps to reach either of them.
+  Widget _channelEntry(GuildDto guild, ChannelDto channel, bool canManage) {
+    final tile = _ChannelTile(
+      guildId: guild.id,
+      guildName: guild.name,
+      channel: channel,
+      canManage: canManage,
+      unread: _unread[channel.id],
+      onLongPress: () => _showChannelActions(channel),
+    );
+    if (!channel.type.isForumLike) return tile;
+    final visits = [
+      for (final visit in ForumVisits.forForum(channel.id))
+        // An archived post leaves the sidebar the way it leaves the forum's
+        // active post list - it's still there to open, it's just not something
+        // anybody is following anymore.
+        if (!(guild.channels
+                .where((c) => c.id == visit.postId)
+                .firstOrNull
+                ?.isArchived ??
+            false))
+          visit,
+    ];
+    if (visits.isEmpty) return tile;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        tile,
+        for (var i = 0; i < visits.length; i++)
+          _ForumPostTile(
+            // A post can be renamed after it was last opened, so the cached
+            // channel wins when the guild still has it; the remembered title
+            // is the fallback for a post the cache doesn't carry.
+            name:
+                guild.channels
+                    .where((c) => c.id == visits[i].postId)
+                    .firstOrNull
+                    ?.name ??
+                visits[i].name,
+            unread: _unread[visits[i].postId],
+            isLast: i == visits.length - 1,
+            onTap: () {
+              _markChannelRead(visits[i].postId);
+              context.push(
+                RoutePaths.serverChannelPath(guild.id, visits[i].postId),
+              );
+            },
+            onForget: () => ForumVisits.forget(channel.id, visits[i].postId),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final guild = _guild;
@@ -517,14 +584,7 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
                     context.push(RoutePaths.serverChannelsRolesPath(guild.id)),
               ),
             for (final channel in uncategorized)
-              _ChannelTile(
-                guildId: guild.id,
-                guildName: guild.name,
-                channel: channel,
-                canManage: canManageChannels,
-                unread: _unread[channel.id],
-                onLongPress: () => _showChannelActions(channel),
-              ),
+              _channelEntry(guild, channel, canManageChannels),
             for (final category in sortedCategories) ...[
               _CategoryHeader(
                 category: category,
@@ -532,14 +592,7 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
                 onEdit: () => _editCategory(category),
               ),
               for (final channel in byCategory[category.id] ?? const [])
-                _ChannelTile(
-                  guildId: guild.id,
-                  guildName: guild.name,
-                  channel: channel,
-                  canManage: canManageChannels,
-                  unread: _unread[channel.id],
-                  onLongPress: () => _showChannelActions(channel),
-                ),
+                _channelEntry(guild, channel, canManageChannels),
             ],
           ],
         ),
@@ -729,6 +782,142 @@ class _ChannelTile extends StatelessWidget {
       onLongPress: onLongPress,
     );
   }
+}
+
+/// One already-visited forum post, nested under its forum in the channel
+/// list, joined to it by the branch line [_ForumBranchPainter] draws.
+///
+/// Not a `ListTile`: this row is deliberately tighter than a channel row, and
+/// it gives its left inset over to the branch, so a forum with a few posts
+/// under it reads as one entry in the list rather than as five channels.
+class _ForumPostTile extends StatelessWidget {
+  const _ForumPostTile({
+    required this.name,
+    required this.isLast,
+    required this.onTap,
+    required this.onForget,
+    this.unread,
+  });
+
+  /// Row height. Fixed rather than intrinsic because the branch is painted
+  /// against it - the elbow has to land on the text's centre line, and the
+  /// title is a single ellipsised line, so there's nothing to measure.
+  static const _height = 36.0;
+
+  final String name;
+  final _ChannelReadState? unread;
+
+  /// The last post under this forum ends the trunk at its own elbow instead
+  /// of running the line on into the next channel.
+  final bool isLast;
+  final VoidCallback onTap;
+  final VoidCallback onForget;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isUnread = unread?.isUnread ?? false;
+    final mentionCount = unread?.mentionCount ?? 0;
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: _height,
+        child: Row(
+          children: [
+            CustomPaint(
+              size: const Size(_ForumBranchPainter.width, _height),
+              painter: _ForumBranchPainter(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.22),
+                isLast: isLast,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.s),
+            Expanded(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: isUnread ? theme.colorScheme.onSurface : muted,
+                  fontWeight: isUnread ? FontWeight.w600 : null,
+                ),
+              ),
+            ),
+            if (mentionCount > 0) ...[
+              const SizedBox(width: AppSpacing.s),
+              CircleAvatar(
+                radius: 9,
+                backgroundColor: theme.colorScheme.error,
+                child: Text(
+                  '$mentionCount',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: theme.colorScheme.onError,
+                  ),
+                ),
+              ),
+            ],
+            // Only stops the post being listed here - it isn't leaving the
+            // post, and opening it again brings the row back.
+            IconButton(
+              icon: const Icon(Icons.close, size: 16),
+              color: muted,
+              tooltip: 'Remove from list',
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(AppSpacing.xs),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onPressed: onForget,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The elbow joining a nested forum post to its forum: a trunk dropping from
+/// the forum's icon, turning right into each post's title.
+///
+/// This is what makes a run of posts read as belonging to the channel above
+/// them rather than as an unexplained indent - the trunk is continuous down
+/// the run and stops at the last elbow, so the group has a visible end.
+class _ForumBranchPainter extends CustomPainter {
+  const _ForumBranchPainter({required this.color, required this.isLast});
+
+  /// Sized so the trunk lands under the centre of a `ListTile`'s leading icon
+  /// (16 content padding + half of a 24 icon), and the run out of the elbow is
+  /// long enough to carry the title clear of the channel names above it -
+  /// nesting you can see at a glance rather than a four-pixel indent.
+  static const width = 56.0;
+  static const _trunkX = 28.0;
+  static const _radius = 10.0;
+
+  final Color color;
+  final bool isLast;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    final centerY = size.height / 2;
+    canvas.drawPath(
+      Path()
+        ..moveTo(_trunkX, 0)
+        ..lineTo(_trunkX, isLast ? centerY - _radius : size.height)
+        ..moveTo(_trunkX, centerY - _radius)
+        ..quadraticBezierTo(_trunkX, centerY, _trunkX + _radius, centerY)
+        ..lineTo(size.width, centerY),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ForumBranchPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.isLast != isLast;
 }
 
 /// Inline, Discord-style: the channel row plus one participant row per

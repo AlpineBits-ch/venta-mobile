@@ -9,6 +9,7 @@ import '../../../messaging/bloc/message_thread_bloc.dart';
 import '../../../messaging/data/message_api.dart';
 import '../../../messaging/data/message_repository.dart';
 import '../../../messaging/presentation/widgets/thread_view.dart';
+import '../../data/forum_visits.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
 import '../../data/models/guild_dto.dart';
@@ -52,7 +53,36 @@ class _ChannelScreenState extends State<ChannelScreen> {
     }
     _guildsSub = repository.guildsStream.listen((_) {
       if (mounted) setState(() {});
+      _recordForumVisit();
     });
+    _recordForumVisit();
+  }
+
+  /// Puts this post in its forum's sidebar list, if that's what it is.
+  ///
+  /// Called again whenever the guild cache lands, because the interesting
+  /// case - a cold start straight into a post, a deep link, a notification -
+  /// is precisely the one where nothing is cached yet at `initState`.
+  void _recordForumVisit() {
+    final channel = _channel;
+    if (channel == null || channel.type != ChannelType.thread) return;
+    final parent = _parentOf(channel);
+    if (!(parent?.type.isForumLike ?? false)) return;
+    ForumVisits.record(
+      forumChannelId: parent!.id,
+      postId: channel.id,
+      name: channel.name,
+    );
+  }
+
+  ChannelDto? _parentOf(ChannelDto channel) {
+    final parentId = channel.parentChannelId;
+    if (parentId == null) return null;
+    return getIt<GuildRepository>()
+        .cachedById(widget.guildId)
+        ?.channels
+        .where((c) => c.id == parentId)
+        .firstOrNull;
   }
 
   @override
@@ -82,14 +112,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
   Widget? _banner() {
     final channel = _channel;
     if (channel == null || channel.type != ChannelType.thread) return null;
-    final parentId = channel.parentChannelId;
-    if (parentId == null) return null;
-    final parent = getIt<GuildRepository>()
-        .cachedById(widget.guildId)
-        ?.channels
-        .where((c) => c.id == parentId)
-        .firstOrNull;
-    if (!(parent?.type.isForumLike ?? false)) return null;
+    if (!(_parentOf(channel)?.type.isForumLike ?? false)) return null;
     return ForumPostHeader(guildId: widget.guildId, post: channel);
   }
 

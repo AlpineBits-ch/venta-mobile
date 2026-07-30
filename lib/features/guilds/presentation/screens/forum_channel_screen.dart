@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
@@ -20,6 +21,7 @@ import '../../../messaging/data/message_content_codec.dart';
 import '../../../messaging/data/models/attachment_dto.dart';
 import '../../../messaging/presentation/widgets/message_attachment_view.dart';
 import '../../../auth/data/auth_repository.dart';
+import '../../data/forum_visits.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
 import '../../data/models/forum_config_dto.dart';
@@ -126,8 +128,18 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
   StreamSubscription<RealtimeEvent>? _realtimeSub;
   Timer? _reloadDebounce;
 
+  /// Set when `/guilds/{id}/me` couldn't be read at all - which is not the
+  /// same as being told "no". Everything else stays hidden on a failure, but
+  /// posting doesn't: a forum with no way to start a post and no explanation
+  /// reads as broken, and `POST /threads` is authorised server-side anyway, so
+  /// the worst case is a refusal we can show a reason for.
+  bool _permissionsFailed = false;
+
   bool get _canModerate =>
       _permissions.has('ManageAnyThread') || _permissions.has('ManageChannel');
+
+  bool get _canCreatePosts =>
+      _permissions.has('CreateThreads') || _permissionsFailed;
 
   String? get _myUserId => getIt<AuthRepository>().currentUserId;
 
@@ -228,14 +240,17 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
     try {
       final self = await repository.getOwnMember(widget.guildId);
       if (mounted) {
-        setState(
-          () => _permissions = ownerId == null
+        setState(() {
+          _permissions = ownerId == null
               ? self.permissions
-              : self.effectivePermissions(ownerId),
-        );
+              : self.effectivePermissions(ownerId);
+          _permissionsFailed = false;
+        });
       }
     } catch (_) {
-      // Moderation entries stay hidden; the server enforces them anyway.
+      // Moderation entries stay hidden; the server enforces them anyway. The
+      // *create* button is the exception - see [_permissionsFailed].
+      if (mounted) setState(() => _permissionsFailed = true);
     }
   }
 
@@ -380,7 +395,19 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
   }
 
   void _openPost(ForumPostDto post) =>
-      context.push(RoutePaths.serverChannelPath(widget.guildId, post.id));
+      _openPostById(post.id, name: post.name);
+
+  void _openPostById(String postId, {required String name}) {
+    // Recorded here as well as in `ChannelScreen` because a just-created post
+    // isn't in the guild's channel cache yet, and that's the one path where
+    // the post screen can't name it for itself.
+    ForumVisits.record(
+      forumChannelId: widget.channelId,
+      postId: postId,
+      name: name,
+    );
+    context.push(RoutePaths.serverChannelPath(widget.guildId, postId));
+  }
 
   Future<void> _createPost() async {
     final input = await showModalBottomSheet<_NewPostInput>(
@@ -404,14 +431,23 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
         tagIds: input.tagIds.toList(),
       );
       await _loadPosts();
+      if (mounted) _openPostById(post.id, name: post.name);
+    } catch (e) {
       if (mounted) {
-        context.push(RoutePaths.serverChannelPath(widget.guildId, post.id));
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Could not create post.')));
+        // Say which kind of "no" it was. "Could not create post" in front of
+        // somebody who isn't allowed to post - or whose server is down - is
+        // the message that sends them looking for a bug in their own typing.
+        final status = e is DioException ? e.response?.statusCode : null;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(switch (status) {
+              403 => 'You don\'t have permission to post in this forum.',
+              null || >= 500 => 'The server couldn\'t take that post. Try '
+                  'again in a moment.',
+              _ => 'Could not create post.',
+            }),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _creating = false);
@@ -664,7 +700,7 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
           Expanded(child: _buildBody(theme)),
         ],
       ),
-      floatingActionButton: _permissions.has('CreateThreads')
+      floatingActionButton: _canCreatePosts
           ? FloatingActionButton(
               onPressed: _creating ? null : _createPost,
               tooltip: 'New post',
