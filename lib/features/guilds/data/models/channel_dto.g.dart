@@ -37,7 +37,7 @@ _ChannelDto _$ChannelDtoFromJson(Map<String, dynamic> json) => _ChannelDto(
   type: $enumDecode(
     _$ChannelTypeEnumMap,
     json['type'],
-    unknownValue: ChannelType.text,
+    unknownValue: ChannelType.unknown,
   ),
   guildId: json['guildId'] as String,
   isAgeRestricted: json['isAgeRestricted'] as bool? ?? false,
@@ -96,4 +96,10 @@ const _$ChannelTypeEnumMap = {
   ChannelType.announcement: 'Announcement',
   ChannelType.forum: 'Forum',
   ChannelType.media: 'Media',
+  ChannelType.list: 'List',
+  ChannelType.chores: 'Chores',
+  ChannelType.ledger: 'Ledger',
+  ChannelType.pantry: 'Pantry',
+  ChannelType.decisions: 'Decisions',
+  ChannelType.unknown: 'unknown',
 };

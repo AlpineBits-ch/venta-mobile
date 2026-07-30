@@ -16,7 +16,16 @@ enum MemberType {
 
 @freezed
 sealed class RoleMembershipDto with _$RoleMembershipDto {
-  const factory RoleMembershipDto({required RoleDto role}) = _RoleMembershipDto;
+  const factory RoleMembershipDto({
+    required RoleDto role,
+
+    /// Set only for a guest-access grant (`GuestAccess` module). The grant
+    /// lapses on its own - permission resolution ignores it from the exact
+    /// instant it expires - but the row is only tidied up a week later, so a
+    /// past [expiresAt] means "no longer granted" even though it's still
+    /// listed. Existing memberships are null and behave as they always did.
+    DateTime? expiresAt,
+  }) = _RoleMembershipDto;
 
   factory RoleMembershipDto.fromJson(Map<String, dynamic> json) =>
       _$RoleMembershipDtoFromJson(json);
@@ -43,6 +52,17 @@ sealed class GuildMemberDto with _$GuildMemberDto {
       _$GuildMemberDtoFromJson(json);
 }
 
+extension RoleMembershipX on RoleMembershipDto {
+  /// A temporary grant whose time is up. The server stops honouring it the
+  /// instant it expires but keeps the row around for about a week, so
+  /// anything reading `roleMembers` has to filter rather than trust the list.
+  bool get hasLapsed =>
+      expiresAt != null && expiresAt!.isBefore(DateTime.now().toUtc());
+
+  /// A live guest grant - shown with its countdown, and revocable.
+  bool get isTemporary => expiresAt != null && !hasLapsed;
+}
+
 extension GuildMemberEffectivePermissions on GuildMemberDto {
   /// Union of every non-`@everyone` role's permission bits, plus an
   /// automatic Superadmin bypass for the guild owner - mirrors the
@@ -52,6 +72,7 @@ extension GuildMemberEffectivePermissions on GuildMemberDto {
   GuildPermissions effectivePermissions(String guildOwnerId) {
     var result = GuildPermissions.none;
     for (final membership in roleMembers) {
+      if (membership.hasLapsed) continue;
       result = result | membership.role.permissionsValue;
     }
     if (userId == guildOwnerId) result = result | GuildPermissions.superadmin;

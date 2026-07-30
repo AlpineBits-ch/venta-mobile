@@ -14,6 +14,8 @@ import '../../features/guild_voice/data/guild_voice_repository.dart';
 import '../../features/guild_voice/webrtc/guild_voice_webrtc_service.dart';
 import '../../features/guilds/data/guild_api.dart';
 import '../../features/guilds/data/guild_repository.dart';
+import '../../features/household/data/household_api.dart';
+import '../../features/household/data/household_repository.dart';
 import '../../features/messaging/data/bot_command_api.dart';
 import '../../features/messaging/data/message_api.dart';
 import '../../features/profile/data/profile_api.dart';
@@ -96,6 +98,12 @@ Future<void> configureDependencies() async {
       realtimeService: getIt(),
       myUserId: getIt<AuthRepository>().currentUserId ?? '',
     ),
+  );
+  getIt.registerLazySingleton<HouseholdApi>(
+    () => HouseholdApi(client: getIt()),
+  );
+  getIt.registerLazySingleton<HouseholdRepository>(
+    () => HouseholdRepository(realtimeService: getIt()),
   );
   getIt.registerLazySingleton<SoundService>(() => SoundService());
   getIt.registerLazySingleton<VoiceApi>(() => VoiceApi(client: getIt()));

@@ -15,6 +15,7 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
+import '../../../household/presentation/widgets/home_status_board.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/category_dto.dart';
 import '../../data/models/channel_dto.dart';
@@ -117,6 +118,10 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   }
 
   Future<void> _showChannelActions(ChannelDto channel) async {
+    // Everything in this sheet is either about messages or about managing the
+    // channel - for a household channel you can't manage, there's nothing in
+    // it, and an empty sheet sliding up is worse than nothing happening.
+    if (!channel.type.hasMessages && !_permissions.has('ManageChannel')) return;
     final action = await showModalBottomSheet<String>(
       context: context,
       // The shell's nav rail lives in a sibling of this screen's own
@@ -126,21 +131,26 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
-            ListTile(
-              leading: const Icon(Icons.done_all),
-              title: const Text('Mark as read'),
-              onTap: () => Navigator.pop(context, 'read'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.notifications_off_outlined),
-              title: const Text('Mute'),
-              onTap: () => Navigator.pop(context, 'mute'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.notifications_outlined),
-              title: const Text('Notification settings'),
-              onTap: () => Navigator.pop(context, 'notifications'),
-            ),
+            // Read state, muting and notification settings are all about
+            // messages, and a List/Chores/Ledger/Pantry/Decisions channel
+            // doesn't have any.
+            if (channel.type.hasMessages) ...[
+              ListTile(
+                leading: const Icon(Icons.done_all),
+                title: const Text('Mark as read'),
+                onTap: () => Navigator.pop(context, 'read'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.notifications_off_outlined),
+                title: const Text('Mute'),
+                onTap: () => Navigator.pop(context, 'mute'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.notifications_outlined),
+                title: const Text('Notification settings'),
+                onTap: () => Navigator.pop(context, 'notifications'),
+              ),
+            ],
             if (_permissions.has('ManageChannel'))
               ListTile(
                 leading: const Icon(Icons.settings_outlined),
@@ -489,6 +499,11 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
             // join voice - so the way back into the wizard has to stay in
             // front of them rather than being a modal they dismissed once.
             if (_onboardingPending) _OnboardingBanner(onTap: _openOnboarding),
+            // Who's actually in the flat, above the channels - it's the thing
+            // a household opens the app to check, and it belongs to the house
+            // rather than to any one channel.
+            if (guild.hasFeature(GuildFeature.presence))
+              HomeStatusBoard(guild: guild),
             if (_hasSelfServePrompts)
               ListTile(
                 dense: true,
@@ -680,6 +695,14 @@ class _ChannelTile extends StatelessWidget {
         ChannelType.forum => Icons.forum_outlined,
         ChannelType.media => Icons.perm_media_outlined,
         ChannelType.announcement => Icons.campaign_outlined,
+        // Household channels hold rows, not messages - a `#` in front of a
+        // shopping list would promise a conversation that isn't there.
+        ChannelType.list => Icons.checklist_rounded,
+        ChannelType.chores => Icons.cleaning_services_outlined,
+        ChannelType.ledger => Icons.account_balance_wallet_outlined,
+        ChannelType.pantry => Icons.kitchen_outlined,
+        ChannelType.decisions => Icons.how_to_vote_outlined,
+        ChannelType.unknown => Icons.help_outline_rounded,
         _ => Icons.tag,
       }),
       title: Text(
@@ -828,10 +851,61 @@ class _CreateChannelDialog extends StatefulWidget {
   State<_CreateChannelDialog> createState() => _CreateChannelDialogState();
 }
 
+/// One row of the create-channel picker, for the household types - which are
+/// data-driven because there are five of them and they're all gated
+/// individually on their own module.
+typedef _ChannelTypeChoice = ({
+  ChannelType type,
+  IconData icon,
+  String title,
+  String subtitle,
+});
+
 class _CreateChannelDialogState extends State<_CreateChannelDialog> {
   final _nameController = TextEditingController();
   ChannelType _type = ChannelType.text;
   String? _categoryId;
+
+  static const _allHouseholdTypes = <_ChannelTypeChoice>[
+    (
+      type: ChannelType.list,
+      icon: Icons.checklist_rounded,
+      title: 'List',
+      subtitle: 'A shopping or todo list everyone ticks off together',
+    ),
+    (
+      type: ChannelType.chores,
+      icon: Icons.cleaning_services_outlined,
+      title: 'Chores',
+      subtitle: 'A rota that shares out the work by effort, not by turn',
+    ),
+    (
+      type: ChannelType.ledger,
+      icon: Icons.account_balance_wallet_outlined,
+      title: 'Ledger',
+      subtitle: 'Shared expenses and who owes who',
+    ),
+    (
+      type: ChannelType.pantry,
+      icon: Icons.kitchen_outlined,
+      title: 'Pantry',
+      subtitle: 'Stock for one place - the fridge, the freezer, the cellar',
+    ),
+    (
+      type: ChannelType.decisions,
+      icon: Icons.how_to_vote_outlined,
+      title: 'Decisions',
+      subtitle: 'House questions anyone can stop with a reason',
+    ),
+  ];
+
+  /// A type whose module is off isn't offered - creating one is a `400`.
+  List<_ChannelTypeChoice> get _householdTypes => [
+    for (final choice in _allHouseholdTypes)
+      if (choice.type.requiredFeature != null &&
+          widget.features.has(choice.type.requiredFeature!))
+        choice,
+  ];
 
   @override
   void dispose() {
@@ -916,6 +990,37 @@ class _CreateChannelDialogState extends State<_CreateChannelDialog> {
                 ),
               ),
             ),
+            // The household types sit in their own group rather than at the
+            // end of the same list: they hold rows instead of messages, which
+            // is a bigger difference than Text vs Voice, and the heading is
+            // what says so before somebody picks one.
+            if (_householdTypes.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.l),
+              Text('FOR THE HOUSE', style: labelStyle),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadii.card),
+                child: ColoredBox(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < _householdTypes.length; i++) ...[
+                        if (i > 0) divider,
+                        _ChannelTypeOption(
+                          icon: _householdTypes[i].icon,
+                          title: _householdTypes[i].title,
+                          subtitle: _householdTypes[i].subtitle,
+                          selected: _type == _householdTypes[i].type,
+                          onTap: () => setState(
+                            () => _type = _householdTypes[i].type,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
             if (widget.categories.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.l),
               Text('CATEGORY', style: labelStyle),

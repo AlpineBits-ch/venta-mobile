@@ -9,10 +9,16 @@ part of 'guild_member_dto.dart';
 _RoleMembershipDto _$RoleMembershipDtoFromJson(Map<String, dynamic> json) =>
     _RoleMembershipDto(
       role: RoleDto.fromJson(json['role'] as Map<String, dynamic>),
+      expiresAt: json['expiresAt'] == null
+          ? null
+          : DateTime.parse(json['expiresAt'] as String),
     );
 
 Map<String, dynamic> _$RoleMembershipDtoToJson(_RoleMembershipDto instance) =>
-    <String, dynamic>{'role': instance.role};
+    <String, dynamic>{
+      'role': instance.role,
+      'expiresAt': instance.expiresAt?.toIso8601String(),
+    };
 
 _GuildMemberDto _$GuildMemberDtoFromJson(Map<String, dynamic> json) =>
     _GuildMemberDto(

@@ -1,5 +1,6 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'guild_features.dart';
 import 'guild_permissions.dart';
 
 part 'channel_dto.freezed.dart';
@@ -22,6 +23,30 @@ enum ChannelType {
   /// forum docs say "forum", read "forum or media channel".
   @JsonValue('Media')
   media,
+
+  // Household module channels. These hold structured rows, not messages -
+  // there is no message history and no `POST /messages` behind any of them.
+  // They arrive from the ordinary channel endpoints alongside Text and Voice,
+  // so the sidebar already receives them; the work is knowing not to open a
+  // composer on one.
+  @JsonValue('List')
+  list,
+  @JsonValue('Chores')
+  chores,
+  @JsonValue('Ledger')
+  ledger,
+  @JsonValue('Pantry')
+  pantry,
+  @JsonValue('Decisions')
+  decisions,
+
+  /// A type this build has never heard of - a household channel seen by a
+  /// client that predates them, or whatever gets appended next.
+  ///
+  /// Deliberately its own value rather than falling back to [text]: treating
+  /// an unrecognised type as Text is precisely the failure that puts a
+  /// message composer on a shopping list. Unknown renders inert instead.
+  unknown,
 }
 
 extension ChannelTypeX on ChannelType {
@@ -29,6 +54,37 @@ extension ChannelTypeX on ChannelType {
   /// `/posts`, `/tags` and `/forum-config` endpoints.
   bool get isForumLike =>
       this == ChannelType.forum || this == ChannelType.media;
+
+  /// Backed by a household module: structured rows, and a `403` on every one
+  /// of its endpoints unless the guild has the module.
+  bool get isHouseholdModule => const {
+    ChannelType.list,
+    ChannelType.chores,
+    ChannelType.ledger,
+    ChannelType.pantry,
+    ChannelType.decisions,
+  }.contains(this);
+
+  /// Whether this channel has message history and a composer at all.
+  ///
+  /// False for every household type and for [unknown] - route on this before
+  /// rendering anything that can post, mark as read, or mute, because none of
+  /// those concepts exist for a shopping list.
+  bool get hasMessages => this != ChannelType.unknown && !isHouseholdModule;
+
+  /// The `GuildFeature` flag this channel type belongs to, or null for the
+  /// types that aren't gated on a module (Text, Thread).
+  String? get requiredFeature => switch (this) {
+    ChannelType.voice => GuildFeature.voiceChannels,
+    ChannelType.forum || ChannelType.media => GuildFeature.forums,
+    ChannelType.announcement => GuildFeature.announcements,
+    ChannelType.list => GuildFeature.lists,
+    ChannelType.chores => GuildFeature.chores,
+    ChannelType.ledger => GuildFeature.ledger,
+    ChannelType.pantry => GuildFeature.pantry,
+    ChannelType.decisions => GuildFeature.decisions,
+    _ => null,
+  };
 }
 
 @freezed
@@ -58,7 +114,7 @@ sealed class ChannelDto with _$ChannelDto {
     required String id,
     required String name,
     String? description,
-    @JsonKey(unknownEnumValue: ChannelType.text) required ChannelType type,
+    @JsonKey(unknownEnumValue: ChannelType.unknown) required ChannelType type,
     required String guildId,
     @Default(false) bool isAgeRestricted,
     @Default(false) bool isPrivate,

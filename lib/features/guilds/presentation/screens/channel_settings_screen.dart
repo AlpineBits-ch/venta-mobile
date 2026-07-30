@@ -234,30 +234,35 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
                   value: _isPrivate,
                   onChanged: (value) => setState(() => _isPrivate = value),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Age-restricted'),
-                  value: _isAgeRestricted,
-                  onChanged: (value) =>
-                      setState(() => _isAgeRestricted = value),
-                ),
-                const SizedBox(height: AppSpacing.s),
-                DropdownButtonFormField<int>(
-                  initialValue: _slowModeSeconds,
-                  decoration: const InputDecoration(labelText: 'Slow mode'),
-                  items: const [
-                    DropdownMenuItem(value: 0, child: Text('Off')),
-                    DropdownMenuItem(value: 5, child: Text('5 seconds')),
-                    DropdownMenuItem(value: 10, child: Text('10 seconds')),
-                    DropdownMenuItem(value: 30, child: Text('30 seconds')),
-                    DropdownMenuItem(value: 60, child: Text('1 minute')),
-                    DropdownMenuItem(value: 300, child: Text('5 minutes')),
-                    DropdownMenuItem(value: 900, child: Text('15 minutes')),
-                    DropdownMenuItem(value: 3600, child: Text('1 hour')),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _slowModeSeconds = value ?? 0),
-                ),
+                // Age gating and slow mode are both about *posting*, and a
+                // household channel holds rows rather than messages - there's
+                // nothing for either of them to act on.
+                if (channel.type.hasMessages) ...[
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Age-restricted'),
+                    value: _isAgeRestricted,
+                    onChanged: (value) =>
+                        setState(() => _isAgeRestricted = value),
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  DropdownButtonFormField<int>(
+                    initialValue: _slowModeSeconds,
+                    decoration: const InputDecoration(labelText: 'Slow mode'),
+                    items: const [
+                      DropdownMenuItem(value: 0, child: Text('Off')),
+                      DropdownMenuItem(value: 5, child: Text('5 seconds')),
+                      DropdownMenuItem(value: 10, child: Text('10 seconds')),
+                      DropdownMenuItem(value: 30, child: Text('30 seconds')),
+                      DropdownMenuItem(value: 60, child: Text('1 minute')),
+                      DropdownMenuItem(value: 300, child: Text('5 minutes')),
+                      DropdownMenuItem(value: 900, child: Text('15 minutes')),
+                      DropdownMenuItem(value: 3600, child: Text('1 hour')),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _slowModeSeconds = value ?? 0),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.m),
                 FilledButton(
                   onPressed: _saving ? null : _save,

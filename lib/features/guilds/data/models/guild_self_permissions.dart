@@ -29,8 +29,18 @@ class GuildSelfPermissions {
   factory GuildSelfPermissions.fromJson(Map<String, dynamic> json) {
     var permissions = GuildPermissions.none;
     for (final raw in (json['roleMembers'] as List?) ?? const []) {
-      final role =
-          (raw as Map<String, dynamic>)['role'] as Map<String, dynamic>?;
+      final membership = raw as Map<String, dynamic>;
+      // A guest grant is still listed for about a week after it lapses, but
+      // stopped granting anything the instant it expired - so a UI built from
+      // this would otherwise keep offering the pet sitter buttons that now
+      // 403.
+      final expiresAt = DateTime.tryParse(
+        membership['expiresAt'] as String? ?? '',
+      );
+      if (expiresAt != null && expiresAt.isBefore(DateTime.now().toUtc())) {
+        continue;
+      }
+      final role = membership['role'] as Map<String, dynamic>?;
       final wire = role?['permissions'] as String?;
       if (wire != null)
         permissions = permissions | GuildPermissions.parse(wire);

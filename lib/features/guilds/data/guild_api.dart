@@ -716,6 +716,17 @@ class GuildApi {
     ChannelType.announcement => 'Announcement',
     ChannelType.forum => 'Forum',
     ChannelType.media => 'Media',
+    ChannelType.list => 'List',
+    ChannelType.chores => 'Chores',
+    ChannelType.ledger => 'Ledger',
+    ChannelType.pantry => 'Pantry',
+    ChannelType.decisions => 'Decisions',
+    // Only ever produced by *decoding* a type this build doesn't know; it's
+    // never offered as something to create. Loud rather than silently posting
+    // a bogus type the server would reject anyway.
+    ChannelType.unknown => throw ArgumentError(
+      'Cannot create a channel of an unrecognised type',
+    ),
   };
 
   Future<List<GuildEmojiDto>> getEmojis(String guildId) async {

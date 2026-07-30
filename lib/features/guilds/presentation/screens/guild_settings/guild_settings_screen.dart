@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/di/injector.dart';
 import '../../../../../core/routing/route_paths.dart';
 import '../../../../../core/widgets/app_back_button.dart';
+import '../../../../household/presentation/screens/house_settings_tab.dart';
 import '../../../data/guild_repository.dart';
 import '../../../data/models/guild_dto.dart';
 import '../../../data/models/guild_features.dart';
@@ -77,6 +78,12 @@ class _GuildSettingsScreenState extends State<GuildSettingsScreen> {
           label: 'Onboarding',
           view: OnboardingSettingsTab(guildId: widget.guildId),
         ),
+      // The two household modules that aren't channels have to live
+      // somewhere, and "the house itself" is the same shape of thing as
+      // Overview - quiet hours and who's allowed in for the weekend.
+      if (features.has(GuildFeature.quietHours) ||
+          features.has(GuildFeature.guestAccess))
+        (label: 'House', view: HouseSettingsTab(guildId: widget.guildId)),
       (label: 'Modules', view: ModulesSettingsTab(guildId: widget.guildId)),
     ];
 

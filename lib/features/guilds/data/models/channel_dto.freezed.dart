@@ -290,7 +290,7 @@ as String,
 /// @nodoc
 mixin _$ChannelDto {
 
- String get id; String get name; String? get description;@JsonKey(unknownEnumValue: ChannelType.text) ChannelType get type; String get guildId; bool get isAgeRestricted; bool get isPrivate; String? get categoryId; List<ChannelPermissionDto> get permissions; int get position; int get slowModeSeconds; String? get parentChannelId; List<String> get tagIds; bool get isPinned;/// No new messages, by moderator decision - distinct from archived, and
+ String get id; String get name; String? get description;@JsonKey(unknownEnumValue: ChannelType.unknown) ChannelType get type; String get guildId; bool get isAgeRestricted; bool get isPrivate; String? get categoryId; List<ChannelPermissionDto> get permissions; int get position; int get slowModeSeconds; String? get parentChannelId; List<String> get tagIds; bool get isPinned;/// No new messages, by moderator decision - distinct from archived, and
 /// persisting independently of it.
  bool get isLocked; bool get isArchived; DateTime? get lastActivityAt; int get messageCount; DateTime? get autoArchiveAt;
 /// Create a copy of ChannelDto
@@ -325,7 +325,7 @@ abstract mixin class $ChannelDtoCopyWith<$Res>  {
   factory $ChannelDtoCopyWith(ChannelDto value, $Res Function(ChannelDto) _then) = _$ChannelDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String? description,@JsonKey(unknownEnumValue: ChannelType.text) ChannelType type, String guildId, bool isAgeRestricted, bool isPrivate, String? categoryId, List<ChannelPermissionDto> permissions, int position, int slowModeSeconds, String? parentChannelId, List<String> tagIds, bool isPinned, bool isLocked, bool isArchived, DateTime? lastActivityAt, int messageCount, DateTime? autoArchiveAt
+ String id, String name, String? description,@JsonKey(unknownEnumValue: ChannelType.unknown) ChannelType type, String guildId, bool isAgeRestricted, bool isPrivate, String? categoryId, List<ChannelPermissionDto> permissions, int position, int slowModeSeconds, String? parentChannelId, List<String> tagIds, bool isPinned, bool isLocked, bool isArchived, DateTime? lastActivityAt, int messageCount, DateTime? autoArchiveAt
 });
 
 
@@ -445,7 +445,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.text)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId,  List<String> tagIds,  bool isPinned,  bool isLocked,  bool isArchived,  DateTime? lastActivityAt,  int messageCount,  DateTime? autoArchiveAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.unknown)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId,  List<String> tagIds,  bool isPinned,  bool isLocked,  bool isArchived,  DateTime? lastActivityAt,  int messageCount,  DateTime? autoArchiveAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ChannelDto() when $default != null:
 return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_that.isAgeRestricted,_that.isPrivate,_that.categoryId,_that.permissions,_that.position,_that.slowModeSeconds,_that.parentChannelId,_that.tagIds,_that.isPinned,_that.isLocked,_that.isArchived,_that.lastActivityAt,_that.messageCount,_that.autoArchiveAt);case _:
@@ -466,7 +466,7 @@ return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.text)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId,  List<String> tagIds,  bool isPinned,  bool isLocked,  bool isArchived,  DateTime? lastActivityAt,  int messageCount,  DateTime? autoArchiveAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.unknown)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId,  List<String> tagIds,  bool isPinned,  bool isLocked,  bool isArchived,  DateTime? lastActivityAt,  int messageCount,  DateTime? autoArchiveAt)  $default,) {final _that = this;
 switch (_that) {
 case _ChannelDto():
 return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_that.isAgeRestricted,_that.isPrivate,_that.categoryId,_that.permissions,_that.position,_that.slowModeSeconds,_that.parentChannelId,_that.tagIds,_that.isPinned,_that.isLocked,_that.isArchived,_that.lastActivityAt,_that.messageCount,_that.autoArchiveAt);}
@@ -483,7 +483,7 @@ return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.text)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId,  List<String> tagIds,  bool isPinned,  bool isLocked,  bool isArchived,  DateTime? lastActivityAt,  int messageCount,  DateTime? autoArchiveAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String? description, @JsonKey(unknownEnumValue: ChannelType.unknown)  ChannelType type,  String guildId,  bool isAgeRestricted,  bool isPrivate,  String? categoryId,  List<ChannelPermissionDto> permissions,  int position,  int slowModeSeconds,  String? parentChannelId,  List<String> tagIds,  bool isPinned,  bool isLocked,  bool isArchived,  DateTime? lastActivityAt,  int messageCount,  DateTime? autoArchiveAt)?  $default,) {final _that = this;
 switch (_that) {
 case _ChannelDto() when $default != null:
 return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_that.isAgeRestricted,_that.isPrivate,_that.categoryId,_that.permissions,_that.position,_that.slowModeSeconds,_that.parentChannelId,_that.tagIds,_that.isPinned,_that.isLocked,_that.isArchived,_that.lastActivityAt,_that.messageCount,_that.autoArchiveAt);case _:
@@ -498,13 +498,13 @@ return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_
 @JsonSerializable()
 
 class _ChannelDto implements ChannelDto {
-  const _ChannelDto({required this.id, required this.name, this.description, @JsonKey(unknownEnumValue: ChannelType.text) required this.type, required this.guildId, this.isAgeRestricted = false, this.isPrivate = false, this.categoryId, final  List<ChannelPermissionDto> permissions = const <ChannelPermissionDto>[], this.position = 0, this.slowModeSeconds = 0, this.parentChannelId, final  List<String> tagIds = const <String>[], this.isPinned = false, this.isLocked = false, this.isArchived = false, this.lastActivityAt, this.messageCount = 0, this.autoArchiveAt}): _permissions = permissions,_tagIds = tagIds;
+  const _ChannelDto({required this.id, required this.name, this.description, @JsonKey(unknownEnumValue: ChannelType.unknown) required this.type, required this.guildId, this.isAgeRestricted = false, this.isPrivate = false, this.categoryId, final  List<ChannelPermissionDto> permissions = const <ChannelPermissionDto>[], this.position = 0, this.slowModeSeconds = 0, this.parentChannelId, final  List<String> tagIds = const <String>[], this.isPinned = false, this.isLocked = false, this.isArchived = false, this.lastActivityAt, this.messageCount = 0, this.autoArchiveAt}): _permissions = permissions,_tagIds = tagIds;
   factory _ChannelDto.fromJson(Map<String, dynamic> json) => _$ChannelDtoFromJson(json);
 
 @override final  String id;
 @override final  String name;
 @override final  String? description;
-@override@JsonKey(unknownEnumValue: ChannelType.text) final  ChannelType type;
+@override@JsonKey(unknownEnumValue: ChannelType.unknown) final  ChannelType type;
 @override final  String guildId;
 @override@JsonKey() final  bool isAgeRestricted;
 @override@JsonKey() final  bool isPrivate;
@@ -568,7 +568,7 @@ abstract mixin class _$ChannelDtoCopyWith<$Res> implements $ChannelDtoCopyWith<$
   factory _$ChannelDtoCopyWith(_ChannelDto value, $Res Function(_ChannelDto) _then) = __$ChannelDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String? description,@JsonKey(unknownEnumValue: ChannelType.text) ChannelType type, String guildId, bool isAgeRestricted, bool isPrivate, String? categoryId, List<ChannelPermissionDto> permissions, int position, int slowModeSeconds, String? parentChannelId, List<String> tagIds, bool isPinned, bool isLocked, bool isArchived, DateTime? lastActivityAt, int messageCount, DateTime? autoArchiveAt
+ String id, String name, String? description,@JsonKey(unknownEnumValue: ChannelType.unknown) ChannelType type, String guildId, bool isAgeRestricted, bool isPrivate, String? categoryId, List<ChannelPermissionDto> permissions, int position, int slowModeSeconds, String? parentChannelId, List<String> tagIds, bool isPinned, bool isLocked, bool isArchived, DateTime? lastActivityAt, int messageCount, DateTime? autoArchiveAt
 });
 
 

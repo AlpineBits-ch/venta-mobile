@@ -6,6 +6,8 @@ import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/hex_color.dart';
 import '../../../../../core/theme/widget_styles.dart';
 import '../../../data/guild_repository.dart';
+import '../../../data/models/guild_dto.dart';
+import '../../../data/models/guild_features.dart';
 import '../../../data/models/guild_member_dto.dart';
 import '../../../data/models/guild_permissions.dart';
 import '../../../data/models/role_dto.dart';
@@ -225,11 +227,17 @@ class _RoleEditorScreenState extends State<RoleEditorScreen> {
           const SizedBox(height: AppSpacing.l),
           Text('Permissions', style: theme.textTheme.titleSmall),
           const SizedBox(height: AppSpacing.xs),
-          for (final flag in GuildPermissions.grantableFlagNames)
+          // Filtered by the guild's modules: a permission whose module is off
+          // is refused before roles are even consulted, so offering it here
+          // would be offering something that cannot take effect.
+          for (final flag in GuildPermissions.grantableFlagNamesFor(
+            getIt<GuildRepository>().cachedById(widget.guildId)?.featureSet ??
+                GuildFeatures.communityPreset,
+          ))
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
-              title: Text(flag),
+              title: Text(GuildPermissions.labelFor(flag)),
               value: _permissions.has(flag),
               onChanged: (value) => setState(
                 () => _permissions = _permissions.withFlag(flag, value),

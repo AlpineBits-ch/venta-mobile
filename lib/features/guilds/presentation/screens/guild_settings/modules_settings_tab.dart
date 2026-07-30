@@ -123,14 +123,6 @@ class _ModulesSettingsTabState extends State<ModulesSettingsTab> {
     if (guild == null) return const Center(child: CircularProgressIndicator());
     final features = guild.featureSet;
 
-    // Household modules are flag values with nothing behind them yet, so they
-    // only appear once the guild actually has one - showing togglable rows
-    // for features that do nothing would be a promise this build can't keep.
-    final householdOn = [
-      for (final module in GuildFeature.householdModules)
-        if (features.has(module)) module,
-    ];
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.m,
@@ -191,29 +183,28 @@ class _ModulesSettingsTabState extends State<ModulesSettingsTab> {
           'never deletes anything. Channels of a type you switch off stay '
           'where they are; you just can\'t make new ones.',
         ),
-        if (householdOn.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.l),
-          SettingsSection(
-            label: 'Household',
-            child: Column(
-              children: [
-                for (final module in householdOn)
-                  SwitchListTile(
-                    title: Text(GuildFeature.labels[module] ?? module),
-                    subtitle: const Text('Not built yet'),
-                    value: true,
-                    onChanged: _saving
-                        ? null
-                        : (value) => _toggle(module, value),
-                  ),
-              ],
-            ),
+        const SizedBox(height: AppSpacing.l),
+        SettingsSection(
+          label: 'Household',
+          child: Column(
+            children: [
+              for (final module in GuildFeature.householdModules)
+                SwitchListTile(
+                  title: Text(GuildFeature.labels[module] ?? module),
+                  subtitle: GuildFeature.descriptions[module] == null
+                      ? null
+                      : Text(GuildFeature.descriptions[module]!),
+                  value: features.has(module),
+                  onChanged: _saving ? null : (value) => _toggle(module, value),
+                ),
+            ],
           ),
-          const SettingsFootnote(
-            'These are switched on for this server but nothing is behind them '
-            'yet - they\'ll start working without you doing anything.',
-          ),
-        ],
+        ),
+        const SettingsFootnote(
+          'The first five each add a kind of channel. The last three are about '
+          'the whole house rather than one channel, and show up on the server '
+          'itself.',
+        ),
         if (_error != null) ...[
           const SizedBox(height: AppSpacing.m),
           Text(

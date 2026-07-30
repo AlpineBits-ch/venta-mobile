@@ -13,13 +13,10 @@ import '../../features/auth/presentation/screens/server_setup_screen.dart';
 import '../../features/conversations/presentation/screens/home_screen.dart';
 import '../../features/friends/bloc/friends_bloc.dart';
 import '../../features/friends/presentation/screens/friends_screen.dart';
-import '../../features/guilds/data/guild_repository.dart';
-import '../../features/guilds/data/models/channel_dto.dart';
-import '../../features/guilds/presentation/screens/channel_screen.dart';
+import '../../features/guilds/presentation/screens/channel_host_screen.dart';
 import '../../features/guilds/presentation/screens/channel_settings_screen.dart';
 import '../../features/guilds/presentation/screens/events_screen.dart';
 import '../../features/guilds/presentation/screens/channels_and_roles_screen.dart';
-import '../../features/guilds/presentation/screens/forum_channel_screen.dart';
 import '../../features/guilds/presentation/screens/forum_settings_screen.dart';
 import '../../features/guilds/presentation/screens/guild_detail_screen.dart';
 import '../../features/guilds/presentation/screens/guild_members_screen.dart';
@@ -166,22 +163,15 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       ),
       GoRoute(
         path: RoutePaths.serverChannel,
-        builder: (context, state) {
-          final guildId = state.pathParameters['guildId']!;
-          final channelId = state.pathParameters['channelId']!;
-          // A Forum (or Media) channel is a post list, not a message thread -
-          // every other channel type (including a post itself, which is just a
-          // Thread channel) opens the normal ChannelScreen.
-          final channel = getIt<GuildRepository>()
-              .cachedById(guildId)
-              ?.channels
-              .where((c) => c.id == channelId)
-              .firstOrNull;
-          if (channel?.type.isForumLike ?? false) {
-            return ForumChannelScreen(guildId: guildId, channelId: channelId);
-          }
-          return ChannelScreen(guildId: guildId, channelId: channelId);
-        },
+        // Which screen a channel opens into depends on its type, and the type
+        // isn't always known at route time - a cold start into a persisted
+        // location has an empty guild cache. `ChannelHostScreen` waits for the
+        // channel before choosing, rather than defaulting to a message thread
+        // and putting a composer on a shopping list.
+        builder: (context, state) => ChannelHostScreen(
+          guildId: state.pathParameters['guildId']!,
+          channelId: state.pathParameters['channelId']!,
+        ),
       ),
       GoRoute(
         path: RoutePaths.serverChannelForumSettings,

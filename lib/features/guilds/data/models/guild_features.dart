@@ -65,9 +65,10 @@ abstract final class GuildFeature {
   static const wiki = 'Wiki';
   static const events = 'Events';
 
-  // Household modules - flag values only today, with no endpoints, channel
-  // types or permissions behind them. Listed so the modules screen can show
-  // what a Household preset turns on, but nothing gates on them yet.
+  // Household modules. Five of them are channel types (`List`, `Chores`,
+  // `Ledger`, `Pantry`, `Decisions`); the other three are guild-scoped -
+  // who's home, quiet hours, and time-boxed guest access. Every endpoint
+  // behind them answers `403` when the module is off, for the owner too.
   static const lists = 'Lists';
   static const chores = 'Chores';
   static const ledger = 'Ledger';
@@ -140,5 +141,24 @@ abstract final class GuildFeature {
     bots: 'Install and manage bots',
     wiki: 'The whole wiki and its permissions',
     events: 'The scheduled-events calendar',
+    lists: 'Shopping and todo lists, shared and ticked off together',
+    chores: 'A rota that weights by effort instead of just taking turns',
+    ledger: 'Shared expenses, who owes who, and settling up',
+    pantry: 'What\'s in stock, what\'s running out, what\'s going off',
+    decisions: 'House decisions where one reasoned objection stops it',
+    presence: 'Who\'s actually in the flat right now',
+    quietHours: 'A nightly window that holds back chore reminders',
+    guestAccess: 'Roles that hand themselves back when they run out',
   };
+
+  /// The channel-type modules, in the order a household sidebar tends to use
+  /// them. The remaining three ([presence], [quietHours], [guestAccess]) have
+  /// no channel of their own.
+  static const householdChannelModules = <String>[
+    lists,
+    chores,
+    ledger,
+    pantry,
+    decisions,
+  ];
 }

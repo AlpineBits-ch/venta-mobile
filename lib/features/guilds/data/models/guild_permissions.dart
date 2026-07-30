@@ -1,3 +1,5 @@
+import 'guild_features.dart';
+
 /// Wraps the 64-bit permission bitmask. Deliberately `BigInt`, not `int` -
 /// `Superadmin` sits at bit 63, the sign bit of a 64-bit signed integer, so a
 /// native Dart `int` would misbehave for that flag specifically.
@@ -51,7 +53,85 @@ class GuildPermissions {
     'ViewAuditLog': 36,
     'ManageEmojis': 37,
     'ManageEvents': 38,
+    // Household module permissions. The bit *positions* here are this
+    // client's own numbering, not the server's: the wire format is names in
+    // both directions (see the class doc), so nothing depends on agreeing on
+    // a number - only on each name having a distinct, stable bit locally.
+    // They resolve per channel, so an overwrite granting control of one list
+    // doesn't grant every list, and viewing any module's contents needs only
+    // `ViewChannel`.
+    'ManageLists': 39,
+    'AddListItems': 40,
+    'CheckOffListItems': 41,
+    'ManageChores': 42,
+    'CompleteChores': 43,
+    'ManageLedger': 44,
+    'AddExpenses': 45,
+    'ManagePantry': 46,
+    'CreateDecisions': 47,
+    'VoteDecisions': 48,
+    'ManageGuests': 49,
     'Superadmin': 63,
+  };
+
+  /// Which module each permission belongs to, for the permissions that have
+  /// one. A guild without the module answers `403` for these regardless of
+  /// roles - **including for the owner** - so a role editor that offers them
+  /// anyway is offering something that cannot work.
+  static const permissionFeature = <String, String>{
+    'Connect': GuildFeature.voiceChannels,
+    'Speak': GuildFeature.voiceChannels,
+    'Stream': GuildFeature.voiceChannels,
+    'MuteMembers': GuildFeature.voiceChannels,
+    'DeafenMembers': GuildFeature.voiceChannels,
+    'MoveMembers': GuildFeature.voiceChannels,
+    'CreateThreads': GuildFeature.threads,
+    'SendMessagesInThreads': GuildFeature.threads,
+    'ManageOwnThreads': GuildFeature.threads,
+    'ManageAnyThread': GuildFeature.threads,
+    'ViewWiki': GuildFeature.wiki,
+    'CreateWikiPages': GuildFeature.wiki,
+    'EditOwnWikiPages': GuildFeature.wiki,
+    'EditAnyWikiPage': GuildFeature.wiki,
+    'DeleteWikiPages': GuildFeature.wiki,
+    'ManageWikiRevisions': GuildFeature.wiki,
+    'ManageWikiStructure': GuildFeature.wiki,
+    'ModerateWikiComments': GuildFeature.wiki,
+    'PublishWikiPublicly': GuildFeature.wiki,
+    'KickMembers': GuildFeature.moderation,
+    'BanMembers': GuildFeature.moderation,
+    'ModerateMembers': GuildFeature.moderation,
+    'ViewAuditLog': GuildFeature.moderation,
+    'ManageEmojis': GuildFeature.emojis,
+    'ManageEvents': GuildFeature.events,
+    'ManageLists': GuildFeature.lists,
+    'AddListItems': GuildFeature.lists,
+    'CheckOffListItems': GuildFeature.lists,
+    'ManageChores': GuildFeature.chores,
+    'CompleteChores': GuildFeature.chores,
+    'ManageLedger': GuildFeature.ledger,
+    'AddExpenses': GuildFeature.ledger,
+    'ManagePantry': GuildFeature.pantry,
+    'CreateDecisions': GuildFeature.decisions,
+    'VoteDecisions': GuildFeature.decisions,
+    'ManageGuests': GuildFeature.guestAccess,
+  };
+
+  /// Plain-language labels for the role editor - `CheckOffListItems` is a
+  /// flag name, not something to put in front of somebody deciding who's
+  /// allowed to tick the milk off.
+  static const flagLabels = <String, String>{
+    'ManageLists': 'Manage lists',
+    'AddListItems': 'Add list items',
+    'CheckOffListItems': 'Tick items off',
+    'ManageChores': 'Manage chores',
+    'CompleteChores': 'Complete chores',
+    'ManageLedger': 'Manage the ledger',
+    'AddExpenses': 'Add expenses',
+    'ManagePantry': 'Manage the pantry',
+    'CreateDecisions': 'Open decisions',
+    'VoteDecisions': 'Vote on decisions',
+    'ManageGuests': 'Give guests temporary access',
   };
 
   static final GuildPermissions none = GuildPermissions(BigInt.zero);
@@ -60,9 +140,24 @@ class GuildPermissions {
   /// Every flag name except `Superadmin` - used to render the role
   /// permission-editor's checkbox list. Declaration order matches the
   /// server's own grouping (channel/messages, voice, threads, moderation,
-  /// wiki), not bit position.
+  /// wiki, household), not bit position.
   static List<String> get grantableFlagNames =>
       _flags.keys.where((k) => k != 'Superadmin').toList();
+
+  /// [grantableFlagNames] minus everything belonging to a module this guild
+  /// doesn't have. A community server has no business listing "Tick items
+  /// off", and a household has no business listing wiki permissions - in both
+  /// cases granting it would change nothing, because the feature gate refuses
+  /// before roles are even consulted.
+  static List<String> grantableFlagNamesFor(GuildFeatures features) => [
+    for (final name in grantableFlagNames)
+      if (permissionFeature[name] == null ||
+          features.has(permissionFeature[name]!))
+        name,
+  ];
+
+  /// How a flag reads in the role editor.
+  static String labelFor(String flagName) => flagLabels[flagName] ?? flagName;
 
   static GuildPermissions _bit(int position) =>
       GuildPermissions(BigInt.one << position);

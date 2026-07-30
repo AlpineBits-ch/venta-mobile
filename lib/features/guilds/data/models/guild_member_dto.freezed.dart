@@ -15,7 +15,12 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$RoleMembershipDto {
 
- RoleDto get role;
+ RoleDto get role;/// Set only for a guest-access grant (`GuestAccess` module). The grant
+/// lapses on its own - permission resolution ignores it from the exact
+/// instant it expires - but the row is only tidied up a week later, so a
+/// past [expiresAt] means "no longer granted" even though it's still
+/// listed. Existing memberships are null and behave as they always did.
+ DateTime? get expiresAt;
 /// Create a copy of RoleMembershipDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +33,16 @@ $RoleMembershipDtoCopyWith<RoleMembershipDto> get copyWith => _$RoleMembershipDt
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoleMembershipDto&&(identical(other.role, role) || other.role == role));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoleMembershipDto&&(identical(other.role, role) || other.role == role)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,role);
+int get hashCode => Object.hash(runtimeType,role,expiresAt);
 
 @override
 String toString() {
-  return 'RoleMembershipDto(role: $role)';
+  return 'RoleMembershipDto(role: $role, expiresAt: $expiresAt)';
 }
 
 
@@ -48,7 +53,7 @@ abstract mixin class $RoleMembershipDtoCopyWith<$Res>  {
   factory $RoleMembershipDtoCopyWith(RoleMembershipDto value, $Res Function(RoleMembershipDto) _then) = _$RoleMembershipDtoCopyWithImpl;
 @useResult
 $Res call({
- RoleDto role
+ RoleDto role, DateTime? expiresAt
 });
 
 
@@ -65,10 +70,11 @@ class _$RoleMembershipDtoCopyWithImpl<$Res>
 
 /// Create a copy of RoleMembershipDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? role = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? role = null,Object? expiresAt = freezed,}) {
   return _then(_self.copyWith(
 role: null == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
-as RoleDto,
+as RoleDto,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 /// Create a copy of RoleMembershipDto
@@ -159,10 +165,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( RoleDto role)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( RoleDto role,  DateTime? expiresAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _RoleMembershipDto() when $default != null:
-return $default(_that.role);case _:
+return $default(_that.role,_that.expiresAt);case _:
   return orElse();
 
 }
@@ -180,10 +186,10 @@ return $default(_that.role);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( RoleDto role)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( RoleDto role,  DateTime? expiresAt)  $default,) {final _that = this;
 switch (_that) {
 case _RoleMembershipDto():
-return $default(_that.role);}
+return $default(_that.role,_that.expiresAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -197,10 +203,10 @@ return $default(_that.role);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( RoleDto role)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( RoleDto role,  DateTime? expiresAt)?  $default,) {final _that = this;
 switch (_that) {
 case _RoleMembershipDto() when $default != null:
-return $default(_that.role);case _:
+return $default(_that.role,_that.expiresAt);case _:
   return null;
 
 }
@@ -212,10 +218,16 @@ return $default(_that.role);case _:
 @JsonSerializable()
 
 class _RoleMembershipDto implements RoleMembershipDto {
-  const _RoleMembershipDto({required this.role});
+  const _RoleMembershipDto({required this.role, this.expiresAt});
   factory _RoleMembershipDto.fromJson(Map<String, dynamic> json) => _$RoleMembershipDtoFromJson(json);
 
 @override final  RoleDto role;
+/// Set only for a guest-access grant (`GuestAccess` module). The grant
+/// lapses on its own - permission resolution ignores it from the exact
+/// instant it expires - but the row is only tidied up a week later, so a
+/// past [expiresAt] means "no longer granted" even though it's still
+/// listed. Existing memberships are null and behave as they always did.
+@override final  DateTime? expiresAt;
 
 /// Create a copy of RoleMembershipDto
 /// with the given fields replaced by the non-null parameter values.
@@ -230,16 +242,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoleMembershipDto&&(identical(other.role, role) || other.role == role));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoleMembershipDto&&(identical(other.role, role) || other.role == role)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,role);
+int get hashCode => Object.hash(runtimeType,role,expiresAt);
 
 @override
 String toString() {
-  return 'RoleMembershipDto(role: $role)';
+  return 'RoleMembershipDto(role: $role, expiresAt: $expiresAt)';
 }
 
 
@@ -250,7 +262,7 @@ abstract mixin class _$RoleMembershipDtoCopyWith<$Res> implements $RoleMembershi
   factory _$RoleMembershipDtoCopyWith(_RoleMembershipDto value, $Res Function(_RoleMembershipDto) _then) = __$RoleMembershipDtoCopyWithImpl;
 @override @useResult
 $Res call({
- RoleDto role
+ RoleDto role, DateTime? expiresAt
 });
 
 
@@ -267,10 +279,11 @@ class __$RoleMembershipDtoCopyWithImpl<$Res>
 
 /// Create a copy of RoleMembershipDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? role = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? role = null,Object? expiresAt = freezed,}) {
   return _then(_RoleMembershipDto(
 role: null == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
-as RoleDto,
+as RoleDto,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 
