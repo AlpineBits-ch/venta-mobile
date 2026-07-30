@@ -50,57 +50,11 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
     }
   }
 
-  Future<({String name, bool animated})?> _promptEmojiDetails() async {
-    final nameController = TextEditingController();
-    var animated = false;
-    try {
-      return await showDialog<({String name, bool animated})>(
+  Future<({String name, bool animated})?> _promptEmojiDetails() =>
+      showDialog<({String name, bool animated})>(
         context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('New emoji'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  autofocus: true,
-                  onChanged: (_) => setDialogState(() {}),
-                  decoration: const InputDecoration(hintText: 'emoji_name'),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Animated'),
-                  value: animated,
-                  onChanged: (value) => setDialogState(() => animated = value),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                // Without a name the upload was dropped on the floor after
-                // the dialog closed, so picking an image then tapping Upload
-                // looked like the upload had simply failed silently.
-                onPressed: nameController.text.trim().isEmpty
-                    ? null
-                    : () => Navigator.of(context).pop((
-                        name: nameController.text.trim(),
-                        animated: animated,
-                      )),
-                child: const Text('Upload'),
-              ),
-            ],
-          ),
-        ),
+        builder: (context) => const _NewEmojiDialog(),
       );
-    } finally {
-      nameController.dispose();
-    }
-  }
 
   Future<void> _uploadFlow() async {
     final file = await _picker.pickImage(
@@ -275,6 +229,78 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
               )
             : const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+/// Name + animated flag for a new emoji, popped as a record.
+///
+/// A widget that owns its controller, rather than the inline `StatefulBuilder`
+/// this used to be: that version disposed the controller in a `finally` around
+/// `showDialog`, but that future completes the moment the route is *popped*,
+/// while the dialog is still mounted and rebuilding through its exit
+/// animation. The still-visible `TextField` then rebuilt against a dead
+/// controller and threw "A TextEditingController was used after being
+/// disposed" across the dialog. [State.dispose] doesn't run until the route is
+/// actually gone, which is what makes it the safe place to do this.
+class _NewEmojiDialog extends StatefulWidget {
+  const _NewEmojiDialog();
+
+  @override
+  State<_NewEmojiDialog> createState() => _NewEmojiDialogState();
+}
+
+class _NewEmojiDialogState extends State<_NewEmojiDialog> {
+  final _nameController = TextEditingController();
+  bool _animated = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New emoji'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _nameController,
+            autofocus: true,
+            // Rebuilds on every keystroke purely so Upload can enable itself
+            // the moment there's a name to send.
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(hintText: 'emoji_name'),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Animated'),
+            value: _animated,
+            onChanged: (value) => setState(() => _animated = value),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          // Without a name the upload was dropped on the floor after the
+          // dialog closed, so picking an image then tapping Upload looked like
+          // the upload had simply failed silently.
+          onPressed: _nameController.text.trim().isEmpty
+              ? null
+              : () => Navigator.of(context).pop((
+                  name: _nameController.text.trim(),
+                  animated: _animated,
+                )),
+          child: const Text('Upload'),
+        ),
+      ],
     );
   }
 }
