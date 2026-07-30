@@ -7,6 +7,7 @@ import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../conversations/data/conversation_repository.dart';
 import '../../../friends/data/models/relationship_model.dart';
@@ -80,7 +81,10 @@ class _UserProfileView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(
+        leading: const AppBackButton(fallbackLocation: RoutePaths.home),
+        title: const Text('Profile'),
+      ),
       body: BlocConsumer<UserProfileCubit, UserProfileState>(
         listener: (context, state) {
           if (state.errorMessage != null) {

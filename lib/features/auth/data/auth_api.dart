@@ -3,6 +3,16 @@ import 'package:dio/dio.dart';
 import 'models/server_configuration.dart';
 import 'models/token_response.dart';
 
+/// Thrown by [AuthApi.passwordGrant] on a `401 mfa_required` - the
+/// credentials were correct but the account has MFA enabled and no code was
+/// supplied yet. Caller should prompt for a 6-digit code and retry.
+class MfaRequiredException implements Exception {}
+
+/// Thrown by [AuthApi.passwordGrant] on a `401 mfa_invalid` - a code was
+/// supplied but didn't verify (wrong or expired). Caller should let the user
+/// retry the code without re-entering their password.
+class MfaInvalidException implements Exception {}
+
 /// Raw calls against the OAuth2 token endpoint and identity API - used only
 /// by [AuthRepository]. Deliberately uses its own plain [Dio] (no auth
 /// interceptor): the token endpoint doesn't take a bearer token, and a

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
 
@@ -94,7 +95,12 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
     final theme = Theme.of(context);
     final posts = _posts;
     return Scaffold(
-      appBar: AppBar(title: Text(_title())),
+      appBar: AppBar(
+        leading: AppBackButton(
+          fallbackLocation: RoutePaths.serverPath(widget.guildId),
+        ),
+        title: Text(_title()),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : posts == null || posts.isEmpty

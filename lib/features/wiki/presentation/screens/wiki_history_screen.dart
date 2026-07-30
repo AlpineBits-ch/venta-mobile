@@ -3,7 +3,9 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../data/models/wiki_revision_dto.dart';
 import '../../data/wiki_repository.dart';
 
@@ -151,7 +153,15 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('History')),
+      appBar: AppBar(
+        leading: AppBackButton(
+          fallbackLocation: RoutePaths.serverWikiPagePath(
+            widget.guildId,
+            widget.pageId,
+          ),
+        ),
+        title: const Text('History'),
+      ),
       body: body,
     );
   }

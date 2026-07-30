@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../guilds/data/models/guild_permissions.dart';
 import '../../data/models/wiki_category_dto.dart';
 import '../../data/models/wiki_dto.dart';
@@ -197,6 +199,9 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
     if (_loading) {
       return Scaffold(
         appBar: AppBar(
+          leading: AppBackButton(
+            fallbackLocation: RoutePaths.serverWikiPath(widget.guildId),
+          ),
           title: Text(widget.isEditing ? 'Edit page' : 'New page'),
         ),
         body: const Center(child: CircularProgressIndicator()),
@@ -205,6 +210,9 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
     if (_loadError != null) {
       return Scaffold(
         appBar: AppBar(
+          leading: AppBackButton(
+            fallbackLocation: RoutePaths.serverWikiPath(widget.guildId),
+          ),
           title: Text(widget.isEditing ? 'Edit page' : 'New page'),
         ),
         body: Center(child: Text(_loadError!)),
@@ -226,6 +234,9 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: AppBackButton(
+          fallbackLocation: RoutePaths.serverWikiPath(widget.guildId),
+        ),
         title: Text(widget.isEditing ? 'Edit page' : 'New page'),
         actions: [
           IconButton(

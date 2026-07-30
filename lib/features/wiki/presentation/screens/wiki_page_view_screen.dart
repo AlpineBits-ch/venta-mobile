@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../guilds/data/models/guild_permissions.dart';
 import '../../data/models/wiki_page_dto.dart';
@@ -186,6 +187,9 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: AppBackButton(
+          fallbackLocation: RoutePaths.serverWikiPath(widget.guildId),
+        ),
         title: Text(page?.title ?? 'Wiki'),
         actions: [
           if (canSeeHistory && page != null)

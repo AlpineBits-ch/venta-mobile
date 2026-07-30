@@ -6,9 +6,11 @@ import 'package:flutter/material.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
+import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/avatar_palette.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/status_dot.dart';
 import '../../../profile/data/models/profile_dto.dart';
@@ -209,7 +211,12 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Members')),
+      appBar: AppBar(
+        leading: AppBackButton(
+          fallbackLocation: RoutePaths.serverPath(widget.guildId),
+        ),
+        title: const Text('Members'),
+      ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 200),
         child: KeyedSubtree(key: ValueKey(members == null), child: body),

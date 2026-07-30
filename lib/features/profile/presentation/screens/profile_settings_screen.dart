@@ -5,10 +5,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/avatar_palette.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../auth/data/account_repository.dart';
 import '../../../auth/data/identity_api.dart';
 import '../../../auth/data/models/notification_settings_dto.dart';
@@ -336,7 +338,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Your Profile')),
+      appBar: AppBar(
+        leading: const AppBackButton(fallbackLocation: RoutePaths.home),
+        title: const Text('Your Profile'),
+      ),
       body: BlocConsumer<SelfProfileCubit, SelfProfileState>(
         listener: (context, state) {
           if (state.errorMessage != null) {

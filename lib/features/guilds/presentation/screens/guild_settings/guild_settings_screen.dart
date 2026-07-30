@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../core/routing/route_paths.dart';
+import '../../../../../core/widgets/app_back_button.dart';
 import 'audit_log_settings_tab.dart';
 import 'bans_settings_tab.dart';
 import 'emoji_settings_tab.dart';
@@ -24,6 +26,9 @@ class GuildSettingsScreen extends StatelessWidget {
       length: 7,
       child: Scaffold(
         appBar: AppBar(
+          leading: AppBackButton(
+            fallbackLocation: RoutePaths.serverPath(guildId),
+          ),
           title: const Text('Server Settings'),
           // The tab strip doesn't fit on a phone width, so it's scrollable -
           // this fade hints that without it, "Audit Log"/"Invites" just look

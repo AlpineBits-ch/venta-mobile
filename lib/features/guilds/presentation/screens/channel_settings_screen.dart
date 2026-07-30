@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
 
@@ -153,7 +155,15 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
     final channel = _channel;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Channel Settings')),
+      appBar: AppBar(
+        leading: AppBackButton(
+          fallbackLocation: RoutePaths.serverChannelPath(
+            widget.guildId,
+            widget.channelId,
+          ),
+        ),
+        title: const Text('Channel Settings'),
+      ),
       body: channel == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(

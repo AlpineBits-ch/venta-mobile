@@ -12,6 +12,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/routing/route_paths.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -880,6 +881,11 @@ class _ThreadViewState extends State<ThreadView> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        leading: AppBackButton(
+          fallbackLocation: widget.guildId != null
+              ? RoutePaths.serverPath(widget.guildId!)
+              : RoutePaths.home,
+        ),
         title: Row(
           children: [
             // Guild channels are titled "#channel-name", which already
