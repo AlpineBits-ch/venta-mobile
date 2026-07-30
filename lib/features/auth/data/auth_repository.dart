@@ -94,6 +94,15 @@ class AuthRepository {
     newPassword: newPassword,
   );
 
+  /// Confirms the address with the emailed code. Throws a `400` DioException
+  /// on a wrong or expired code.
+  Future<void> verifyEmail({required String email, required String code}) =>
+      api.verifyEmail(baseUrl: _baseUrl, email: email, code: code);
+
+  /// Re-sends the verification code. A `400` means it's already verified.
+  Future<void> resendVerificationCode(String email) =>
+      api.generateVerificationCode(baseUrl: _baseUrl, email: email);
+
   Future<void> register({
     required String email,
     required String username,

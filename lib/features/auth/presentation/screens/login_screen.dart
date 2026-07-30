@@ -6,6 +6,7 @@ import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../bloc/auth_bloc.dart';
+import '../widgets/verification_code_form.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -100,6 +101,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     BlocBuilder<AuthBloc, AuthState>(
                       builder: (context, state) {
                         final loading = state.status == AuthStatus.loading;
+                        final email = state.pendingVerificationEmail;
+                        // Keyed off the pending address, not the status, so
+                        // the form survives the `loading` emit while a code
+                        // is being checked instead of flicking back to the
+                        // credentials it was already past.
+                        if (email != null) {
+                          return VerificationCodeForm(
+                            email: email,
+                            loading: loading,
+                            errorMessage: state.errorMessage,
+                            infoMessage: state.infoMessage,
+                            onCancel: () => context.read<AuthBloc>().add(
+                              const LoginCancelled(),
+                            ),
+                          );
+                        }
                         if (state.status == AuthStatus.mfaRequired) {
                           return _MfaCodeForm(
                             controller: _mfaCodeController,

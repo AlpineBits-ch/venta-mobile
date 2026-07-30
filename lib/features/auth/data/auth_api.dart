@@ -13,6 +13,15 @@ class MfaRequiredException implements Exception {}
 /// retry the code without re-entering their password.
 class MfaInvalidException implements Exception {}
 
+/// Thrown by [AuthApi.passwordGrant] on a `403 Email not verified.` - the
+/// account exists and the password is right, it just can't sign in until the
+/// emailed link is followed.
+///
+/// Typed rather than left as a bare `DioException` because it's the *normal*
+/// end of registration, not a failure: `AuthRepository.register` signs in
+/// straight after creating the account, so every new account hits this.
+class EmailNotVerifiedException implements Exception {}
+
 /// Raw calls against the OAuth2 token endpoint and identity API - used only
 /// by [AuthRepository]. Deliberately uses its own plain [Dio] (no auth
 /// interceptor): the token endpoint doesn't take a bearer token, and a
@@ -53,10 +62,16 @@ class AuthApi {
       );
       return TokenResponse.fromJson(response.data!);
     } on DioException catch (e) {
+      final marker = _errorMarker(e.response?.data);
       if (e.response?.statusCode == 401) {
-        final marker = _errorMarker(e.response?.data);
         if (marker == 'mfa_required') throw MfaRequiredException();
         if (marker == 'mfa_invalid') throw MfaInvalidException();
+      }
+      // The body is a bare string here (`Email not verified.`), not the
+      // OAuth error/error_description shape the 401s use.
+      if (e.response?.statusCode == 403 &&
+          (marker?.toLowerCase().contains('email not verified') ?? false)) {
+        throw EmailNotVerifiedException();
       }
       rethrow;
     }
@@ -101,6 +116,33 @@ class AuthApi {
         'password': password,
         'birthdate': birthdate.toUtc().toIso8601String(),
       },
+    );
+  }
+
+  /// Confirms an address with the 6-digit code that was emailed to it.
+  ///
+  /// `GET` with query parameters rather than a POST body - matches Alpine's
+  /// `EmailVerificationService`, which is the only other client of these two
+  /// endpoints. Throws a `400` on a wrong or expired code.
+  Future<void> verifyEmail({
+    required String baseUrl,
+    required String email,
+    required String code,
+  }) async {
+    await _dio.get<void>(
+      '$baseUrl/api/v1/identity/user/verify-email',
+      queryParameters: {'email': email, 'code': code},
+    );
+  }
+
+  /// Sends a fresh code. `400` here means the address is already verified.
+  Future<void> generateVerificationCode({
+    required String baseUrl,
+    required String email,
+  }) async {
+    await _dio.get<void>(
+      '$baseUrl/api/v1/identity/user/generate-verification-code',
+      queryParameters: {'email': email},
     );
   }
 
