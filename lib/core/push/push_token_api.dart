@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../network/api_client.dart';
 
 /// Registers device push tokens against the identity service. `/device-token`
@@ -10,17 +12,31 @@ class PushTokenApi {
 
   final ApiClient client;
 
-  Future<void> registerDeviceToken(String token) async {
-    await client.dio.post<void>(
-      client.url('/api/v1/identity/users/self/device-token'),
-      data: {'token': token},
-    );
-  }
+  Future<void> registerDeviceToken(String token) =>
+      _postWithRetry('/api/v1/identity/users/self/device-token', token);
 
-  Future<void> registerVoipToken(String token) async {
-    await client.dio.post<void>(
-      client.url('/api/v1/identity/users/self/voip-token'),
-      data: {'token': token},
-    );
+  Future<void> registerVoipToken(String token) =>
+      _postWithRetry('/api/v1/identity/users/self/voip-token', token);
+
+  /// Both callers fire this off via `unawaited(startPushServices())` at app
+  /// boot/login with nothing watching the result — a single transient
+  /// failure (network not up yet, backend mid-deploy) used to drop the
+  /// token silently for the rest of the session, since VoIP/FCM tokens are
+  /// rarely reissued. Retried a few times before giving up and logging, so
+  /// a real failure is at least visible instead of indistinguishable from
+  /// "never happened to fail".
+  Future<void> _postWithRetry(String path, String token) async {
+    for (var attempt = 1; ; attempt++) {
+      try {
+        await client.dio.post<void>(client.url(path), data: {'token': token});
+        return;
+      } catch (e) {
+        if (attempt >= 3) {
+          debugPrint('PushTokenApi: giving up on $path after $attempt attempts: $e');
+          return;
+        }
+        await Future<void>.delayed(Duration(seconds: attempt * 2));
+      }
+    }
   }
 }
