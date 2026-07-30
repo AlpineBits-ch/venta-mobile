@@ -433,6 +433,10 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
 
     final byCategory = <String?, List<ChannelDto>>{};
     for (final channel in guild.channels) {
+      // Forum posts are Thread-typed channels parented to their Forum (see
+      // ForumChannelScreen) - they browse under that forum's own post list,
+      // never as top-level sidebar entries.
+      if (channel.type == ChannelType.thread) continue;
       (byCategory[channel.categoryId] ??= []).add(channel);
     }
     for (final list in byCategory.values) {

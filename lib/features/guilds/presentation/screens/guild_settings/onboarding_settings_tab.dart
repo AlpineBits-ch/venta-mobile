@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/widget_styles.dart';
 import '../../../data/guild_repository.dart';
+import '../../../data/models/channel_dto.dart';
 import '../../../data/models/onboarding_dto.dart';
 
 class OnboardingSettingsTab extends StatefulWidget {
@@ -87,7 +88,12 @@ class _OnboardingSettingsTabState extends State<OnboardingSettingsTab> {
     if (_loading) return const Center(child: CircularProgressIndicator());
     final theme = Theme.of(context);
     final config = _config ?? const OnboardingConfigDto();
-    final channels = getIt<GuildRepository>().cachedById(widget.guildId)?.channels ??
+    final channels =
+        getIt<GuildRepository>()
+            .cachedById(widget.guildId)
+            ?.channels
+            .where((c) => c.type != ChannelType.thread)
+            .toList() ??
         const [];
 
     return ListView(
