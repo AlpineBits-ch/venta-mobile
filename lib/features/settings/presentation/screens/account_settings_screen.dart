@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
@@ -315,29 +316,43 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           const SizedBox(height: AppSpacing.l),
           SettingsSection(
             label: 'Devices',
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.m),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Signs out every session except this one.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.s),
-                  OutlinedButton(
-                    onPressed: _signingOutOthers ? null : _confirmSignOutOthers,
-                    child: _signingOutOthers
-                        ? ButtonProgressIndicator(
-                            onColor: theme.colorScheme.onSurface,
-                          )
-                        : const Text('Sign out of all other devices'),
-                  ),
-                ],
+            children: [
+              // The itemised view, where you can see which device you're
+              // signing out before doing it. The blunt instrument below stays
+              // for when you don't care which.
+              SettingsRow(
+                icon: Icons.devices_outlined,
+                title: 'Logged-in devices',
+                onTap: () => context.push(RoutePaths.devices),
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.m),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Signs out every session except this one.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    OutlinedButton(
+                      onPressed: _signingOutOthers
+                          ? null
+                          : _confirmSignOutOthers,
+                      child: _signingOutOthers
+                          ? ButtonProgressIndicator(
+                              onColor: theme.colorScheme.onSurface,
+                            )
+                          : const Text('Sign out of all other devices'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           if (_account != null) ...[
             const SizedBox(height: AppSpacing.l),

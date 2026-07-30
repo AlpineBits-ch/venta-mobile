@@ -1,4 +1,5 @@
 import 'identity_api.dart';
+import 'models/login_session_dto.dart';
 import 'models/notification_settings_dto.dart';
 import 'models/user_dto.dart';
 
@@ -25,6 +26,10 @@ class AccountRepository {
   );
 
   Future<void> signOutOtherDevices() => api.signOutOtherDevices();
+
+  Future<List<LoginSessionDto>> listSessions() => api.listSessions();
+
+  Future<void> revokeSession(String id) => api.revokeSession(id);
 
   Future<NotificationSettingsDto> getNotificationSettings() async {
     final raw = await api.getSettings();

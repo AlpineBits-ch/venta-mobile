@@ -39,6 +39,13 @@ abstract final class RoutePaths {
   static const notificationSettings = '/settings/notifications';
   static const appearanceSettings = '/settings/appearance';
 
+  /// Scanning a desktop/web client's login QR code. Nothing here is about
+  /// *this* device's session - see `QrLoginScreen`.
+  static const qrLogin = '/settings/qr-login';
+
+  /// Every session signed in to the account, with per-device revoke.
+  static const devices = '/settings/devices';
+
   /// Where the profile *and* settings used to live together. Kept only as a
   /// redirect target: [RoutePersistence] may have saved it as the last visited
   /// location, and a cold start on an unmatched path lands on go_router's

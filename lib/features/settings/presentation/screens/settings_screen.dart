@@ -127,6 +127,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       extra: _account?.mfaEnabled,
     ),
     const _Entry(
+      section: 'Account Settings',
+      title: 'Logged-in Devices',
+      icon: Icons.devices_outlined,
+      path: RoutePaths.devices,
+      keywords: 'sessions sign out revoke computer phone browser security',
+    ),
+    const _Entry(
+      section: 'Account Settings',
+      title: 'Scan QR Code',
+      icon: Icons.qr_code_scanner,
+      path: RoutePaths.qrLogin,
+      keywords: 'log in desktop web computer browser approve sign in camera',
+    ),
+    const _Entry(
       section: 'App Settings',
       title: 'Appearance',
       icon: Icons.palette_outlined,

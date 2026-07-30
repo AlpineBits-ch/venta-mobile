@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
+import 'models/login_session_dto.dart';
 import 'models/user_dto.dart';
 
 /// Thrown by [IdentityApi.cancelDeletion] on a 409 - the purge has already
@@ -18,6 +19,38 @@ class MfaActionFailedException implements Exception {
   MfaActionFailedException(this.message);
 
   final String message;
+}
+
+/// The device waiting behind a scanned QR login code - what the confirmation
+/// screen names so the user can recognise (or fail to recognise) it.
+class QrLoginTarget {
+  const QrLoginTarget({required this.deviceName, required this.deviceType});
+
+  factory QrLoginTarget.fromJson(Map<String, dynamic> json) => QrLoginTarget(
+    deviceName: json['deviceName'] as String? ?? 'Unknown device',
+    deviceType: json['deviceType'] as String? ?? '',
+  );
+
+  /// e.g. `Chrome on Windows`.
+  final String deviceName;
+
+  /// e.g. `Web`, `Desktop`, `Mobile` - only used to pick an icon.
+  final String deviceType;
+}
+
+/// Thrown by [IdentityApi.scanQrLogin] and [IdentityApi.respondToQrLogin] on a
+/// `404`. Expired, never existed, and already-decided-by-someone-else all come
+/// back the same way, and are deliberately shown the same way - distinguishing
+/// them would report on codes the scanner doesn't own.
+class QrLoginCodeInvalidException implements Exception {
+  const QrLoginCodeInvalidException();
+}
+
+/// Thrown by [IdentityApi.respondToQrLogin] on a `403` - only the session that
+/// called `/scan` may decide that code, so this means the account changed
+/// between scanning and tapping Approve.
+class QrLoginNotYoursException implements Exception {
+  const QrLoginNotYoursException();
 }
 
 class MfaEnrollment {
@@ -43,6 +76,10 @@ class IdentityApi {
   /// matches the MFA guide's endpoints exactly, one of this API's several
   /// pre-existing singular/plural routing quirks.
   String get _mfaBase => client.url('/api/v1/identity/user/mfa');
+
+  String get _qrLoginBase => client.url('/api/v1/identity/qr-login');
+
+  String get _sessionsBase => client.url('/api/v1/identity/sessions');
 
   Future<UserDto> getSelf() async {
     final response = await client.dio.get<Map<String, dynamic>>(_base);
@@ -91,9 +128,29 @@ class IdentityApi {
 
   Future<void> signOutOtherDevices() async {
     await client.dio.post<void>(
-      client.url('/api/v1/identity/sessions/revoke-others'),
+      '$_sessionsBase/revoke-others',
       data: {'withinSeconds': 3600},
     );
+  }
+
+  /// Every login on this account, one entry per session, including this app's
+  /// own (`isCurrent`).
+  Future<List<LoginSessionDto>> listSessions() async {
+    final response = await client.dio.get<List<dynamic>>(_sessionsBase);
+    return (response.data ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(LoginSessionDto.fromJson)
+        .toList();
+  }
+
+  /// Stops [id] from refreshing its access token.
+  ///
+  /// Not instantaneous for the revoked device: whatever access token it
+  /// already holds keeps working until it expires on its own (up to ~an hour).
+  /// That's inherent to stateless access tokens, so the UI has to say so
+  /// rather than claim the device was signed out on the spot.
+  Future<void> revokeSession(String id) async {
+    await client.dio.delete<void>('$_sessionsBase/$id');
   }
 
   /// The opaque user-settings JSON blob (`{notifications: {...}, autostart}`
@@ -108,6 +165,52 @@ class IdentityApi {
 
   Future<void> updateSettings(Map<String, dynamic> settings) async {
     await client.dio.put<void>('$_base/settings', data: settings);
+  }
+
+  /// Claims a QR login code shown on another device and returns which device
+  /// it belongs to. Claiming is not approving - nothing happens to that device
+  /// until [respondToQrLogin] says so.
+  ///
+  /// [code] is the QR payload verbatim: an opaque string, not a URI or JSON.
+  Future<QrLoginTarget> scanQrLogin(String code) async {
+    try {
+      final response = await client.dio.post<Map<String, dynamic>>(
+        '$_qrLoginBase/scan',
+        data: {'code': code},
+      );
+      return QrLoginTarget.fromJson(response.data ?? const {});
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw const QrLoginCodeInvalidException();
+      }
+      rethrow;
+    }
+  }
+
+  /// Approves or denies a code already claimed via [scanQrLogin]. The other
+  /// device redeems its own tokens afterwards - nothing about this phone's
+  /// session travels through here, and this phone stays signed in either way.
+  ///
+  /// Must land inside the ~3-minute window the code was generated in; past
+  /// that the desktop side treats it as expired whatever this returns.
+  Future<void> respondToQrLogin({
+    required String code,
+    required bool approve,
+  }) async {
+    try {
+      await client.dio.post<void>(
+        '$_qrLoginBase/approve',
+        data: {'code': code, 'approve': approve},
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw const QrLoginCodeInvalidException();
+      }
+      if (e.response?.statusCode == 403) {
+        throw const QrLoginNotYoursException();
+      }
+      rethrow;
+    }
   }
 
   /// Re-callable before [enableMfa] succeeds - the server just re-returns

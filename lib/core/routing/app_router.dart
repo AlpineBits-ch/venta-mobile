@@ -34,7 +34,9 @@ import '../../features/profile/presentation/screens/self_profile_screen.dart';
 import '../../features/profile/presentation/screens/user_profile_screen.dart';
 import '../../features/settings/presentation/screens/account_settings_screen.dart';
 import '../../features/settings/presentation/screens/appearance_settings_screen.dart';
+import '../../features/settings/presentation/screens/devices_screen.dart';
 import '../../features/settings/presentation/screens/notification_settings_screen.dart';
+import '../../features/settings/presentation/screens/qr_login_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../di/injector.dart';
 import '../realtime/realtime_service.dart';
@@ -281,6 +283,14 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       GoRoute(
         path: RoutePaths.appearanceSettings,
         builder: (context, state) => const AppearanceSettingsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.qrLogin,
+        builder: (context, state) => const QrLoginScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.devices,
+        builder: (context, state) => const DevicesScreen(),
       ),
       GoRoute(
         path: RoutePaths.userProfile,
