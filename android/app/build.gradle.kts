@@ -51,7 +51,7 @@ dependencies {
 }
 
 // Push notifications (firebase_messaging) need this applied, which in turn
-// needs google-services.json — see docs/native-call-push-backend-spec.md.
+// needs google-services.json - see docs/native-call-push-backend-spec.md.
 // Applied conditionally so the build stays green (no FCM push, but otherwise
 // unaffected) for anyone who hasn't dropped that file in yet.
 if (file("google-services.json").exists()) {

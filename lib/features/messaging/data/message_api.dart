@@ -38,7 +38,7 @@ class MessageApi {
     return MessageDto.fromJson(response.data!);
   }
 
-  /// Uploads one file and returns its attachment id — call [pollAttachment]
+  /// Uploads one file and returns its attachment id - call [pollAttachment]
   /// afterwards to wait for server-side processing before referencing the id
   /// in `create()`. One file per request (matches the desktop client): the
   /// server accepts a collection under the `files` field but only the first
@@ -67,7 +67,7 @@ class MessageApi {
 
   /// Polls until the server finishes processing the upload (thumbnailing
   /// etc), matching `FileService.pollFileStatus` on desktop. The server only
-  /// reports `Pending`/`Complete` — no `Failed` state exists — so a stuck
+  /// reports `Pending`/`Complete` - no `Failed` state exists - so a stuck
   /// upload is bounded by [timeout] rather than an error state that never
   /// arrives.
   Future<AttachmentDto> pollAttachment(
@@ -102,13 +102,18 @@ class MessageApi {
     );
   }
 
+  /// Uses Postgres `websearch_to_tsquery` server-side, so plain search-engine
+  /// syntax works: quoted phrases, `-exclude`, `or`. Only `Plain`-encryption
+  /// messages are indexed - MLS-encrypted conversations always come back
+  /// empty (the server can't read ciphertext), not an error.
   Future<List<MessageDto>> searchConversation(
     String conversationId,
-    String query,
-  ) async {
+    String query, {
+    int limit = 25,
+  }) async {
     final response = await client.dio.get<List<dynamic>>(
       client.url(
-        '/api/v1/messaging/messaging/conversations/$conversationId/messages/search?q=${Uri.encodeQueryComponent(query)}',
+        '/api/v1/messaging/messaging/search?query=${Uri.encodeQueryComponent(query)}&conversationId=$conversationId&limit=$limit',
       ),
     );
     return response.data!
@@ -116,11 +121,46 @@ class MessageApi {
         .toList();
   }
 
-  Future<List<MessageDto>> searchChannel(String channelId, String query) async {
+  Future<List<MessageDto>> searchChannel(
+    String channelId,
+    String query, {
+    int limit = 25,
+  }) async {
     final response = await client.dio.get<List<dynamic>>(
       client.url(
-        '/api/v1/messaging/messaging/channels/$channelId/messages/search?q=${Uri.encodeQueryComponent(query)}',
+        '/api/v1/messaging/messaging/search?query=${Uri.encodeQueryComponent(query)}&channelId=$channelId&limit=$limit',
       ),
+    );
+    return response.data!
+        .map((json) => MessageDto.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Idempotent - pinning an already-pinned message just returns its
+  /// current pin state.
+  Future<void> pinMessage(String messageId) {
+    return client.dio.post<void>(
+      client.url('/api/v1/messaging/messaging/$messageId/pin'),
+    );
+  }
+
+  Future<void> unpinMessage(String messageId) {
+    return client.dio.delete<void>(
+      client.url('/api/v1/messaging/messaging/$messageId/pin'),
+    );
+  }
+
+  /// Exactly one of [channelId]/[conversationId] must be set. Returns up to
+  /// 50, most-recently-pinned first.
+  Future<List<MessageDto>> getPinnedMessages({
+    String? channelId,
+    String? conversationId,
+  }) async {
+    final query = channelId != null
+        ? 'channelId=$channelId'
+        : 'conversationId=$conversationId';
+    final response = await client.dio.get<List<dynamic>>(
+      client.url('/api/v1/messaging/messaging/pins?$query'),
     );
     return response.data!
         .map((json) => MessageDto.fromJson(json as Map<String, dynamic>))
@@ -158,11 +198,16 @@ class MessageApi {
       client.url('/api/v1/messaging/attachments/$attachmentId/thumbnail');
 
   /// `conversationId` is sent even for a channel reaction (as `''`) to match
-  /// the request shape the server expects — mirrors Alpine's
-  /// `CreateReactionDto`.
+  /// the request shape the server expects - mirrors Alpine's
+  /// `CreateReactionDto`. Exactly one of [emoji]/[emojiId] should be set:
+  /// [emojiId] for a custom guild emoji (server resolves and fills in the
+  /// name), [emoji] for a plain Unicode reaction. Custom emoji only work in
+  /// guild channels - passing [emojiId] with [conversationId] is rejected
+  /// server-side with a 400.
   Future<void> addReaction({
     required String messageId,
-    required String emoji,
+    String? emoji,
+    String? emojiId,
     String? conversationId,
     String? channelId,
   }) {
@@ -170,23 +215,30 @@ class MessageApi {
       client.url('/api/v1/messaging/messages/$messageId/reactions'),
       data: {
         'conversationId': conversationId ?? '',
-        'reaction': emoji,
+        if (emojiId != null) 'emojiId': emojiId else 'reaction': emoji,
         if (channelId != null) 'channelId': channelId,
       },
     );
   }
 
   /// `contextId` is the conversationId or channelId the message belongs to
-  /// — mirrors Alpine's `RemoveReactionDto`. Dio's `delete` accepts a body
-  /// via `data`, matching the server's DELETE-with-body contract.
+  /// - mirrors Alpine's `RemoveReactionDto`. Dio's `delete` accepts a body
+  /// via `data`, matching the server's DELETE-with-body contract. [channelId]
+  /// is what lets a guild-channel removal broadcast to other members in
+  /// realtime (previously silently missing for all channel reactions).
   Future<void> removeReaction({
     required String messageId,
     required String emoji,
     required String contextId,
+    String? channelId,
   }) {
     return client.dio.delete<void>(
       client.url('/api/v1/messaging/messages/$messageId/reactions'),
-      data: {'reaction': emoji, 'contextId': contextId},
+      data: {
+        'reaction': emoji,
+        'contextId': contextId,
+        if (channelId != null) 'channelId': channelId,
+      },
     );
   }
 

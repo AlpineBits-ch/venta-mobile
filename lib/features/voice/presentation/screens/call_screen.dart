@@ -18,14 +18,14 @@ import '../../../../core/widgets/video_participant_tile.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../bloc/call_cubit.dart';
 
-/// Full-screen call UI — covers both the incoming-call prompt and the
+/// Full-screen call UI - covers both the incoming-call prompt and the
 /// active-call controls, since both are just different renderings of the
 /// same `CallCubit` state and the screen is pushed/popped as one unit by
 /// `AppShell` whenever `CallState.phase` leaves/returns to idle.
 ///
 /// Deliberately always-dark regardless of the app's light/dark theme
 /// setting (same "photo viewer chrome" exception as `message_attachment_view`'s
-/// full-screen image viewer) — text/icon colors below are the named
+/// full-screen image viewer) - text/icon colors below are the named
 /// `AppColors` dark-surface tokens rather than `colorScheme.onSurface`,
 /// which would invert unreadably if the app theme were light.
 class CallScreen extends StatelessWidget {
@@ -159,7 +159,7 @@ class _ActiveCallView extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
-                  'Waiting for others to rejoin — call ends in ',
+                  'Waiting for others to rejoin - call ends in ',
                   style: TextStyle(color: context.statusColors.idle),
                 ),
                 CountdownLabel(

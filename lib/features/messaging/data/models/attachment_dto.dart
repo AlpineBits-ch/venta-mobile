@@ -3,10 +3,10 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'attachment_dto.freezed.dart';
 part 'attachment_dto.g.dart';
 
-/// Server-side processing state for an uploaded attachment — see
+/// Server-side processing state for an uploaded attachment - see
 /// `MessageApi.pollAttachment`, which polls `GET .../attachments/{id}` until
 /// this reaches `complete`. The server only ever reports these two values
-/// (verified against `Messaging.Domain.Enums.AttachmentState`) — there's no
+/// (verified against `Messaging.Domain.Enums.AttachmentState`) - there's no
 /// `Failed` state, so a stuck `pending` is handled with a client-side
 /// timeout rather than waiting for a terminal error state that never comes.
 enum AttachmentState {
@@ -17,9 +17,9 @@ enum AttachmentState {
 }
 
 /// Covers both the minimal shape embedded on a `MessageDto` (id, fileName,
-/// contentType, thumbnailUrl — notably **no `url`**) and the fuller
+/// contentType, thumbnailUrl - notably **no `url`**) and the fuller
 /// standalone shape returned by `GET .../attachments/{id}` while polling
-/// upload status (adds `state`, `sizeBytes`, and a populated `url`) — one
+/// upload status (adds `state`, `sizeBytes`, and a populated `url`) - one
 /// model, extra fields nullable where a given caller doesn't populate them.
 /// Callers needing a download link for a message-embedded attachment must
 /// build it from [id] via `MessageApi.downloadUrl`/`thumbnailUrl`, since the

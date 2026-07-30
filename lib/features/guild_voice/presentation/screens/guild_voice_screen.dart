@@ -16,12 +16,12 @@ import '../../bloc/guild_voice_cubit.dart';
 
 /// Full-screen "in-call" view for the currently joined guild voice channel.
 /// Pushed via the root navigator (see `VoiceStatusBar`/`GuildDetailScreen`),
-/// poppable at any time — leaving this screen does not disconnect, matching
+/// poppable at any time - leaving this screen does not disconnect, matching
 /// Discord: voice stays connected while browsing text channels, and this
 /// view is just one way of looking at it.
 ///
 /// Deliberately always-dark regardless of the app's light/dark theme
-/// setting — see the matching note in `CallScreen`.
+/// setting - see the matching note in `CallScreen`.
 class GuildVoiceScreen extends StatelessWidget {
   const GuildVoiceScreen({super.key});
 

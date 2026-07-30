@@ -21,11 +21,11 @@ import '../widgets/server_rail_icon.dart';
 import 'route_paths.dart';
 
 /// Persistent chrome for the authenticated app: a docked server-icon rail on
-/// the left (always visible — Discord mobile does *not* hide this behind a
+/// the left (always visible - Discord mobile does *not* hide this behind a
 /// drawer) with the current nav branch's content pane to its right. Tapping
 /// into an actual conversation/channel pushes a full-screen route *outside*
 /// this shell (see `RoutePaths.conversation`/`.serverChannel` in
-/// `app_router.dart`), which is where the back button belongs — going back
+/// `app_router.dart`), which is where the back button belongs - going back
 /// returns here with the rail still in place.
 class AppShell extends StatefulWidget {
   const AppShell({
@@ -170,7 +170,7 @@ class _AppShellState extends State<AppShell> {
       _callScreenShown = false;
       Navigator.of(context, rootNavigator: true).pop();
     }
-    // Shown from the shell's own context, not `CallScreen`'s — its route is
+    // Shown from the shell's own context, not `CallScreen`'s - its route is
     // being popped in the same beat this fires, so a SnackBar raised from
     // inside it would vanish with the route before anyone saw it.
     final notice = state.disconnectNotice;

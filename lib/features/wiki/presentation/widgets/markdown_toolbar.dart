@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Inserts markdown syntax around the current selection (or at the cursor)
-/// in [controller] — the "raw markdown" editing affordance mobile uses in
+/// in [controller] - the "raw markdown" editing affordance mobile uses in
 /// place of Alpine's TipTap WYSIWYG editor.
 class MarkdownToolbar extends StatelessWidget {
   const MarkdownToolbar({super.key, required this.controller});

@@ -17,6 +17,8 @@ import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/theme/hex_color.dart';
+import '../../../conversations/data/conversation_repository.dart';
+import '../../../conversations/data/models/conversation_dto.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/channel_dto.dart';
 import '../../../guilds/data/models/guild_member_dto.dart';
@@ -34,6 +36,7 @@ import 'bot_command_options_dialog.dart';
 import 'gif_picker_sheet.dart';
 import 'message_attachment_view.dart';
 import 'message_search_screen.dart';
+import 'pinned_messages_screen.dart';
 import 'reaction_bar.dart';
 import 'reaction_picker_sheet.dart';
 
@@ -41,7 +44,7 @@ const _imageExtensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'bmp'};
 
 final _inviteUrlRe = RegExp(r'https://venta\.gg/invite/([A-Za-z0-9_-]+)');
 
-/// Flavor-text rotations for join/leave system messages — kept verbatim from
+/// Flavor-text rotations for join/leave system messages - kept verbatim from
 /// desktop's locale strings (`MESSAGE.SYSTEM.GUILD_MEMBER_JOIN/LEAVE.*`) so
 /// the same server-assigned `systemMessageVariant` index reads identically
 /// on both clients.
@@ -71,7 +74,7 @@ const _leaveVariants = [
   '%USER% is no longer with us',
 ];
 
-/// Client-only commands that don't hit a bot — matches desktop's
+/// Client-only commands that don't hit a bot - matches desktop's
 /// `COMMANDS` in `commands.ts`.
 class _LocalCommand {
   const _LocalCommand({required this.name, required this.description});
@@ -84,7 +87,7 @@ const _localCommands = [
   _LocalCommand(name: 'gif', description: 'Search for a GIF'),
 ];
 
-/// One row in the `/`-trigger suggestion overlay — either a local command or
+/// One row in the `/`-trigger suggestion overlay - either a local command or
 /// a bot-registered one, matching desktop's merged `ComposerCommandItem`
 /// list.
 sealed class _CommandSuggestion {
@@ -107,7 +110,7 @@ class _BotSuggestion extends _CommandSuggestion {
 }
 
 /// One file the user has attached but not yet (or not successfully)
-/// uploaded — tracked as local composer state, mirroring desktop's
+/// uploaded - tracked as local composer state, mirroring desktop's
 /// `AttachedFile`. Mutated in place and surfaced via `setState`.
 class _PendingAttachment {
   _PendingAttachment({
@@ -125,7 +128,7 @@ class _PendingAttachment {
 }
 
 /// The message list + composer, shared by DM conversations and guild
-/// channels alike — this is the concrete payoff of parameterizing
+/// channels alike - this is the concrete payoff of parameterizing
 /// `MessageThreadBloc`/`MessageRepository` by conversation-or-channel id
 /// instead of writing two near-identical screens.
 class ThreadView extends StatefulWidget {
@@ -142,7 +145,7 @@ class ThreadView extends StatefulWidget {
   final String myUserId;
   final List<Widget>? actions;
 
-  /// Set only for guild channels — gates bot-command discovery/autocomplete,
+  /// Set only for guild channels - gates bot-command discovery/autocomplete,
   /// since bots (and therefore slash commands) only exist inside guilds.
   final String? guildId;
 
@@ -175,12 +178,20 @@ class _ThreadViewState extends State<ThreadView> {
   int _mentionStart = -1;
   String _mentionTrigger = '@';
 
+  /// Whether the caller may pin/unpin messages here - always true for DMs
+  /// (any conversation member may pin), gated on the `PinMessages` guild
+  /// permission for channels. Starts `false` for guild channels so the Pin
+  /// action doesn't flash on then disappear once the permission check lands.
+  bool _canPinMessages = false;
+
   @override
   void initState() {
     super.initState();
+    _canPinMessages = widget.guildId == null;
     _textController.addListener(_onTextChanged);
     _loadBotCommands();
     _loadGuildMembers();
+    _loadPinPermission();
   }
 
   @override
@@ -247,9 +258,9 @@ class _ThreadViewState extends State<ThreadView> {
     context.read<MessageThreadBloc>().add(MessageDeleteRequested(message.id));
   }
 
-  /// Long-press action sheet — Reply / Edit / Delete, mirroring the message
-  /// actions already established for other pickers in this composer (bottom
-  /// sheet with a leading icon per row).
+  /// Long-press action sheet - Reply / Pin / Edit / Delete, mirroring the
+  /// message actions already established for other pickers in this composer
+  /// (bottom sheet with a leading icon per row).
   Future<void> _showMessageActions(MessageDto message) async {
     final isMine = message.authorId == widget.myUserId;
     final action = await showModalBottomSheet<String>(
@@ -262,6 +273,16 @@ class _ThreadViewState extends State<ThreadView> {
               title: const Text('Reply'),
               onTap: () => Navigator.pop(context, 'reply'),
             ),
+            if (_canPinMessages)
+              ListTile(
+                leading: Icon(
+                  message.isPinned
+                      ? Icons.push_pin
+                      : Icons.push_pin_outlined,
+                ),
+                title: Text(message.isPinned ? 'Unpin' : 'Pin'),
+                onTap: () => Navigator.pop(context, 'pin'),
+              ),
             if (isMine) ...[
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
@@ -288,6 +309,8 @@ class _ThreadViewState extends State<ThreadView> {
     switch (action) {
       case 'reply':
         _startReply(message);
+      case 'pin':
+        context.read<MessageThreadBloc>().add(MessagePinToggled(message.id));
       case 'edit':
         _startEdit(message);
       case 'delete':
@@ -295,8 +318,35 @@ class _ThreadViewState extends State<ThreadView> {
     }
   }
 
+  Future<void> _loadPinPermission() async {
+    final guildId = widget.guildId;
+    if (guildId == null) return;
+    try {
+      final repository = getIt<GuildRepository>();
+      final self = await repository.getOwnMember(guildId);
+      final ownerId = repository.cachedById(guildId)?.ownerId;
+      final effective = ownerId != null
+          ? self.effectivePermissions(ownerId)
+          : self.permissions;
+      if (mounted) {
+        setState(() => _canPinMessages = effective.has('PinMessages'));
+      }
+    } catch (_) {
+      // Leave it hidden - still enforced server-side on every pin attempt.
+    }
+  }
+
+  void _openPinnedMessages() {
+    final repository = context.read<MessageThreadBloc>().repository;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PinnedMessagesScreen(repository: repository),
+      ),
+    );
+  }
+
   /// Cache-then-fetch lookup for a reply reference, same idea as
-  /// `ProfileResolver` — checks the already-loaded page first, then the
+  /// `ProfileResolver` - checks the already-loaded page first, then the
   /// local resolve cache, then fetches once (guarded against duplicate
   /// in-flight fetches) and rebuilds when it lands.
   MessageDto? _resolveReply(String id) {
@@ -317,7 +367,7 @@ class _ThreadViewState extends State<ThreadView> {
   }
 
   /// Cache-then-fetch a mentioned user's display name, same idiom as
-  /// [_resolveReply] and `ProfileResolver` — used to tell a real `@mention`
+  /// [_resolveReply] and `ProfileResolver` - used to tell a real `@mention`
   /// (someone actually tagged in `message.mentions`) apart from someone
   /// merely typing an `@`-prefixed word.
   String? _resolveMentionName(String userId) {
@@ -346,7 +396,7 @@ class _ThreadViewState extends State<ThreadView> {
       final commands = await getIt<BotCommandApi>().getCommands(guildId);
       if (mounted) setState(() => _botCommands = commands);
     } catch (_) {
-      // Autocomplete just won't offer bot commands — not worth surfacing.
+      // Autocomplete just won't offer bot commands - not worth surfacing.
     }
   }
 
@@ -357,13 +407,13 @@ class _ThreadViewState extends State<ThreadView> {
       final members = await getIt<GuildRepository>().getMembers(guildId);
       if (mounted) setState(() => _guildMembers = members);
     } catch (_) {
-      // Autocomplete just won't offer @mention candidates — not worth
+      // Autocomplete just won't offer @mention candidates - not worth
       // surfacing, same tolerance as the bot-command load above.
     }
   }
 
   /// Display name → user id for everyone `@mention` autocomplete (and the
-  /// final send-time mention scan) should consider — guild members for a
+  /// final send-time mention scan) should consider - guild members for a
   /// channel, the other DM participant(s) otherwise.
   Map<String, String> get _mentionCandidateNames {
     final names = <String, String>{};
@@ -383,7 +433,7 @@ class _ThreadViewState extends State<ThreadView> {
     return names;
   }
 
-  /// Role name → role id, for `@role` autocomplete/rendering — guild
+  /// Role name → role id, for `@role` autocomplete/rendering - guild
   /// channels only, excludes the implicit `@everyone` role (that's handled
   /// as its own literal broadcast token, not a "mention this role").
   Map<String, String> get _roleCandidateNames {
@@ -402,7 +452,7 @@ class _ThreadViewState extends State<ThreadView> {
     return getIt<GuildRepository>().cachedById(guildId)?.channels ?? const [];
   }
 
-  /// Channel name → channel id for `#channel` autocomplete — text channels
+  /// Channel name → channel id for `#channel` autocomplete - text channels
   /// win a same-named tie with a voice channel, matching the render-side
   /// tie-break in `_MessageBody` (and Alpine's own `#general` resolution).
   Map<String, String> get _channelCandidateNames {
@@ -508,10 +558,10 @@ class _ThreadViewState extends State<ThreadView> {
 
   /// Re-scans the final submitted text for `@name`/`@everyone`/`@here`
   /// runs matching a known candidate, rather than trusting autocomplete-
-  /// insertion bookkeeping — robust to the user editing/removing an
+  /// insertion bookkeeping - robust to the user editing/removing an
   /// inserted mention afterwards. `@everyone`/`@here` are flagged whenever
   /// they literally appear (no rich "chip" editor here to gate on an
-  /// explicit selection like desktop's composer does) — the server is
+  /// explicit selection like desktop's composer does) - the server is
   /// still the source of truth on whether the sender may actually notify.
   _ExtractedMentions _extractMentions(String text) {
     final userNames = _mentionCandidateNames;
@@ -596,7 +646,7 @@ class _ThreadViewState extends State<ThreadView> {
     final text = _textController.text;
     if (_pendingAttachments.any((p) => p.uploading)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Still uploading — hang on a moment.')),
+        const SnackBar(content: Text('Still uploading - hang on a moment.')),
       );
       return;
     }
@@ -684,9 +734,21 @@ class _ThreadViewState extends State<ThreadView> {
 
   void _openSearch() {
     final repository = context.read<MessageThreadBloc>().repository;
+    // Only DMs can be MLS-encrypted today - guild channels are always
+    // Plain, so search is always available there.
+    final isEncrypted =
+        widget.guildId == null &&
+        getIt<ConversationRepository>().cached
+                .where((c) => c.id == repository.conversationId)
+                .firstOrNull
+                ?.encryptionState ==
+            ConversationEncryption.encrypted;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => MessageSearchScreen(repository: repository),
+        builder: (_) => MessageSearchScreen(
+          repository: repository,
+          isEncrypted: isEncrypted,
+        ),
       ),
     );
   }
@@ -694,7 +756,7 @@ class _ThreadViewState extends State<ThreadView> {
   /// Guild channels reuse the existing full `GuildMembersScreen` outright
   /// (kick/ban/role management already lives there); DM/group conversations
   /// get a lightweight read-only sheet since there's no equivalent screen
-  /// for that side yet and it doesn't need one — just names and avatars.
+  /// for that side yet and it doesn't need one - just names and avatars.
   void _openMembers() {
     final guildId = widget.guildId;
     if (guildId != null) {
@@ -750,12 +812,16 @@ class _ThreadViewState extends State<ThreadView> {
     context.read<MessageThreadBloc>().add(ThreadMessageSubmitted(url));
   }
 
-  /// Inserts an emoji glyph into the composer at the cursor — reuses the
+  /// Inserts an emoji glyph into the composer at the cursor - reuses the
   /// same picker sheet the reaction bar's "+" already opens, just applied to
   /// the text field instead of toggling a reaction.
   Future<void> _pickEmojiForComposer() async {
-    final emoji = await showReactionPickerSheet(context);
-    if (emoji == null || !mounted) return;
+    // No guildId here - custom emoji have no rendering story in composed
+    // text yet (see the emoji feature's known limitations), so this stays
+    // Unicode-only.
+    final picked = await showReactionPickerSheet(context);
+    if (picked == null || !mounted) return;
+    final emoji = picked.emoji;
     final selection = _textController.selection;
     final text = _textController.text;
     final start = selection.start >= 0 ? selection.start : text.length;
@@ -814,8 +880,30 @@ class _ThreadViewState extends State<ThreadView> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Row(
+          children: [
+            // Guild channels are titled "#channel-name", which already
+            // carries its own identity - only DMs get a leading avatar,
+            // matching Discord's conversation header.
+            if (widget.guildId == null && widget.mentionableUserIds.isNotEmpty) ...[
+              UserAvatar(
+                userId: widget.mentionableUserIds.first,
+                radius: AppRadii.avatarSmall,
+                showStatus: true,
+              ),
+              const SizedBox(width: AppSpacing.s),
+            ],
+            Expanded(
+              child: Text(widget.title, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.push_pin_outlined),
+            tooltip: 'Pinned Messages',
+            onPressed: _openPinnedMessages,
+          ),
           IconButton(icon: const Icon(Icons.search), onPressed: _openSearch),
           IconButton(
             icon: const Icon(Icons.people_outline),
@@ -839,7 +927,7 @@ class _ThreadViewState extends State<ThreadView> {
                   child = Center(
                     key: const ValueKey('empty'),
                     child: Text(
-                      'No messages yet — say hi!',
+                      'No messages yet - say hi!',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurface.withValues(
                           alpha: 0.5,
@@ -910,22 +998,25 @@ class _ThreadViewState extends State<ThreadView> {
                               : null,
                           resolveMentionName: _resolveMentionName,
                           guildId: widget.guildId,
-                          onReactionToggle: (emoji) =>
+                          onReactionToggle: (emoji, emojiId) =>
                               context.read<MessageThreadBloc>().add(
                                 ReactionToggled(
                                   messageId: message.id,
                                   emoji: emoji,
+                                  emojiId: emojiId,
                                 ),
                               ),
                           onAddReaction: () async {
-                            final emoji = await showReactionPickerSheet(
+                            final picked = await showReactionPickerSheet(
                               context,
+                              guildId: widget.guildId,
                             );
-                            if (emoji == null || !context.mounted) return;
+                            if (picked == null || !context.mounted) return;
                             context.read<MessageThreadBloc>().add(
                               ReactionToggled(
                                 messageId: message.id,
-                                emoji: emoji,
+                                emoji: picked.emoji,
+                                emojiId: picked.emojiId,
                               ),
                             );
                           },
@@ -1100,7 +1191,7 @@ class _ThreadViewState extends State<ThreadView> {
   }
 }
 
-/// One row offered by the `@`-trigger autocomplete — either a real user
+/// One row offered by the `@`-trigger autocomplete - either a real user
 /// (avatar leading) or a role (colored dot leading), merged into one list
 /// sorted by name.
 sealed class _MentionSuggestionEntry {
@@ -1126,7 +1217,7 @@ class _ChannelMentionEntry extends _MentionSuggestionEntry {
   final String channelId;
 }
 
-/// Extracted from the composer's final text at submit time — see
+/// Extracted from the composer's final text at submit time - see
 /// `_ThreadViewState._extractMentions`.
 class _ExtractedMentions {
   const _ExtractedMentions({
@@ -1141,7 +1232,7 @@ class _ExtractedMentions {
   final bool here;
 }
 
-/// The `@`-trigger autocomplete dropdown — same overlay treatment as
+/// The `@`-trigger autocomplete dropdown - same overlay treatment as
 /// [_CommandSuggestionList], offering guild members/roles or DM
 /// participants.
 class _MentionSuggestionList extends StatelessWidget {
@@ -1191,7 +1282,7 @@ class _MentionSuggestionList extends StatelessWidget {
   }
 }
 
-/// The `/`-trigger autocomplete dropdown — merges local and bot commands
+/// The `/`-trigger autocomplete dropdown - merges local and bot commands
 /// into one flat list, matching desktop's suggestion overlay.
 class _CommandSuggestionList extends StatelessWidget {
   const _CommandSuggestionList({
@@ -1246,7 +1337,7 @@ class _CommandSuggestionList extends StatelessWidget {
   }
 }
 
-/// One thumbnail/chip in the composer's pending-attachment strip — shows an
+/// One thumbnail/chip in the composer's pending-attachment strip - shows an
 /// upload spinner while in flight, an error icon on failure, and a remove
 /// button always.
 class _PendingAttachmentChip extends StatelessWidget {
@@ -1344,7 +1435,7 @@ String _formatMessageTime(DateTime dt) {
 }
 
 /// Discord-style row: avatar + author name (bold, a step above body size)
-/// shown once per consecutive run of same-author messages — [showHeader]
+/// shown once per consecutive run of same-author messages - [showHeader]
 /// is false for subsequent messages in that run, which just indent under
 /// where the name was instead of repeating the avatar/name.
 class _MessageBubble extends StatelessWidget {
@@ -1371,7 +1462,7 @@ class _MessageBubble extends StatelessWidget {
   final bool isMe;
   final bool failed;
   final String myUserId;
-  final ValueChanged<String> onReactionToggle;
+  final void Function(String emoji, String? emojiId) onReactionToggle;
   final VoidCallback onAddReaction;
   final VoidCallback onLongPress;
   final String? Function(String userId) resolveMentionName;
@@ -1383,7 +1474,7 @@ class _MessageBubble extends StatelessWidget {
   final Widget? replyToWidget;
 
   /// Width the avatar occupies (diameter) plus the gap before the text
-  /// column — grouped messages indent by this same amount so the text
+  /// column - grouped messages indent by this same amount so the text
   /// lines up under the name instead of the avatar.
   static const _leadingWidth = AppRadii.avatarMedium * 2 + AppSpacing.s;
 
@@ -1444,6 +1535,14 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 ),
               ],
+              if (message.isPinned) ...[
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.push_pin,
+                  size: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
             ],
           ),
         if (isEditing)
@@ -1464,6 +1563,7 @@ class _MessageBubble extends StatelessWidget {
         MessageReactionBar(
           reactions: message.reactions,
           myUserId: myUserId,
+          guildId: guildId,
           onToggle: onReactionToggle,
           onAddPressed: onAddReaction,
         ),
@@ -1510,7 +1610,7 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-/// Just the GIF/text/attachment body of a message — split out so
+/// Just the GIF/text/attachment body of a message - split out so
 /// [_MessageBubble] doesn't duplicate it between its headered and
 /// grouped-continuation layouts.
 class _MessageBody extends StatelessWidget {
@@ -1643,7 +1743,7 @@ class _MessageBody extends StatelessWidget {
   }
 }
 
-/// Matches `@user`, `@role`, `@everyone`/`@here`, and `#channel` — but only
+/// Matches `@user`, `@role`, `@everyone`/`@here`, and `#channel` - but only
 /// when the name is one of the message's actual known references (resolved
 /// user/role names, or the message's own `mentionsEveryone`/`mentionsHere`
 /// flags), mirroring Alpine's distinction between a real mention and
@@ -1772,7 +1872,7 @@ class _MentionElementBuilder extends MarkdownElementBuilder {
 }
 
 /// Inline text-edit affordance shown in place of [_MessageBody] while a
-/// message is being edited — Enter saves, Shift+Enter inserts a newline,
+/// message is being edited - Enter saves, Shift+Enter inserts a newline,
 /// matching the composer's own submit-on-enter convention.
 class _MessageEditField extends StatelessWidget {
   const _MessageEditField({
@@ -1835,7 +1935,7 @@ class _MessageEditField extends StatelessWidget {
 }
 
 /// Quoted reference to the message being replied to, shown above the
-/// header of the replying message — matches desktop's reply-reference row
+/// header of the replying message - matches desktop's reply-reference row
 /// (author name + snippet). Shows an italic placeholder while the
 /// referenced message is still being resolved or if it's gone.
 class _ReplyQuoteRow extends StatelessWidget {
@@ -1898,7 +1998,7 @@ class _ReplyQuoteRow extends StatelessWidget {
   }
 }
 
-/// Centered flavor-text row for join/leave/generic system events — no
+/// Centered flavor-text row for join/leave/generic system events - no
 /// avatar, no reactions, no long-press actions, matching desktop's
 /// visually-distinct `SystemMessageComponent`.
 class _SystemMessageRow extends StatelessWidget {
@@ -1946,7 +2046,7 @@ class _SystemMessageRow extends StatelessWidget {
   }
 }
 
-/// Compact inline card for an invite-type message — reuses the existing
+/// Compact inline card for an invite-type message - reuses the existing
 /// [InviteDialog] for preview/join instead of duplicating that flow here.
 class _InviteMessageCard extends StatelessWidget {
   const _InviteMessageCard({required this.code});
@@ -1986,7 +2086,7 @@ class _InviteMessageCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.s),
-              const Text('Server Invite — tap to view'),
+              const Text('Server Invite - tap to view'),
             ],
           ),
         ),

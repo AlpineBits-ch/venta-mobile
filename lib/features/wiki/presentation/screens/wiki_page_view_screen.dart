@@ -54,7 +54,7 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
       final permissions = await loadGuildPermissions(widget.guildId);
       if (mounted) setState(() => _permissions = permissions);
     } catch (_) {
-      // Leave edit/history/delete hidden — server still enforces on write.
+      // Leave edit/history/delete hidden - server still enforces on write.
     }
   }
 

@@ -7,19 +7,19 @@ import '../routing/route_paths.dart';
 import 'call_kit_service.dart';
 import 'push_token_api.dart';
 
-/// Marks a push as call-signaling rather than a normal notification — see
+/// Marks a push as call-signaling rather than a normal notification - see
 /// `docs/native-call-push-backend-spec.md`. Anything with this data type is
 /// left entirely to [CallKitService] (via native PushKit/FCM delivery); this
 /// service only ever surfaces `message`-type pushes as a visible banner.
 const _callPushType = 'call';
 
-/// Must be a top-level (or static) function — the platform relaunches a
+/// Must be a top-level (or static) function - the platform relaunches a
 /// separate background isolate to run it, so it can't close over any state
 /// from the running app (no [getIt], no existing Dio/auth session).
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (message.data['type'] == _callPushType) {
-    // Android only — iOS call pushes arrive via PushKit straight into
+    // Android only - iOS call pushes arrive via PushKit straight into
     // native Swift and never reach this FCM background handler at all.
     await showCallKitFromPushData(message.data);
     return;
@@ -27,7 +27,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await PushNotificationService.showLocalNotification(message);
 }
 
-/// Regular (non-call) push notifications — the Flutter counterpart to
+/// Regular (non-call) push notifications - the Flutter counterpart to
 /// Alpine's `NotificationService`/`UserTokenService`. Registers this
 /// install's push token with the backend and surfaces incoming-message
 /// pushes as a local notification while the app is foregrounded (the OS
@@ -35,7 +35,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// sends a `Notification`-block FCM message / `.Alert`-type APNs push).
 ///
 /// Call-signaling pushes are a separate, silent, data-only path owned by
-/// [CallKitService] — this service explicitly ignores them.
+/// [CallKitService] - this service explicitly ignores them.
 class PushNotificationService {
   PushNotificationService({required this.api});
 
@@ -52,7 +52,7 @@ class PushNotificationService {
   final _navigationController = StreamController<String>.broadcast();
 
   /// Route paths to push (via the root [GoRouter]) when the user taps a
-  /// message notification — synthesized from the tapped push's
+  /// message notification - synthesized from the tapped push's
   /// `conversationId` through the same `venta://conversation/<id>` shape
   /// [DeepLinkHandler] already resolves.
   Stream<String> get onNotificationTap => _navigationController.stream;
@@ -98,11 +98,11 @@ class PushNotificationService {
     if (initialMessage != null) _handleTap(initialMessage);
   }
 
-  /// Both platforms register their FCM registration token — the backend
+  /// Both platforms register their FCM registration token - the backend
   /// sends all regular push through FCM (see `PushNotifiaction.cs`), which
   /// relays to APNs internally for iOS. Both land in the same generic
   /// `/device-token` field server-side. VoIP/CallKit push is the one
-  /// exception and uses a separate PushKit token — see `call_kit_service.dart`.
+  /// exception and uses a separate PushKit token - see `call_kit_service.dart`.
   Future<void> _registerToken() async {
     final messaging = FirebaseMessaging.instance;
     final token = await messaging.getToken();

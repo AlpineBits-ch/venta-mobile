@@ -14,7 +14,7 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     // Started/stopped immediately before/after flutter_webrtc's
-                    // getDisplayMedia — see ScreenCaptureService for why this
+                    // getDisplayMedia - see ScreenCaptureService for why this
                     // is required at all.
                     "start" -> {
                         startForegroundService(Intent(this, ScreenCaptureService::class.java))

@@ -5,7 +5,7 @@ import '../theme/status_colors_extension.dart';
 
 /// A small presence indicator meant to sit at an avatar's bottom-right
 /// corner (wrap the avatar in a [Stack] and [Positioned] this over it).
-/// `offline`/`hidden` render nothing — an absent dot is presence
+/// `offline`/`hidden` render nothing - an absent dot is presence
 /// information too, and avoids cluttering member lists with a grey dot on
 /// every inactive row.
 class StatusDot extends StatelessWidget {

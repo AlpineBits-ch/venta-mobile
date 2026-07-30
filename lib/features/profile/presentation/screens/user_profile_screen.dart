@@ -32,7 +32,7 @@ String _statusLabel(OnlineStatus status) => switch (status) {
   OnlineStatus.offline => 'Offline',
 };
 
-/// Read-only view of *another* user's profile — the counterpart to
+/// Read-only view of *another* user's profile - the counterpart to
 /// `ProfileSettingsScreen` (which is self-only and editable). Reached by
 /// tapping a `UserAvatar` or a message bubble anywhere in the app.
 class UserProfileScreen extends StatelessWidget {

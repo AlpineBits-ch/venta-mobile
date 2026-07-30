@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$AuditLogEntryDto {
 
- String get id; String get guildId; String get actorUserId;@JsonKey(unknownEnumValue: AuditActionType.unknown) AuditActionType get actionType; String? get targetId;/// Raw JSON string, shape varies per [actionType] — parsed defensively.
+ String get id; String get guildId; String get actorUserId;@JsonKey(unknownEnumValue: AuditActionType.unknown) AuditActionType get actionType; String? get targetId;/// Raw JSON string, shape varies per [actionType] - parsed defensively.
  String? get metadata; DateTime? get createdAt;
 /// Create a copy of AuditLogEntryDto
 /// with the given fields replaced by the non-null parameter values.
@@ -218,7 +218,7 @@ class _AuditLogEntryDto implements AuditLogEntryDto {
 @override final  String actorUserId;
 @override@JsonKey(unknownEnumValue: AuditActionType.unknown) final  AuditActionType actionType;
 @override final  String? targetId;
-/// Raw JSON string, shape varies per [actionType] — parsed defensively.
+/// Raw JSON string, shape varies per [actionType] - parsed defensively.
 @override final  String? metadata;
 @override final  DateTime? createdAt;
 

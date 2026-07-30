@@ -2,7 +2,7 @@ default_platform(:ios)
 
 # The .ipa itself is built by `flutter build ipa` in the GitHub Actions
 # workflow (Flutter already knows how to archive/export a Flutter+Xcode
-# project correctly) — fastlane's only job here is the TestFlight upload,
+# project correctly) - fastlane's only job here is the TestFlight upload,
 # authenticated via an App Store Connect API key so no Apple ID/2FA prompt
 # is ever needed in CI.
 platform :ios do

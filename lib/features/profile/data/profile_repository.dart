@@ -2,7 +2,7 @@ import '../../../core/realtime/realtime_service.dart';
 import 'profile_api.dart';
 import 'models/profile_dto.dart';
 
-/// Caches profiles by user id (the id most other DTOs reference — messages,
+/// Caches profiles by user id (the id most other DTOs reference - messages,
 /// relationships, conversation members) so features can resolve a display
 /// name/avatar without a network round trip once it's been seen once.
 /// Also the sole listener for `presence.*` realtime events.

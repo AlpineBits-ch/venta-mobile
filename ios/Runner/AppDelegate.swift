@@ -6,14 +6,14 @@ import PushKit
 import UIKit
 import WebRTC
 
-// PushKit/CallKit wiring for native incoming-call UI — see
+// PushKit/CallKit wiring for native incoming-call UI - see
 // docs/native-call-push-backend-spec.md for the payload this expects from
 // the backend's VoIP push, and CallKitService (Dart) for the other half.
 //
 // Owns a CXProvider directly rather than going through a third-party plugin
 // (flutter_callkit_incoming, still used on Android). Reporting a call to
 // CallKit now has zero dependency on a Flutter engine, plugin registrar, or
-// any Dart code existing yet — PushKit's report-the-call deadline is strict
+// any Dart code existing yet - PushKit's report-the-call deadline is strict
 // enough (miss it and the OS SIGKILLs the process with FRONTBOARD
 // 0xbaadca11, then stops delivering future VoIP pushes) that routing it
 // through anything requiring an engine boot is fragile by construction; see
@@ -21,7 +21,7 @@ import WebRTC
 //
 // Relaying a user action (answer/decline/end) back to Dart has no such
 // deadline, so that path is allowed to lazily boot a real Flutter engine if
-// nothing is running yet — see `ensureEngineForActionRelay`.
+// nothing is running yet - see `ensureEngineForActionRelay`.
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, PKPushRegistryDelegate,
   CXProviderDelegate
@@ -61,7 +61,7 @@ import WebRTC
   // update and, crucially, incoming VoIP pushes the moment the registry is
   // deallocated. As a local in didFinishLaunchingWithOptions it died the
   // instant that method returned, so a killed app relaunched by a VoIP push had
-  // no live registry to hand the push to — the call never arrived.
+  // no live registry to hand the push to - the call never arrived.
   private var voipRegistry: PKPushRegistry?
   private var voipToken: String?
   private var callKitChannel: FlutterMethodChannel?
@@ -212,7 +212,7 @@ import WebRTC
   }
 
   // User-initiated end from the app's own in-call UI. Unlike the remote case
-  // above, this must go through a CXEndCallAction transaction — that's what
+  // above, this must go through a CXEndCallAction transaction - that's what
   // lets CallKit own the teardown: it ends the call *and* deactivates the audio
   // session (firing provider(_:didDeactivate:)), clearing the "call in
   // progress" state. reportCall(endedAt:) leaves a self-activated session (see
@@ -256,7 +256,7 @@ import WebRTC
   // Put the shared AVAudioSession into a call-capable category *before* CallKit
   // tries to activate it. When the user answers, CallKit activates the app's
   // audio session synchronously; if it's still in the default (solo-ambient)
-  // category — which can't record — that activation fails and iOS immediately
+  // category - which can't record - that activation fails and iOS immediately
   // tears the call down showing "Call Failed" on the native screen. WebRTC only
   // switches the category to playAndRecord much later, when it opens the mic
   // during connect, which is far too late. We set only the category/mode, never
@@ -277,8 +277,8 @@ import WebRTC
   // The core of getting two-way audio right under CallKit. By default WebRTC
   // (flutter_webrtc) runs RTCAudioSession in *automatic* mode: it brings its
   // audio unit up the instant an audio track is ready, activating the session
-  // itself. Under CallKit that's the wrong owner — CallKit, not WebRTC, decides
-  // when the session goes live — and the mismatch produced every symptom we
+  // itself. Under CallKit that's the wrong owner - CallKit, not WebRTC, decides
+  // when the session goes live - and the mismatch produced every symptom we
   // saw: mic dead on the first call (WebRTC opened the unit before CallKit had
   // the session, so the record bus never armed), "Call Failed" answering from
   // the background (WebRTC racing CallKit for activation), and it only "working
@@ -299,7 +299,7 @@ import WebRTC
     // the session isn't active yet (Dart hasn't reached getUserMedia), so audio
     // stays off until didActivate. But when Dart answered from the app's own UI,
     // WebRTC already activated the session during connect and CallKit may not
-    // re-fire didActivate — seed from the current state so audio isn't stranded.
+    // re-fire didActivate - seed from the current state so audio isn't stranded.
     let wasActive = rtc.isActive
     rtc.useManualAudio = true
     rtc.isAudioEnabled = wasActive
@@ -326,7 +326,7 @@ import WebRTC
   }
 
   // Apple requires reporting the call to CallKit synchronously within this
-  // callback, every time, with no exceptions — an app that doesn't gets
+  // callback, every time, with no exceptions - an app that doesn't gets
   // silently killed by the OS and future VoIP pushes stop being delivered.
   func pushRegistry(
     _ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload,
@@ -339,7 +339,7 @@ import WebRTC
 
     let id = payload.dictionaryPayload["callId"] as? String ?? UUID().uuidString
 
-    // "end" cancels a ring already shown on this device — sent when the call
+    // "end" cancels a ring already shown on this device - sent when the call
     // was answered/declined/timed out on another device or by the caller.
     // Without this a phantom CallKit ring sits there until its own ~30s
     // timeout. See docs/native-call-push-backend-spec.md.
@@ -379,7 +379,7 @@ import WebRTC
 
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
     // Set the call category so CallKit's activation succeeds, and hand audio
-    // control to CallKit (manual mode) so WebRTC can't race it — this is what
+    // control to CallKit (manual mode) so WebRTC can't race it - this is what
     // fixes background "Call Failed" and first-call one-way audio. Both must be
     // in place before fulfilling, since CallKit activates right after.
     configureAudioSession()
@@ -399,7 +399,7 @@ import WebRTC
     let id = callIdsByUUID.removeValue(forKey: action.callUUID)
     selfInitiatedAnswers.remove(action.callUUID)
     endManualCallAudio()
-    // Dart's own hang-up drove this end (requestEndCall) — it already tore its
+    // Dart's own hang-up drove this end (requestEndCall) - it already tore its
     // call state down, so don't relay it back. The map cleanup above also makes
     // the redundant iosBridge.endCall that follows a *native* end a no-op.
     guard !wasSelfInitiated, let id else { return }

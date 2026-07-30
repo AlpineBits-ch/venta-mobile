@@ -5,7 +5,7 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
 
-/// Rename/describe/slowmode/delete for a single channel — mirrors desktop's
+/// Rename/describe/slowmode/delete for a single channel - mirrors desktop's
 /// `ChannelOverviewComponent`. Permission override editing (per-role/
 /// per-member allow/deny) isn't built here; that's the same scope cut as
 /// the guild role editor (display/edit of the simple fields only).

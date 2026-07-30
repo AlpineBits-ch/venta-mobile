@@ -5,7 +5,7 @@ import 'auth_interceptor.dart';
 
 /// Shared authenticated HTTP client for every feature repository except
 /// [AuthRepository] itself. There's no static `baseUrl` on the underlying
-/// [Dio] — the server can change at login time (self-hosted instances), so
+/// [Dio] - the server can change at login time (self-hosted instances), so
 /// callers build request paths via [url] against [AuthRepository.baseUrl].
 class ApiClient {
   ApiClient({required this.authRepository})

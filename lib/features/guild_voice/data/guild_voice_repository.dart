@@ -51,7 +51,7 @@ class VoiceParticipantJoined extends GuildVoiceEvent {
 }
 
 /// A remote participant published a new track. `kind` is video/screen/
-/// screenAudio — not acted on in this audio-only v1, but still surfaced so
+/// screenAudio - not acted on in this audio-only v1, but still surfaced so
 /// callers can show a badge (e.g. "streaming") without subscribing to it.
 class VoiceTrackPublished extends GuildVoiceEvent {
   const VoiceTrackPublished({
@@ -95,7 +95,7 @@ class VoiceMuteChanged extends GuildVoiceEvent {
 }
 
 /// Deafen implies mute one-way: a `true` deafen event should force the
-/// participant's muted badge on too, but `false` does not auto-unmute —
+/// participant's muted badge on too, but `false` does not auto-unmute -
 /// mirrors Alpine's `onDeafenChanged` handling.
 class VoiceDeafenChanged extends GuildVoiceEvent {
   const VoiceDeafenChanged({
@@ -134,7 +134,7 @@ class VoiceScreenShareStarted extends GuildVoiceEvent {
   final String trackName;
 }
 
-/// Client-side is a no-op beyond clearing the streaming badge — the actual
+/// Client-side is a no-op beyond clearing the streaming badge - the actual
 /// track teardown rides on [VoiceTrackClosed], same as Alpine.
 class VoiceScreenShareStopped extends GuildVoiceEvent {
   const VoiceScreenShareStopped({
@@ -159,7 +159,7 @@ class VoiceMovedToChannel extends GuildVoiceEvent {
 
 /// This device's session in [channelId] was just taken over by another of
 /// the user's own devices joining the same channel. Must tear down local
-/// WebRTC/audio without calling leave — the server already removed it.
+/// WebRTC/audio without calling leave - the server already removed it.
 class VoiceKickedByOtherDevice extends GuildVoiceEvent {
   const VoiceKickedByOtherDevice({
     required this.channelId,
@@ -169,7 +169,7 @@ class VoiceKickedByOtherDevice extends GuildVoiceEvent {
   final String guildId;
 }
 
-/// App-lifetime singleton (like `GuildRepository`/`VoiceRepository`) — voice
+/// App-lifetime singleton (like `GuildRepository`/`VoiceRepository`) - voice
 /// rosters for every voice channel in every guild the user can see need to
 /// stay live even when no voice screen is on-screen, so this can't be scoped
 /// to one joined channel.

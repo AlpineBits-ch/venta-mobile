@@ -4,7 +4,7 @@ import '../../features/profile/data/models/profile_dto.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../di/injector.dart';
 
-/// Resolves a [ProfileDto] by user id — checks `ProfileRepository`'s cache
+/// Resolves a [ProfileDto] by user id - checks `ProfileRepository`'s cache
 /// synchronously first (instant for anyone already seen this session),
 /// otherwise fetches once and rebuilds. Shared by anything that needs a
 /// user's live name/avatar/status (`UserAvatar`, message author headers, …)

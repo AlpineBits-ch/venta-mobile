@@ -45,7 +45,7 @@ class ConversationRepository {
     try {
       await fetch();
     } catch (_) {
-      // Best-effort — the user can still pull-to-refresh.
+      // Best-effort - the user can still pull-to-refresh.
     }
   }
 

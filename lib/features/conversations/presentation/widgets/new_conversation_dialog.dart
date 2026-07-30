@@ -11,12 +11,12 @@ import '../../../friends/data/relationship_repository.dart';
 import '../../data/conversation_api.dart';
 import '../../data/conversation_repository.dart';
 
-/// Start (or reopen) a direct message, or create a named group DM — mirrors
+/// Start (or reopen) a direct message, or create a named group DM - mirrors
 /// desktop's `NewConversationDialogComponent`: pick from your friends list
 /// (locally filtered by name, same as desktop's `filteredFriends`), a single
 /// selection opens/creates a 1:1, two or more prompts for an optional group
 /// name. E2EE group creation is out of scope here (matches this client's
-/// deferred MLS phase) — always creates a Plain conversation.
+/// deferred MLS phase) - always creates a Plain conversation.
 Future<void> showNewConversationDialog(BuildContext context) {
   return showDialog<void>(
     context: context,

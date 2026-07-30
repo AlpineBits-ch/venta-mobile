@@ -4,7 +4,7 @@ part 'bot_command_dto.freezed.dart';
 part 'bot_command_dto.g.dart';
 
 /// Discord's own option-type numbering, reused as-is by the backend (see
-/// `Bots.Application`) — no dedicated server-side enum, just raw ints.
+/// `Bots.Application`) - no dedicated server-side enum, just raw ints.
 /// Only `string`/`integer`/`boolean`/`number` get a typed input in the
 /// options dialog; the rest fall back to a plain text field for a raw id,
 /// matching desktop (`discordOptionInputKind`).

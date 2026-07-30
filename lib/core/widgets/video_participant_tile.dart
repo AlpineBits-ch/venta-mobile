@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
-/// Renders one live camera/screen-share video track — the video-capable
+/// Renders one live camera/screen-share video track - the video-capable
 /// sibling of `CallParticipantTile`. Owns its own `RTCVideoRenderer` and
 /// wraps whatever [track] currently is in a throwaway local `MediaStream`
 /// (flutter_webrtc's renderer only accepts a stream, not a bare track).
 ///
 /// [track] is expected to change *reference* (not mutate) whenever the
-/// underlying `MediaStreamTrack` is replaced/cleared — `MediaStreamTrack`s
+/// underlying `MediaStreamTrack` is replaced/cleared - `MediaStreamTrack`s
 /// can't live in `Equatable` cubit state, so callers re-read the current
 /// track from the webrtc service on every rebuild driven by the cubit's
 /// `videoRevision` counter and pass whatever comes back.
@@ -26,7 +26,7 @@ class VideoParticipantTile extends StatefulWidget {
   final double width;
   final double height;
 
-  /// Mirrors the video horizontally — used for the local front-camera
+  /// Mirrors the video horizontally - used for the local front-camera
   /// self-preview so it behaves like every other camera app.
   final bool mirror;
 

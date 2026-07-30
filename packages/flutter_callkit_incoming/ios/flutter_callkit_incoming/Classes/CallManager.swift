@@ -22,14 +22,14 @@ class CallManager: NSObject {
     
     func startCall(_ data: Data) {
         let handle = CXHandle(type: self.getHandleType(data.handleType), value: data.getEncryptHandle())
-        // Guard against malformed UUID strings — caller layers (Dart, native) sometimes pass
+        // Guard against malformed UUID strings - caller layers (Dart, native) sometimes pass
         // app-internal call identifiers that aren't UUID(8-4-4-4-12) shaped. Force-unwrapping
         // here would crash the host process (was the chronic SnowChat "iPhone caller endCall →
         // process dies" symptom before the Dart-side guard was added). Returning silently is
         // safe: no CallKit call gets registered, and the caller can detect the no-op via
         // its own state machine.
         guard let uuid = UUID(uuidString: data.uuid) else {
-            NSLog("[CallkitIncoming] startCall: invalid UUID '\(data.uuid)' — ignored")
+            NSLog("[CallkitIncoming] startCall: invalid UUID '\(data.uuid)' - ignored")
             return
         }
         let startCallAction = CXStartCallAction(call: uuid, handle: handle)

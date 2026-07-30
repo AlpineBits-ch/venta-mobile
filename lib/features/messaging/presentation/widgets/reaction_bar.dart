@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/di/injector.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../guilds/data/guild_repository.dart';
 import '../../data/models/message_reaction_dto.dart';
 
 class _ReactionGroup {
-  _ReactionGroup(this.emoji);
+  _ReactionGroup(this.emoji, this.emojiId);
   final String emoji;
+  final String? emojiId;
   int count = 0;
   bool hasOwn = false;
 }
 
-/// Grouped, counted reaction pills under a message — tapping a pill toggles
+/// Grouped, counted reaction pills under a message - tapping a pill toggles
 /// the caller's own reaction for that emoji; the trailing `+` opens the full
 /// picker. Own-reaction pills get a brand-tinted fill so "did I react to
 /// this" reads at a glance, matching Alpine's reaction bar.
@@ -21,12 +24,17 @@ class MessageReactionBar extends StatelessWidget {
     required this.myUserId,
     required this.onToggle,
     required this.onAddPressed,
+    this.guildId,
   });
 
   final List<MessageReactionDto> reactions;
   final String myUserId;
-  final ValueChanged<String> onToggle;
+  final void Function(String emoji, String? emojiId) onToggle;
   final VoidCallback onAddPressed;
+
+  /// Set for guild channels - resolves `emojiId` against the guild's
+  /// cached custom emoji list to render the actual image.
+  final String? guildId;
 
   @override
   Widget build(BuildContext context) {
@@ -34,13 +42,18 @@ class MessageReactionBar extends StatelessWidget {
 
     final groups = <String, _ReactionGroup>{};
     for (final reaction in reactions) {
+      final key = reaction.emojiId ?? reaction.emoji;
       final group = groups.putIfAbsent(
-        reaction.emoji,
-        () => _ReactionGroup(reaction.emoji),
+        key,
+        () => _ReactionGroup(reaction.emoji, reaction.emojiId),
       );
       group.count++;
       if (reaction.userId == myUserId) group.hasOwn = true;
     }
+
+    final customEmoji = guildId != null
+        ? getIt<GuildRepository>().cachedEmojis(guildId!)
+        : null;
 
     return Padding(
       padding: const EdgeInsets.only(top: 4),
@@ -51,9 +64,15 @@ class MessageReactionBar extends StatelessWidget {
           for (final group in groups.values)
             _ReactionPill(
               emoji: group.emoji,
+              imageUrl: group.emojiId != null
+                  ? customEmoji
+                        ?.where((e) => e.id == group.emojiId)
+                        .firstOrNull
+                        ?.imageUrl
+                  : null,
               count: group.count,
               isOwn: group.hasOwn,
-              onTap: () => onToggle(group.emoji),
+              onTap: () => onToggle(group.emoji, group.emojiId),
             ),
           _AddReactionPill(onTap: onAddPressed),
         ],
@@ -68,9 +87,11 @@ class _ReactionPill extends StatelessWidget {
     required this.count,
     required this.isOwn,
     required this.onTap,
+    this.imageUrl,
   });
 
   final String emoji;
+  final String? imageUrl;
   final int count;
   final bool isOwn;
   final VoidCallback onTap;
@@ -89,7 +110,7 @@ class _ReactionPill extends StatelessWidget {
         // ConstrainedBox + Center(...Factor: 1) gives a *minimum* 36x36 tap
         // target without the classic Container(alignment: ...) trap, which
         // expands to fill all available cross-axis space inside a Wrap
-        // instead of shrink-wrapping — that bug is what stacked these pills
+        // instead of shrink-wrapping - that bug is what stacked these pills
         // into a full-width vertical list instead of a horizontal row.
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
@@ -109,7 +130,17 @@ class _ReactionPill extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(emoji, style: const TextStyle(fontSize: 15)),
+                  imageUrl != null
+                      ? Image.network(
+                          imageUrl!,
+                          width: 15,
+                          height: 15,
+                          errorBuilder: (context, error, stack) => Text(
+                            ':$emoji:',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        )
+                      : Text(emoji, style: const TextStyle(fontSize: 15)),
                   const SizedBox(width: 5),
                   Text(
                     '$count',

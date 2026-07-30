@@ -26,7 +26,7 @@ class UserProfileState extends Equatable {
   final String? errorMessage;
 
   /// [relationship] and [errorMessage] are always set as given (including
-  /// `null`) rather than falling back to the current value — every call
+  /// `null`) rather than falling back to the current value - every call
   /// site recomputes the relationship fresh, and `null` there is a
   /// meaningful "no relationship anymore" (e.g. after a revoke/reject), not
   /// "unchanged".
@@ -56,7 +56,7 @@ class UserProfileState extends Equatable {
 
 /// Loads another user's profile plus the caller's relationship to them (so
 /// the screen can render Add Friend / Pending / Accept-Reject / Friends
-/// appropriately) — the read-only counterpart to `SelfProfileCubit`.
+/// appropriately) - the read-only counterpart to `SelfProfileCubit`.
 class UserProfileCubit extends Cubit<UserProfileState> {
   UserProfileCubit({
     required this.userId,
@@ -135,7 +135,7 @@ class UserProfileCubit extends Cubit<UserProfileState> {
   }
 
   /// Declines an incoming request or cancels one the caller sent, depending
-  /// on [RelationshipModel.status] — the two map to different API calls.
+  /// on [RelationshipModel.status] - the two map to different API calls.
   Future<void> rejectOrRevokeRequest() async {
     final relationship = state.relationship;
     if (relationship == null) return;

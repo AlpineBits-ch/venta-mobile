@@ -13,7 +13,7 @@ import '../../bloc/conversation_list_bloc.dart';
 import '../../data/models/conversation_dto.dart';
 import '../widgets/new_conversation_dialog.dart';
 
-/// The default landing surface (Discord mobile's "Home" tab) — rendered as
+/// The default landing surface (Discord mobile's "Home" tab) - rendered as
 /// the shell's content pane, next to the always-visible server rail
 /// (`AppShell`). Tapping a conversation pushes the full-screen thread route.
 class HomeScreen extends StatelessWidget {
@@ -88,7 +88,7 @@ class _HomeView extends StatelessWidget {
                     ),
                   )
                 else
-                  // NOTE: no last-message preview/timestamp here — ConversationDto
+                  // NOTE: no last-message preview/timestamp here - ConversationDto
                   // carries no such field yet; showing one is blocked on the
                   // backend adding it, not a client-side gap.
                   for (final conversation in state.conversations)

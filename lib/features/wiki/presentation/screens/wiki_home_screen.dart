@@ -15,7 +15,7 @@ import 'wiki_category_manager_screen.dart';
 
 /// Landing screen for a guild's wiki: pinned pages, recently updated pages,
 /// then every category with its root pages, then anything uncategorized.
-/// Categories are shown as a flat, position-ordered list — mobile v1's
+/// Categories are shown as a flat, position-ordered list - mobile v1's
 /// simplification of Alpine's arbitrarily-nestable category tree (see the
 /// wiki feature plan's scope decisions).
 class WikiHomeScreen extends StatefulWidget {
@@ -54,7 +54,7 @@ class _WikiHomeScreenState extends State<WikiHomeScreen> {
       final permissions = await loadGuildPermissions(widget.guildId);
       if (mounted) setState(() => _permissions = permissions);
     } catch (_) {
-      // Leave create/manage actions hidden — server still enforces on write.
+      // Leave create/manage actions hidden - server still enforces on write.
     }
   }
 
@@ -145,7 +145,7 @@ class _EmptyWiki extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               canCreate
-                  ? 'Start documenting your server — the first page can be anything from rules to a getting-started guide.'
+                  ? 'Start documenting your server - the first page can be anything from rules to a getting-started guide.'
                   : 'Nobody has written anything here yet.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(

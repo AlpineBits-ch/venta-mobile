@@ -12,16 +12,16 @@ import '../storage/secure_storage_service.dart';
 import 'ios_call_kit_bridge.dart';
 import 'push_token_api.dart';
 
-/// Marks a push as call-signaling — see `PushNotificationService`'s matching
+/// Marks a push as call-signaling - see `PushNotificationService`'s matching
 /// constant and `docs/native-call-push-backend-spec.md`.
 const _callPushType = 'call';
 
-/// Called from `firebaseMessagingBackgroundHandler` (Android only — iOS call
+/// Called from `firebaseMessagingBackgroundHandler` (Android only - iOS call
 /// pushes arrive via PushKit straight into native Swift, never through FCM)
 /// when a data-only call push wakes the app. Must stay a static/top-level
 /// function reachable from the background isolate.
 ///
-/// `callSubtype: "end"` cancels a ring already shown on this device — sent
+/// `callSubtype: "end"` cancels a ring already shown on this device - sent
 /// when the call was answered/declined/timed out on another device or by
 /// the caller. Without this a phantom ring sits there indefinitely (Android
 /// has no CallKit-style auto-timeout for a custom incoming-call UI). See
@@ -29,11 +29,11 @@ const _callPushType = 'call';
 Future<void> showCallKitFromPushData(Map<String, dynamic> data) async {
   if (data['type'] != _callPushType) return;
   // Android only. iOS drives its CallKit UI exclusively through `AppDelegate`'s
-  // native CXProvider — via PushKit for backgrounded/killed calls and via
+  // native CXProvider - via PushKit for backgrounded/killed calls and via
   // SignalR -> CallKitService for foreground ones. Routing an FCM call push
   // through the plugin here on iOS puts a *second*, competing CallKit call on
   // screen: its Accept goes to the plugin, whose iOS events nothing listens to
-  // (see CallKitService.start — the plugin's onEvent is wired on Android only),
+  // (see CallKitService.start - the plugin's onEvent is wired on Android only),
   // so the tap is silently dropped, while our own provider never learns of the
   // call and every answer/end on it fails with UnknownCallUUID. FCM call pushes
   // on iOS are redundant with PushKit regardless, so just ignore them.
@@ -55,17 +55,17 @@ Future<void> showCallKitFromPushData(Map<String, dynamic> data) async {
   );
 }
 
-/// Android only (see [CallKitService.start]) — must be a top-level function
+/// Android only (see [CallKitService.start]) - must be a top-level function
 /// for the same reason as [firebaseMessagingBackgroundHandler]: the plugin
 /// relaunches a separate, throwaway background isolate to run it whenever an
 /// accept/decline/timeout fires natively with no live [FlutterCallkitIncoming.onEvent]
 /// listener attached (i.e. the app process was killed). That's the normal
-/// resting state of a phone, and without this the tap is silently dropped —
+/// resting state of a phone, and without this the tap is silently dropped -
 /// the plugin's own event dispatch only reaches a listener or a registered
 /// background handler, never both, and never queues for later.
 ///
 /// This can't reach [CallCubit] or make the authenticated accept/decline API
-/// call itself (no [getIt], no running app) — it only records which call was
+/// call itself (no [getIt], no running app) - it only records which call was
 /// acted on so [CallKitService.start] can finish the job once the real app
 /// engine boots moments later via the plugin's own relaunch of `MainActivity`.
 @pragma('vm:entry-point')
@@ -89,7 +89,7 @@ Future<void> callKitBackgroundMessageHandler(CallEvent event) async {
   );
 }
 
-/// Bridges the native CallKit/Android-incoming-call UI to [CallCubit] — the
+/// Bridges the native CallKit/Android-incoming-call UI to [CallCubit] - the
 /// single source of truth for actual call state. This service never decides
 /// call state itself; it only forwards native UI actions into the cubit and
 /// mirrors the cubit's own transitions back out to the native UI, picking
@@ -100,7 +100,7 @@ Future<void> callKitBackgroundMessageHandler(CallEvent event) async {
 ///
 /// iOS and Android take genuinely different native paths: iOS owns a
 /// `CXProvider` directly in `AppDelegate.swift` (see [IosCallKitBridge] for
-/// why — in short, going through a plugin that needs a live Flutter engine
+/// why - in short, going through a plugin that needs a live Flutter engine
 /// was the root cause of a PushKit crash), Android still goes through
 /// `flutter_callkit_incoming`.
 class CallKitService {
@@ -139,7 +139,7 @@ class CallKitService {
       );
       // iOS's own CXProvider relays accept/decline/end natively regardless
       // of whether any Dart engine was already running (AppDelegate.swift
-      // eagerly boots one if not) — only Android needs this background
+      // eagerly boots one if not) - only Android needs this background
       // hand-off registered/consumed. See callKitBackgroundMessageHandler.
       await FlutterCallkitIncoming.onBackgroundMessage(
         callKitBackgroundMessageHandler,
@@ -149,7 +149,7 @@ class CallKitService {
   }
 
   /// Finishes handling an accept/decline that [callKitBackgroundMessageHandler]
-  /// caught while this engine wasn't running yet. Android only — see [start].
+  /// caught while this engine wasn't running yet. Android only - see [start].
   Future<void> _resumePendingCallAction() async {
     final pending = await secureStorage.readPendingCallAction();
     if (pending == null) return;
@@ -174,7 +174,7 @@ class CallKitService {
   /// Foreground/live-socket path: [CallCubit] already learned about the call
   /// over the websocket, so this is the one place that shows the native UI
   /// for it (the push-driven cold-start path shows it natively before any
-  /// Dart code runs at all — see [showCallKitFromPushData] on Android, and
+  /// Dart code runs at all - see [showCallKitFromPushData] on Android, and
   /// the PushKit delegate in `AppDelegate.swift` on iOS).
   Future<void> _handleCallCubitState(CallState state) async {
     if (state.phase == CallPhase.incoming &&
@@ -187,7 +187,7 @@ class CallKitService {
         _connectedForCallId != state.call!.id) {
       // Answering from this app's own in-call UI (as opposed to the native
       // CallKit banner/lock-screen button) never performs a `CXAnswerCallAction`
-      // on iOS — nothing tells CallKit the call was picked up, so its session
+      // on iOS - nothing tells CallKit the call was picked up, so its session
       // stays "ringing" forever and iOS never grants the audio route, leaving
       // WebRTC signaling fully connected but silent in both directions (see
       // AppDelegate.swift's didActivate handoff for the other half of this).
@@ -195,7 +195,7 @@ class CallKitService {
       // what actually triggers it. Harmless no-op if the native button
       // already answered it (both platforms).
       //
-      // Deliberately NOT gated on `_shownForCallId == state.call!.id` — that's
+      // Deliberately NOT gated on `_shownForCallId == state.call!.id` - that's
       // only ever set by this Dart instance's own _showForIncoming, but most
       // real calls arrive while backgrounded/killed, where the native side
       // shows the incoming-call UI directly and this field never gets set
@@ -235,7 +235,7 @@ class CallKitService {
         callerName = profile.userName;
         callerAvatarUrl = profile.avatarUrl;
       } catch (_) {
-        // Fall through with no name/avatar — still worth ringing.
+        // Fall through with no name/avatar - still worth ringing.
       }
     }
     final iosBridge = _iosBridge;

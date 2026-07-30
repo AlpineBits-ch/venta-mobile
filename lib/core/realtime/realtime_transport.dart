@@ -2,7 +2,7 @@ enum RealtimeConnectionStatus { connected, connecting, disconnected }
 
 /// Seam around the SignalR client so `RealtimeService` (and everything built
 /// on it) never sees `signalr_netcore` directly. If that package turns out
-/// unreliable, only an implementation of this interface needs replacing —
+/// unreliable, only an implementation of this interface needs replacing -
 /// see the Android/architecture notes for the fallback plan (a hand-rolled
 /// client over `web_socket_channel`).
 abstract class RealtimeTransport {

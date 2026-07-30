@@ -16,14 +16,14 @@ abstract final class AppRadii {
   static const avatarMedium = 20.0;
   static const avatarLarge = 40.0;
 
-  /// Small role badges (e.g. "BOT" tags) — replaces the mix of 3/4px
+  /// Small role badges (e.g. "BOT" tags) - replaces the mix of 3/4px
   /// literals that used to be scattered across message/member rows.
   static const badge = 4.0;
 
   /// Fully-rounded pill shape for the chat composer's input container.
   static const composerPill = 24.0;
 
-  /// Text field / date-picker-style input control corners — matches
+  /// Text field / date-picker-style input control corners - matches
   /// `AppTheme`'s `InputDecorationTheme`/`ElevatedButtonThemeData`.
   static const input = 10.0;
 

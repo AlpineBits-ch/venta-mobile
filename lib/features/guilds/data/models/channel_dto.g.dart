@@ -74,4 +74,5 @@ const _$ChannelTypeEnumMap = {
   ChannelType.voice: 'Voice',
   ChannelType.thread: 'Thread',
   ChannelType.announcement: 'Announcement',
+  ChannelType.forum: 'Forum',
 };

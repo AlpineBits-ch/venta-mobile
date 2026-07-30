@@ -66,27 +66,27 @@ class CallState extends Equatable {
   final bool isDeafened;
 
   /// Whether output is routed to the loud/speakerphone output rather than
-  /// the quiet call (earpiece) speaker. Defaults on — with no headset
+  /// the quiet call (earpiece) speaker. Defaults on - with no headset
   /// connected, calls were otherwise landing on the quiet earpiece route
   /// with no way to switch, unlike every other calling app.
   final bool isSpeakerOn;
 
-  /// Set once, the moment the call becomes [CallPhase.active] — drives the
+  /// Set once, the moment the call becomes [CallPhase.active] - drives the
   /// elapsed-time display. Never touched again for the life of the call.
   final DateTime? connectedAt;
   final String? errorMessage;
 
   /// One-shot, non-error explanation for why the call just ended/was torn
-  /// down locally — e.g. "You joined this call on another device." or a
+  /// down locally - e.g. "You joined this call on another device." or a
   /// `call.CallEnded` reason translated to copy. `null` means nothing to show.
   final String? disconnectNotice;
 
   /// Set from `call.CallAlone` while this is the sole connected participant
-  /// — the deadline (~5 min out) the server will force-end the call at if
+  /// - the deadline (~5 min out) the server will force-end the call at if
   /// nobody rejoins. Cleared once another participant is observed.
   final DateTime? aloneDeadline;
 
-  /// Bumped on every local/remote camera or screen-share track add/remove —
+  /// Bumped on every local/remote camera or screen-share track add/remove -
   /// `MediaStreamTrack`s themselves can't live in this `Equatable` state (not
   /// comparable/immutable-safe), so `VideoParticipantTile`/`ScreenShareView`
   /// instead pull the current track imperatively from the webrtc service and
@@ -94,11 +94,11 @@ class CallState extends Equatable {
   final int videoRevision;
 
   /// [errorMessage]/[disconnectNotice] are always set as given (including
-  /// `null`), never falling back to the current value — every emitting call
+  /// `null`), never falling back to the current value - every emitting call
   /// site recomputes them, and `null` there means "nothing to show", not
   /// "unchanged". [aloneDeadline] is the opposite: it coalesces like most
   /// other fields so unrelated updates (mute/deafen toggles) don't
-  /// accidentally clear an active countdown — pass [clearAloneDeadline] to
+  /// accidentally clear an active countdown - pass [clearAloneDeadline] to
   /// clear it explicitly.
   CallState copyWith({
     CallPhase? phase,
@@ -145,7 +145,7 @@ class CallState extends Equatable {
   ];
 }
 
-/// App-lifetime singleton owning the one call the app can be in at a time —
+/// App-lifetime singleton owning the one call the app can be in at a time -
 /// the domain/UI-state counterpart to Alpine desktop's `CallSessionService`.
 /// `CallWebRtcService` (a fresh instance per call) owns the actual WebRTC
 /// plumbing; this cubit just tells it which participants to subscribe to.
@@ -171,7 +171,7 @@ class CallCubit extends Cubit<CallState> {
   late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
   CallWebRtcService? _webRtc;
 
-  /// Set only for calls *this* device initiated via [startCall] — drives the
+  /// Set only for calls *this* device initiated via [startCall] - drives the
   /// outgoing ringback tone, which (unlike incoming calls) has no native
   /// CallKit equivalent to double up with. Cleared as soon as another
   /// participant actually joins, or the call ends/is torn down.
@@ -224,13 +224,13 @@ class CallCubit extends Cubit<CallState> {
     try {
       await repository.declineCall(call.id);
     } catch (_) {
-      // Best-effort — we've already left the incoming-call UI locally.
+      // Best-effort - we've already left the incoming-call UI locally.
     }
   }
 
   /// [acceptIncomingCall]'s counterpart for calls answered from the native
   /// CallKit UI before this app instance ever saw a `call.IncomingCall`
-  /// websocket event — e.g. a cold start from a VoIP push, where [state.call]
+  /// websocket event - e.g. a cold start from a VoIP push, where [state.call]
   /// was never populated. Guards on [CallPhase.idle] rather than
   /// [CallPhase.incoming] for that reason; `CallKitService` picks whichever
   /// of this or [acceptIncomingCall] applies based on current state.
@@ -245,20 +245,20 @@ class CallCubit extends Cubit<CallState> {
     }
   }
 
-  /// [declineIncomingCall]'s by-id counterpart — see [acceptIncomingCallById].
+  /// [declineIncomingCall]'s by-id counterpart - see [acceptIncomingCallById].
   Future<void> declineIncomingCallById(String callId) async {
     if (state.phase != CallPhase.idle) return;
     try {
       await repository.declineCall(callId);
     } catch (_) {
-      // Best-effort — CallKit's UI is already dismissed locally.
+      // Best-effort - CallKit's UI is already dismissed locally.
     }
   }
 
   /// Hangs up a call by id regardless of whether it was ever loaded into
-  /// [state.call] — the native CallKit "end" action carries only the id.
+  /// [state.call] - the native CallKit "end" action carries only the id.
   /// This is a local hang-up (removes just this user), not a force-end for
-  /// everyone — see [endCall].
+  /// everyone - see [endCall].
   Future<void> endCallById(String callId) async {
     if (state.call?.id == callId) {
       await endCall();
@@ -267,11 +267,11 @@ class CallCubit extends Cubit<CallState> {
     try {
       await repository.leaveCall(callId);
     } catch (_) {
-      // Best-effort — nothing local to tear down for a call we never loaded.
+      // Best-effort - nothing local to tear down for a call we never loaded.
     }
   }
 
-  /// Hangs up the current call. Calls the `leave` endpoint — this removes
+  /// Hangs up the current call. Calls the `leave` endpoint - this removes
   /// just the local user, it does not end the call for anyone still
   /// connected (a 1:1 call still ends almost immediately in practice once
   /// the other side also leaves/was never connected, but the mechanism is
@@ -288,7 +288,7 @@ class CallCubit extends Cubit<CallState> {
     try {
       await repository.leaveCall(call.id);
     } catch (_) {
-      // Best-effort — we've already torn down locally.
+      // Best-effort - we've already torn down locally.
     }
   }
 
@@ -317,7 +317,7 @@ class CallCubit extends Cubit<CallState> {
     await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
   }
 
-  /// Current local camera state — read from [state.participants] rather than
+  /// Current local camera state - read from [state.participants] rather than
   /// a separate field, since the self-entry there is already the source of
   /// truth other participants' badges read from.
   bool get isCameraOn =>
@@ -340,7 +340,7 @@ class CallCubit extends Cubit<CallState> {
         await webRtc.stopLocalVideo();
       }
     } catch (_) {
-      return; // Capture failed (denied permission, no camera, etc.) — bail.
+      return; // Capture failed (denied permission, no camera, etc.) - bail.
     }
     emit(
       state.copyWith(
@@ -357,7 +357,7 @@ class CallCubit extends Cubit<CallState> {
     );
   }
 
-  /// Mirrors [isCameraOn] for screen sharing — Android only (see
+  /// Mirrors [isCameraOn] for screen sharing - Android only (see
   /// `toggleScreenShare` callers, which gate the button by platform).
   bool get isScreenSharing =>
       state.participants
@@ -379,7 +379,7 @@ class CallCubit extends Cubit<CallState> {
       try {
         await webRtc.stopScreenShare();
       } catch (_) {
-        // Best-effort — fall through to update local state regardless.
+        // Best-effort - fall through to update local state regardless.
       }
       emit(
         state.copyWith(
@@ -402,7 +402,7 @@ class CallCubit extends Cubit<CallState> {
       try {
         await webRtc.startScreenShare(shareId);
       } catch (_) {
-        return; // Permission denied/cancelled the system picker — bail.
+        return; // Permission denied/cancelled the system picker - bail.
       }
       _myShareId = shareId;
       emit(
@@ -425,7 +425,7 @@ class CallCubit extends Cubit<CallState> {
   void _bumpVideoRevision() =>
       emit(state.copyWith(videoRevision: state.videoRevision + 1));
 
-  /// Track getters for the UI — read imperatively, see [CallState.videoRevision]
+  /// Track getters for the UI - read imperatively, see [CallState.videoRevision]
   /// doc comment for why `MediaStreamTrack`s can't live in cubit state itself.
   MediaStreamTrack? get localVideoTrack => _webRtc?.localVideoTrack;
   MediaStreamTrack? get localScreenTrack => _webRtc?.localScreenTrack;
@@ -454,7 +454,7 @@ class CallCubit extends Cubit<CallState> {
       webRtc.setDeafened(state.isDeafened);
       await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
       // Backfill-subscribe to anyone already publishing audio, rather than
-      // relying solely on the live `call.ParticipantJoined` event — that
+      // relying solely on the live `call.ParticipantJoined` event - that
       // event can be missed (e.g. joining a group call already in progress,
       // or a SignalR gap right around connect). Mirrors GuildVoiceCubit.
       for (final p in call.participants) {
@@ -476,7 +476,7 @@ class CallCubit extends Cubit<CallState> {
   }
 
   /// A reconnect is the signal that any `call.*` events broadcast during the
-  /// gap were dropped — SignalR doesn't queue undelivered messages. Re-fetches
+  /// gap were dropped - SignalR doesn't queue undelivered messages. Re-fetches
   /// authoritative state and reconciles: subscribes to participants we never
   /// heard about, unsubscribes from ones who left, and hangs up locally if the
   /// call ended (or we were removed) while disconnected.
@@ -491,7 +491,7 @@ class CallCubit extends Cubit<CallState> {
     try {
       fresh = await repository.getCall(call.id);
     } catch (_) {
-      return; // Best-effort — a later reconnect or live event will catch up.
+      return; // Best-effort - a later reconnect or live event will catch up.
     }
     if (state.phase != CallPhase.active || state.call?.id != call.id) return;
 
@@ -585,7 +585,7 @@ class CallCubit extends Cubit<CallState> {
         _webRtc?.unsubscribeParticipant(userId);
 
       case CallLifecycleParticipantLeft(:final userId):
-        // Roster-level counterpart to CallParticipantLeft above — handled
+        // Roster-level counterpart to CallParticipantLeft above - handled
         // identically (idempotent either way, whichever actually fires).
         emit(
           state.copyWith(
@@ -688,7 +688,7 @@ class CallCubit extends Cubit<CallState> {
       case CallAcceptedElsewhere(:final callId):
       case CallDeviceDismissed(:final callId):
         // Another device resolved the ring (accepted, or this device's own
-        // decline raced a takeover) — dismiss silently, no "ended" messaging.
+        // decline raced a takeover) - dismiss silently, no "ended" messaging.
         if (state.phase == CallPhase.incoming && state.call?.id == callId) {
           emit(const CallState());
         } else if (state.call?.id == callId) {
@@ -726,7 +726,7 @@ class CallCubit extends Cubit<CallState> {
 
   String? _endedNoticeFor(String? reason) => switch (reason) {
     'Declined' => 'Call declined.',
-    'AloneTimeout' => 'Call ended — nobody rejoined in time.',
+    'AloneTimeout' => 'Call ended - nobody rejoined in time.',
     _ => null,
   };
 

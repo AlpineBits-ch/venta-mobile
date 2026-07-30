@@ -1,10 +1,10 @@
-/// Wraps the 64-bit permission bitmask. Deliberately `BigInt`, not `int` —
+/// Wraps the 64-bit permission bitmask. Deliberately `BigInt`, not `int` -
 /// `Superadmin` sits at bit 63, the sign bit of a 64-bit signed integer, so a
 /// native Dart `int` would misbehave for that flag specifically.
 ///
 /// The wire format is a **comma-separated list of flag names**
 /// (.NET's default `[Flags]` enum `ToString()`, e.g. `"ViewChannel,
-/// SendMessages"`), not a numeric string — verified against Alpine's
+/// SendMessages"`), not a numeric string - verified against Alpine's
 /// `parsePermissions`/`stringifyPermissions` in `enums/permissions.enum.ts`.
 class GuildPermissions {
   const GuildPermissions(this.value);
@@ -49,13 +49,14 @@ class GuildPermissions {
     'ModerateMembers': 34,
     'ManageGuild': 35,
     'ViewAuditLog': 36,
+    'ManageEmojis': 37,
     'Superadmin': 63,
   };
 
   static final GuildPermissions none = GuildPermissions(BigInt.zero);
   static final GuildPermissions superadmin = _bit(63);
 
-  /// Every flag name except `Superadmin` — used to render the role
+  /// Every flag name except `Superadmin` - used to render the role
   /// permission-editor's checkbox list. Declaration order matches the
   /// server's own grouping (channel/messages, voice, threads, moderation,
   /// wiki), not bit position.
@@ -93,7 +94,7 @@ class GuildPermissions {
   GuildPermissions operator |(GuildPermissions other) =>
       GuildPermissions(value | other.value);
 
-  /// Sets or clears one named flag — the building block for a permission
+  /// Sets or clears one named flag - the building block for a permission
   /// checkbox list.
   GuildPermissions withFlag(String flagName, bool enabled) {
     final bit = _flags[flagName];
@@ -102,7 +103,7 @@ class GuildPermissions {
     return GuildPermissions(enabled ? (value | mask) : (value & ~mask));
   }
 
-  /// `perms` with `deny` bits cleared then `allow` bits set — matches the
+  /// `perms` with `deny` bits cleared then `allow` bits set - matches the
   /// standard "deny wins over role default, allow wins over deny" override
   /// order used for channel/category permission overrides.
   static GuildPermissions applyOverride(

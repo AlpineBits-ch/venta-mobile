@@ -155,7 +155,7 @@ Future<void> configureDependencies() async {
   );
 }
 
-/// Starts the push-notification and native-call-UI services — call once per
+/// Starts the push-notification and native-call-UI services - call once per
 /// authenticated session (cold start with a restored session, or right after
 /// login/register), mirroring [RealtimeService.start]'s own call sites.
 Future<void> startPushServices() async {

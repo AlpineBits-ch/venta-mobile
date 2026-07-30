@@ -14,6 +14,8 @@ enum ChannelType {
   thread,
   @JsonValue('Announcement')
   announcement,
+  @JsonValue('Forum')
+  forum,
 }
 
 @freezed

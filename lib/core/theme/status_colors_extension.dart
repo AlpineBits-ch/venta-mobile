@@ -21,7 +21,7 @@ class VentaStatusColors extends ThemeExtension<VentaStatusColors> {
   final Color doNotDisturb;
   final Color offline;
 
-  /// Distinct from [ColorScheme.surface] — the server-rail/channel-drawer
+  /// Distinct from [ColorScheme.surface] - the server-rail/channel-drawer
   /// background, one tone darker/lighter than cards.
   final Color sidebar;
 

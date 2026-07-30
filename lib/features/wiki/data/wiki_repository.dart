@@ -10,11 +10,11 @@ import 'models/wiki_revision_dto.dart';
 import 'wiki_api.dart';
 
 /// App-lifetime singleton, like `GuildRepository`, but deliberately holds no
-/// cache of its own — wiki screens are opened per-guild and fetch fresh on
+/// cache of its own - wiki screens are opened per-guild and fetch fresh on
 /// open (mirrors `GuildDetailScreen._load()`), and only one wiki screen is
 /// ever open at a time. This repository's job is just to turn the six
 /// `guild.Wiki*` realtime events into a guildId invalidation signal that any
-/// open wiki screen can filter on and refetch from — deliberately screen-
+/// open wiki screen can filter on and refetch from - deliberately screen-
 /// local invalidation rather than shared state, the same choice made for
 /// `guild.PresenceChanged` on the member list.
 class WikiRepository {
@@ -45,7 +45,7 @@ class WikiRepository {
   final _invalidatedController = StreamController<String>.broadcast();
 
   /// Emits a guildId every time that guild's wiki structure or a page
-  /// changed remotely — screens filter for their own guildId.
+  /// changed remotely - screens filter for their own guildId.
   Stream<String> get invalidated => _invalidatedController.stream;
 
   Future<WikiDto> getWiki(String guildId) => api.getWiki(guildId);

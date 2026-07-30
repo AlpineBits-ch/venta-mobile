@@ -22,7 +22,7 @@ abstract final class AvatarPalette {
     return _palette[_fnv1a(userId) % _palette.length];
   }
 
-  /// FNV-1a over UTF-8 bytes — stable across Dart versions/isolates, unlike
+  /// FNV-1a over UTF-8 bytes - stable across Dart versions/isolates, unlike
   /// [Object.hashCode] which carries no such guarantee.
   static int _fnv1a(String input) {
     const prime = 0x01000193;

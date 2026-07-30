@@ -8,6 +8,7 @@ import 'models/ban_dto.dart';
 import 'models/category_dto.dart';
 import 'models/channel_dto.dart';
 import 'models/guild_dto.dart';
+import 'models/guild_emoji_dto.dart';
 import 'models/guild_member_dto.dart';
 import 'models/guild_permissions.dart';
 import 'models/guild_self_permissions.dart';
@@ -18,7 +19,7 @@ import 'models/role_dto.dart';
 /// (`guild.GuildDeleted/Updated`, `guild.ChannelCreated/Deleted/Updated`,
 /// `guild.CategoryCreated/Deleted`, `guild.MemberJoined/Left` for the
 /// current user leaving/joining). Same invalidate-and-refetch pattern as
-/// `ConversationRepository`/`RelationshipRepository` — these events are
+/// `ConversationRepository`/`RelationshipRepository` - these events are
 /// infrequent enough that a full refetch per event is simple and correct
 /// rather than hand-patching nested categories/channels/roles.
 class GuildRepository {
@@ -39,16 +40,26 @@ class GuildRepository {
             'guild.CategoryDeleted',
             'guild.MemberJoined',
             'guild.MemberLeft',
+            'guild.EmojiCreated',
+            'guild.EmojiDeleted',
           }.contains(e.name),
         )
         .listen((event) {
+          final guildId = event.objectPayload['guildId'] as String?;
+          if (event.name == 'guild.EmojiCreated' ||
+              event.name == 'guild.EmojiDeleted') {
+            if (guildId != null) {
+              unawaited(getEmojis(guildId, forceRefresh: true));
+            }
+            return;
+          }
           if (event.name == 'guild.MemberLeft' &&
               event.objectPayload['userId'] == myUserId) {
-            _guilds.removeWhere((g) => g.id == event.objectPayload['guildId']);
+            _guilds.removeWhere((g) => g.id == guildId);
             _guildsController.add(List.unmodifiable(_guilds));
             return;
           }
-          unawaited(_refreshGuild(event.objectPayload['guildId'] as String?));
+          unawaited(_refreshGuild(guildId));
         });
   }
 
@@ -59,8 +70,21 @@ class GuildRepository {
   final List<GuildDto> _guilds = [];
   final _guildsController = StreamController<List<GuildDto>>.broadcast();
 
+  final Map<String, List<GuildEmojiDto>> _emojiCache = {};
+  final _emojiUpdatesController =
+      StreamController<({String guildId, List<GuildEmojiDto> emojis})>.broadcast();
+
   Stream<List<GuildDto>> get guildsStream => _guildsController.stream;
+
+  /// Fires whenever a guild's emoji list is (re)fetched - pickers/reaction
+  /// renderers listen to keep a newly-created emoji usable without a manual
+  /// refresh.
+  Stream<({String guildId, List<GuildEmojiDto> emojis})> get emojiUpdates =>
+      _emojiUpdatesController.stream;
+
   List<GuildDto> get cached => List.unmodifiable(_guilds);
+
+  List<GuildEmojiDto>? cachedEmojis(String guildId) => _emojiCache[guildId];
 
   GuildDto? cachedById(String guildId) {
     for (final guild in _guilds) {
@@ -78,7 +102,7 @@ class GuildRepository {
     return _guilds;
   }
 
-  /// Fetches one guild fresh and updates the cache — used when opening a
+  /// Fetches one guild fresh and updates the cache - used when opening a
   /// guild's channel list, where we want the latest data, not last-known.
   Future<GuildDto> fetchGuild(String guildId) async {
     final updated = await api.getGuild(guildId);
@@ -104,7 +128,7 @@ class GuildRepository {
       }
       _guildsController.add(List.unmodifiable(_guilds));
     } catch (_) {
-      // Guild may have been deleted or we may have been removed — a full
+      // Guild may have been deleted or we may have been removed - a full
       // fetch() next time the guild list screen opens will reconcile.
     }
   }
@@ -228,16 +252,69 @@ class GuildRepository {
     String? name,
     String? description,
     String? systemChannelId,
+    VerificationLevel? verificationLevel,
   }) async {
     final updated = await api.updateGuild(
       guildId,
       name: name,
       description: description,
       systemChannelId: systemChannelId,
+      verificationLevel: verificationLevel,
     );
     _replaceCached(updated);
     return updated;
   }
+
+  /// Cache-then-fetch, like [cachedById]/[fetchGuild] - pass
+  /// [forceRefresh] after a mutating call (upload/delete) or on a
+  /// `guild.EmojiCreated`/`guild.EmojiDeleted` realtime event, since emoji
+  /// aren't part of [GuildDto] and so don't ride along with guild refreshes.
+  Future<List<GuildEmojiDto>> getEmojis(
+    String guildId, {
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh && _emojiCache.containsKey(guildId)) {
+      return _emojiCache[guildId]!;
+    }
+    final emojis = await api.getEmojis(guildId);
+    _emojiCache[guildId] = emojis;
+    _emojiUpdatesController.add((guildId: guildId, emojis: emojis));
+    return emojis;
+  }
+
+  Future<GuildEmojiDto> uploadEmoji(
+    String guildId, {
+    required String name,
+    required bool animated,
+    required List<int> bytes,
+    required String fileName,
+  }) async {
+    final emoji = await api.uploadEmoji(
+      guildId,
+      name: name,
+      animated: animated,
+      bytes: bytes,
+      fileName: fileName,
+    );
+    await getEmojis(guildId, forceRefresh: true);
+    return emoji;
+  }
+
+  Future<void> deleteEmoji(String guildId, String emojiId) async {
+    await api.deleteEmoji(guildId, emojiId);
+    await getEmojis(guildId, forceRefresh: true);
+  }
+
+  Future<ChannelDto> createThread(
+    String channelId, {
+    required String name,
+    String? content,
+  }) => api.createThread(channelId, name: name, content: content);
+
+  Future<List<ChannelDto>> getThreads(String channelId) =>
+      api.getThreads(channelId);
+
+  Future<void> archiveThread(String threadId) => api.archiveThread(threadId);
 
   Future<GuildDto> uploadGuildIcon(
     String guildId, {
@@ -317,6 +394,16 @@ class GuildRepository {
     await _refreshGuild(guildId);
   }
 
+  Future<void> reorderChannels(
+    String guildId, {
+    List<({String channelId, int position, String? categoryId})> channels =
+        const [],
+    List<({String categoryId, int position})> categories = const [],
+  }) async {
+    await api.reorderChannels(guildId, channels: channels, categories: categories);
+    await _refreshGuild(guildId);
+  }
+
   Future<List<GuildMemberDto>> getRoleMembers(
     String roleId, {
     int skip = 0,
@@ -380,5 +467,6 @@ class GuildRepository {
   void dispose() {
     _realtimeSub.cancel();
     _guildsController.close();
+    _emojiUpdatesController.close();
   }
 }

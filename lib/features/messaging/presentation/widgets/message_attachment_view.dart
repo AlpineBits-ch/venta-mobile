@@ -8,7 +8,7 @@ import '../../data/message_api.dart';
 import '../../data/models/attachment_dto.dart';
 
 /// Message-embedded attachments never carry a `url` (only optionally a
-/// `thumbnailUrl` for images) — the full-file/download link must be built
+/// `thumbnailUrl` for images) - the full-file/download link must be built
 /// client-side from the id. Standalone attachments (fresh off the upload
 /// poll) already have both populated directly by the server.
 String _resolveUrl(AttachmentDto attachment) =>

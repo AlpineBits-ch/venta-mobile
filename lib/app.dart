@@ -84,9 +84,9 @@ class _AppState extends State<App> {
         BlocProvider(create: (_) => ThemeCubit()),
         // App-lifetime singleton, provided at the root (not inside `AppShell`)
         // so it's still reachable from screens pushed via the *root*
-        // navigator — like `CallScreen`, which lives outside the shell.
+        // navigator - like `CallScreen`, which lives outside the shell.
         BlocProvider.value(value: getIt<CallCubit>()),
-        // Same root-navigator reasoning as `CallCubit` — `GuildVoiceScreen`
+        // Same root-navigator reasoning as `CallCubit` - `GuildVoiceScreen`
         // is pushed via `Navigator.of(context, rootNavigator: true)`.
         BlocProvider.value(value: getIt<GuildVoiceCubit>()),
       ],

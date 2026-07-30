@@ -97,7 +97,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                 ],
               ),
               if (state.pendingIncoming.isNotEmpty) ...[
-                _SectionHeader('PENDING — ${state.pendingIncoming.length}'),
+                _SectionHeader('PENDING - ${state.pendingIncoming.length}'),
                 for (final r in state.pendingIncoming)
                   _RelationshipTile(
                     relationship: r,
@@ -128,7 +128,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   ),
               ],
               if (state.pendingOutgoing.isNotEmpty) ...[
-                _SectionHeader('SENT — ${state.pendingOutgoing.length}'),
+                _SectionHeader('SENT - ${state.pendingOutgoing.length}'),
                 for (final r in state.pendingOutgoing)
                   _RelationshipTile(
                     relationship: r,
@@ -142,13 +142,13 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     ),
                   ),
               ],
-              _SectionHeader('ALL FRIENDS — ${state.friends.length}'),
+              _SectionHeader('ALL FRIENDS - ${state.friends.length}'),
               if (state.friends.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                   child: Center(
                     child: Text(
-                      'No friends yet — add one above.',
+                      'No friends yet - add one above.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurface.withValues(
                           alpha: 0.5,

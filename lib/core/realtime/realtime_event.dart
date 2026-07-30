@@ -1,5 +1,5 @@
 /// A raw re-broadcast of one SignalR hub method invocation. Repositories
-/// filter by [name] and interpret [args] themselves — some events carry a
+/// filter by [name] and interpret [args] themselves - some events carry a
 /// single JSON object (`conversation.MessageCreated`), others a bare string
 /// (`presence.UserOnline`), matching whatever the hub actually sends.
 class RealtimeEvent {

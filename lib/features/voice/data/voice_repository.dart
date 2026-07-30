@@ -11,7 +11,7 @@ sealed class VoiceRepositoryEvent {
   const VoiceRepositoryEvent();
 }
 
-/// Another of the user's own devices accepted this call — dismiss the local
+/// Another of the user's own devices accepted this call - dismiss the local
 /// ringing UI on this device the same way a local decline would, no "call
 /// ended" messaging. No-op if this device isn't currently ringing for the
 /// call (e.g. it's the device that itself just accepted).
@@ -21,7 +21,7 @@ class CallAcceptedElsewhere extends VoiceRepositoryEvent {
 }
 
 /// A stale decline from *this* device arrived after the user had already
-/// connected on another device. Dismiss the local ring UI silently — the
+/// connected on another device. Dismiss the local ring UI silently - the
 /// call keeps running elsewhere.
 class CallDeviceDismissed extends VoiceRepositoryEvent {
   const CallDeviceDismissed(this.callId);
@@ -30,14 +30,14 @@ class CallDeviceDismissed extends VoiceRepositoryEvent {
 
 /// This device's connection to the call was just taken over by another of
 /// the user's own devices (e.g. accepted on a second device). Must tear down
-/// local WebRTC/audio without calling leave — the server already updated
+/// local WebRTC/audio without calling leave - the server already updated
 /// state.
 class CallDeviceTakeover extends VoiceRepositoryEvent {
   const CallDeviceTakeover(this.callId);
   final String callId;
 }
 
-/// A participant left a still-active call via the new `leave` endpoint — the
+/// A participant left a still-active call via the new `leave` endpoint - the
 /// call keeps running for everyone else. Distinct from [CallParticipantLeft]
 /// (the CF-Calls-track-level presence event); both are handled the same way
 /// client-side (remove from roster, unsubscribe audio) since either may be
@@ -48,7 +48,7 @@ class CallLifecycleParticipantLeft extends VoiceRepositoryEvent {
 }
 
 /// The call dropped to exactly one connected participant (this device's
-/// user) — a 5-minute grace period started server-side, ending at [deadline].
+/// user) - a 5-minute grace period started server-side, ending at [deadline].
 class CallAlone extends VoiceRepositoryEvent {
   const CallAlone({required this.callId, required this.deadline});
   final String callId;
@@ -61,7 +61,7 @@ class IncomingCallReceived extends VoiceRepositoryEvent {
 }
 
 /// Someone joined the call. [cfSessionId]/[audioTrackName] are their CF
-/// Calls session + published audio track name — needed to subscribe to it.
+/// Calls session + published audio track name - needed to subscribe to it.
 class CallParticipantJoined extends VoiceRepositoryEvent {
   const CallParticipantJoined({
     required this.userId,
@@ -92,7 +92,7 @@ class CallCameraChanged extends VoiceRepositoryEvent {
 }
 
 /// A remote participant published a new track. `kind` is video/screen/
-/// screenAudio — mirrors `guild.voice.TrackPublished` (see
+/// screenAudio - mirrors `guild.voice.TrackPublished` (see
 /// `GuildVoiceRepository`'s `VoiceTrackPublished`).
 class CallTrackPublished extends VoiceRepositoryEvent {
   const CallTrackPublished({
@@ -126,15 +126,15 @@ class CallScreenShareStarted extends VoiceRepositoryEvent {
   final String trackName;
 }
 
-/// Client-side is a no-op beyond clearing the streaming badge — the actual
+/// Client-side is a no-op beyond clearing the streaming badge - the actual
 /// track teardown rides on [CallTrackClosed], same as guild voice.
 class CallScreenShareStopped extends VoiceRepositoryEvent {
   const CallScreenShareStopped({required this.shareId});
   final String shareId;
 }
 
-/// [reason] is the backend's `CallEndedReason` — one of `Declined`,
-/// `UserEnded`, `AllParticipantsLeft`, `AloneTimeout` — used to pick UI copy.
+/// [reason] is the backend's `CallEndedReason` - one of `Declined`,
+/// `UserEnded`, `AllParticipantsLeft`, `AloneTimeout` - used to pick UI copy.
 /// May be `null` for events from before this field existed.
 class CallEndedRemotely extends VoiceRepositoryEvent {
   const CallEndedRemotely(this.callId, {this.reason});
@@ -142,7 +142,7 @@ class CallEndedRemotely extends VoiceRepositoryEvent {
   final String? reason;
 }
 
-/// App-lifetime singleton (like `ConversationRepository`) — the single hub
+/// App-lifetime singleton (like `ConversationRepository`) - the single hub
 /// connection's `call.*` events need to reach the incoming-call banner even
 /// when no call screen is on-screen yet, so this can't be scoped to one call.
 class VoiceRepository {
@@ -165,7 +165,7 @@ class VoiceRepository {
   final _eventsController = StreamController<VoiceRepositoryEvent>.broadcast();
   Stream<VoiceRepositoryEvent> get events => _eventsController.stream;
 
-  /// Drives [CallCubit]'s reconcile-on-reconnect — a transition back to
+  /// Drives [CallCubit]'s reconcile-on-reconnect - a transition back to
   /// [RealtimeConnectionStatus.connected] is the signal that any `call.*`
   /// events broadcast during the gap were silently dropped.
   Stream<RealtimeConnectionStatus> get connectionStatus =>
@@ -274,7 +274,7 @@ class VoiceRepository {
       api.declineCall(callId, deviceId: _deviceIdService.deviceId);
 
   /// Removes the local user from the call without ending it for anyone else
-  /// still connected — see [VoiceApi.leaveCall].
+  /// still connected - see [VoiceApi.leaveCall].
   Future<CallDto> leaveCall(String callId) =>
       api.leaveCall(callId, deviceId: _deviceIdService.deviceId);
 

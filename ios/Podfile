@@ -42,7 +42,7 @@ post_install do |installer|
 
     # permission_handler compiles in Obj-C for every permission group unless
     # told otherwise, which makes Apple's binary validation flag missing
-    # purpose strings (ITMS-90683) for groups we never actually request —
+    # purpose strings (ITMS-90683) for groups we never actually request -
     # e.g. location, even though nothing in lib/ calls Permission.location.
     # Only enable the groups we have an NSUsageDescription for in Info.plist.
     target.build_configurations.each do |config|

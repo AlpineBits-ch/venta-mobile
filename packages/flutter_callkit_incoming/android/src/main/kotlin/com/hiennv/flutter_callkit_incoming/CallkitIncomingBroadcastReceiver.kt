@@ -122,13 +122,13 @@ class CallkitIncomingBroadcastReceiver : BroadcastReceiver() {
         } ?: return
         if (parsed.id.isEmpty()) return
         if (CallkitConnection.find(parsed.id) != null) {
-            Log.d(TAG, "Telecom call already registered id=${parsed.id} — skip")
+            Log.d(TAG, "Telecom call already registered id=${parsed.id} - skip")
             return
         }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.MANAGE_OWN_CALLS)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            Log.w(TAG, "MANAGE_OWN_CALLS not granted — Telecom incoming skipped")
+            Log.w(TAG, "MANAGE_OWN_CALLS not granted - Telecom incoming skipped")
             return
         }
         val telecom = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager ?: return

@@ -5,11 +5,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/realtime/realtime_event.dart';
+import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../auth/data/auth_repository.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
 import '../../data/guild_repository.dart';
@@ -18,8 +21,13 @@ import '../../data/models/channel_dto.dart';
 import '../../data/models/guild_dto.dart';
 import '../../data/models/guild_permissions.dart';
 
+/// Per-channel read state tracked locally in [_GuildDetailScreenState] -
+/// [isUnread] drives the bold channel-name styling, [mentionCount] the red
+/// badge, mirroring Alpine's `GuildReadStateService`/`ChannelReadState`.
+typedef _ChannelReadState = ({bool isUnread, int mentionCount});
+
 /// Content pane shown inside `AppShell` when a server is selected from the
-/// rail — categories/channels for that guild. Tapping a channel pushes the
+/// rail - categories/channels for that guild. Tapping a channel pushes the
 /// full-screen `ChannelScreen` (outside the shell); the rail stays visible
 /// here the whole time, matching Discord mobile.
 class GuildDetailScreen extends StatefulWidget {
@@ -34,21 +42,111 @@ class GuildDetailScreen extends StatefulWidget {
 class _GuildDetailScreenState extends State<GuildDetailScreen> {
   GuildDto? _guild;
   GuildPermissions _permissions = GuildPermissions.none;
+  Map<String, _ChannelReadState> _unread = {};
+  late final StreamSubscription<RealtimeEvent> _messageSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    final myUserId = getIt<AuthRepository>().currentUserId;
+    _messageSub = getIt<RealtimeService>().events
+        .where((e) => e.name == 'guild.MessageCreated')
+        .listen((event) {
+          final payload = event.objectPayload;
+          final channelId = payload['channelId'] as String?;
+          if (channelId == null || payload['authorId'] == myUserId) return;
+          if (!(_guild?.channels.any((c) => c.id == channelId) ?? false)) {
+            return;
+          }
+          final mentioned =
+              (payload['mentions'] as List?)?.contains(myUserId) ?? false;
+          setState(() {
+            final current = _unread[channelId];
+            _unread = {
+              ..._unread,
+              channelId: (
+                isUnread: true,
+                mentionCount:
+                    (current?.mentionCount ?? 0) + (mentioned ? 1 : 0),
+              ),
+            };
+          });
+        });
   }
 
   Future<void> _loadOwnPermissions(String ownerId) async {
     try {
       final self = await getIt<GuildRepository>().getOwnMember(widget.guildId);
       if (!mounted) return;
-      setState(() => _permissions = self.effectivePermissions(ownerId));
+      setState(() {
+        _permissions = self.effectivePermissions(ownerId);
+        _unread = {
+          for (final entry in self.unreadMentionCounts.entries)
+            entry.key: (isUnread: true, mentionCount: entry.value),
+        };
+      });
     } catch (_) {
-      // Leave permission-gated entries hidden — they're still enforced
+      // Leave permission-gated entries hidden - they're still enforced
       // server-side on every write regardless.
+    }
+  }
+
+  /// Local-only, like Alpine's own `markChannelRead` - there's no per-
+  /// channel "mark read" endpoint, just the same `readState` rows the
+  /// server updates when messages are actually viewed in-channel.
+  void _markChannelRead(String channelId) {
+    setState(() => _unread = {..._unread}..remove(channelId));
+  }
+
+  Future<void> _showChannelActions(ChannelDto channel) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      // The shell's nav rail lives in a sibling of this screen's own
+      // Navigator (see `AppShell`) - without this the sheet is clipped to
+      // just the content pane instead of covering the whole device width.
+      useRootNavigator: true,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.done_all),
+              title: const Text('Mark as read'),
+              onTap: () => Navigator.pop(context, 'read'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications_off_outlined),
+              title: const Text('Mute'),
+              onTap: () => Navigator.pop(context, 'mute'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications_outlined),
+              title: const Text('Notification settings'),
+              onTap: () => Navigator.pop(context, 'notifications'),
+            ),
+            if (_permissions.has('ManageChannel'))
+              ListTile(
+                leading: const Icon(Icons.settings_outlined),
+                title: const Text('Edit channel'),
+                onTap: () => Navigator.pop(context, 'edit'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'read':
+        _markChannelRead(channel.id);
+      case 'mute':
+      case 'notifications':
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Not available yet.')));
+      case 'edit':
+        context.push(
+          RoutePaths.serverChannelSettingsPath(widget.guildId, channel.id),
+        );
     }
   }
 
@@ -56,6 +154,12 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   void didUpdateWidget(covariant GuildDetailScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.guildId != widget.guildId) _load();
+  }
+
+  @override
+  void dispose() {
+    _messageSub.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -88,6 +192,7 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   Future<void> _showCreateSheet() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
+      useRootNavigator: true,
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
@@ -250,6 +355,7 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     final sortedCategories = [...guild.categories]
       ..sort((a, b) => a.position.compareTo(b.position));
     final uncategorized = byCategory[null] ?? const <ChannelDto>[];
+    final canManageChannels = _permissions.has('ManageChannel');
 
     return Scaffold(
       appBar: AppBar(
@@ -286,12 +392,14 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
                 guildId: guild.id,
                 guildName: guild.name,
                 channel: channel,
-                canManage: _permissions.has('ManageChannel'),
+                canManage: canManageChannels,
+                unread: _unread[channel.id],
+                onLongPress: () => _showChannelActions(channel),
               ),
             for (final category in sortedCategories) ...[
               _CategoryHeader(
                 category: category,
-                canManage: _permissions.has('ManageChannel'),
+                canManage: canManageChannels,
                 onEdit: () => _editCategory(category),
               ),
               for (final channel in byCategory[category.id] ?? const [])
@@ -299,7 +407,9 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
                   guildId: guild.id,
                   guildName: guild.name,
                   channel: channel,
-                  canManage: _permissions.has('ManageChannel'),
+                  canManage: canManageChannels,
+                  unread: _unread[channel.id],
+                  onLongPress: () => _showChannelActions(channel),
                 ),
             ],
           ],
@@ -316,7 +426,7 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   }
 }
 
-/// Result of [_CreateChannelDialog] — carries the chosen type/category
+/// Result of [_CreateChannelDialog] - carries the chosen type/category
 /// alongside the name so [_GuildDetailScreenState._createChannel] doesn't
 /// need a second round-trip through the dialog's internal state.
 class _NewChannelInput {
@@ -342,32 +452,14 @@ class _CategoryHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, AppSpacing.m, 8, AppSpacing.xs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              category.name.toUpperCase(),
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-          ),
-          if (canManage)
-            InkWell(
-              onTap: onEdit,
-              borderRadius: BorderRadius.circular(AppRadii.chip),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.settings_outlined,
-                  size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-            ),
-        ],
+    return InkWell(
+      onLongPress: canManage ? onEdit : null,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, AppSpacing.m, 8, AppSpacing.xs),
+        child: Text(
+          category.name.toUpperCase(),
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
       ),
     );
   }
@@ -379,11 +471,15 @@ class _ChannelTile extends StatelessWidget {
     required this.guildName,
     required this.channel,
     this.canManage = false,
+    this.unread,
+    this.onLongPress,
   });
   final String guildId;
   final String guildName;
   final ChannelDto channel;
   final bool canManage;
+  final _ChannelReadState? unread;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -393,22 +489,41 @@ class _ChannelTile extends StatelessWidget {
         guildName: guildName,
         channel: channel,
         canManage: canManage,
+        onLongPress: onLongPress,
       );
     }
     final theme = Theme.of(context);
+    final isUnread = unread?.isUnread ?? false;
+    final mentionCount = unread?.mentionCount ?? 0;
     return ListTile(
-      leading: const Icon(Icons.tag),
-      title: Text(channel.name, style: theme.textTheme.bodyMedium),
-      trailing: canManage
-          ? IconButton(
-              icon: const Icon(Icons.settings_outlined, size: 20),
-              onPressed: () => context.push(
-                RoutePaths.serverChannelSettingsPath(guildId, channel.id),
+      dense: true,
+      leading: Icon(
+        channel.type == ChannelType.forum ? Icons.forum_outlined : Icons.tag,
+      ),
+      title: Text(
+        channel.name,
+        style: isUnread
+            ? theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              )
+            : theme.textTheme.bodyMedium,
+      ),
+      trailing: mentionCount > 0
+          ? CircleAvatar(
+              radius: 10,
+              backgroundColor: theme.colorScheme.error,
+              child: Text(
+                '$mentionCount',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onError,
+                ),
               ),
             )
           : null,
       onTap: () =>
           context.push(RoutePaths.serverChannelPath(guildId, channel.id)),
+      onLongPress: onLongPress,
     );
   }
 }
@@ -424,11 +539,13 @@ class _VoiceChannelTile extends StatelessWidget {
     required this.guildName,
     required this.channel,
     this.canManage = false,
+    this.onLongPress,
   });
   final String guildId;
   final String guildName;
   final ChannelDto channel;
   final bool canManage;
+  final VoidCallback? onLongPress;
 
   void _onTap(BuildContext context, GuildVoiceState state) {
     final alreadyJoined = state.channelId == channel.id && state.isInVoice;
@@ -459,35 +576,20 @@ class _VoiceChannelTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ListTile(
+              dense: true,
               leading: Icon(
                 Icons.volume_up_outlined,
                 color: joined ? theme.colorScheme.primary : null,
               ),
               title: Text(channel.name, style: theme.textTheme.bodyMedium),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (participants.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.xs),
-                      child: Text(
-                        '${participants.length}',
-                        style: theme.textTheme.labelSmall,
-                      ),
-                    ),
-                  if (canManage)
-                    IconButton(
-                      icon: const Icon(Icons.settings_outlined, size: 20),
-                      onPressed: () => context.push(
-                        RoutePaths.serverChannelSettingsPath(
-                          guildId,
-                          channel.id,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+              trailing: participants.isNotEmpty
+                  ? Text(
+                      '${participants.length}',
+                      style: theme.textTheme.labelSmall,
+                    )
+                  : null,
               onTap: () => _onTap(context, state),
+              onLongPress: onLongPress,
             ),
             for (final participant in participants)
               Padding(
@@ -527,8 +629,8 @@ class _VoiceChannelTile extends StatelessWidget {
   }
 }
 
-/// Name + type (Text/Voice — matches desktop's own create-channel modal,
-/// which likewise doesn't offer Announcement/Thread as user-creatable
+/// Name + type (Text/Voice/Forum - matches desktop's own create-channel
+/// modal, which likewise doesn't offer Announcement/Thread as user-creatable
 /// types) + optional category, mirroring `CreateChannelModalComponent`.
 class _CreateChannelDialog extends StatefulWidget {
   const _CreateChannelDialog({required this.categories});
@@ -552,51 +654,86 @@ class _CreateChannelDialogState extends State<_CreateChannelDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final labelStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.5,
+    );
+    final divider = Divider(
+      height: 1,
+      thickness: 1,
+      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+    );
     return AlertDialog(
       title: const Text('Create a channel'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _nameController,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: 'channel-name'),
-          ),
-          const SizedBox(height: AppSpacing.s),
-          SegmentedButton<ChannelType>(
-            segments: const [
-              ButtonSegment(
-                value: ChannelType.text,
-                icon: Icon(Icons.tag),
-                label: Text('Text'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('CHANNEL NAME', style: labelStyle),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: 'new-channel'),
+            ),
+            const SizedBox(height: AppSpacing.l),
+            Text('CHANNEL TYPE', style: labelStyle),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadii.card),
+              child: ColoredBox(
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: Column(
+                  children: [
+                    _ChannelTypeOption(
+                      icon: Icons.tag,
+                      title: 'Text',
+                      subtitle: 'Send messages, images, GIFs, and more',
+                      selected: _type == ChannelType.text,
+                      onTap: () => setState(() => _type = ChannelType.text),
+                    ),
+                    divider,
+                    _ChannelTypeOption(
+                      icon: Icons.volume_up_outlined,
+                      title: 'Voice',
+                      subtitle: 'Hang out together with voice chat',
+                      selected: _type == ChannelType.voice,
+                      onTap: () => setState(() => _type = ChannelType.voice),
+                    ),
+                    divider,
+                    _ChannelTypeOption(
+                      icon: Icons.forum_outlined,
+                      title: 'Forum',
+                      subtitle: 'Organize discussion into posts',
+                      selected: _type == ChannelType.forum,
+                      onTap: () => setState(() => _type = ChannelType.forum),
+                    ),
+                  ],
+                ),
               ),
-              ButtonSegment(
-                value: ChannelType.voice,
-                icon: Icon(Icons.volume_up_outlined),
-                label: Text('Voice'),
+            ),
+            if (widget.categories.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.l),
+              Text('CATEGORY', style: labelStyle),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String?>(
+                initialValue: _categoryId,
+                items: [
+                  const DropdownMenuItem<String?>(child: Text('None')),
+                  for (final category in widget.categories)
+                    DropdownMenuItem<String?>(
+                      value: category.id,
+                      child: Text(category.name),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _categoryId = value),
               ),
             ],
-            selected: {_type},
-            onSelectionChanged: (selection) =>
-                setState(() => _type = selection.first),
-          ),
-          if (widget.categories.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.s),
-            DropdownButtonFormField<String?>(
-              initialValue: _categoryId,
-              decoration: const InputDecoration(labelText: 'Category'),
-              items: [
-                const DropdownMenuItem<String?>(child: Text('None')),
-                for (final category in widget.categories)
-                  DropdownMenuItem<String?>(
-                    value: category.id,
-                    child: Text(category.name),
-                  ),
-              ],
-              onChanged: (value) => setState(() => _categoryId = value),
-            ),
           ],
-        ],
+        ),
       ),
       actions: [
         TextButton(
@@ -618,7 +755,93 @@ class _CreateChannelDialogState extends State<_CreateChannelDialog> {
   }
 }
 
-/// What [_EditCategoryDialog] resolves to — either an edited name/
+/// One selectable channel-type row in [_CreateChannelDialog] - three of
+/// these sit inside one shared bordered/rounded group (see the `ClipRRect`
+/// in the dialog's `build`) separated by hairline dividers, rather than each
+/// being its own bordered box. Only the selected row gets a tinted
+/// background, so the group reads as one cohesive picker instead of three
+/// disconnected buttons.
+class _ChannelTypeOption extends StatelessWidget {
+  const _ChannelTypeOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: selected
+          ? theme.colorScheme.primary.withValues(alpha: 0.12)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.m,
+            vertical: AppSpacing.s + 2,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                size: 20,
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What [_EditCategoryDialog] resolves to - either an edited name/
 /// description, or a delete request (kept as one result type so the
 /// caller only has to `await` one dialog for both actions).
 class _CategoryEditInput {
@@ -662,7 +885,7 @@ class _EditCategoryDialogState extends State<_EditCategoryDialog> {
       builder: (context) => AlertDialog(
         title: const Text('Delete category?'),
         content: Text(
-          'Channels in "${widget.category.name}" are not deleted — they just '
+          'Channels in "${widget.category.name}" are not deleted - they just '
           "won't be grouped under it anymore.",
         ),
         actions: [

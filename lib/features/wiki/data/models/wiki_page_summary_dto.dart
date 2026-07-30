@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'wiki_page_summary_dto.freezed.dart';
 part 'wiki_page_summary_dto.g.dart';
 
-/// Wire values are PascalCase (`Public`/`Private`) — matching every other
+/// Wire values are PascalCase (`Public`/`Private`) - matching every other
 /// enum in this API (`OnlineStatus`, `ChannelType`, etc.) despite Alpine's
 /// own TypeScript type alias (`'public' | 'private'`) suggesting lowercase;
 /// verified against a live `GET .../wiki` response.
@@ -14,7 +14,7 @@ enum WikiVisibility {
   private,
 }
 
-/// The list-view shape returned by `GET .../wiki` — every page except its
+/// The list-view shape returned by `GET .../wiki` - every page except its
 /// `content` (fetched lazily per-page, see `WikiPageDto`). Mirrors Alpine's
 /// `WikiPageSummaryDto`.
 @freezed

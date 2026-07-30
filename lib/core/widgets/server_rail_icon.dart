@@ -24,7 +24,7 @@ class ServerRailIcon extends StatelessWidget {
   final Color? backgroundColor;
 
   /// Real server icon image, when the backend sends one. Falls back to
-  /// [icon]/[label] while null — most guilds today, since the backend
+  /// [icon]/[label] while null - most guilds today, since the backend
   /// doesn't send this field yet.
   final String? imageUrl;
 

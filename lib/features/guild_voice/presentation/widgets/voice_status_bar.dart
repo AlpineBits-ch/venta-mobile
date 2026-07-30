@@ -8,7 +8,7 @@ import '../../../../core/widgets/elapsed_time_label.dart';
 import '../../bloc/guild_voice_cubit.dart';
 import '../screens/guild_voice_screen.dart';
 
-/// Persistent "connected to voice channel X" bar — the mobile analogue of
+/// Persistent "connected to voice channel X" bar - the mobile analogue of
 /// Alpine's `voice-status-bar`. Lives in `AppShell`'s chrome (not scoped to
 /// any one route) so it survives navigating between text channels/guilds;
 /// tapping it reopens the full `GuildVoiceScreen`, the hang-up button leaves

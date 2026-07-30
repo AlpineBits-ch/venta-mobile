@@ -6,7 +6,7 @@ part 'wiki_page_dto.freezed.dart';
 part 'wiki_page_dto.g.dart';
 
 /// The full page shape returned by `GET .../wiki/pages/{id}` and by
-/// create/update — a [WikiPageSummaryDto] plus `content` (markdown text on
+/// create/update - a [WikiPageSummaryDto] plus `content` (markdown text on
 /// the wire, per Alpine's `renderWikiMarkdown`/TipTap-markdown-export
 /// pipeline). Kept as a flat class rather than extending the summary since
 /// freezed doesn't support class inheritance.

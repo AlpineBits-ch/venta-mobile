@@ -42,7 +42,7 @@ class AuthRepository {
   }
 
   /// Loads any persisted session and, if a refresh token exists, validates
-  /// it against the server immediately — there's no persisted expiry, so a
+  /// it against the server immediately - there's no persisted expiry, so a
   /// forced refresh on cold start is the simplest reliable check.
   Future<void> init() async {
     _baseUrl = await secureStorage.readServerUrl() ?? AppConfig.defaultApiUrl;
@@ -61,7 +61,7 @@ class AuthRepository {
     return api.getConfiguration(_resolveBaseUrl(domain));
   }
 
-  /// Accepts `username` or `user@server.com` — the latter points the client
+  /// Accepts `username` or `user@server.com` - the latter points the client
   /// at a self-hosted instance for the rest of the session.
   Future<void> login(String input, String password) async {
     final (username, resolvedBaseUrl) = _splitLoginInput(input);

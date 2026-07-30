@@ -4,7 +4,7 @@ import '../../../core/network/api_client.dart';
 import 'models/call_dto.dart';
 import 'models/cf_signaling_dto.dart';
 
-/// REST surface for 1:1 calling — call lifecycle plus the Cloudflare Calls
+/// REST surface for 1:1 calling - call lifecycle plus the Cloudflare Calls
 /// SFU proxy endpoints (App ID/secret never leave the server; the backend
 /// proxies each of these straight to `rtc.live.cloudflare.com`).
 class VoiceApi {
@@ -14,7 +14,7 @@ class VoiceApi {
 
   static const _base = '/api/v1/messaging/voice';
 
-  /// Authoritative current-state fetch — the catch-up path when a live
+  /// Authoritative current-state fetch - the catch-up path when a live
   /// `call.*` SignalR event may have been missed (e.g. a reconnect gap).
   Future<CallDto> getCall(String callId) async {
     final response = await client.dio.get<Map<String, dynamic>>(
@@ -58,7 +58,7 @@ class VoiceApi {
     return CallDto.fromJson(response.data!);
   }
 
-  /// Removes just this participant from an active call — the rest of the
+  /// Removes just this participant from an active call - the rest of the
   /// call keeps running. This is what a "hang up" action should call for a
   /// call with other participants still connected; [endCall] force-terminates
   /// for everyone regardless of how many remain.
@@ -71,7 +71,7 @@ class VoiceApi {
   }
 
   /// Force-terminates the call for every participant. Not currently wired to
-  /// any UI action (this client has no "end call for everyone" button — see
+  /// any UI action (this client has no "end call for everyone" button - see
   /// [leaveCall]), kept available like `GuildVoiceApi.serverDeafen` mirrors
   /// the full backend contract for a future moderator-style action.
   Future<CallDto> endCall(String callId, {required String deviceId}) async {

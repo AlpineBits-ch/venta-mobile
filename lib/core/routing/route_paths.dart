@@ -15,7 +15,7 @@ abstract final class RoutePaths {
   static const serverSettings = '/server/:guildId/settings';
   static const serverWiki = '/server/:guildId/wiki';
 
-  /// Declared/registered before [serverWikiPage] in `app_router.dart` — both
+  /// Declared/registered before [serverWikiPage] in `app_router.dart` - both
   /// match a 4-segment `/server/:guildId/wiki/*` location, and go_router
   /// picks the first declared match, so this literal `new` segment must be
   /// tried before the `:pageId` wildcard swallows it.

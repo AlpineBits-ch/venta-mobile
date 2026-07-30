@@ -19,7 +19,7 @@ class SecureStorageService {
   static const _pendingCallActionKey = 'venta.call.pending_action';
   static const _pendingCallIdKey = 'venta.call.pending_call_id';
 
-  /// Generic key on purpose — this is the app's one stable per-installation
+  /// Generic key on purpose - this is the app's one stable per-installation
   /// device identifier (see `DeviceIdService`), not call-specific. Named so
   /// it can double as the MLS `ClientDeviceId` once E2EE lands, per the
   /// multi-device calls/voice spec's "don't invent a second ID" note.
@@ -34,7 +34,7 @@ class SecureStorageService {
       _storage.write(key: _deviceIdKey, value: deviceId);
 
   /// A call action (accept/decline) that a [CallKitService] background
-  /// isolate captured while the main Flutter engine wasn't running yet — see
+  /// isolate captured while the main Flutter engine wasn't running yet - see
   /// `call_kit_service.dart`'s background handler for why this hand-off is
   /// needed instead of just acting on it directly from that isolate.
   Future<void> writePendingCallAction({

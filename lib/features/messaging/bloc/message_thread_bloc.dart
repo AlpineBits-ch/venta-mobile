@@ -55,7 +55,7 @@ class ThreadMessageSubmitted extends ThreadEvent {
   ];
 }
 
-/// Edits an existing message's content — optimistic-first like reactions,
+/// Edits an existing message's content - optimistic-first like reactions,
 /// rolled back to [previousText] if the HTTP call fails.
 class MessageEditRequested extends ThreadEvent {
   const MessageEditRequested({
@@ -69,7 +69,7 @@ class MessageEditRequested extends ThreadEvent {
   List<Object?> get props => [messageId, newText];
 }
 
-/// Deletes a message — optimistic-first, reinserted at its original index
+/// Deletes a message - optimistic-first, reinserted at its original index
 /// if the HTTP call fails.
 class MessageDeleteRequested extends ThreadEvent {
   const MessageDeleteRequested(this.messageId);
@@ -83,25 +83,43 @@ class ThreadTypingNotified extends ThreadEvent {
   const ThreadTypingNotified();
 }
 
-/// Toggles the caller's own reaction on a message — adds it if they haven't
+/// Toggles the caller's own reaction on a message - adds it if they haven't
 /// reacted with this emoji yet, removes it if they have. Applied optimistic-
 /// first (mirrors Alpine's `toggleReaction`), rolled back if the HTTP call
-/// fails.
+/// fails. [emoji] is always the display text (a Unicode glyph, or a custom
+/// emoji's name as fallback); [emojiId] is set only for a custom guild
+/// emoji, in which case reactions are matched/sent by id rather than name.
 class ReactionToggled extends ThreadEvent {
-  const ReactionToggled({required this.messageId, required this.emoji});
+  const ReactionToggled({
+    required this.messageId,
+    required this.emoji,
+    this.emojiId,
+  });
   final String messageId;
   final String emoji;
+  final String? emojiId;
 
   @override
-  List<Object?> get props => [messageId, emoji];
+  List<Object?> get props => [messageId, emoji, emojiId];
+}
+
+/// Toggles a message's pinned state - optimistic-first like reactions,
+/// rolled back if the HTTP call fails. Guild-channel gating (`PinMessages`)
+/// happens in the UI before this is even dispatched; DMs allow any member.
+class MessagePinToggled extends ThreadEvent {
+  const MessagePinToggled(this.messageId);
+  final String messageId;
+
+  @override
+  List<Object?> get props => [messageId];
 }
 
 /// Registers a synthetic "the bot is working on it" row while a slash
-/// command invocation is in flight — the caller (the composer) has already
+/// command invocation is in flight - the caller (the composer) has already
 /// fired the HTTP invoke; this just reserves the placeholder + starts the
 /// await-with-timeout. The real reply resolves it via the normal
 /// `guild.MessageCreated` realtime path in [_onMessageReceived] once the bot
-/// posts (there's no correlation id from the server — see `BotCommandApi`).
+/// posts (there's no correlation id from the server - see `BotCommandApi`).
 class ThreadBotPlaceholderAdded extends ThreadEvent {
   const ThreadBotPlaceholderAdded({
     required this.tempId,
@@ -115,7 +133,7 @@ class ThreadBotPlaceholderAdded extends ThreadEvent {
 }
 
 /// The invoke HTTP call itself failed before the server could even accept
-/// it — resolves the placeholder as failed immediately rather than waiting
+/// it - resolves the placeholder as failed immediately rather than waiting
 /// out the full timeout.
 class ThreadBotPlaceholderFailed extends ThreadEvent {
   const ThreadBotPlaceholderFailed(this.tempId);
@@ -171,13 +189,15 @@ class _ReactionAddedRemote extends ThreadEvent {
     required this.messageId,
     required this.emoji,
     required this.userId,
+    this.emojiId,
   });
   final String messageId;
   final String emoji;
   final String userId;
+  final String? emojiId;
 
   @override
-  List<Object?> get props => [messageId, emoji, userId];
+  List<Object?> get props => [messageId, emoji, userId, emojiId];
 }
 
 class _ReactionRemovedRemote extends ThreadEvent {
@@ -185,13 +205,37 @@ class _ReactionRemovedRemote extends ThreadEvent {
     required this.messageId,
     required this.emoji,
     required this.userId,
+    this.emojiId,
   });
   final String messageId;
   final String emoji;
   final String userId;
+  final String? emojiId;
 
   @override
-  List<Object?> get props => [messageId, emoji, userId];
+  List<Object?> get props => [messageId, emoji, userId, emojiId];
+}
+
+class _MessagePinnedRemote extends ThreadEvent {
+  const _MessagePinnedRemote({
+    required this.messageId,
+    required this.pinnedById,
+    required this.pinnedAt,
+  });
+  final String messageId;
+  final String pinnedById;
+  final DateTime pinnedAt;
+
+  @override
+  List<Object?> get props => [messageId, pinnedById, pinnedAt];
+}
+
+class _MessageUnpinnedRemote extends ThreadEvent {
+  const _MessageUnpinnedRemote(this.messageId);
+  final String messageId;
+
+  @override
+  List<Object?> get props => [messageId];
 }
 
 class _TypingExpired extends ThreadEvent {
@@ -205,7 +249,7 @@ class _TypingExpired extends ThreadEvent {
 /// One cohesive state, not a sealed union: "loading older page", "have a
 /// pending send", and "someone is typing" are all simultaneously true in a
 /// real thread, so a mutually-exclusive union fits worse here than in
-/// Auth/Friends — a deliberate deviation, documented for future maintainers.
+/// Auth/Friends - a deliberate deviation, documented for future maintainers.
 class ThreadState extends Equatable {
   const ThreadState({
     this.messages = const [],
@@ -274,6 +318,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<MessageDeleteRequested>(_onMessageDeleteRequested);
     on<ThreadTypingNotified>(_onTypingNotified);
     on<ReactionToggled>(_onReactionToggled);
+    on<MessagePinToggled>(_onMessagePinToggled);
     on<ThreadBotPlaceholderAdded>(_onBotPlaceholderAdded);
     on<ThreadBotPlaceholderFailed>(_onBotPlaceholderFailed);
     on<_BotPlaceholderTimedOut>(_onBotPlaceholderTimedOut);
@@ -284,6 +329,8 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<_TypingExpired>(_onTypingExpired);
     on<_ReactionAddedRemote>(_onReactionAddedRemote);
     on<_ReactionRemovedRemote>(_onReactionRemovedRemote);
+    on<_MessagePinnedRemote>(_onMessagePinnedRemote);
+    on<_MessageUnpinnedRemote>(_onMessageUnpinnedRemote);
 
     _repoSub = repository.events.listen((event) {
       switch (event) {
@@ -306,6 +353,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
               messageId: event.messageId,
               emoji: event.emoji,
               userId: event.userId,
+              emojiId: event.emojiId,
             ),
           );
         case RemoteReactionRemoved():
@@ -314,8 +362,19 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
               messageId: event.messageId,
               emoji: event.emoji,
               userId: event.userId,
+              emojiId: event.emojiId,
             ),
           );
+        case RemoteMessagePinned():
+          add(
+            _MessagePinnedRemote(
+              messageId: event.messageId,
+              pinnedById: event.pinnedById,
+              pinnedAt: event.pinnedAt,
+            ),
+          );
+        case RemoteMessageUnpinned():
+          add(_MessageUnpinnedRemote(event.messageId));
       }
     });
 
@@ -329,7 +388,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   final Map<String, Timer> _typingTimers = {};
   int _tempIdCounter = 0;
 
-  /// FIFO queue of pending placeholder temp-ids per bot user id — a bot's
+  /// FIFO queue of pending placeholder temp-ids per bot user id - a bot's
   /// next `MessageCreated` resolves its oldest still-pending placeholder.
   final Map<String, List<String>> _pendingBotTempIdsByBot = {};
   final Map<String, Timer> _botTimeoutTimers = {};
@@ -447,7 +506,9 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       (m) =>
           m.id == event.messageId &&
           m.reactions.any(
-            (r) => r.emoji == event.emoji && r.userId == myUserId,
+            (r) =>
+                _sameReaction(r, event.emoji, event.emojiId) &&
+                r.userId == myUserId,
           ),
     );
 
@@ -458,7 +519,9 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           (reactions) => hasOwn
               ? reactions
                     .where(
-                      (r) => !(r.emoji == event.emoji && r.userId == myUserId),
+                      (r) =>
+                          !(_sameReaction(r, event.emoji, event.emojiId) &&
+                              r.userId == myUserId),
                     )
                     .toList()
               : [
@@ -466,6 +529,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
                   MessageReactionDto(
                     messageId: event.messageId,
                     emoji: event.emoji,
+                    emojiId: event.emojiId,
                     userId: myUserId,
                     createdAt: DateTime.now(),
                   ),
@@ -478,7 +542,11 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       if (hasOwn) {
         await repository.removeReaction(event.messageId, event.emoji);
       } else {
-        await repository.addReaction(event.messageId, event.emoji);
+        await repository.addReaction(
+          event.messageId,
+          event.emoji,
+          emojiId: event.emojiId,
+        );
       }
     } catch (_) {
       // Roll back to the pre-toggle state.
@@ -492,6 +560,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
                     MessageReactionDto(
                       messageId: event.messageId,
                       emoji: event.emoji,
+                      emojiId: event.emojiId,
                       userId: myUserId,
                       createdAt: DateTime.now(),
                     ),
@@ -499,7 +568,8 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
                 : reactions
                       .where(
                         (r) =>
-                            !(r.emoji == event.emoji && r.userId == myUserId),
+                            !(_sameReaction(r, event.emoji, event.emojiId) &&
+                                r.userId == myUserId),
                       )
                       .toList(),
           ),
@@ -507,6 +577,87 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       );
     }
   }
+
+  Future<void> _onMessagePinToggled(
+    MessagePinToggled event,
+    Emitter<ThreadState> emit,
+  ) async {
+    final previous = state.messages
+        .where((m) => m.id == event.messageId)
+        .firstOrNull;
+    if (previous == null) return;
+    final wasPinned = previous.isPinned;
+
+    emit(
+      state.copyWith(
+        messages: _updateMessage(
+          event.messageId,
+          (m) => wasPinned
+              ? m.copyWith(isPinned: false, pinnedAt: null, pinnedById: null)
+              : m.copyWith(
+                  isPinned: true,
+                  pinnedAt: DateTime.now(),
+                  pinnedById: myUserId,
+                ),
+        ),
+      ),
+    );
+
+    try {
+      if (wasPinned) {
+        await repository.unpinMessage(event.messageId);
+      } else {
+        await repository.pinMessage(event.messageId);
+      }
+    } catch (_) {
+      emit(
+        state.copyWith(
+          messages: _updateMessage(event.messageId, (_) => previous),
+        ),
+      );
+    }
+  }
+
+  void _onMessagePinnedRemote(
+    _MessagePinnedRemote event,
+    Emitter<ThreadState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        messages: _updateMessage(
+          event.messageId,
+          (m) => m.copyWith(
+            isPinned: true,
+            pinnedAt: event.pinnedAt,
+            pinnedById: event.pinnedById,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _onMessageUnpinnedRemote(
+    _MessageUnpinnedRemote event,
+    Emitter<ThreadState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        messages: _updateMessage(
+          event.messageId,
+          (m) => m.copyWith(isPinned: false, pinnedAt: null, pinnedById: null),
+        ),
+      ),
+    );
+  }
+
+  /// True when [reaction] represents the same reaction as [emoji]/[emojiId]
+  /// - custom guild emoji are matched by id (the `emoji` field is just a
+  /// text fallback and can collide across different custom emoji with the
+  /// same name), Unicode reactions by the literal glyph.
+  bool _sameReaction(MessageReactionDto reaction, String emoji, String? emojiId) =>
+      emojiId != null
+          ? reaction.emojiId == emojiId
+          : reaction.emoji == emoji && reaction.emojiId == null;
 
   Future<void> _onMessageEditRequested(
     MessageEditRequested event,
@@ -588,7 +739,9 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       state.copyWith(
         messages: _withReactions(event.messageId, (reactions) {
           if (reactions.any(
-            (r) => r.emoji == event.emoji && r.userId == event.userId,
+            (r) =>
+                _sameReaction(r, event.emoji, event.emojiId) &&
+                r.userId == event.userId,
           )) {
             return reactions;
           }
@@ -597,6 +750,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
             MessageReactionDto(
               messageId: event.messageId,
               emoji: event.emoji,
+              emojiId: event.emojiId,
               userId: event.userId,
               createdAt: DateTime.now(),
             ),
@@ -616,7 +770,9 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           event.messageId,
           (reactions) => reactions
               .where(
-                (r) => !(r.emoji == event.emoji && r.userId == event.userId),
+                (r) =>
+                    !(_sameReaction(r, event.emoji, event.emojiId) &&
+                        r.userId == event.userId),
               )
               .toList(),
         ),
@@ -625,7 +781,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   }
 
   /// Returns [state.messages] with [messageId]'s `reactions` list replaced by
-  /// running [update] over its current reactions — a no-op if the message
+  /// running [update] over its current reactions - a no-op if the message
   /// isn't currently loaded (e.g. it scrolled out of the fetched page).
   List<MessageDto> _withReactions(
     String messageId,
@@ -637,6 +793,18 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           m.copyWith(reactions: update(m.reactions))
         else
           m,
+    ];
+  }
+
+  /// Returns [state.messages] with [messageId] replaced by running [update]
+  /// over it - a no-op if the message isn't currently loaded.
+  List<MessageDto> _updateMessage(
+    String messageId,
+    MessageDto Function(MessageDto) update,
+  ) {
+    return [
+      for (final m in state.messages)
+        if (m.id == messageId) update(m) else m,
     ];
   }
 
@@ -700,7 +868,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
   void _onMessageReceived(_MessageReceived event, Emitter<ThreadState> emit) {
     // Our own message already landed via the REST response in
-    // _onMessageSubmitted — the hub echo just needs to be ignored.
+    // _onMessageSubmitted - the hub echo just needs to be ignored.
     if (state.messages.any((m) => m.id == event.message.id)) return;
 
     final botQueue = _pendingBotTempIdsByBot[event.message.authorId];

@@ -22,6 +22,7 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
   final _picker = ImagePicker();
   GuildDto? _guild;
   String? _systemChannelId;
+  VerificationLevel _verificationLevel = VerificationLevel.none;
   bool _saving = false;
   bool _iconFailed = false;
 
@@ -56,6 +57,7 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
       _nameController.text = guild.name;
       _descriptionController.text = guild.description ?? '';
       _systemChannelId = guild.systemChannelId;
+      _verificationLevel = guild.verificationLevel;
       _iconFailed = false;
     });
   }
@@ -68,6 +70,7 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         systemChannelId: _systemChannelId,
+        verificationLevel: _verificationLevel,
       );
       if (mounted) {
         ScaffoldMessenger.of(
@@ -248,6 +251,32 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
           ],
           onChanged: (value) => setState(() => _systemChannelId = value),
         ),
+        const SizedBox(height: AppSpacing.l),
+        const Divider(),
+        const SizedBox(height: AppSpacing.s),
+        Text('Safety', style: theme.textTheme.titleSmall),
+        const SizedBox(height: AppSpacing.s),
+        DropdownButtonFormField<VerificationLevel>(
+          initialValue: _verificationLevel,
+          decoration: const InputDecoration(labelText: 'Verification level'),
+          items: [
+            for (final level in VerificationLevel.values)
+              DropdownMenuItem(
+                value: level,
+                child: Text(_verificationLevelLabel(level)),
+              ),
+          ],
+          onChanged: (value) => setState(
+            () => _verificationLevel = value ?? VerificationLevel.none,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _verificationLevelDescription(_verificationLevel),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
         const SizedBox(height: AppSpacing.m),
         FilledButton(
           onPressed: _saving ? null : _save,
@@ -276,3 +305,21 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
     );
   }
 }
+
+String _verificationLevelLabel(VerificationLevel level) => switch (level) {
+  VerificationLevel.none => 'None',
+  VerificationLevel.low => 'Low',
+  VerificationLevel.medium => 'Medium',
+  VerificationLevel.high => 'High',
+};
+
+/// Mirrors the backend's join-time requirement for each tier - v1 gates
+/// joining only, it doesn't retroactively restrict already-joined members.
+String _verificationLevelDescription(VerificationLevel level) => switch (level) {
+  VerificationLevel.none => 'Anyone with a valid invite can join.',
+  VerificationLevel.low => 'Requires a verified email to join.',
+  VerificationLevel.medium =>
+    'Requires a verified email and an account registered 5+ minutes ago.',
+  VerificationLevel.high =>
+    'Requires a verified email and an account registered 10+ minutes ago.',
+};

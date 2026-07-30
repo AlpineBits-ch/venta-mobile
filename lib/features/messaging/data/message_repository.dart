@@ -36,10 +36,12 @@ class RemoteReactionAdded extends MessageRepositoryEvent {
     required this.messageId,
     required this.emoji,
     required this.userId,
+    this.emojiId,
   });
   final String messageId;
   final String emoji;
   final String userId;
+  final String? emojiId;
 }
 
 class RemoteReactionRemoved extends MessageRepositoryEvent {
@@ -47,19 +49,37 @@ class RemoteReactionRemoved extends MessageRepositoryEvent {
     required this.messageId,
     required this.emoji,
     required this.userId,
+    this.emojiId,
   });
   final String messageId;
   final String emoji;
   final String userId;
+  final String? emojiId;
+}
+
+class RemoteMessagePinned extends MessageRepositoryEvent {
+  const RemoteMessagePinned({
+    required this.messageId,
+    required this.pinnedById,
+    required this.pinnedAt,
+  });
+  final String messageId;
+  final String pinnedById;
+  final DateTime pinnedAt;
+}
+
+class RemoteMessageUnpinned extends MessageRepositoryEvent {
+  const RemoteMessageUnpinned(this.messageId);
+  final String messageId;
 }
 
 /// One instance per open thread (unlike the app-lifetime singleton
-/// repositories) — messages are inherently scoped to a single thread and
+/// repositories) - messages are inherently scoped to a single thread and
 /// there's no benefit to sharing state across threads that aren't open at
 /// the same time. Owned and disposed by `MessageThreadBloc`.
 ///
 /// Parameterized by *either* [conversationId] (DM) *or* [channelId] (guild
-/// channel) — exactly one must be set. This is the shared-kernel seam the
+/// channel) - exactly one must be set. This is the shared-kernel seam the
 /// Phase 1 plan called out: guild channel messaging in Phase 2 reuses this
 /// unchanged, just constructed with `channelId` instead.
 class MessageRepository {
@@ -151,6 +171,7 @@ class MessageRepository {
             messageId: payload['messageId'] as String,
             emoji: payload['emoji'] as String,
             userId: payload['userId'] as String,
+            emojiId: payload['emojiId'] as String?,
           ),
         );
       case 'conversation.ReactionRemoved' || 'guild.ReactionRemoved':
@@ -159,7 +180,20 @@ class MessageRepository {
             messageId: payload['messageId'] as String,
             emoji: payload['emoji'] as String,
             userId: payload['userId'] as String,
+            emojiId: payload['emojiId'] as String?,
           ),
+        );
+      case 'conversation.MessagePinned' || 'guild.MessagePinned':
+        _eventsController.add(
+          RemoteMessagePinned(
+            messageId: payload['messageId'] as String,
+            pinnedById: payload['pinnedById'] as String,
+            pinnedAt: DateTime.parse(payload['pinnedAt'] as String),
+          ),
+        );
+      case 'conversation.MessageUnpinned' || 'guild.MessageUnpinned':
+        _eventsController.add(
+          RemoteMessageUnpinned(payload['messageId'] as String),
         );
     }
   }
@@ -170,7 +204,7 @@ class MessageRepository {
       : api.getForConversation(_contextId, offset: offset, limit: limit);
 
   /// The server always base64-wraps whatever `Content` it stores when
-  /// echoing/broadcasting it back (confirmed empirically — see the Phase 1
+  /// echoing/broadcasting it back (confirmed empirically - see the Phase 1
   /// messaging debug session), so the client sends raw plaintext here and
   /// only ever decodes, never encodes, for the wire. `MessageContentCodec`
   /// stays the single seam for both, ready for MLS ciphertext later.
@@ -197,7 +231,7 @@ class MessageRepository {
   }
 
   /// Uploads and waits for processing on one file, for the composer's
-  /// attachment picker — the returned [AttachmentDto] already has its final
+  /// attachment picker - the returned [AttachmentDto] already has its final
   /// `url`, so it can be used directly both in the optimistic local message
   /// and as the id passed to [send].
   Future<AttachmentDto> uploadAttachment({
@@ -209,7 +243,7 @@ class MessageRepository {
   }
 
   /// Builds the optimistic local entry with the right context id filled in
-  /// — callers (`MessageThreadBloc`) shouldn't need to know which mode
+  /// - callers (`MessageThreadBloc`) shouldn't need to know which mode
   /// they're in.
   MessageDto buildOptimistic({
     required String id,
@@ -249,7 +283,7 @@ class MessageRepository {
   Future<void> deleteMessage(String messageId) => api.delete(messageId);
 
   /// Used to resolve a reply reference that's scrolled out of the currently
-  /// loaded page — mirrors Alpine's `MessageStore.getOrFetchMessage`.
+  /// loaded page - mirrors Alpine's `MessageStore.getOrFetchMessage`.
   Future<MessageDto> getMessageById(String messageId) => isChannel
       ? api.getChannelMessage(channelId: _contextId, messageId: messageId)
       : api.getConversationMessage(
@@ -257,19 +291,32 @@ class MessageRepository {
           messageId: messageId,
         );
 
-  Future<void> addReaction(String messageId, String emoji) => api.addReaction(
-    messageId: messageId,
-    emoji: emoji,
-    conversationId: conversationId,
-    channelId: channelId,
-  );
+  Future<void> addReaction(String messageId, String emoji, {String? emojiId}) =>
+      api.addReaction(
+        messageId: messageId,
+        emoji: emojiId != null ? null : emoji,
+        emojiId: emojiId,
+        conversationId: conversationId,
+        channelId: channelId,
+      );
 
   Future<void> removeReaction(String messageId, String emoji) =>
       api.removeReaction(
         messageId: messageId,
         emoji: emoji,
         contextId: _contextId,
+        channelId: channelId,
       );
+
+  /// Idempotent - pinning an already-pinned message just returns its
+  /// current pin state.
+  Future<void> pinMessage(String messageId) => api.pinMessage(messageId);
+
+  Future<void> unpinMessage(String messageId) => api.unpinMessage(messageId);
+
+  Future<List<MessageDto>> getPinnedMessages() => isChannel
+      ? api.getPinnedMessages(channelId: _contextId)
+      : api.getPinnedMessages(conversationId: _contextId);
 
   Future<void> sendTypingIndicator() =>
       _realtimeService.invoke('$_methodPrefix.StartTyping', args: [_contextId]);

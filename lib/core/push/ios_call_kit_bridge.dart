@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 /// Mirrors just the event shapes [CallKitService] needs from the native
-/// CXProvider owned directly by `AppDelegate.swift` — see that file for why
+/// CXProvider owned directly by `AppDelegate.swift` - see that file for why
 /// iOS stopped going through `flutter_callkit_incoming` (still used as-is
 /// on Android).
 sealed class IosCallKitEvent {
@@ -33,11 +33,11 @@ class IosVoipTokenUpdated extends IosCallKitEvent {
 /// Thin wrapper around the `gg.venta.mobile/callkit` [MethodChannel] that
 /// `AppDelegate.swift` sets up on whichever Flutter engine ends up live
 /// (the normal UIScene-driven one, or its own lazily-booted fallback for a
-/// backgrounded decline/end — see `ensureEngineForActionRelay` there).
+/// backgrounded decline/end - see `ensureEngineForActionRelay` there).
 ///
 /// Native buffers every event rather than pushing it the instant a channel
 /// exists, since that could still race Dart's [setMethodCallHandler] call
-/// below — [_drainPendingEvents] here (called once up front, and again on
+/// below - [_drainPendingEvents] here (called once up front, and again on
 /// every "wake" ping) is what actually guarantees delivery.
 class IosCallKitBridge {
   IosCallKitBridge() {
@@ -76,14 +76,14 @@ class IosCallKitBridge {
         args['token'] as String,
       ),
       _ =>
-        null, // 'reported' is purely informational — nothing to react to here.
+        null, // 'reported' is purely informational - nothing to react to here.
     };
   }
 
   Future<String?> getVoipToken() =>
       _channel.invokeMethod<String>('getVoipToken');
 
-  /// Foreground/live-socket path — mirrors the old `showCallkitIncoming`
+  /// Foreground/live-socket path - mirrors the old `showCallkitIncoming`
   /// call for a call [CallKitService] already learned about over SignalR.
   Future<bool> reportIncomingCall({
     required String callId,

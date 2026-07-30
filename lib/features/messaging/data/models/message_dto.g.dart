@@ -54,6 +54,11 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
         unknownValue: MessageAuthorType.standard,
       ) ??
       MessageAuthorType.standard,
+  isPinned: json['isPinned'] as bool? ?? false,
+  pinnedAt: json['pinnedAt'] == null
+      ? null
+      : DateTime.parse(json['pinnedAt'] as String),
+  pinnedById: json['pinnedById'] as String?,
   systemMessageVariant: (json['systemMessageVariant'] as num?)?.toInt(),
 );
 
@@ -78,6 +83,9 @@ Map<String, dynamic> _$MessageDtoToJson(
   'encryptionState': _$MessageEncryptionStateEnumMap[instance.encryptionState]!,
   'type': _$MessageTypeEnumMap[instance.type]!,
   'authorIdType': _$MessageAuthorTypeEnumMap[instance.authorIdType]!,
+  'isPinned': instance.isPinned,
+  'pinnedAt': instance.pinnedAt?.toIso8601String(),
+  'pinnedById': instance.pinnedById,
   'systemMessageVariant': instance.systemMessageVariant,
 };
 

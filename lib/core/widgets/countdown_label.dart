@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// Live "mm:ss" countdown to [deadline] — counterpart to [ElapsedTimeLabel]
+/// Live "mm:ss" countdown to [deadline] - counterpart to [ElapsedTimeLabel]
 /// for the multi-device calling "alone" grace period. Ticks locally via its
 /// own Timer for the same reason: a pure display concern, no need to push a
 /// rebuild through the bloc layer for it.

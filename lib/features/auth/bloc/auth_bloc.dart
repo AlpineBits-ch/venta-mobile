@@ -132,8 +132,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (status == 409) {
         return 'That username or email is already taken.';
       }
-      return 'Network error — please try again.';
+      return 'Network error - please try again.';
     }
-    return 'Something went wrong — please try again.';
+    return 'Something went wrong - please try again.';
   }
 }

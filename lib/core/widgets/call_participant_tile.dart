@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'profile_resolver.dart';
 import 'user_avatar.dart';
 
-/// One participant's avatar + name in a call screen's roster — shared by
+/// One participant's avatar + name in a call screen's roster - shared by
 /// [CallScreen] and [GuildVoiceScreen]. Always rendered on the same
 /// intentionally-dark call chrome, so text stays literal white rather than
 /// theme-derived (matching the rest of that chrome).

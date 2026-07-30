@@ -2,7 +2,7 @@ name: Release
 
 # Cut a release by pushing a tag like `v1.0.1`. `workflow_dispatch` is a
 # manual escape hatch for testing the pipeline itself without cutting a
-# real tag — the TestFlight/GitHub Release steps only run on tag pushes
+# real tag - the TestFlight/GitHub Release steps only run on tag pushes
 # (see the `if:` guards below), so a manual run just builds artifacts.
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
 
       - run: flutter pub get
 
-      # No dedicated release keystore yet — this is signed with the debug
+      # No dedicated release keystore yet - this is signed with the debug
       # key, same as local `flutter run --release`. Fine for a sideloaded
       # APK; switch `android/app/build.gradle.kts`'s release signingConfig
       # (and add the matching secrets here) before ever publishing to Play
@@ -94,7 +94,7 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # Apple's intermediate CAs — without these, `security find-identity
+          # Apple's intermediate CAs - without these, `security find-identity
           # -v` can't build a full trust chain for the imported cert and
           # silently filters it out of the "valid" list, which is what
           # produces Flutter's "No valid code signing certificates were
@@ -149,7 +149,7 @@ jobs:
 
       # NOTE: ios/Runner.xcodeproj/project.pbxproj currently has no signing
       # configuration at all (still Flutter's default `CODE_SIGN_STYLE =
-      # Automatic`, no team) — it's never been opened in real Xcode. A
+      # Automatic`, no team) - it's never been opened in real Xcode. A
       # previous attempt to patch in manual signing settings blind, from a
       # non-Mac machine, produced a project file that xcodebuild refused to
       # even parse ("damaged... parse error") twice in a row for reasons
@@ -162,10 +162,10 @@ jobs:
       # then commit the resulting project.pbxproj. Xcode writes well-formed
       # entries; hand-editing this file blind is what broke it. Once that's
       # committed, this job's cert/profile import steps above should be
-      # sufficient on their own — no CI-side pbxproj patching needed.
+      # sufficient on their own - no CI-side pbxproj patching needed.
 
       # `flutter build ipa` generates `ios/Podfile` (if missing, as it
-      # currently is — iOS has never been built on this Windows dev
+      # currently is - iOS has never been built on this Windows dev
       # machine) and runs `pod install` itself as part of the archive step,
       # so no separate CocoaPods step is needed here.
       - name: flutter build ipa

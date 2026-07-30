@@ -8,9 +8,9 @@ import 'relationship_api.dart';
 extension RelationshipModelX on RelationshipModel {
   /// The API returns `status` already relative to the querying user
   /// (e.g. `pendingIncoming` means incoming *to me*), but `owner`/`target`
-  /// are absolute — this picks whichever side isn't me, for display.
+  /// are absolute - this picks whichever side isn't me, for display.
   ///
-  /// Compares against `owner.userId`, not the top-level `ownerId` — the
+  /// Compares against `owner.userId`, not the top-level `ownerId` - the
   /// latter is the Social service's profile id (`prfl_...`), a different
   /// namespace than `myUserId` (the Identity JWT `sub`), so it never
   /// matched and this always fell back to `owner`, showing yourself as
@@ -58,7 +58,7 @@ class RelationshipRepository {
     try {
       await fetch();
     } catch (_) {
-      // Best-effort — the user can still pull-to-refresh.
+      // Best-effort - the user can still pull-to-refresh.
     }
   }
 

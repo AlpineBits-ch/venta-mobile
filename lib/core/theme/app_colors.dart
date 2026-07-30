@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
 /// Raw design tokens ported from the Venta desktop client's palette
-/// (`Alpine/src/styles.css`, theme id `alpine-dark`).
+/// (`Alpine/src/styles.css`'s `@theme` block, which is required to stay
+/// byte-identical to `DEFAULT_THEME` in `Alpine/src/app/models/theme.model.ts`
+/// - same two-source-of-truth constraint applies here, so re-check both
+/// when Alpine's palette changes again).
 ///
-/// This is the single place hex values live — features must never hardcode
+/// This is the single place hex values live - features must never hardcode
 /// a `Color(0x...)` literal, they should go through [AppTheme]/[VentaStatusColors].
 abstract final class AppColors {
   // Brand
-  static const brand = Color(0xFF7C72FF);
-  static const brandHover = Color(0xFF695DF2);
-  static const brandDim = Color(0xFF9A84FF);
-  static const brandDark = Color(0xFF584AD9);
+  static const brand = Color(0xFF4B5BC4);
+  static const brandHover = Color(0xFF3E4EAE);
+  static const brandDim = Color(0xFF7E8AE0);
+  static const brandDark = Color(0xFF333F8C);
 
   // Dark-mode surfaces (Alpine's only theme)
   static const darkLoginBg = Color(0xFF06090F);
@@ -19,13 +22,14 @@ abstract final class AppColors {
   static const darkCard = Color(0xFF161B27);
   static const darkHover = Color(0xFF1D2333);
   static const darkBorder = Color(0xFF252E42);
-  static const darkBorderSubtle = Color(0x24FFFFFF); // rgba(255,255,255,.14)
-  static const darkBorderDefault = Color(0x38FFFFFF); // rgba(255,255,255,.22)
-  static const darkTextPrimary = Color(0xD9FFFFFF); // rgba(255,255,255,.85)
-  static const darkTextSecondary = Color(0x99FFFFFF); // rgba(255,255,255,.60)
-  static const darkTextMuted = Color(0x66FFFFFF); // rgba(255,255,255,.40)
+  static const darkBorderSubtle = Color(0x1AFFFFFF); // rgba(255,255,255,.10)
+  static const darkBorderDefault = Color(0x29FFFFFF); // rgba(255,255,255,.16)
+  static const darkTextPrimary = Color(0xE0FFFFFF); // rgba(255,255,255,.88)
+  static const darkTextSecondary = Color(0x9EFFFFFF); // rgba(255,255,255,.62)
+  static const darkTextMuted = Color(0x6BFFFFFF); // rgba(255,255,255,.42)
+  static const darkTextFaint = Color(0x3DFFFFFF); // rgba(255,255,255,.24)
 
-  // Light-mode surfaces — manually mapped for the mobile client, since
+  // Light-mode surfaces - manually mapped for the mobile client, since
   // Alpine desktop ships dark-only but Discord mobile supports both.
   static const lightAppBg = Color(0xFFFFFFFF);
   static const lightSidebar = Color(0xFFF2F3F7);
@@ -38,13 +42,13 @@ abstract final class AppColors {
   static const lightTextSecondary = Color(0xA3060714); // rgba(6,7,20,.64)
   static const lightTextMuted = Color(0x73060714); // rgba(6,7,20,.45)
 
-  // Presence / status — same across both themes
+  // Presence / status - same across both themes
   static const statusOnline = Color(0xFF34D399);
   static const statusIdle = Color(0xFFFBBF24);
   static const statusOffline = Color(0xFFF43F5E);
   static const statusDnd = Color(0xFFF43F5E);
 
-  // Avatar-placeholder accent palette — deterministic per-user fallback fill
+  // Avatar-placeholder accent palette - deterministic per-user fallback fill
   // (see AvatarPalette.colorForUserId), kept hue-distinct from the presence
   // colors above so a placeholder is never mistaken for a status dot.
   static const avatarAccentBlue = Color(0xFF4C8DFF);

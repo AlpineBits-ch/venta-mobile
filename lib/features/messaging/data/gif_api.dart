@@ -12,14 +12,14 @@ class GifResult {
   final String id;
   final String title;
 
-  /// Full animated GIF URL — sent as the message content, matching desktop.
+  /// Full animated GIF URL - sent as the message content, matching desktop.
   final String url;
 
-  /// Static JPEG thumbnail — used for the picker grid.
+  /// Static JPEG thumbnail - used for the picker grid.
   final String previewUrl;
 }
 
-/// Hits Klipy directly from the client (no gateway involved) — same
+/// Hits Klipy directly from the client (no gateway involved) - same
 /// convention as the desktop app, which embeds this key client-side too
 /// since it's already shipped in every build.
 class GifApi {
@@ -66,7 +66,7 @@ class GifApi {
   }
 }
 
-/// True when [text] is an entire message consisting of a Klipy CDN GIF URL —
+/// True when [text] is an entire message consisting of a Klipy CDN GIF URL -
 /// such a message renders as an inline GIF image rather than plain text.
 bool isKlipyGifUrl(String text) => RegExp(
   r'^https://static\.klipy\.com/.+',

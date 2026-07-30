@@ -5,7 +5,7 @@ import '../device/device_id_service.dart';
 import 'realtime_event.dart';
 import 'realtime_transport.dart';
 
-/// The single shared hub connection for the whole app — mirrors Alpine's
+/// The single shared hub connection for the whole app - mirrors Alpine's
 /// `RealtimeConnectionService`. Dumb typed re-broadcast only: it knows
 /// nothing about blocs or domain rules, it just turns hub methods into a
 /// broadcast [Stream<RealtimeEvent>] that feature repositories subscribe to
@@ -32,10 +32,12 @@ class RealtimeService {
     'conversation.UserTyping',
     'conversation.ReactionCreated',
     'conversation.ReactionRemoved',
+    'conversation.MessagePinned',
+    'conversation.MessageUnpinned',
     'conversation.FriendRequestReceived',
     'conversation.FriendRequestAccepted',
     // MLS (E2EE) key-exchange bootstrap signal, not a hydration event
-    // despite the name — Alpine's handler fetches "pending welcomes" and
+    // despite the name - Alpine's handler fetches "pending welcomes" and
     // joins an MLS group for this conversationId. venta_mobile has no MLS
     // yet (plaintext-first v1 scope), so this stays watched-but-unconsumed
     // until E2EE lands rather than being wired to a no-op MLS stub.
@@ -58,6 +60,10 @@ class RealtimeService {
     'guild.PresenceChanged',
     'guild.ReactionCreated',
     'guild.ReactionRemoved',
+    'guild.MessagePinned',
+    'guild.MessageUnpinned',
+    'guild.EmojiCreated',
+    'guild.EmojiDeleted',
     'guild.WikiPageCreated',
     'guild.WikiPageUpdated',
     'guild.WikiPageDeleted',
@@ -77,7 +83,7 @@ class RealtimeService {
     'call.CallDeviceTakeover',
     'call.CallParticipantLeft',
     'call.CallAlone',
-    // Camera/screenshare — mirrors guild.voice.*'s equivalents (see
+    // Camera/screenshare - mirrors guild.voice.*'s equivalents (see
     // GuildVoiceRepository); the backend has always supported these
     // symmetrically for calls too, the client just never watched them.
     'call.CameraChanged',
@@ -101,7 +107,7 @@ class RealtimeService {
 
   final _eventsController = StreamController<RealtimeEvent>.broadcast();
 
-  /// Every watched hub method, tagged by name — repositories filter with
+  /// Every watched hub method, tagged by name - repositories filter with
   /// `.where((e) => e.name == '...')`.
   Stream<RealtimeEvent> get events => _eventsController.stream;
 

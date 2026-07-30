@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Self-managed Telecom [Connection] implementation for flutter_callkit_incoming.
  *
  * Hosts the call in the Android Telecom framework with `PROPERTY_SELF_MANAGED` so
- * the OS treats it as a first-party phone call — granting it keyguard-bypass /
+ * the OS treats it as a first-party phone call - granting it keyguard-bypass /
  * full-screen-intent priority on strict OEMs (Samsung Knox, Xiaomi, etc.) that
  * otherwise ignore [android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED]
  * on ordinary Activities.
@@ -42,7 +42,7 @@ class CallkitConnection(
     companion object {
         private const val TAG = "CallkitConnection"
 
-        /** Bundle key — pass the full call Data bundle through Telecom extras. */
+        /** Bundle key - pass the full call Data bundle through Telecom extras. */
         const val EXTRA_CALL_BUNDLE = "com.hiennv.flutter_callkit_incoming.CALL_BUNDLE"
 
         private val activeConnections = ConcurrentHashMap<String, CallkitConnection>()
@@ -57,7 +57,7 @@ class CallkitConnection(
             activeConnections.remove(callId)
         }
 
-        /** For testing / cleanup — release all refs (Connection objects already destroyed by OS). */
+        /** For testing / cleanup - release all refs (Connection objects already destroyed by OS). */
         fun clearAll() {
             activeConnections.clear()
         }
@@ -79,7 +79,7 @@ class CallkitConnection(
     // These fire when the user interacts with the OS-level call UI (system
     // dialer, car Bluetooth, watch, etc.). In our app-driven model we still
     // handle the primary Accept/Decline via our own notification buttons, but
-    // the OS can also trigger these — we must honor both paths.
+    // the OS can also trigger these - we must honor both paths.
     // -------------------------------------------------------------------------
 
     override fun onAnswer() {
@@ -120,14 +120,14 @@ class CallkitConnection(
     // App → Telecom driving helpers (invoked by the plugin's BroadcastReceiver)
     // -------------------------------------------------------------------------
 
-    /** Mark the call as answered — user accepted via app notification. */
+    /** Mark the call as answered - user accepted via app notification. */
     fun markAccepted() {
         Log.d(TAG, "markAccepted id=$callId")
         setActive()
     }
 
     /**
-     * Mark the call as declined/ended — user declined via app notification.
+     * Mark the call as declined/ended - user declined via app notification.
      *
      * Cold-launch DECLINE recovery is fired
      * from inside the self-managed [Connection] context (and *before*
@@ -151,7 +151,7 @@ class CallkitConnection(
     }
 
     /**
-     * Persist declined nonce and start MainActivity. Idempotent — safe even
+     * Persist declined nonce and start MainActivity. Idempotent - safe even
      * if the BroadcastReceiver fallback also fires (single-task launch flag,
      * one-shot consumePending).
      */
@@ -176,20 +176,20 @@ class CallkitConnection(
                 context.startActivity(launchIntent)
                 Log.d(TAG, "[DIAG-DECLINE-CS] startActivity dispatched (CS ctx, RINGING)")
             } else {
-                Log.w(TAG, "[DIAG-DECLINE-CS] launchIntent null — recovery skipped")
+                Log.w(TAG, "[DIAG-DECLINE-CS] launchIntent null - recovery skipped")
             }
         } catch (e: Exception) {
             Log.w(TAG, "[DIAG-DECLINE-CS] recovery failed: ${e.message}")
         }
     }
 
-    /** Mark the call as terminated — call ended (either side hung up). */
+    /** Mark the call as terminated - call ended (either side hung up). */
     fun markEnded() {
         Log.d(TAG, "markEnded id=$callId")
         finishWithCause(DisconnectCause.LOCAL)
     }
 
-    /** Mark the call as missed — timeout without answer. */
+    /** Mark the call as missed - timeout without answer. */
     fun markMissed() {
         Log.d(TAG, "markMissed id=$callId")
         finishWithCause(DisconnectCause.MISSED)

@@ -4,7 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../../voice/data/models/cf_signaling_dto.dart';
 import 'models/guild_voice_dto.dart';
 
-/// REST surface for guild voice channels — a parallel abstraction to
+/// REST surface for guild voice channels - a parallel abstraction to
 /// `VoiceApi` (1:1 calling), scoped to `{guildId}/channels/{channelId}`
 /// rather than a bare call id. Mirrors Alpine's `GuildVoiceService`: no
 /// accept/decline (joining is unilateral), CF Calls session/track/SDP
@@ -45,7 +45,7 @@ class GuildVoiceApi {
     );
   }
 
-  /// Roster-only fetch, without joining — used to populate participant
+  /// Roster-only fetch, without joining - used to populate participant
   /// counts/avatars for voice channels the user hasn't joined yet.
   Future<VoiceStateDto> getState(String guildId, String channelId) async {
     final response = await client.dio.get<Map<String, dynamic>>(

@@ -4,7 +4,7 @@ part 'token_response.freezed.dart';
 part 'token_response.g.dart';
 
 /// Response shape of `{baseUrl}/connect/token` (OAuth2 password/refresh_token
-/// grants) — snake_case keys are the wire format, not a style choice.
+/// grants) - snake_case keys are the wire format, not a style choice.
 @freezed
 sealed class TokenResponse with _$TokenResponse {
   const factory TokenResponse({

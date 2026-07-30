@@ -6,12 +6,13 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../guilds/data/guild_api.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/invite_dto.dart';
 
 enum _DialogState { loading, ready, joining, joined, error }
 
-/// Modal invite popup — landing target for `venta://invite/{code}`, shown
+/// Modal invite popup - landing target for `venta://invite/{code}`, shown
 /// via `showDialog` from the app-level deep link listener (see `app.dart`).
 /// Mirrors desktop's `InviteDialogComponent` exactly: same states
 /// (loading/ready/joining/joined/error), same guild icon+name+description
@@ -29,6 +30,7 @@ class _InviteDialogState extends State<InviteDialog> {
   InviteDto? _invite;
   _DialogState _state = _DialogState.loading;
   bool _iconFailed = false;
+  String? _joinError;
 
   @override
   void initState() {
@@ -51,7 +53,10 @@ class _InviteDialogState extends State<InviteDialog> {
 
   Future<void> _join() async {
     if (_state == _DialogState.joining) return;
-    setState(() => _state = _DialogState.joining);
+    setState(() {
+      _state = _DialogState.joining;
+      _joinError = null;
+    });
     try {
       final guild = await getIt<GuildRepository>().redeemInvite(widget.code);
       if (!mounted) return;
@@ -60,8 +65,21 @@ class _InviteDialogState extends State<InviteDialog> {
       if (!mounted) return;
       Navigator.of(context).pop();
       context.push(RoutePaths.serverPath(guild.id));
+    } on VerificationLevelNotMetException catch (e) {
+      if (mounted) {
+        setState(() {
+          _state = _DialogState.ready;
+          _joinError =
+              'This server requires ${_verificationRequirementText(e.requiredLevel)} to join.';
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _state = _DialogState.ready);
+      if (mounted) {
+        setState(() {
+          _state = _DialogState.ready;
+          _joinError = 'Could not join server. Try again.';
+        });
+      }
     }
   }
 
@@ -119,6 +137,16 @@ class _InviteDialogState extends State<InviteDialog> {
                 ),
                 const SizedBox(height: AppSpacing.l),
                 Center(child: _buildBody(theme)),
+                if (_joinError != null) ...[
+                  const SizedBox(height: AppSpacing.s),
+                  Text(
+                    _joinError!,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.l),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -295,3 +323,13 @@ class _InviteDialogState extends State<InviteDialog> {
     );
   }
 }
+
+/// Turns a `requiredLevel` wire value (`"Low"`/`"Medium"`/`"High"`) into the
+/// plain-language requirement it maps to - see the guild verification-level
+/// spec's join-gating table.
+String _verificationRequirementText(String requiredLevel) => switch (requiredLevel) {
+  'Low' => 'a verified email',
+  'Medium' => 'a verified email and an account at least 5 minutes old',
+  'High' => 'a verified email and an account at least 10 minutes old',
+  _ => 'additional account verification',
+};

@@ -12,9 +12,9 @@ import '../../data/wiki_repository.dart';
 import '../wiki_permissions.dart';
 import '../widgets/markdown_toolbar.dart';
 
-/// Shared create/edit form — pass [pageId] to edit that page, omit it to
+/// Shared create/edit form - pass [pageId] to edit that page, omit it to
 /// create a new one. [pageId] (rather than a pre-loaded `WikiPageDto`) keeps
-/// this screen reachable by a plain go_router path — it fetches the page
+/// this screen reachable by a plain go_router path - it fetches the page
 /// itself, the same way every other guild screen fetches its own data on
 /// open. Pops with `true` on a successful save so the caller refetches.
 class WikiEditorScreen extends StatefulWidget {

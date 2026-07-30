@@ -29,7 +29,7 @@
 			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<!-- Invite links, notification-tap deep links — see
+				<!-- Invite links, notification-tap deep links - see
 				     lib/core/routing/deep_link_handler.dart. -->
 				<string>venta</string>
 			</array>

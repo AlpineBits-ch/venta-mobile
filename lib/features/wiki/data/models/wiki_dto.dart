@@ -6,7 +6,7 @@ import 'wiki_page_summary_dto.dart';
 part 'wiki_dto.freezed.dart';
 part 'wiki_dto.g.dart';
 
-/// The whole-wiki shape returned by `GET .../guilds/{guildId}/wiki` — every
+/// The whole-wiki shape returned by `GET .../guilds/{guildId}/wiki` - every
 /// category plus every page *summary* (no content) in one round trip.
 @freezed
 sealed class WikiDto with _$WikiDto {

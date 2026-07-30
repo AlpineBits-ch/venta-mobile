@@ -7,7 +7,7 @@ import 'widget_styles.dart';
 
 /// Builds explicit [ThemeData] for both brightness modes.
 ///
-/// Deliberately does NOT use [ColorScheme.fromSeed] — that algorithmically
+/// Deliberately does NOT use [ColorScheme.fromSeed] - that algorithmically
 /// derives tones and would drift from Venta's exact brand hex values. Every
 /// role below is mapped by hand from Alpine's `--color-*` tokens.
 abstract final class AppTheme {

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/widget_styles.dart';
 
 /// Lets a user point the client at a self-hosted instance instead of the
-/// default `api.venta.gg` — mirrors Alpine's `ApiConfigService`. Wired up
+/// default `api.venta.gg` - mirrors Alpine's `ApiConfigService`. Wired up
 /// for real once `AuthRepository` lands in Phase 1.
 class ServerSetupScreen extends StatelessWidget {
   const ServerSetupScreen({super.key});

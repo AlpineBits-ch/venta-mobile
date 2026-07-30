@@ -29,7 +29,7 @@ sealed class GuildMemberDto with _$GuildMemberDto {
     required String guildId,
     required String userId,
     // Backend contract change (2026-07-27): member permissions are now
-    // computed from `roleMembers` rather than sent as a precomputed string —
+    // computed from `roleMembers` rather than sent as a precomputed string -
     // this can legitimately be null/absent now.
     @Default('') String permissions,
     @Default(OnlineStatus.offline) OnlineStatus status,
@@ -45,7 +45,7 @@ sealed class GuildMemberDto with _$GuildMemberDto {
 
 extension GuildMemberEffectivePermissions on GuildMemberDto {
   /// Union of every non-`@everyone` role's permission bits, plus an
-  /// automatic Superadmin bypass for the guild owner — mirrors the
+  /// automatic Superadmin bypass for the guild owner - mirrors the
   /// server's own aggregation (`GuildPermissionService`) closely enough for
   /// gating client-side UI (the server is still the source of truth on
   /// every write).

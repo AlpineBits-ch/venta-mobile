@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// One circular control in a call screen's action row (mute/deafen/speaker/
-/// end-call, etc.) — shared by [CallScreen] and [GuildVoiceScreen] so their
+/// end-call, etc.) - shared by [CallScreen] and [GuildVoiceScreen] so their
 /// controls stay visually identical instead of being copy-pasted per screen.
 class CallActionButton extends StatelessWidget {
   const CallActionButton({

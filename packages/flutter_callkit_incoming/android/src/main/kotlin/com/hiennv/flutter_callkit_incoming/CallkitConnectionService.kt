@@ -13,12 +13,12 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 
 /**
- * Self-managed Telecom [ConnectionService] — hosts in-app calls in the Android
+ * Self-managed Telecom [ConnectionService] - hosts in-app calls in the Android
  * Telecom framework.
  *
  * Registered via [InAppCallManager.registerPhoneAccount] with
  * [android.telecom.PhoneAccount.CAPABILITY_SELF_MANAGED]. Activated when the
- * plugin's incoming-call flow calls `telecomManager.addNewIncomingCall(...)` —
+ * plugin's incoming-call flow calls `telecomManager.addNewIncomingCall(...)` -
  * the OS then invokes [onCreateIncomingConnection] which returns a ringing
  * [CallkitConnection]. The Telecom layer grants the resulting call OS-level
  * privileges equivalent to a dialer app:
@@ -28,7 +28,7 @@ import androidx.annotation.RequiresApi
  *  - Compatibility with strict OEMs (Samsung Knox, Xiaomi, Oppo) that block
  *    non-Telecom `showWhenLocked` Activities.
  *
- * Prior versions of this file were a stub with no overrides — the PhoneAccount
+ * Prior versions of this file were a stub with no overrides - the PhoneAccount
  * was registered but never used. Filling in the overrides + wiring
  * `addNewIncomingCall` in the BroadcastReceiver converts the plugin from an
  * "app that looks like a call" into a real first-party call.
@@ -122,7 +122,7 @@ class CallkitConnectionService : ConnectionService() {
 
     private fun extractCallBundle(extras: Bundle?): Bundle? {
         if (extras == null) return null
-        // Primary path — our helper nests the full plugin Data under the
+        // Primary path - our helper nests the full plugin Data under the
         // dedicated key. Telecom also exposes the caller-supplied extras under
         // EXTRA_INCOMING_CALL_EXTRAS for the incoming path.
         extras.getBundle(CallkitConnection.EXTRA_CALL_BUNDLE)?.let { return it }

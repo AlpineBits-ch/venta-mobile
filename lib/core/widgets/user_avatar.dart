@@ -26,7 +26,7 @@ class UserAvatar extends StatelessWidget {
   /// Shown while no profile/avatar is available. Defaults to `?`.
   final String? fallbackLabel;
 
-  /// Overlays a [StatusDot] driven by the same cached profile — off by
+  /// Overlays a [StatusDot] driven by the same cached profile - off by
   /// default so avatars in dense rows (voice participant lists, etc.) don't
   /// change size/shape unexpectedly; opt in where presence is meaningful
   /// (DM lists, message authors).

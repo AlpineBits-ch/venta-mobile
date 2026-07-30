@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 /// Encodes/decodes message bodies for the wire. `content` is always
-/// base64(UTF-8), even for `Plain` messages — matches Alpine.
+/// base64(UTF-8), even for `Plain` messages - matches Alpine.
 ///
 /// This is the seam where MLS encrypt/decrypt gets inserted later: every
 /// message is currently treated as plaintext regardless of its

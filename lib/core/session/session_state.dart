@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'session_state.freezed.dart';
 
 /// Drives [GoRouter]'s auth redirect. `Authenticated`/`Unauthenticated` are
-/// filled in for real once `AuthRepository` lands in Phase 1 — for now a
+/// filled in for real once `AuthRepository` lands in Phase 1 - for now a
 /// stored token is trusted at face value with no refresh/validation.
 @freezed
 sealed class SessionState with _$SessionState {

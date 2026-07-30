@@ -29,6 +29,13 @@ _GuildDto _$GuildDtoFromJson(Map<String, dynamic> json) => _GuildDto(
   bannerUrl: json['bannerUrl'] as String?,
   iconUrl: json['iconUrl'] as String?,
   systemChannelId: json['systemChannelId'] as String?,
+  verificationLevel:
+      $enumDecodeNullable(
+        _$VerificationLevelEnumMap,
+        json['verificationLevel'],
+        unknownValue: VerificationLevel.none,
+      ) ??
+      VerificationLevel.none,
 );
 
 Map<String, dynamic> _$GuildDtoToJson(_GuildDto instance) => <String, dynamic>{
@@ -42,4 +49,12 @@ Map<String, dynamic> _$GuildDtoToJson(_GuildDto instance) => <String, dynamic>{
   'bannerUrl': instance.bannerUrl,
   'iconUrl': instance.iconUrl,
   'systemChannelId': instance.systemChannelId,
+  'verificationLevel': _$VerificationLevelEnumMap[instance.verificationLevel]!,
+};
+
+const _$VerificationLevelEnumMap = {
+  VerificationLevel.none: 'None',
+  VerificationLevel.low: 'Low',
+  VerificationLevel.medium: 'Medium',
+  VerificationLevel.high: 'High',
 };

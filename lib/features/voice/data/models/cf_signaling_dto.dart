@@ -4,7 +4,7 @@ part 'cf_signaling_dto.freezed.dart';
 part 'cf_signaling_dto.g.dart';
 
 /// `sessionDescription` is kept as a raw `{type, sdp}` map rather than a
-/// typed class — it's only ever handed straight to `RTCSessionDescription`
+/// typed class - it's only ever handed straight to `RTCSessionDescription`
 /// by `CallWebRtcService`, the one place that needs the flutter_webrtc type.
 
 @freezed

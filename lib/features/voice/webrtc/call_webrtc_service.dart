@@ -9,19 +9,19 @@ import '../../../core/media/screen_share_service.dart';
 import '../../../core/webrtc/track_kind.dart';
 import '../data/voice_api.dart';
 
-/// Owner (userId + [TrackKind]) of one negotiated mid — lets a single
+/// Owner (userId + [TrackKind]) of one negotiated mid - lets a single
 /// `ontrack` callback route audio, camera, and screen-share tracks to the
 /// right per-kind bucket instead of assuming everything is audio.
 typedef _TrackOwner = ({String userId, TrackKind kind});
 
-/// Manages the WebRTC plumbing for one Cloudflare Calls SFU session — the
+/// Manages the WebRTC plumbing for one Cloudflare Calls SFU session - the
 /// mobile counterpart to Alpine desktop's `CallWebRtcService`. One instance
 /// is created per active call by `CallCubit`, which owns the participant
 /// list; this service only knows about mids, tracks, and SDP.
 ///
 /// Audio plays automatically once its track is part of a live
 /// `RTCPeerConnection` (flutter_webrtc routes it to the device's call/media
-/// output natively) — video/screen tracks don't auto-render anywhere; the UI
+/// output natively) - video/screen tracks don't auto-render anywhere; the UI
 /// attaches an `RTCVideoRenderer` to whatever [remoteVideoTrackFor]/
 /// [remoteScreenTrackFor]/[localVideoTrack] currently return.
 ///
@@ -47,7 +47,7 @@ class CallWebRtcService {
   // MID -> (userId, kind), so ontrack can route an inbound track to the
   // right participant and the right per-kind bucket below.
   final Map<String, _TrackOwner> _midOwners = {};
-  // "userId|kind" keys already subscribed — makes subscribing safe to call
+  // "userId|kind" keys already subscribed - makes subscribing safe to call
   // more than once for the same user+kind (e.g. both the live
   // `ParticipantJoined`/`TrackPublished` event and a reconcile-on-reconnect
   // backfill racing).
@@ -57,14 +57,14 @@ class CallWebRtcService {
   final Map<String, MediaStreamTrack> _remoteScreenTracks = {};
   final List<RTCTrackEvent> _pendingTracks = [];
 
-  // RTCPeerConnection only allows one offer/answer exchange at a time —
+  // RTCPeerConnection only allows one offer/answer exchange at a time -
   // chaining through this serializes publish/subscribe calls that would
   // otherwise race on setLocalDescription/setRemoteDescription.
   Future<void> _negotiationChain = Future.value();
 
   bool _deafened = false;
 
-  // TEMPORARY diagnostic — see venta_mobile's "no audio in/out on mobile"
+  // TEMPORARY diagnostic - see venta_mobile's "no audio in/out on mobile"
   // investigation. Polls getStats() to see whether real RTP bytes are
   // actually flowing (as opposed to the connection merely reaching
   // `connected` with silent tracks). Remove once the root cause is found.
@@ -119,7 +119,7 @@ class CallWebRtcService {
     _startStatsLogging();
   }
 
-  /// Starts local camera capture and publishes it as a `"camera"` track —
+  /// Starts local camera capture and publishes it as a `"camera"` track -
   /// the backend classifies any non-`"audio"`, non-`screen-`-prefixed track
   /// name as `kind: "video"` purely from the name, so nothing else is needed
   /// server-side. No-ops if the camera is already on.
@@ -148,7 +148,7 @@ class CallWebRtcService {
     await _closeTrack('camera');
   }
 
-  /// Starts screen capture and publishes it as `"screen-$shareId"` — the
+  /// Starts screen capture and publishes it as `"screen-$shareId"` - the
   /// `screen-` prefix is what makes the backend classify it as `kind:
   /// "screen"` (vs. `"video"` for the camera) and broadcast it as a screen
   /// share rather than a regular video track. [shareId] is a caller-generated
@@ -197,11 +197,11 @@ class CallWebRtcService {
         trackNames: [trackName],
       );
     } catch (_) {
-      // Best-effort — the local track is already stopped either way.
+      // Best-effort - the local track is already stopped either way.
     }
   }
 
-  /// Publishes one already-captured local track under [trackName] — shared
+  /// Publishes one already-captured local track under [trackName] - shared
   /// by [connect] (audio), [publishLocalVideo] (camera), and
   /// [startScreenShare] (screen).
   Future<void> _publishTrack({
@@ -288,17 +288,17 @@ class CallWebRtcService {
   }
 
   // flutter_webrtc's RTCRtpTransceiver.mid is a snapshot taken when
-  // addTransceiver() returns — before the SDP that actually assigns mids
-  // exists — and is never refreshed after setLocalDescription() the way a
+  // addTransceiver() returns - before the SDP that actually assigns mids
+  // exists - and is never refreshed after setLocalDescription() the way a
   // browser's live `mid` property is (see Alpine's identical-looking
   // `transceiver.mid` usage, which works there for exactly that reason: a
   // browser DOES keep it live). Reading it straight off `transceiver` here
   // always sends an empty mid, which Cloudflare Calls rejects outright
-  // ("Missing mid in track") — see venta_mobile's "no audio in/out"
+  // ("Missing mid in track") - see venta_mobile's "no audio in/out"
   // investigation. getTransceivers() makes a fresh native call and returns
   // the real, current mid.
   //
-  // transceiverId can't be used to find the same transceiver again — on
+  // transceiverId can't be used to find the same transceiver again - on
   // Android (PeerConnectionObserver.java) it's *derived from* mid itself
   // (`transceiver.getMid() ?? randomUUID()`), so it's a fresh random value
   // every time it's read before mid is assigned, and a *different* value

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Hand-rolled shimmer sweep (no `shimmer` package — only ~3 call sites need
+/// Hand-rolled shimmer sweep (no `shimmer` package - only ~3 call sites need
 /// this, not worth a new dependency for). A soft highlight band slides left
 /// to right across a muted base fill, looping continuously.
 class ShimmerBox extends StatefulWidget {

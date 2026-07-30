@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../data/message_content_codec.dart';
 import '../../data/message_repository.dart';
 import '../../data/models/message_dto.dart';
 
-/// Full-text search within the current conversation/channel — mirrors
+/// Full-text search within the current conversation/channel - mirrors
 /// desktop's `searchMessagesForConversation`/`searchMessagesForChannel`.
 /// Results are read-only (author + decoded snippet + timestamp); jumping
 /// the live thread view to the exact message isn't wired up yet since
 /// `ThreadView` has no scroll-to-index infra (same limitation as the
 /// reply-quote row, which is tap-inert for the same reason).
 class MessageSearchScreen extends StatefulWidget {
-  const MessageSearchScreen({super.key, required this.repository});
+  const MessageSearchScreen({
+    super.key,
+    required this.repository,
+    this.isEncrypted = false,
+  });
 
   final MessageRepository repository;
+
+  /// True for an MLS-encrypted DM - the server can't read ciphertext, so
+  /// nothing is indexed there. Skips the network round-trip entirely and
+  /// shows an explicit "not available" state instead of an empty-results one.
+  final bool isEncrypted;
 
   @override
   State<MessageSearchScreen> createState() => _MessageSearchScreenState();
@@ -26,6 +36,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   bool _loading = false;
   bool _searched = false;
   String? _error;
+  String _lastQuery = '';
 
   @override
   void dispose() {
@@ -54,6 +65,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           _results = results;
           _loading = false;
           _searched = true;
+          _lastQuery = trimmed;
         });
       }
     } catch (_) {
@@ -74,7 +86,8 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       appBar: AppBar(
         title: TextField(
           controller: _controller,
-          autofocus: true,
+          autofocus: !widget.isEncrypted,
+          enabled: !widget.isEncrypted,
           textInputAction: TextInputAction.search,
           onSubmitted: _search,
           decoration: const InputDecoration(
@@ -85,11 +98,41 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () => _search(_controller.text),
+            onPressed: widget.isEncrypted
+                ? null
+                : () => _search(_controller.text),
           ),
         ],
       ),
-      body: _loading
+      body: widget.isEncrypted
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.l),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.lock_outline,
+                      size: 32,
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.4,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    Text(
+                      "Search isn't available in encrypted conversations",
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? Center(child: Text(_error!))
@@ -122,8 +165,20 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                     builder: (context, profile) =>
                         Text(profile?.userName ?? '…'),
                   ),
-                  subtitle: Text(
-                    text.isEmpty ? '(attachment)' : text,
+                  subtitle: Text.rich(
+                    TextSpan(
+                      children: _highlightedSpans(
+                        text.isEmpty ? '(attachment)' : text,
+                        _lastQuery,
+                        theme.textTheme.bodySmall,
+                        theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                          backgroundColor: theme.colorScheme.primary
+                              .withValues(alpha: 0.12),
+                        ),
+                      ),
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -140,4 +195,44 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
             ),
     );
   }
+}
+
+/// Client-side highlight of [query]'s terms within [text] - the search API
+/// doesn't return match offsets or a pre-highlighted snippet, just the full
+/// `content`, so this does a simple case-insensitive literal-term match.
+/// Strips `websearch_to_tsquery` syntax (quotes, leading `-`) down to bare
+/// words rather than trying to fully replicate Postgres' query parsing.
+List<TextSpan> _highlightedSpans(
+  String text,
+  String query,
+  TextStyle? baseStyle,
+  TextStyle? highlightStyle,
+) {
+  final terms = query
+      .replaceAll('"', ' ')
+      .split(RegExp(r'\s+'))
+      .where((t) => t.isNotEmpty && t != '-' && t.toLowerCase() != 'or')
+      .map((t) => t.startsWith('-') ? t.substring(1) : t)
+      .where((t) => t.isNotEmpty)
+      .map(RegExp.escape)
+      .toSet()
+      .toList();
+  if (terms.isEmpty) return [TextSpan(text: text, style: baseStyle)];
+
+  final pattern = RegExp('(${terms.join('|')})', caseSensitive: false);
+  final spans = <TextSpan>[];
+  var cursor = 0;
+  for (final match in pattern.allMatches(text)) {
+    if (match.start > cursor) {
+      spans.add(TextSpan(text: text.substring(cursor, match.start), style: baseStyle));
+    }
+    spans.add(
+      TextSpan(text: text.substring(match.start, match.end), style: highlightStyle),
+    );
+    cursor = match.end;
+  }
+  if (cursor < text.length) {
+    spans.add(TextSpan(text: text.substring(cursor), style: baseStyle));
+  }
+  return spans;
 }

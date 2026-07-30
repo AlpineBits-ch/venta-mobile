@@ -17,7 +17,7 @@ import androidx.core.app.ServiceCompat
  * foreground service of that type already be running before
  * `MediaProjection` capture is allowed to start. flutter_webrtc's
  * `getDisplayMedia` calls `MediaProjectionManager` directly without starting
- * one itself — the app has to. Started right before, and stopped right
+ * one itself - the app has to. Started right before, and stopped right
  * after, screen-share capture from Dart via the `venta/screen_share`
  * `MethodChannel` registered in [MainActivity].
  */

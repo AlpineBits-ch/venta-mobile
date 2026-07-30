@@ -26,7 +26,7 @@ class VoiceParticipantState extends Equatable {
   final bool isMuted;
   final bool isDeafened;
 
-  /// Screen sharing — kept as `isStreaming` for backward compatibility with
+  /// Screen sharing - kept as `isStreaming` for backward compatibility with
   /// existing UI/roster code; [hasCamera] is the separate camera-on flag.
   final bool isStreaming;
   final bool hasCamera;
@@ -79,17 +79,17 @@ class GuildVoiceState extends Equatable {
   final bool isDeafened;
 
   /// Whether output is routed to the loud/speakerphone output rather than
-  /// the quiet call (earpiece) speaker. Defaults on — with no headset
+  /// the quiet call (earpiece) speaker. Defaults on - with no headset
   /// connected, calls were otherwise landing on the quiet earpiece route
   /// with no way to switch, unlike every other calling app.
   final bool isSpeakerOn;
 
   /// Set once, the moment the channel join reaches [GuildVoicePhase.active]
-  /// — drives the elapsed-time display. Never touched again until the next
+  /// - drives the elapsed-time display. Never touched again until the next
   /// join (leave/error reset to a fresh [GuildVoiceState] with this null).
   final DateTime? connectedAt;
 
-  /// Every voice channel's roster, keyed by channelId — not just the one
+  /// Every voice channel's roster, keyed by channelId - not just the one
   /// the local user has joined. This is what lets the sidebar show live
   /// participant avatars for channels the user hasn't joined, like Discord.
   final Map<String, List<VoiceParticipantState>> rosters;
@@ -101,7 +101,7 @@ class GuildVoiceState extends Equatable {
       rosters[channelId] ?? const [];
 
   /// Identity fields (guildId/channelId/channelName/guildName) intentionally
-  /// never fall back to null here — a full reset (leave/error) constructs a
+  /// never fall back to null here - a full reset (leave/error) constructs a
   /// fresh `GuildVoiceState` instead, same pattern as `CallState`/`CallCubit`.
   GuildVoiceState copyWith({
     GuildVoicePhase? phase,
@@ -131,7 +131,7 @@ class GuildVoiceState extends Equatable {
     videoRevision: videoRevision ?? this.videoRevision,
   );
 
-  /// Bumped on every local/remote camera or screen-share track add/remove —
+  /// Bumped on every local/remote camera or screen-share track add/remove -
   /// `MediaStreamTrack`s themselves can't live in this `Equatable` state (not
   /// comparable/immutable-safe), so `VideoParticipantTile`/`ScreenShareView`
   /// instead pull the current track imperatively from the webrtc service and
@@ -157,7 +157,7 @@ class GuildVoiceState extends Equatable {
 
 /// App-lifetime singleton owning the one guild voice channel the app can be
 /// joined to at a time, plus live rosters for every voice channel visible in
-/// the sidebar — the guild-voice counterpart to `CallCubit`. Joining a
+/// the sidebar - the guild-voice counterpart to `CallCubit`. Joining a
 /// channel does not force any particular screen; unlike 1:1 calling, guild
 /// voice deliberately keeps the user free to browse other text channels
 /// while connected (mirrors Alpine's persistent `voice-status-bar`).
@@ -182,7 +182,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
 
   String get _myUserId => authRepository.currentUserId ?? '';
 
-  /// Populates the roster for one voice channel without joining it — used
+  /// Populates the roster for one voice channel without joining it - used
   /// when a guild's channel list loads, so sidebar participant counts show
   /// up even for channels the user hasn't entered.
   Future<void> hydrateChannelRoster(String guildId, String channelId) async {
@@ -193,7 +193,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
         voiceState.participants.map(_toParticipantState).toList(),
       );
     } catch (_) {
-      // Best-effort — realtime events will keep it eventually consistent.
+      // Best-effort - realtime events will keep it eventually consistent.
     }
   }
 
@@ -248,7 +248,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     try {
       await repository.leave(guildId, channelId);
     } catch (_) {
-      // Best-effort — we've already torn down locally.
+      // Best-effort - we've already torn down locally.
     }
   }
 
@@ -300,7 +300,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
   }
 
-  /// Current local camera state — read from the roster rather than a
+  /// Current local camera state - read from the roster rather than a
   /// separate field, since the self-tile in [state.rosters] is already the
   /// source of truth other participants' badges read from.
   bool get isCameraOn {
@@ -327,7 +327,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
         await webRtc.stopLocalVideo();
       }
     } catch (_) {
-      return; // Capture failed (denied permission, no camera, etc.) — bail.
+      return; // Capture failed (denied permission, no camera, etc.) - bail.
     }
     _updateParticipant(
       channelId,
@@ -341,7 +341,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     );
   }
 
-  /// Mirrors [isCameraOn] for screen sharing — Android only (see
+  /// Mirrors [isCameraOn] for screen sharing - Android only (see
   /// `toggleScreenShare` callers, which gate the button by platform).
   bool get isScreenSharing {
     final channelId = state.channelId;
@@ -367,7 +367,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       try {
         await webRtc.stopScreenShare();
       } catch (_) {
-        // Best-effort — fall through to update local state regardless.
+        // Best-effort - fall through to update local state regardless.
       }
       _updateParticipant(
         channelId,
@@ -387,7 +387,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       try {
         await webRtc.startScreenShare(shareId);
       } catch (_) {
-        return; // Permission denied/cancelled the system picker — bail.
+        return; // Permission denied/cancelled the system picker - bail.
       }
       _myShareId = shareId;
       _updateParticipant(
@@ -407,7 +407,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
   void _bumpVideoRevision() =>
       emit(state.copyWith(videoRevision: state.videoRevision + 1));
 
-  /// Track getters for the UI — read imperatively (see [GuildVoiceState.videoRevision]
+  /// Track getters for the UI - read imperatively (see [GuildVoiceState.videoRevision]
   /// doc comment for why `MediaStreamTrack`s can't live in cubit state itself).
   MediaStreamTrack? get localVideoTrack => _webRtc?.localVideoTrack;
   MediaStreamTrack? get localScreenTrack => _webRtc?.localScreenTrack;

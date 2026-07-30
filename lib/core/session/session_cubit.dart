@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../features/auth/data/auth_repository.dart';
+import '../routing/route_persistence.dart';
 import 'session_state.dart';
 
 class SessionCubit extends Cubit<SessionState> {
@@ -33,6 +34,7 @@ class SessionCubit extends Cubit<SessionState> {
 
   Future<void> signOut() async {
     await authRepository.logout();
+    RoutePersistence.clear();
     emit(const SessionState.unauthenticated());
   }
 

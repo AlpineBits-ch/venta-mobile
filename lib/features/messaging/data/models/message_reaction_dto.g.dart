@@ -11,6 +11,7 @@ _MessageReactionDto _$MessageReactionDtoFromJson(Map<String, dynamic> json) =>
       messageId: json['messageId'] as String,
       emoji: json['emoji'] as String,
       userId: json['userId'] as String,
+      emojiId: json['emojiId'] as String?,
       contextId: json['contextId'] as String?,
       createdAt: json['createdAt'] == null
           ? null
@@ -24,6 +25,7 @@ Map<String, dynamic> _$MessageReactionDtoToJson(_MessageReactionDto instance) =>
       'messageId': instance.messageId,
       'emoji': instance.emoji,
       'userId': instance.userId,
+      'emojiId': instance.emojiId,
       'contextId': instance.contextId,
       'createdAt': instance.createdAt?.toIso8601String(),
       'conversationId': instance.conversationId,

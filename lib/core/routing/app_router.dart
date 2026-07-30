@@ -12,8 +12,11 @@ import '../../features/auth/presentation/screens/server_setup_screen.dart';
 import '../../features/conversations/presentation/screens/home_screen.dart';
 import '../../features/friends/bloc/friends_bloc.dart';
 import '../../features/friends/presentation/screens/friends_screen.dart';
+import '../../features/guilds/data/guild_repository.dart';
+import '../../features/guilds/data/models/channel_dto.dart';
 import '../../features/guilds/presentation/screens/channel_screen.dart';
 import '../../features/guilds/presentation/screens/channel_settings_screen.dart';
+import '../../features/guilds/presentation/screens/forum_channel_screen.dart';
 import '../../features/guilds/presentation/screens/guild_detail_screen.dart';
 import '../../features/guilds/presentation/screens/guild_members_screen.dart';
 import '../../features/guilds/presentation/screens/guild_settings/guild_settings_screen.dart';
@@ -31,8 +34,9 @@ import '../session/session_cubit.dart';
 import '../session/session_state.dart';
 import 'app_shell.dart';
 import 'route_paths.dart';
+import 'route_persistence.dart';
 
-/// go_router removed its bundled `GoRouterRefreshStream` back in v5 — this
+/// go_router removed its bundled `GoRouterRefreshStream` back in v5 - this
 /// is the same small adapter from its own migration docs, converting a
 /// bloc/cubit's `Stream<State>` into the `Listenable` `refreshListenable`
 /// expects, so `redirect` re-runs on every [SessionCubit] state change.
@@ -62,11 +66,20 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
           state.matchedLocation == RoutePaths.register ||
           state.matchedLocation == RoutePaths.serverSetup;
 
+      // Every authenticated navigation is a candidate "last place the user
+      // was" - remembered so a cold relaunch (app process killed, not just
+      // backgrounded) reopens there instead of always on Home.
+      if (session is SessionAuthenticated && !loggingIn) {
+        RoutePersistence.save(state.uri.toString());
+      }
+
       return switch (session) {
         SessionUnknown() => null,
         SessionUnauthenticated() ||
         SessionServerMisconfigured() => loggingIn ? null : RoutePaths.login,
-        SessionAuthenticated() => loggingIn ? RoutePaths.home : null,
+        SessionAuthenticated() => loggingIn
+            ? (RoutePersistence.lastLocation ?? RoutePaths.home)
+            : null,
       };
     },
     routes: [
@@ -137,10 +150,22 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       ),
       GoRoute(
         path: RoutePaths.serverChannel,
-        builder: (context, state) => ChannelScreen(
-          guildId: state.pathParameters['guildId']!,
-          channelId: state.pathParameters['channelId']!,
-        ),
+        builder: (context, state) {
+          final guildId = state.pathParameters['guildId']!;
+          final channelId = state.pathParameters['channelId']!;
+          // A Forum channel is a post list, not a message thread - every
+          // other channel type (including a post itself, which is just a
+          // Thread channel) opens the normal ChannelScreen.
+          final channel = getIt<GuildRepository>()
+              .cachedById(guildId)
+              ?.channels
+              .where((c) => c.id == channelId)
+              .firstOrNull;
+          if (channel?.type == ChannelType.forum) {
+            return ForumChannelScreen(guildId: guildId, channelId: channelId);
+          }
+          return ChannelScreen(guildId: guildId, channelId: channelId);
+        },
       ),
       GoRoute(
         path: RoutePaths.serverChannelSettings,
@@ -164,7 +189,7 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         builder: (context, state) =>
             WikiHomeScreen(guildId: state.pathParameters['guildId']!),
       ),
-      // Declared before serverWikiPage — see the comment on
+      // Declared before serverWikiPage - see the comment on
       // RoutePaths.serverWikiNewPage for why literal `new` must be tried
       // before the `:pageId` wildcard.
       GoRoute(

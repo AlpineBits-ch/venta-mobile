@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 /// Live "mm:ss" (or "h:mm:ss" past an hour) duration since [since], ticking
-/// locally via its own Timer rather than through a cubit — this is purely a
+/// locally via its own Timer rather than through a cubit - this is purely a
 /// display concern with nothing else caring about the current second, so
 /// there's no reason to push a rebuild through the bloc layer for it.
 class ElapsedTimeLabel extends StatefulWidget {

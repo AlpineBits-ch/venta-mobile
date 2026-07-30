@@ -43,7 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 
-# Signing material — generated at CI time from secrets, never committed.
+# Signing material - generated at CI time from secrets, never committed.
 ios/ExportOptions.plist
 *.p12
 *.p8

@@ -5,7 +5,7 @@ import 'models/wiki_page_dto.dart';
 import 'models/wiki_page_summary_dto.dart';
 import 'models/wiki_revision_dto.dart';
 
-/// Mirrors Alpine's `WikiService` — every endpoint lives under
+/// Mirrors Alpine's `WikiService` - every endpoint lives under
 /// `{baseUrl}/api/v1/guild/guilds/{guildId}/wiki`.
 class WikiApi {
   WikiApi({required this.client});
@@ -54,7 +54,7 @@ class WikiApi {
 
   /// `null` for [parentPageId]/[categoryId] means "don't change"; pass an
   /// explicit empty string sentinel is not needed here since callers only
-  /// invoke this with fields that changed — [clearParentPage]/
+  /// invoke this with fields that changed - [clearParentPage]/
   /// [clearCategory] force those relationships to `null` server-side.
   Future<WikiPageDto> updatePage(
     String guildId,

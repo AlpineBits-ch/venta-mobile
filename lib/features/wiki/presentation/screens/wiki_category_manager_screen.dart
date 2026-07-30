@@ -5,7 +5,7 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../data/models/wiki_category_dto.dart';
 import '../../data/wiki_repository.dart';
 
-/// Flat, position-ordered category list with drag-to-reorder — mobile v1's
+/// Flat, position-ordered category list with drag-to-reorder - mobile v1's
 /// simplification of Alpine's nestable/drag-droppable category tree.
 class WikiCategoryManagerScreen extends StatefulWidget {
   const WikiCategoryManagerScreen({super.key, required this.guildId});

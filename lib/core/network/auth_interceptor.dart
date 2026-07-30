@@ -36,7 +36,7 @@ class AuthInterceptor extends Interceptor {
         handler.resolve(retryResponse);
         return;
       } catch (_) {
-        // Refresh failed — fall through and surface the original error.
+        // Refresh failed - fall through and surface the original error.
       }
     }
     handler.next(err);

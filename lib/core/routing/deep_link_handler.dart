@@ -1,6 +1,6 @@
 import 'route_paths.dart';
 
-/// What a resolved `venta://` URI should do — most hosts just push a route,
+/// What a resolved `venta://` URI should do - most hosts just push a route,
 /// but `invite` opens a modal popup over whatever screen is currently up
 /// (matching desktop's `InviteDialogComponent`, which is a global overlay
 /// rather than a navigated page) instead of a full navigation.
@@ -18,11 +18,11 @@ class InviteTarget extends DeepLinkTarget {
   final String code;
 }
 
-/// Single owner for turning a `venta://` URI — or an equivalent synthesized
-/// URI from a push-notification tap payload — into a [DeepLinkTarget].
+/// Single owner for turning a `venta://` URI - or an equivalent synthesized
+/// URI from a push-notification tap payload - into a [DeepLinkTarget].
 ///
 /// `invite` and `conversation` are implemented for v1 (the latter feeds
-/// `PushNotificationService`'s notification-tap handling — see
+/// `PushNotificationService`'s notification-tap handling - see
 /// `venta://conversation/<id>` synthesized from a message push's
 /// `conversationId` data field). Other Alpine desktop hosts
 /// (`install-bot`, `discord-import`, `steam-auth`) are out of scope for

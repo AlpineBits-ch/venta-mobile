@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 import 'models/server_configuration.dart';
 import 'models/token_response.dart';
 
-/// Raw calls against the OAuth2 token endpoint and identity API — used only
+/// Raw calls against the OAuth2 token endpoint and identity API - used only
 /// by [AuthRepository]. Deliberately uses its own plain [Dio] (no auth
 /// interceptor): the token endpoint doesn't take a bearer token, and a
 /// refresh call must never itself trigger a 401-retry loop.

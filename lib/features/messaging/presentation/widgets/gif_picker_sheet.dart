@@ -7,7 +7,7 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../data/gif_api.dart';
 
 /// Bottom sheet GIF search/browse, backed by Klipy. Selecting a result pops
-/// the sheet with the full GIF URL — the caller sends that URL as the
+/// the sheet with the full GIF URL - the caller sends that URL as the
 /// message content directly (matches desktop: a GIF isn't an attachment, the
 /// message body just *is* the CDN url and renders specially).
 Future<String?> showGifPickerSheet(BuildContext context) {

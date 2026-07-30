@@ -57,7 +57,7 @@
             android:value="2" />
         <!-- Satisfies Android's requirement that a foreground service of this
              type be running before MediaProjection screen capture may start
-             (strictly enforced since Android 14) — see ScreenCaptureService.kt. -->
+             (strictly enforced since Android 14) - see ScreenCaptureService.kt. -->
         <service
             android:name=".ScreenCaptureService"
             android:foregroundServiceType="mediaProjection"

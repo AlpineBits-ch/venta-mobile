@@ -5,7 +5,7 @@ import '../../data/bot_command_api.dart';
 import '../../data/models/bot_command_dto.dart';
 
 /// Collects one value per command option before invoking a bot command that
-/// takes parameters — matches desktop's `BotCommandDialogComponent`.
+/// takes parameters - matches desktop's `BotCommandDialogComponent`.
 /// `User`/`Channel`/`Role`/`Mentionable` options fall back to a plain text
 /// field for a raw id, same as desktop (no picker widget for those yet).
 Future<List<InvokeCommandOption>?> showBotCommandOptionsDialog(

@@ -128,12 +128,12 @@ class CallkitNotificationService : Service() {
         super.onTaskRemoved(rootIntent)
         // This used to be a no-op ("the call might still be ongoing"), but this
         // app has no background execution path that keeps a call's WebRTC audio
-        // flowing once its Flutter engine/Activity task is gone — so the call is
+        // flowing once its Flutter engine/Activity task is gone - so the call is
         // already dead in every way that matters the moment this fires. Leaving
         // the FGS (and its "Ongoing call" notification) alive banked on a later
         // "call ended" push to clean up, which left the notification/Telecom
         // connection stuck forever whenever that push never arrived (dropped
-        // push, the other party's own client never hitting /end, etc.) — see
+        // push, the other party's own client never hitting /end, etc.) - see
         // venta_mobile's stuck-notification bug report. End the call for real
         // instead of leaving a notification that lies about the call state.
         val calls = getDataActiveCalls(applicationContext)

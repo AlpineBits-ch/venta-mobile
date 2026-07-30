@@ -4,7 +4,7 @@ import '../theme/widget_styles.dart';
 import 'shimmer_box.dart';
 
 /// Placeholder row shaped like a `ListTile` (avatar + two text lines), shown
-/// while a list is loading instead of a bare `CircularProgressIndicator` —
+/// while a list is loading instead of a bare `CircularProgressIndicator` -
 /// content appears roughly where it will actually render.
 class SkeletonListTile extends StatelessWidget {
   const SkeletonListTile({super.key});

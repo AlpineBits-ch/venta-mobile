@@ -16,7 +16,7 @@ import '../../data/guild_repository.dart';
 import '../../data/models/guild_member_dto.dart';
 import '../../data/models/role_dto.dart';
 
-/// Member sidebar — grouped by highest colored role (Discord convention),
+/// Member sidebar - grouped by highest colored role (Discord convention),
 /// then an Online/Offline fallback for members with no significant role.
 /// Bots are flagged with a badge and treated as always-active for grouping.
 /// Full member management (kick/ban/mute/role assignment) lives in the
@@ -143,18 +143,18 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
     for (final (role, roleMembers) in groups) {
       roleMembers.sort(activeFirst);
       sections.add(
-        _MemberSection('${role.name} — ${roleMembers.length}', roleMembers),
+        _MemberSection('${role.name} - ${roleMembers.length}', roleMembers),
       );
     }
     if (onlineNoRole.isNotEmpty) {
       sections.add(
-        _MemberSection('Online — ${onlineNoRole.length}', onlineNoRole),
+        _MemberSection('Online - ${onlineNoRole.length}', onlineNoRole),
       );
     }
     if (offlineNoRole.isNotEmpty) {
       sections.add(
         _MemberSection(
-          'Offline — ${offlineNoRole.length}',
+          'Offline - ${offlineNoRole.length}',
           offlineNoRole,
           dimmed: true,
         ),

@@ -4,7 +4,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'profile_resolver.dart';
 import 'video_participant_tile.dart';
 
-/// Full-width "spotlight" view of one active screen share — the Discord-
+/// Full-width "spotlight" view of one active screen share - the Discord-
 /// style prominent treatment for `kind: "screen"` tracks, as opposed to the
 /// small avatar-sized `VideoParticipantTile` used for camera video. Reuses
 /// the same renderer plumbing, just laid out larger with a name label.

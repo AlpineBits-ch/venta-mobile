@@ -1,4 +1,5 @@
 import 'identity_api.dart';
+import 'models/notification_settings_dto.dart';
 import 'models/user_dto.dart';
 
 /// Account-lifecycle operations (status, deletion request/cancel) for the
@@ -14,4 +15,33 @@ class AccountRepository {
   Future<DateTime> requestDeletion() => api.requestDeletion();
 
   Future<void> cancelDeletion() => api.cancelDeletion();
+
+  Future<int> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) => api.changePassword(
+    currentPassword: currentPassword,
+    newPassword: newPassword,
+  );
+
+  Future<void> signOutOtherDevices() => api.signOutOtherDevices();
+
+  Future<NotificationSettingsDto> getNotificationSettings() async {
+    final raw = await api.getSettings();
+    final notifications = raw['notifications'];
+    return NotificationSettingsDto.fromJson(
+      notifications is Map<String, dynamic> ? notifications : const {},
+    );
+  }
+
+  /// Re-fetches the full settings blob and only replaces the `notifications`
+  /// key before saving, so an `autostart` flag set from desktop (or any
+  /// other key mobile doesn't know about) is never clobbered.
+  Future<void> updateNotificationSettings(
+    NotificationSettingsDto settings,
+  ) async {
+    final raw = await api.getSettings();
+    raw['notifications'] = settings.toJson();
+    await api.updateSettings(raw);
+  }
 }

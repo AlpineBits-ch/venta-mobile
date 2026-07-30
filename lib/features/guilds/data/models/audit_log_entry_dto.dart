@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'audit_log_entry_dto.freezed.dart';
 part 'audit_log_entry_dto.g.dart';
 
-/// Full list confirmed against `Guild.Domain.Enums.AuditActionType` — some
+/// Full list confirmed against `Guild.Domain.Enums.AuditActionType` - some
 /// values (`InviteCreated`/`InviteDeleted`) are declared server-side but
 /// never actually emitted yet, so they just won't appear in practice.
 enum AuditActionType {
@@ -68,7 +68,7 @@ sealed class AuditLogEntryDto with _$AuditLogEntryDto {
     required AuditActionType actionType,
     String? targetId,
 
-    /// Raw JSON string, shape varies per [actionType] — parsed defensively.
+    /// Raw JSON string, shape varies per [actionType] - parsed defensively.
     String? metadata,
     DateTime? createdAt,
   }) = _AuditLogEntryDto;

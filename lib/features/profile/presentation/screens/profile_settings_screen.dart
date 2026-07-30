@@ -11,6 +11,7 @@ import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../auth/data/account_repository.dart';
 import '../../../auth/data/identity_api.dart';
+import '../../../auth/data/models/notification_settings_dto.dart';
 import '../../../auth/data/models/user_dto.dart';
 import '../../bloc/self_profile_cubit.dart';
 import '../../data/models/profile_dto.dart';
@@ -58,6 +59,14 @@ String _fontLabel(ProfileFont font) => switch (font) {
   ProfileFont.handwritten => 'Handwritten',
 };
 
+String _passwordCodeMessage(int code) {
+  if (code >= 200 && code < 300) return 'Password changed successfully.';
+  if (code == 401) return 'Current password is incorrect.';
+  if (code == 422 || code == 400) return 'New password does not meet requirements.';
+  if (code == 429) return 'Too many attempts - please wait before trying again.';
+  return 'Something went wrong ($code).';
+}
+
 String _statusLabel(OnlineStatus status) => switch (status) {
   OnlineStatus.online => 'Online',
   OnlineStatus.idle => 'Idle',
@@ -82,15 +91,31 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   UserDto? _account;
   bool _accountActionInProgress = false;
 
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _obscureCurrentPassword = true;
+  bool _obscureNewPassword = true;
+  bool _passwordChanging = false;
+  bool _signingOutOthers = false;
+
+  NotificationSettingsDto _notificationSettings =
+      const NotificationSettingsDto();
+  bool _notificationSettingsSaving = false;
+
   @override
   void initState() {
     super.initState();
     _loadAccount();
+    _loadNotificationSettings();
   }
 
   @override
   void dispose() {
     _bioController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -100,6 +125,100 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       if (mounted) setState(() => _account = account);
     } catch (_) {
       // Danger-zone section just stays hidden if this fails.
+    }
+  }
+
+  Future<void> _loadNotificationSettings() async {
+    try {
+      final settings = await getIt<AccountRepository>()
+          .getNotificationSettings();
+      if (mounted) setState(() => _notificationSettings = settings);
+    } catch (_) {
+      // Keep defaults if this fails.
+    }
+  }
+
+  bool get _passwordFormValid =>
+      _currentPasswordController.text.isNotEmpty &&
+      _newPasswordController.text.length >= 8 &&
+      _newPasswordController.text == _confirmPasswordController.text;
+
+  Future<void> _submitPasswordChange() async {
+    if (!_passwordFormValid || _passwordChanging) return;
+    setState(() => _passwordChanging = true);
+    final code = await getIt<AccountRepository>().changePassword(
+      currentPassword: _currentPasswordController.text,
+      newPassword: _newPasswordController.text,
+    );
+    if (!mounted) return;
+    setState(() => _passwordChanging = false);
+    if (code >= 200 && code < 300) {
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(_passwordCodeMessage(code))));
+  }
+
+  Future<void> _confirmSignOutOthers() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign out of all other devices?'),
+        content: const Text(
+          'Every other session will be signed out. This device stays signed in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sign out others'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _signingOutOthers = true);
+    try {
+      await getIt<AccountRepository>().signOutOtherDevices();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Signed out of all other devices.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not sign out other devices.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _signingOutOthers = false);
+    }
+  }
+
+  Future<void> _applyNotificationSettings(
+    NotificationSettingsDto settings,
+  ) async {
+    setState(() {
+      _notificationSettings = settings;
+      _notificationSettingsSaving = true;
+    });
+    try {
+      await getIt<AccountRepository>().updateNotificationSettings(settings);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save notification settings.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _notificationSettingsSaving = false);
     }
   }
 
@@ -303,6 +422,51 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       onSelected: (font) => context
                           .read<SelfProfileCubit>()
                           .updateProfile(font: font),
+                    ),
+                    const SizedBox(height: AppSpacing.l),
+                    const Divider(),
+                    const SizedBox(height: AppSpacing.s),
+                    Text('SECURITY', style: theme.textTheme.labelSmall),
+                    const SizedBox(height: AppSpacing.s),
+                    _PasswordChangeForm(
+                      currentPasswordController: _currentPasswordController,
+                      newPasswordController: _newPasswordController,
+                      confirmPasswordController: _confirmPasswordController,
+                      obscureCurrentPassword: _obscureCurrentPassword,
+                      obscureNewPassword: _obscureNewPassword,
+                      onToggleObscureCurrent: () => setState(
+                        () => _obscureCurrentPassword =
+                            !_obscureCurrentPassword,
+                      ),
+                      onToggleObscureNew: () => setState(
+                        () => _obscureNewPassword = !_obscureNewPassword,
+                      ),
+                      formValid: _passwordFormValid,
+                      submitting: _passwordChanging,
+                      onSubmit: _submitPasswordChange,
+                      onChanged: () => setState(() {}),
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    OutlinedButton(
+                      onPressed: _signingOutOthers
+                          ? null
+                          : _confirmSignOutOthers,
+                      child: _signingOutOthers
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Sign out of all other devices'),
+                    ),
+                    const SizedBox(height: AppSpacing.l),
+                    const Divider(),
+                    const SizedBox(height: AppSpacing.s),
+                    Text('NOTIFICATIONS', style: theme.textTheme.labelSmall),
+                    _NotificationSettingsSection(
+                      settings: _notificationSettings,
+                      saving: _notificationSettingsSaving,
+                      onChanged: _applyNotificationSettings,
                     ),
                     if (_account != null) ...[
                       const SizedBox(height: AppSpacing.l),
@@ -534,6 +698,188 @@ class _FontPicker extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _PasswordChangeForm extends StatelessWidget {
+  const _PasswordChangeForm({
+    required this.currentPasswordController,
+    required this.newPasswordController,
+    required this.confirmPasswordController,
+    required this.obscureCurrentPassword,
+    required this.obscureNewPassword,
+    required this.onToggleObscureCurrent,
+    required this.onToggleObscureNew,
+    required this.formValid,
+    required this.submitting,
+    required this.onSubmit,
+    required this.onChanged,
+  });
+
+  final TextEditingController currentPasswordController;
+  final TextEditingController newPasswordController;
+  final TextEditingController confirmPasswordController;
+  final bool obscureCurrentPassword;
+  final bool obscureNewPassword;
+  final VoidCallback onToggleObscureCurrent;
+  final VoidCallback onToggleObscureNew;
+  final bool formValid;
+  final bool submitting;
+  final VoidCallback onSubmit;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: currentPasswordController,
+          obscureText: obscureCurrentPassword,
+          onChanged: (_) => onChanged(),
+          decoration: InputDecoration(
+            hintText: 'Current password',
+            suffixIcon: IconButton(
+              icon: Icon(
+                obscureCurrentPassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+              ),
+              onPressed: onToggleObscureCurrent,
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s),
+        TextField(
+          controller: newPasswordController,
+          obscureText: obscureNewPassword,
+          onChanged: (_) => onChanged(),
+          decoration: InputDecoration(
+            hintText: 'New password (min. 8 characters)',
+            suffixIcon: IconButton(
+              icon: Icon(
+                obscureNewPassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+              ),
+              onPressed: onToggleObscureNew,
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s),
+        TextField(
+          controller: confirmPasswordController,
+          obscureText: obscureNewPassword,
+          onChanged: (_) => onChanged(),
+          onSubmitted: (_) => formValid && !submitting ? onSubmit() : null,
+          decoration: const InputDecoration(hintText: 'Confirm new password'),
+        ),
+        const SizedBox(height: AppSpacing.s),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton(
+            onPressed: formValid && !submitting ? onSubmit : null,
+            child: submitting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Change password'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NotificationSettingsSection extends StatelessWidget {
+  const _NotificationSettingsSection({
+    required this.settings,
+    required this.saving,
+    required this.onChanged,
+  });
+
+  final NotificationSettingsDto settings;
+  final bool saving;
+  final ValueChanged<NotificationSettingsDto> onChanged;
+
+  static const _cooldownOptions = [5, 10, 15, 30, 60, 120, 300];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Notifications enabled'),
+          value: settings.enabled,
+          onChanged: saving
+              ? null
+              : (value) => onChanged(settings.copyWith(enabled: value)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Direct messages'),
+          value: settings.dm,
+          onChanged: saving
+              ? null
+              : (value) => onChanged(settings.copyWith(dm: value)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Mentions'),
+          value: settings.mentions,
+          onChanged: saving
+              ? null
+              : (value) => onChanged(settings.copyWith(mentions: value)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Sounds'),
+          value: settings.sounds,
+          onChanged: saving
+              ? null
+              : (value) => onChanged(settings.copyWith(sounds: value)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Notification cooldown'),
+          subtitle: const Text('Limit how often notifications can repeat'),
+          value: settings.cooldownEnabled,
+          onChanged: saving
+              ? null
+              : (value) =>
+                    onChanged(settings.copyWith(cooldownEnabled: value)),
+        ),
+        if (settings.cooldownEnabled) ...[
+          const SizedBox(height: AppSpacing.s),
+          DropdownButtonFormField<int>(
+            initialValue: _cooldownOptions.contains(settings.cooldownSeconds)
+                ? settings.cooldownSeconds
+                : _cooldownOptions.first,
+            decoration: const InputDecoration(labelText: 'Cooldown length'),
+            items: [
+              for (final seconds in _cooldownOptions)
+                DropdownMenuItem(
+                  value: seconds,
+                  child: Text(
+                    seconds < 60 ? '$seconds seconds' : '${seconds ~/ 60} minute(s)',
+                  ),
+                ),
+            ],
+            onChanged: saving
+                ? null
+                : (value) => onChanged(
+                    settings.copyWith(cooldownSeconds: value ?? settings.cooldownSeconds),
+                  ),
+          ),
+        ],
+      ],
     );
   }
 }
