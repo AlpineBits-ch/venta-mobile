@@ -16,12 +16,14 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _mfaCodeController = TextEditingController();
   bool _obscurePassword = true;
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _mfaCodeController.dispose();
     super.dispose();
   }
 
@@ -30,6 +32,16 @@ class _LoginScreenState extends State<LoginScreen> {
       LoginSubmitted(
         input: _usernameController.text.trim(),
         password: _passwordController.text,
+      ),
+    );
+  }
+
+  void _submitMfaCode() {
+    context.read<AuthBloc>().add(
+      LoginSubmitted(
+        input: _usernameController.text.trim(),
+        password: _passwordController.text,
+        mfaCode: _mfaCodeController.text.trim(),
       ),
     );
   }
@@ -84,55 +96,26 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.l),
-                    Text(
-                      'USERNAME OR EMAIL',
-                      style: theme.textTheme.labelSmall,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    TextField(
-                      controller: _usernameController,
-                      autocorrect: false,
-                      decoration: const InputDecoration(
-                        hintText: 'you, or you@your-server.com',
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    Text('PASSWORD', style: theme.textTheme.labelSmall),
-                    const SizedBox(height: AppSpacing.xs),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      onSubmitted: (_) => _submit(),
-                      decoration: InputDecoration(
-                        hintText: 'Your password',
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.l),
                     BlocBuilder<AuthBloc, AuthState>(
                       builder: (context, state) {
                         final loading = state.status == AuthStatus.loading;
-                        return ElevatedButton(
-                          onPressed: loading ? null : _submit,
-                          child: loading
-                              ? SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: theme.colorScheme.onPrimary,
-                                  ),
-                                )
-                              : const Text('Log In'),
+                        if (state.status == AuthStatus.mfaRequired) {
+                          return _MfaCodeForm(
+                            controller: _mfaCodeController,
+                            loading: loading,
+                            errorMessage: state.errorMessage,
+                            onSubmit: _submitMfaCode,
+                          );
+                        }
+                        return _CredentialsForm(
+                          usernameController: _usernameController,
+                          passwordController: _passwordController,
+                          obscurePassword: _obscurePassword,
+                          onToggleObscure: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                          loading: loading,
+                          onSubmit: _submit,
                         );
                       },
                     ),
@@ -163,6 +146,146 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CredentialsForm extends StatelessWidget {
+  const _CredentialsForm({
+    required this.usernameController,
+    required this.passwordController,
+    required this.obscurePassword,
+    required this.onToggleObscure,
+    required this.loading,
+    required this.onSubmit,
+  });
+
+  final TextEditingController usernameController;
+  final TextEditingController passwordController;
+  final bool obscurePassword;
+  final VoidCallback onToggleObscure;
+  final bool loading;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('USERNAME OR EMAIL', style: theme.textTheme.labelSmall),
+        const SizedBox(height: AppSpacing.xs),
+        TextField(
+          controller: usernameController,
+          autocorrect: false,
+          decoration: const InputDecoration(
+            hintText: 'you, or you@your-server.com',
+          ),
+        ),
+        const SizedBox(height: AppSpacing.m),
+        Text('PASSWORD', style: theme.textTheme.labelSmall),
+        const SizedBox(height: AppSpacing.xs),
+        TextField(
+          controller: passwordController,
+          obscureText: obscurePassword,
+          onSubmitted: (_) => onSubmit(),
+          decoration: InputDecoration(
+            hintText: 'Your password',
+            suffixIcon: IconButton(
+              icon: Icon(
+                obscurePassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+              ),
+              onPressed: onToggleObscure,
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () => context.push(RoutePaths.forgotPassword),
+            child: const Text('Forgot password?'),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.m),
+        ElevatedButton(
+          onPressed: loading ? null : onSubmit,
+          child: loading
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: theme.colorScheme.onPrimary,
+                  ),
+                )
+              : const Text('Log In'),
+        ),
+      ],
+    );
+  }
+}
+
+class _MfaCodeForm extends StatelessWidget {
+  const _MfaCodeForm({
+    required this.controller,
+    required this.loading,
+    required this.errorMessage,
+    required this.onSubmit,
+  });
+
+  final TextEditingController controller;
+  final bool loading;
+  final String? errorMessage;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Enter the 6-digit code from your authenticator app, or one of '
+          'your recovery codes.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: AppSpacing.l),
+        Text('CODE', style: theme.textTheme.labelSmall),
+        const SizedBox(height: AppSpacing.xs),
+        TextField(
+          controller: controller,
+          autofocus: true,
+          autocorrect: false,
+          onSubmitted: (_) => onSubmit(),
+          decoration: const InputDecoration(hintText: '123456'),
+        ),
+        if (errorMessage != null) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            errorMessage!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ],
+        const SizedBox(height: AppSpacing.l),
+        ElevatedButton(
+          onPressed: loading ? null : onSubmit,
+          child: loading
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: theme.colorScheme.onPrimary,
+                  ),
+                )
+              : const Text('Verify'),
+        ),
+      ],
     );
   }
 }

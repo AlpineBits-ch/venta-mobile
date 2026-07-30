@@ -2,6 +2,7 @@ abstract final class RoutePaths {
   static const login = '/login';
   static const register = '/register';
   static const serverSetup = '/server-setup';
+  static const forgotPassword = '/forgot-password';
 
   static const home = '/home';
   static const homeFriends = '/home/friends';
@@ -13,6 +14,7 @@ abstract final class RoutePaths {
       '/server/:guildId/channel/:channelId/settings';
   static const serverMembers = '/server/:guildId/members';
   static const serverSettings = '/server/:guildId/settings';
+  static const serverEvents = '/server/:guildId/events';
   static const serverWiki = '/server/:guildId/wiki';
 
   /// Declared/registered before [serverWikiPage] in `app_router.dart` - both
@@ -44,6 +46,8 @@ abstract final class RoutePaths {
 
   static String serverSettingsPath(String guildId) =>
       '/server/$guildId/settings';
+
+  static String serverEventsPath(String guildId) => '/server/$guildId/events';
 
   static String serverWikiPath(String guildId) => '/server/$guildId/wiki';
 

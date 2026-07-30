@@ -25,6 +25,10 @@ sealed class UserDto with _$UserDto {
     required UserStatus status,
     DateTime? deletionRequestedAt,
     DateTime? purgeScheduledAt,
+    // Not documented in the MFA guide's endpoint list - defaults to `false`
+    // (shows the "set up 2FA" entry point) if the server omits this field
+    // rather than assuming it's enabled.
+    @Default(false) bool mfaEnabled,
   }) = _UserDto;
 
   factory UserDto.fromJson(Map<String, dynamic> json) =>

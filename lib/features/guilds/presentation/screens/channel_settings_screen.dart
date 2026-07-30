@@ -6,6 +6,7 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
+import '../../data/models/channel_follower_dto.dart';
 
 /// Rename/describe/slowmode/delete for a single channel - mirrors desktop's
 /// `ChannelOverviewComponent`. Permission override editing (per-role/
@@ -33,6 +34,8 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
   bool _isAgeRestricted = false;
   int _slowModeSeconds = 0;
   bool _saving = false;
+  List<ChannelFollowerDto>? _followers;
+  bool _followersLoaded = false;
 
   @override
   void initState() {
@@ -56,6 +59,43 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
       _isAgeRestricted = channel.isAgeRestricted;
       _slowModeSeconds = channel.slowModeSeconds;
     });
+    if (channel.type == ChannelType.announcement && !_followersLoaded) {
+      _followersLoaded = true;
+      _loadFollowers();
+    }
+  }
+
+  Future<void> _loadFollowers() async {
+    try {
+      final followers = await getIt<GuildRepository>().getFollowers(
+        widget.channelId,
+      );
+      if (mounted) setState(() => _followers = followers);
+    } catch (_) {
+      // Section just stays empty if this fails.
+    }
+  }
+
+  Future<void> _unfollow(ChannelFollowerDto follower) async {
+    try {
+      await getIt<GuildRepository>().unfollowChannel(
+        sourceChannelId: widget.channelId,
+        followId: follower.id,
+      );
+      if (mounted) {
+        setState(
+          () => _followers = _followers
+              ?.where((f) => f.id != follower.id)
+              .toList(),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not remove that follower.')),
+        );
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -230,6 +270,45 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
                         )
                       : const Text('Save changes'),
                 ),
+                if (channel.type == ChannelType.announcement) ...[
+                  const SizedBox(height: AppSpacing.l),
+                  const Divider(),
+                  const SizedBox(height: AppSpacing.s),
+                  Text('FOLLOWERS', style: theme.textTheme.labelSmall),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Channels (in other servers) that receive published '
+                    'posts from here.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.6,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  if (_followers == null)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: AppSpacing.s),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_followers!.isEmpty)
+                    Text(
+                      'No channels follow this one yet.',
+                      style: theme.textTheme.bodyMedium,
+                    )
+                  else
+                    for (final follower in _followers!)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.rss_feed),
+                        title: Text(follower.targetChannelId),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Remove follower',
+                          onPressed: () => _unfollow(follower),
+                        ),
+                      ),
+                ],
                 const SizedBox(height: AppSpacing.l),
                 const Divider(),
                 const SizedBox(height: AppSpacing.s),

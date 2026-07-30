@@ -284,6 +284,12 @@ class _ThreadViewState extends State<ThreadView> {
                 title: Text(message.isPinned ? 'Unpin' : 'Pin'),
                 onTap: () => Navigator.pop(context, 'pin'),
               ),
+            if (_isAnnouncementChannel && _canPinMessages)
+              ListTile(
+                leading: const Icon(Icons.campaign_outlined),
+                title: const Text('Publish'),
+                onTap: () => Navigator.pop(context, 'publish'),
+              ),
             if (isMine) ...[
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
@@ -312,6 +318,8 @@ class _ThreadViewState extends State<ThreadView> {
         _startReply(message);
       case 'pin':
         context.read<MessageThreadBloc>().add(MessagePinToggled(message.id));
+      case 'publish':
+        await _publishMessage(message);
       case 'edit':
         _startEdit(message);
       case 'delete':
@@ -451,6 +459,74 @@ class _ThreadViewState extends State<ThreadView> {
     final guildId = widget.guildId;
     if (guildId == null) return const [];
     return getIt<GuildRepository>().cachedById(guildId)?.channels ?? const [];
+  }
+
+  ChannelDto? get _currentChannel {
+    final channelId = context.read<MessageThreadBloc>().repository.channelId;
+    if (channelId == null) return null;
+    return _guildChannels.where((c) => c.id == channelId).firstOrNull;
+  }
+
+  bool get _isAnnouncementChannel =>
+      _currentChannel?.type == ChannelType.announcement;
+
+  Future<void> _publishMessage(MessageDto message) async {
+    try {
+      final published = await context
+          .read<MessageThreadBloc>()
+          .repository
+          .publishMessage(message.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              published == 0
+                  ? 'Published - nobody follows this channel yet.'
+                  : 'Published to $published channel${published == 1 ? '' : 's'}.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not publish that message.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _followChannel() async {
+    final sourceChannelId = _currentChannel?.id;
+    if (sourceChannelId == null) return;
+    final target = await showModalBottomSheet<ChannelDto>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      builder: (context) => const _FollowChannelSheet(),
+    );
+    if (target == null || !mounted) return;
+    try {
+      await getIt<GuildRepository>().followChannel(
+        sourceChannelId: sourceChannelId,
+        targetChannelId: target.id,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('#${target.name} will now receive posts.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not follow - you may not manage that channel\'s server.',
+            ),
+          ),
+        );
+      }
+    }
   }
 
   /// Channel name → channel id for `#channel` autocomplete - text channels
@@ -905,6 +981,12 @@ class _ThreadViewState extends State<ThreadView> {
           ],
         ),
         actions: [
+          if (_isAnnouncementChannel)
+            IconButton(
+              icon: const Icon(Icons.rss_feed),
+              tooltip: 'Follow Channel',
+              onPressed: _followChannel,
+            ),
           IconButton(
             icon: const Icon(Icons.push_pin_outlined),
             tooltip: 'Pinned Messages',
@@ -1076,6 +1158,22 @@ class _ThreadViewState extends State<ThreadView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  BlocBuilder<MessageThreadBloc, ThreadState>(
+                    buildWhen: (previous, current) =>
+                        previous.error != current.error,
+                    builder: (context, state) {
+                      if (state.error == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                        child: Text(
+                          state.error!,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                   if (_replyTarget != null)
                     Container(
                       margin: const EdgeInsets.only(bottom: AppSpacing.s),
@@ -2095,6 +2193,59 @@ class _InviteMessageCard extends StatelessWidget {
               const Text('Server Invite - tap to view'),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Which of your channels should receive this?" picker for
+/// [_ThreadViewState._followChannel] - flat list across every guild the
+/// client has cached, since there's no cross-server directory endpoint to
+/// query against (server enforces `ManageChannel` on whichever one is
+/// picked, so an unauthorized pick just surfaces as an error afterward
+/// rather than being filtered out here).
+class _FollowChannelSheet extends StatelessWidget {
+  const _FollowChannelSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final guilds = getIt<GuildRepository>().cached;
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.m),
+              child: Text(
+                'Follow into which channel?',
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final guild in guilds)
+                    for (final channel in guild.channels)
+                      if (channel.type == ChannelType.text ||
+                          channel.type == ChannelType.announcement)
+                        ListTile(
+                          leading: const Icon(Icons.tag),
+                          title: Text('#${channel.name}'),
+                          subtitle: Text(guild.name),
+                          onTap: () => Navigator.of(context).pop(channel),
+                        ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

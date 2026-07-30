@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$UserDto {
 
- String get id; UserStatus get status; DateTime? get deletionRequestedAt; DateTime? get purgeScheduledAt;
+ String get id; UserStatus get status; DateTime? get deletionRequestedAt; DateTime? get purgeScheduledAt; bool get mfaEnabled;
 /// Create a copy of UserDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $UserDtoCopyWith<UserDto> get copyWith => _$UserDtoCopyWithImpl<UserDto>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.deletionRequestedAt, deletionRequestedAt) || other.deletionRequestedAt == deletionRequestedAt)&&(identical(other.purgeScheduledAt, purgeScheduledAt) || other.purgeScheduledAt == purgeScheduledAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.deletionRequestedAt, deletionRequestedAt) || other.deletionRequestedAt == deletionRequestedAt)&&(identical(other.purgeScheduledAt, purgeScheduledAt) || other.purgeScheduledAt == purgeScheduledAt)&&(identical(other.mfaEnabled, mfaEnabled) || other.mfaEnabled == mfaEnabled));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,status,deletionRequestedAt,purgeScheduledAt);
+int get hashCode => Object.hash(runtimeType,id,status,deletionRequestedAt,purgeScheduledAt,mfaEnabled);
 
 @override
 String toString() {
-  return 'UserDto(id: $id, status: $status, deletionRequestedAt: $deletionRequestedAt, purgeScheduledAt: $purgeScheduledAt)';
+  return 'UserDto(id: $id, status: $status, deletionRequestedAt: $deletionRequestedAt, purgeScheduledAt: $purgeScheduledAt, mfaEnabled: $mfaEnabled)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $UserDtoCopyWith<$Res>  {
   factory $UserDtoCopyWith(UserDto value, $Res Function(UserDto) _then) = _$UserDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, UserStatus status, DateTime? deletionRequestedAt, DateTime? purgeScheduledAt
+ String id, UserStatus status, DateTime? deletionRequestedAt, DateTime? purgeScheduledAt, bool mfaEnabled
 });
 
 
@@ -65,13 +65,14 @@ class _$UserDtoCopyWithImpl<$Res>
 
 /// Create a copy of UserDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? status = null,Object? deletionRequestedAt = freezed,Object? purgeScheduledAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? status = null,Object? deletionRequestedAt = freezed,Object? purgeScheduledAt = freezed,Object? mfaEnabled = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as UserStatus,deletionRequestedAt: freezed == deletionRequestedAt ? _self.deletionRequestedAt : deletionRequestedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,purgeScheduledAt: freezed == purgeScheduledAt ? _self.purgeScheduledAt : purgeScheduledAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,mfaEnabled: null == mfaEnabled ? _self.mfaEnabled : mfaEnabled // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -153,10 +154,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt,  bool mfaEnabled)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _UserDto() when $default != null:
-return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt);case _:
+return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt,_that.mfaEnabled);case _:
   return orElse();
 
 }
@@ -174,10 +175,10 @@ return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeSched
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt,  bool mfaEnabled)  $default,) {final _that = this;
 switch (_that) {
 case _UserDto():
-return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt);}
+return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt,_that.mfaEnabled);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -191,10 +192,10 @@ return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeSched
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt,  bool mfaEnabled)?  $default,) {final _that = this;
 switch (_that) {
 case _UserDto() when $default != null:
-return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt);case _:
+return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt,_that.mfaEnabled);case _:
   return null;
 
 }
@@ -206,13 +207,14 @@ return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeSched
 @JsonSerializable()
 
 class _UserDto implements UserDto {
-  const _UserDto({required this.id, required this.status, this.deletionRequestedAt, this.purgeScheduledAt});
+  const _UserDto({required this.id, required this.status, this.deletionRequestedAt, this.purgeScheduledAt, this.mfaEnabled = false});
   factory _UserDto.fromJson(Map<String, dynamic> json) => _$UserDtoFromJson(json);
 
 @override final  String id;
 @override final  UserStatus status;
 @override final  DateTime? deletionRequestedAt;
 @override final  DateTime? purgeScheduledAt;
+@override@JsonKey() final  bool mfaEnabled;
 
 /// Create a copy of UserDto
 /// with the given fields replaced by the non-null parameter values.
@@ -227,16 +229,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.deletionRequestedAt, deletionRequestedAt) || other.deletionRequestedAt == deletionRequestedAt)&&(identical(other.purgeScheduledAt, purgeScheduledAt) || other.purgeScheduledAt == purgeScheduledAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.deletionRequestedAt, deletionRequestedAt) || other.deletionRequestedAt == deletionRequestedAt)&&(identical(other.purgeScheduledAt, purgeScheduledAt) || other.purgeScheduledAt == purgeScheduledAt)&&(identical(other.mfaEnabled, mfaEnabled) || other.mfaEnabled == mfaEnabled));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,status,deletionRequestedAt,purgeScheduledAt);
+int get hashCode => Object.hash(runtimeType,id,status,deletionRequestedAt,purgeScheduledAt,mfaEnabled);
 
 @override
 String toString() {
-  return 'UserDto(id: $id, status: $status, deletionRequestedAt: $deletionRequestedAt, purgeScheduledAt: $purgeScheduledAt)';
+  return 'UserDto(id: $id, status: $status, deletionRequestedAt: $deletionRequestedAt, purgeScheduledAt: $purgeScheduledAt, mfaEnabled: $mfaEnabled)';
 }
 
 
@@ -247,7 +249,7 @@ abstract mixin class _$UserDtoCopyWith<$Res> implements $UserDtoCopyWith<$Res> {
   factory _$UserDtoCopyWith(_UserDto value, $Res Function(_UserDto) _then) = __$UserDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, UserStatus status, DateTime? deletionRequestedAt, DateTime? purgeScheduledAt
+ String id, UserStatus status, DateTime? deletionRequestedAt, DateTime? purgeScheduledAt, bool mfaEnabled
 });
 
 
@@ -264,13 +266,14 @@ class __$UserDtoCopyWithImpl<$Res>
 
 /// Create a copy of UserDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? status = null,Object? deletionRequestedAt = freezed,Object? purgeScheduledAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? status = null,Object? deletionRequestedAt = freezed,Object? purgeScheduledAt = freezed,Object? mfaEnabled = null,}) {
   return _then(_UserDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as UserStatus,deletionRequestedAt: freezed == deletionRequestedAt ? _self.deletionRequestedAt : deletionRequestedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,purgeScheduledAt: freezed == purgeScheduledAt ? _self.purgeScheduledAt : purgeScheduledAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,mfaEnabled: null == mfaEnabled ? _self.mfaEnabled : mfaEnabled // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 

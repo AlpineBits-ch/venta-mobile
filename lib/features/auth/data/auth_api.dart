@@ -28,23 +28,46 @@ class AuthApi {
 
   final Dio _dio;
 
+  /// Throws [MfaRequiredException]/[MfaInvalidException] instead of the
+  /// usual [DioException] when the `401` body signals one of those two
+  /// specific cases - a plain wrong-password `401` still surfaces as a
+  /// [DioException], same as before.
   Future<TokenResponse> passwordGrant({
     required String baseUrl,
     required String username,
     required String password,
+    String? mfaCode,
   }) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '$baseUrl/connect/token',
-      data: {
-        'grant_type': 'password',
-        'client_id': 'echo',
-        'scope': 'openid offline_access',
-        'username': username,
-        'password': password,
-      },
-      options: Options(contentType: Headers.formUrlEncodedContentType),
-    );
-    return TokenResponse.fromJson(response.data!);
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '$baseUrl/connect/token',
+        data: {
+          'grant_type': 'password',
+          'client_id': 'echo',
+          'scope': 'openid offline_access',
+          'username': username,
+          'password': password,
+          if (mfaCode != null) 'mfa_code': mfaCode,
+        },
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+      return TokenResponse.fromJson(response.data!);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        final marker = _errorMarker(e.response?.data);
+        if (marker == 'mfa_required') throw MfaRequiredException();
+        if (marker == 'mfa_invalid') throw MfaInvalidException();
+      }
+      rethrow;
+    }
+  }
+
+  String? _errorMarker(Object? body) {
+    if (body is String) return body;
+    if (body is Map) {
+      return (body['error'] ?? body['error_description'])?.toString();
+    }
+    return null;
   }
 
   Future<TokenResponse> refreshGrant({
@@ -86,5 +109,32 @@ class AuthApi {
       '$baseUrl/api/v1/configuration',
     );
     return ServerConfiguration.fromJson(response.data!);
+  }
+
+  /// Always resolves - `202` regardless of whether the email/username has an
+  /// account, deliberately (avoids leaking which emails are registered).
+  Future<void> requestPasswordReset({
+    required String baseUrl,
+    required String email,
+  }) async {
+    await _dio.get<void>(
+      '$baseUrl/api/v1/identity/user/request-password-reset',
+      queryParameters: {'email': email},
+    );
+  }
+
+  /// Throws [DioException] with `400` on an invalid/expired code, or a
+  /// `400 ValidationProblem` (`errors.newPassword`) if the new password
+  /// fails the server's policy - caller renders either message as-is.
+  Future<void> resetPassword({
+    required String baseUrl,
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _dio.post<void>(
+      '$baseUrl/api/v1/identity/user/reset-password',
+      data: {'email': email, 'code': code, 'newPassword': newPassword},
+    );
   }
 }

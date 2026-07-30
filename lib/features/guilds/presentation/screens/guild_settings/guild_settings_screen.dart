@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../../../../../core/routing/route_paths.dart';
 import '../../../../../core/widgets/app_back_button.dart';
 import 'audit_log_settings_tab.dart';
+import 'auto_mod_settings_tab.dart';
 import 'bans_settings_tab.dart';
 import 'emoji_settings_tab.dart';
 import 'invites_settings_tab.dart';
 import 'members_settings_tab.dart';
+import 'onboarding_settings_tab.dart';
 import 'overview_settings_tab.dart';
 import 'roles_settings_tab.dart';
 
@@ -23,7 +25,7 @@ class GuildSettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 7,
+      length: 9,
       child: Scaffold(
         appBar: AppBar(
           leading: AppBackButton(
@@ -56,6 +58,8 @@ class GuildSettingsScreen extends StatelessWidget {
                   Tab(text: 'Audit Log'),
                   Tab(text: 'Invites'),
                   Tab(text: 'Emoji'),
+                  Tab(text: 'Auto-Mod'),
+                  Tab(text: 'Onboarding'),
                 ],
               ),
             ),
@@ -70,6 +74,8 @@ class GuildSettingsScreen extends StatelessWidget {
             AuditLogSettingsTab(guildId: guildId),
             InvitesSettingsTab(guildId: guildId),
             EmojiSettingsTab(guildId: guildId),
+            AutoModSettingsTab(guildId: guildId),
+            OnboardingSettingsTab(guildId: guildId),
           ],
         ),
       ),

@@ -62,18 +62,37 @@ class AuthRepository {
   }
 
   /// Accepts `username` or `user@server.com` - the latter points the client
-  /// at a self-hosted instance for the rest of the session.
-  Future<void> login(String input, String password) async {
+  /// at a self-hosted instance for the rest of the session. [mfaCode] is
+  /// omitted on the first attempt; a [MfaRequiredException] from [api]
+  /// signals the caller to prompt for one and retry with it set.
+  Future<void> login(String input, String password, {String? mfaCode}) async {
     final (username, resolvedBaseUrl) = _splitLoginInput(input);
     final tokens = await api.passwordGrant(
       baseUrl: resolvedBaseUrl,
       username: username,
       password: password,
+      mfaCode: mfaCode,
     );
     _baseUrl = resolvedBaseUrl;
     await _applyTokens(tokens.accessToken, tokens.refreshToken);
     await secureStorage.writeServerUrl(_baseUrl);
   }
+
+  /// Uses whatever server the client is currently pointed at ([baseUrl]) -
+  /// same default-or-last-used resolution as everywhere else pre-login.
+  Future<void> requestPasswordReset(String email) =>
+      api.requestPasswordReset(baseUrl: _baseUrl, email: email);
+
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) => api.resetPassword(
+    baseUrl: _baseUrl,
+    email: email,
+    code: code,
+    newPassword: newPassword,
+  );
 
   Future<void> register({
     required String email,

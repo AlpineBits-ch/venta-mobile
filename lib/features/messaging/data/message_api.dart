@@ -4,6 +4,22 @@ import '../../../core/network/api_client.dart';
 import 'models/attachment_dto.dart';
 import 'models/message_dto.dart';
 
+/// Thrown by [MessageApi.create] on a `403 automod_blocked` - guild-channel
+/// sends only, a guild's auto-moderation rejected this message instead of
+/// creating it. [reason] is `'blocked_word'` or `'rate_limited'`.
+class AutoModBlockedException implements Exception {
+  AutoModBlockedException(this.reason);
+
+  final String reason;
+
+  String get message => switch (reason) {
+    'blocked_word' => 'Your message contains a word that isn\'t allowed here.',
+    'rate_limited' => 'You\'re sending messages too quickly - try again in '
+        'a moment.',
+    _ => 'That message was blocked by this server\'s auto-moderation.',
+  };
+}
+
 class MessageApi {
   MessageApi({required this.client});
 
@@ -20,22 +36,32 @@ class MessageApi {
     bool mentionsEveryone = false,
     bool mentionsHere = false,
   }) async {
-    final response = await client.dio.post<Map<String, dynamic>>(
-      client.url('/api/v1/messaging/messaging'),
-      data: {
-        'content': content,
-        'conversationId': conversationId,
-        'channelId': channelId,
-        'attachments': attachments,
-        'inReplyTo': inReplyTo,
-        'mentions': mentions,
-        'roleMentions': roleMentions,
-        'mentionsEveryone': mentionsEveryone,
-        'mentionsHere': mentionsHere,
-        'encryptionState': 'Plain',
-      },
-    );
-    return MessageDto.fromJson(response.data!);
+    try {
+      final response = await client.dio.post<Map<String, dynamic>>(
+        client.url('/api/v1/messaging/messaging'),
+        data: {
+          'content': content,
+          'conversationId': conversationId,
+          'channelId': channelId,
+          'attachments': attachments,
+          'inReplyTo': inReplyTo,
+          'mentions': mentions,
+          'roleMentions': roleMentions,
+          'mentionsEveryone': mentionsEveryone,
+          'mentionsHere': mentionsHere,
+          'encryptionState': 'Plain',
+        },
+      );
+      return MessageDto.fromJson(response.data!);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (e.response?.statusCode == 403 &&
+          data is Map &&
+          data['error'] == 'automod_blocked') {
+        throw AutoModBlockedException(data['reason']?.toString() ?? '');
+      }
+      rethrow;
+    }
   }
 
   /// Uploads one file and returns its attachment id - call [pollAttachment]
@@ -100,6 +126,16 @@ class MessageApi {
     return client.dio.delete<void>(
       client.url('/api/v1/messaging/messaging/$messageId'),
     );
+  }
+
+  /// Copies [messageId] into every channel currently following its
+  /// (Announcement) channel. Returns the number of channels it landed in -
+  /// `0` is a valid response, it just means nobody follows that channel yet.
+  Future<int> publishMessage(String messageId) async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      client.url('/api/v1/messaging/messaging/$messageId/publish'),
+    );
+    return response.data!['published'] as int;
   }
 
   /// Uses Postgres `websearch_to_tsquery` server-side, so plain search-engine

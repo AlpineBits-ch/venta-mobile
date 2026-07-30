@@ -2,16 +2,21 @@ import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
 import 'models/audit_log_entry_dto.dart';
+import 'models/auto_mod_config_dto.dart';
 import 'models/ban_dto.dart';
 import 'models/category_dto.dart';
 import 'models/channel_dto.dart';
+import 'models/channel_follower_dto.dart';
 import 'models/guild_dto.dart';
 import 'models/guild_emoji_dto.dart';
+import 'models/guild_template_dto.dart';
 import 'models/guild_member_dto.dart';
 import 'models/guild_permissions.dart';
 import 'models/guild_self_permissions.dart';
 import 'models/invite_dto.dart';
+import 'models/onboarding_dto.dart';
 import 'models/role_dto.dart';
+import 'models/scheduled_event_dto.dart';
 
 /// `{baseUrl}/api/v1/guild` is genuinely the base segment (singular) -
 /// Alpine's own `GuildService` uses it as-is, endpoints then append
@@ -224,6 +229,191 @@ class GuildApi {
 
   Future<void> deleteBan(String guildId, String bannedUserId) async {
     await client.dio.delete<void>('$_base/guilds/$guildId/bans/$bannedUserId');
+  }
+
+  Future<AutoModConfigDto> getAutoMod(String guildId) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/automod',
+    );
+    return AutoModConfigDto.fromJson(response.data!);
+  }
+
+  Future<AutoModConfigDto> updateAutoMod(
+    String guildId,
+    AutoModConfigDto config,
+  ) async {
+    final response = await client.dio.put<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/automod',
+      data: config.toJson(),
+    );
+    return AutoModConfigDto.fromJson(response.data!);
+  }
+
+  /// `403 Forbid` from the server just surfaces as a plain [DioException] -
+  /// the caller decides how to explain "you don't manage that channel".
+  Future<void> followChannel({
+    required String sourceChannelId,
+    required String targetChannelId,
+  }) async {
+    await client.dio.post<void>(
+      '$_base/channels/$sourceChannelId/followers',
+      data: {'targetChannelId': targetChannelId},
+    );
+  }
+
+  Future<List<ChannelFollowerDto>> getFollowers(String sourceChannelId) async {
+    final response = await client.dio.get<List<dynamic>>(
+      '$_base/channels/$sourceChannelId/followers',
+    );
+    return response.data!
+        .map(
+          (json) =>
+              ChannelFollowerDto.fromJson(json as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  Future<void> unfollowChannel({
+    required String sourceChannelId,
+    required String followId,
+  }) async {
+    await client.dio.delete<void>(
+      '$_base/channels/$sourceChannelId/followers/$followId',
+    );
+  }
+
+  Future<List<ScheduledEventDto>> getEvents(String guildId) async {
+    final response = await client.dio.get<List<dynamic>>(
+      '$_base/guilds/$guildId/events',
+    );
+    return response.data!
+        .map(
+          (json) => ScheduledEventDto.fromJson(json as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  Future<ScheduledEventDto> createEvent(
+    String guildId, {
+    required String title,
+    String? description,
+    required DateTime startsAt,
+    DateTime? endsAt,
+    String? location,
+    String? voiceChannelId,
+  }) async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/events',
+      data: {
+        'title': title,
+        if (description != null) 'description': description,
+        'startsAt': startsAt.toUtc().toIso8601String(),
+        if (endsAt != null) 'endsAt': endsAt.toUtc().toIso8601String(),
+        if (location != null) 'location': location,
+        if (voiceChannelId != null) 'voiceChannelId': voiceChannelId,
+      },
+    );
+    return ScheduledEventDto.fromJson(response.data!);
+  }
+
+  /// `PATCH` only touches fields you include - `null` means unchanged, same
+  /// convention used elsewhere in this API.
+  Future<ScheduledEventDto> updateEvent(
+    String eventId, {
+    String? title,
+    String? description,
+    DateTime? startsAt,
+    DateTime? endsAt,
+    String? location,
+    String? voiceChannelId,
+  }) async {
+    final response = await client.dio.patch<Map<String, dynamic>>(
+      '$_base/events/$eventId',
+      data: {
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+        if (startsAt != null) 'startsAt': startsAt.toUtc().toIso8601String(),
+        if (endsAt != null) 'endsAt': endsAt.toUtc().toIso8601String(),
+        if (location != null) 'location': location,
+        if (voiceChannelId != null) 'voiceChannelId': voiceChannelId,
+      },
+    );
+    return ScheduledEventDto.fromJson(response.data!);
+  }
+
+  /// Soft-cancels - there's no hard delete, per the guide.
+  Future<void> cancelEvent(String eventId) async {
+    await client.dio.delete<void>('$_base/events/$eventId');
+  }
+
+  Future<void> markEventInterested(String eventId) async {
+    await client.dio.post<void>('$_base/events/$eventId/interested');
+  }
+
+  Future<void> removeEventInterest(String eventId) async {
+    await client.dio.delete<void>('$_base/events/$eventId/interested');
+  }
+
+  Future<GuildTemplateDto> createTemplate(
+    String guildId, {
+    required String name,
+    String? description,
+  }) async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/templates',
+      data: {'name': name, 'description': description},
+    );
+    return GuildTemplateDto.fromJson(response.data!);
+  }
+
+  /// No permission check beyond being logged in - templates are meant to be
+  /// shareable by id/link, same spirit as an invite code.
+  Future<GuildTemplateDetailDto> getTemplate(String templateId) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/templates/$templateId',
+    );
+    return GuildTemplateDetailDto.fromJson(response.data!);
+  }
+
+  Future<GuildDto> useTemplate(
+    String templateId, {
+    required String name,
+    String? description,
+  }) async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      '$_base/templates/$templateId/use',
+      data: {'name': name, 'description': description},
+    );
+    return GuildDto.fromJson(response.data!);
+  }
+
+  Future<OnboardingConfigDto> getOnboarding(String guildId) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/onboarding',
+    );
+    return OnboardingConfigDto.fromJson(response.data!);
+  }
+
+  Future<OnboardingConfigDto> updateOnboarding(
+    String guildId,
+    OnboardingConfigDto config,
+  ) async {
+    final response = await client.dio.put<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/onboarding',
+      data: config.toJson(),
+    );
+    return OnboardingConfigDto.fromJson(response.data!);
+  }
+
+  Future<OnboardingStatusDto> getOwnOnboardingStatus(String guildId) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/onboarding/me',
+    );
+    return OnboardingStatusDto.fromJson(response.data!);
+  }
+
+  Future<void> acceptOnboarding(String guildId) async {
+    await client.dio.post<void>('$_base/guilds/$guildId/onboarding/accept');
   }
 
   Future<List<AuditLogEntryDto>> getAuditLog(

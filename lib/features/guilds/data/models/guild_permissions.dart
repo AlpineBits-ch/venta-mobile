@@ -50,6 +50,7 @@ class GuildPermissions {
     'ManageGuild': 35,
     'ViewAuditLog': 36,
     'ManageEmojis': 37,
+    'ManageEvents': 38,
     'Superadmin': 63,
   };
 

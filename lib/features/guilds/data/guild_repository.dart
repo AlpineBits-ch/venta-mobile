@@ -4,6 +4,11 @@ import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import 'guild_api.dart';
 import 'models/audit_log_entry_dto.dart';
+import 'models/auto_mod_config_dto.dart';
+import 'models/channel_follower_dto.dart';
+import 'models/guild_template_dto.dart';
+import 'models/onboarding_dto.dart';
+import 'models/scheduled_event_dto.dart';
 import 'models/ban_dto.dart';
 import 'models/category_dto.dart';
 import 'models/channel_dto.dart';
@@ -426,6 +431,106 @@ class GuildRepository {
 
   Future<void> deleteBan(String guildId, String bannedUserId) =>
       api.deleteBan(guildId, bannedUserId);
+
+  Future<AutoModConfigDto> getAutoMod(String guildId) =>
+      api.getAutoMod(guildId);
+
+  Future<AutoModConfigDto> updateAutoMod(
+    String guildId,
+    AutoModConfigDto config,
+  ) => api.updateAutoMod(guildId, config);
+
+  Future<void> followChannel({
+    required String sourceChannelId,
+    required String targetChannelId,
+  }) => api.followChannel(
+    sourceChannelId: sourceChannelId,
+    targetChannelId: targetChannelId,
+  );
+
+  Future<List<ChannelFollowerDto>> getFollowers(String sourceChannelId) =>
+      api.getFollowers(sourceChannelId);
+
+  Future<void> unfollowChannel({
+    required String sourceChannelId,
+    required String followId,
+  }) => api.unfollowChannel(sourceChannelId: sourceChannelId, followId: followId);
+
+  Future<List<ScheduledEventDto>> getEvents(String guildId) =>
+      api.getEvents(guildId);
+
+  Future<ScheduledEventDto> createEvent(
+    String guildId, {
+    required String title,
+    String? description,
+    required DateTime startsAt,
+    DateTime? endsAt,
+    String? location,
+    String? voiceChannelId,
+  }) => api.createEvent(
+    guildId,
+    title: title,
+    description: description,
+    startsAt: startsAt,
+    endsAt: endsAt,
+    location: location,
+    voiceChannelId: voiceChannelId,
+  );
+
+  Future<ScheduledEventDto> updateEvent(
+    String eventId, {
+    String? title,
+    String? description,
+    DateTime? startsAt,
+    DateTime? endsAt,
+    String? location,
+    String? voiceChannelId,
+  }) => api.updateEvent(
+    eventId,
+    title: title,
+    description: description,
+    startsAt: startsAt,
+    endsAt: endsAt,
+    location: location,
+    voiceChannelId: voiceChannelId,
+  );
+
+  Future<void> cancelEvent(String eventId) => api.cancelEvent(eventId);
+
+  Future<void> markEventInterested(String eventId) =>
+      api.markEventInterested(eventId);
+
+  Future<void> removeEventInterest(String eventId) =>
+      api.removeEventInterest(eventId);
+
+  Future<GuildTemplateDto> createTemplate(
+    String guildId, {
+    required String name,
+    String? description,
+  }) => api.createTemplate(guildId, name: name, description: description);
+
+  Future<GuildTemplateDetailDto> getTemplate(String templateId) =>
+      api.getTemplate(templateId);
+
+  Future<GuildDto> useTemplate(
+    String templateId, {
+    required String name,
+    String? description,
+  }) => api.useTemplate(templateId, name: name, description: description);
+
+  Future<OnboardingConfigDto> getOnboarding(String guildId) =>
+      api.getOnboarding(guildId);
+
+  Future<OnboardingConfigDto> updateOnboarding(
+    String guildId,
+    OnboardingConfigDto config,
+  ) => api.updateOnboarding(guildId, config);
+
+  Future<OnboardingStatusDto> getOwnOnboardingStatus(String guildId) =>
+      api.getOwnOnboardingStatus(guildId);
+
+  Future<void> acceptOnboarding(String guildId) =>
+      api.acceptOnboarding(guildId);
 
   Future<List<AuditLogEntryDto>> getAuditLog(
     String guildId, {

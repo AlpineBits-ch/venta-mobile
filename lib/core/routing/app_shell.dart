@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/guilds/data/guild_repository.dart';
 import '../../features/guilds/data/models/guild_dto.dart';
+import '../../features/guilds/data/models/guild_template_dto.dart';
 import '../../features/profile/data/models/profile_dto.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
@@ -116,6 +117,48 @@ class _AppShellState extends State<AppShell> {
             );
           }
         }
+      case _TemplateServerAction():
+        await _createFromTemplate();
+    }
+  }
+
+  Future<void> _createFromTemplate() async {
+    final templateId = await _promptForText(
+      title: 'Create from a template',
+      hint: 'Template id',
+    );
+    if (templateId == null || templateId.trim().isEmpty || !mounted) return;
+    GuildTemplateDetailDto template;
+    try {
+      template = await getIt<GuildRepository>().getTemplate(
+        templateId.trim(),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('That template id doesn\'t look valid.')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _TemplatePreviewDialog(template: template),
+    );
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    try {
+      final guild = await getIt<GuildRepository>().useTemplate(
+        template.id,
+        name: name.trim(),
+      );
+      if (mounted) context.push(RoutePaths.serverPath(guild.id));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not create that server.')),
+        );
+      }
     }
   }
 
@@ -334,6 +377,10 @@ class _JoinServerAction extends _AddServerAction {
   const _JoinServerAction();
 }
 
+class _TemplateServerAction extends _AddServerAction {
+  const _TemplateServerAction();
+}
+
 class _AddServerSheet extends StatelessWidget {
   const _AddServerSheet();
 
@@ -353,8 +400,85 @@ class _AddServerSheet extends StatelessWidget {
             title: const Text('Join a server'),
             onTap: () => Navigator.of(context).pop(const _JoinServerAction()),
           ),
+          ListTile(
+            leading: const Icon(Icons.dashboard_customize_outlined),
+            title: const Text('Create from a template'),
+            onTap: () =>
+                Navigator.of(context).pop(const _TemplateServerAction()),
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// Shows what a template creates (channel/category tree, role list) before
+/// committing, then collects the new server's name - pops that name on
+/// "Create", or `null` on cancel.
+class _TemplatePreviewDialog extends StatefulWidget {
+  const _TemplatePreviewDialog({required this.template});
+
+  final GuildTemplateDetailDto template;
+
+  @override
+  State<_TemplatePreviewDialog> createState() =>
+      _TemplatePreviewDialogState();
+}
+
+class _TemplatePreviewDialogState extends State<_TemplatePreviewDialog> {
+  late final _nameController = TextEditingController(
+    text: widget.template.name,
+  );
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final snapshot = widget.template.snapshot;
+    final channelCount =
+        snapshot.uncategorizedChannels.length +
+        snapshot.categories.fold<int>(
+          0,
+          (sum, category) => sum + category.channels.length,
+        );
+    return AlertDialog(
+      title: Text(widget.template.name),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.template.description != null) ...[
+            Text(widget.template.description!, style: theme.textTheme.bodyMedium),
+            const SizedBox(height: AppSpacing.s),
+          ],
+          Text(
+            'Creates ${snapshot.categories.length} categories, '
+            '$channelCount channels, ${snapshot.roles.length} roles.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.m),
+          TextField(
+            controller: _nameController,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'New server name'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_nameController.text),
+          child: const Text('Create'),
+        ),
+      ],
     );
   }
 }

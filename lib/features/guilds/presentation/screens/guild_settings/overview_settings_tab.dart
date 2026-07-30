@@ -126,6 +126,64 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
     }
   }
 
+  Future<void> _saveAsTemplate() async {
+    final nameController = TextEditingController(
+      text: '${_guild?.name ?? 'Server'} template',
+    );
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Save as template'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Template name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(nameController.text),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    try {
+      final template = await getIt<GuildRepository>().createTemplate(
+        widget.guildId,
+        name: name.trim(),
+      );
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Template created'),
+            content: SelectableText(
+              'Share this id so others can create a server from it:\n\n'
+              '${template.id}',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not create a template.')),
+        );
+      }
+    }
+  }
+
   Future<void> _confirmDeleteServer() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -290,6 +348,13 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
                   ),
                 )
               : const Text('Save changes'),
+        ),
+        const SizedBox(height: AppSpacing.l),
+        const Divider(),
+        const SizedBox(height: AppSpacing.s),
+        OutlinedButton(
+          onPressed: _saveAsTemplate,
+          child: const Text('Save as template'),
         ),
         const SizedBox(height: AppSpacing.l),
         const Divider(),

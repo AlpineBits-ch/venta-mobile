@@ -234,6 +234,8 @@ class MessageRepository {
   /// attachment picker - the returned [AttachmentDto] already has its final
   /// `url`, so it can be used directly both in the optimistic local message
   /// and as the id passed to [send].
+  Future<int> publishMessage(String messageId) => api.publishMessage(messageId);
+
   Future<AttachmentDto> uploadAttachment({
     required List<int> bytes,
     required String fileName,

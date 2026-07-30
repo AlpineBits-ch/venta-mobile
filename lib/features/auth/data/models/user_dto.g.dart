@@ -15,6 +15,7 @@ _UserDto _$UserDtoFromJson(Map<String, dynamic> json) => _UserDto(
   purgeScheduledAt: json['purgeScheduledAt'] == null
       ? null
       : DateTime.parse(json['purgeScheduledAt'] as String),
+  mfaEnabled: json['mfaEnabled'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$UserDtoToJson(_UserDto instance) => <String, dynamic>{
@@ -22,6 +23,7 @@ Map<String, dynamic> _$UserDtoToJson(_UserDto instance) => <String, dynamic>{
   'status': _$UserStatusEnumMap[instance.status]!,
   'deletionRequestedAt': instance.deletionRequestedAt?.toIso8601String(),
   'purgeScheduledAt': instance.purgeScheduledAt?.toIso8601String(),
+  'mfaEnabled': instance.mfaEnabled,
 };
 
 const _$UserStatusEnumMap = {

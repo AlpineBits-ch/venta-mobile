@@ -20,6 +20,7 @@ import '../../data/models/category_dto.dart';
 import '../../data/models/channel_dto.dart';
 import '../../data/models/guild_dto.dart';
 import '../../data/models/guild_permissions.dart';
+import '../../data/models/onboarding_dto.dart';
 
 /// Per-channel read state tracked locally in [_GuildDetailScreenState] -
 /// [isUnread] drives the bold channel-name styling, [mentionCount] the red
@@ -178,6 +179,91 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     } catch (_) {
       // Keep whatever was cached; the realtime-driven refetch will retry.
     }
+    unawaited(_checkOnboarding());
+  }
+
+  /// Cheap enough to call on every guild-open per the backend guide - shows
+  /// the rules gate once per membership (never again once `completed`).
+  Future<void> _checkOnboarding() async {
+    try {
+      final status = await getIt<GuildRepository>().getOwnOnboardingStatus(
+        widget.guildId,
+      );
+      if (!status.completed && mounted) await _showOnboardingSheet(status);
+    } catch (_) {
+      // No onboarding configured for this guild, or the check failed -
+      // either way, don't block on it.
+    }
+  }
+
+  Future<void> _showOnboardingSheet(OnboardingStatusDto status) async {
+    final theme = Theme.of(context);
+    var accepting = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.l),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Welcome! Read the rules to get started', style: theme.textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.m),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      status.rulesText ?? '',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.l),
+                FilledButton(
+                  onPressed: accepting
+                      ? null
+                      : () async {
+                          setSheetState(() => accepting = true);
+                          try {
+                            await getIt<GuildRepository>().acceptOnboarding(
+                              widget.guildId,
+                            );
+                            if (sheetContext.mounted) {
+                              Navigator.of(sheetContext).pop();
+                            }
+                          } catch (_) {
+                            setSheetState(() => accepting = false);
+                            if (sheetContext.mounted) {
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Could not accept - please try again.',
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: accepting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('I understand and agree'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _hydrateVoiceRosters(GuildDto guild) {
@@ -368,6 +454,12 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
               onPressed: () =>
                   context.push(RoutePaths.serverWikiPath(guild.id)),
             ),
+          IconButton(
+            icon: const Icon(Icons.event_outlined),
+            tooltip: 'Events',
+            onPressed: () =>
+                context.push(RoutePaths.serverEventsPath(guild.id)),
+          ),
           IconButton(
             icon: const Icon(Icons.people_outline),
             onPressed: () =>

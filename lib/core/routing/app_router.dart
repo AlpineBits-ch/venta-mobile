@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/server_setup_screen.dart';
@@ -16,6 +17,7 @@ import '../../features/guilds/data/guild_repository.dart';
 import '../../features/guilds/data/models/channel_dto.dart';
 import '../../features/guilds/presentation/screens/channel_screen.dart';
 import '../../features/guilds/presentation/screens/channel_settings_screen.dart';
+import '../../features/guilds/presentation/screens/events_screen.dart';
 import '../../features/guilds/presentation/screens/forum_channel_screen.dart';
 import '../../features/guilds/presentation/screens/guild_detail_screen.dart';
 import '../../features/guilds/presentation/screens/guild_members_screen.dart';
@@ -64,7 +66,8 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       final loggingIn =
           state.matchedLocation == RoutePaths.login ||
           state.matchedLocation == RoutePaths.register ||
-          state.matchedLocation == RoutePaths.serverSetup;
+          state.matchedLocation == RoutePaths.serverSetup ||
+          state.matchedLocation == RoutePaths.forgotPassword;
 
       // Every authenticated navigation is a candidate "last place the user
       // was" - remembered so a cold relaunch (app process killed, not just
@@ -108,6 +111,10 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       GoRoute(
         path: RoutePaths.serverSetup,
         builder: (context, state) => const ServerSetupScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
       ),
       ShellRoute(
         builder: (context, state, child) =>
@@ -178,6 +185,11 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         path: RoutePaths.serverMembers,
         builder: (context, state) =>
             GuildMembersScreen(guildId: state.pathParameters['guildId']!),
+      ),
+      GoRoute(
+        path: RoutePaths.serverEvents,
+        builder: (context, state) =>
+            EventsScreen(guildId: state.pathParameters['guildId']!),
       ),
       GoRoute(
         path: RoutePaths.serverSettings,

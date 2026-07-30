@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/di/injector.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/session/session_cubit.dart';
+import '../data/auth_api.dart';
 import '../data/auth_repository.dart';
 
 sealed class AuthEvent extends Equatable {
@@ -17,13 +18,18 @@ sealed class AuthEvent extends Equatable {
 }
 
 class LoginSubmitted extends AuthEvent {
-  const LoginSubmitted({required this.input, required this.password});
+  const LoginSubmitted({
+    required this.input,
+    required this.password,
+    this.mfaCode,
+  });
 
   final String input;
   final String password;
+  final String? mfaCode;
 
   @override
-  List<Object?> get props => [input, password];
+  List<Object?> get props => [input, password, mfaCode];
 }
 
 class RegisterSubmitted extends AuthEvent {
@@ -43,7 +49,7 @@ class RegisterSubmitted extends AuthEvent {
   List<Object?> get props => [email, username, password, birthdate];
 }
 
-enum AuthStatus { initial, loading, success, failure }
+enum AuthStatus { initial, loading, success, failure, mfaRequired }
 
 class AuthState extends Equatable {
   const AuthState({this.status = AuthStatus.initial, this.errorMessage});
@@ -78,11 +84,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(state.copyWith(status: AuthStatus.loading));
     try {
-      await authRepository.login(event.input, event.password);
+      await authRepository.login(
+        event.input,
+        event.password,
+        mfaCode: event.mfaCode,
+      );
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
       unawaited(startPushServices());
       emit(state.copyWith(status: AuthStatus.success));
+    } on MfaRequiredException {
+      emit(state.copyWith(status: AuthStatus.mfaRequired, errorMessage: null));
+    } on MfaInvalidException {
+      emit(
+        state.copyWith(
+          status: AuthStatus.mfaRequired,
+          errorMessage: 'Invalid code - try again.',
+        ),
+      );
     } catch (e) {
       emit(
         state.copyWith(

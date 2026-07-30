@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/sound/sound_service.dart';
+import '../data/message_api.dart';
 import '../data/message_content_codec.dart';
 import '../data/message_repository.dart';
 import '../data/models/attachment_dto.dart';
@@ -479,6 +480,20 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
               if (m.id == tempId) sent else m,
           ],
           pendingSendIds: {...state.pendingSendIds}..remove(tempId),
+        ),
+      );
+    } on AutoModBlockedException catch (e) {
+      // Retrying identical blocked content would just fail again, so drop
+      // the optimistic bubble entirely rather than leaving a permanently
+      // "failed, tap to retry" message sitting in the thread.
+      emit(
+        state.copyWith(
+          messages: [
+            for (final m in state.messages)
+              if (m.id != tempId) m,
+          ],
+          pendingSendIds: {...state.pendingSendIds}..remove(tempId),
+          error: e.message,
         ),
       );
     } catch (_) {

@@ -11,12 +11,38 @@ class DeletionNotCancellableException implements Exception {
   final String message;
 }
 
+/// Thrown by [IdentityApi.enableMfa]/[disableMfa]/[regenerateRecoveryCodes]
+/// on a `400 Bad Request` - wrong TOTP code or wrong account password,
+/// depending on which call. [message] is already user-facing.
+class MfaActionFailedException implements Exception {
+  MfaActionFailedException(this.message);
+
+  final String message;
+}
+
+class MfaEnrollment {
+  const MfaEnrollment({required this.secret, required this.otpAuthUri});
+
+  factory MfaEnrollment.fromJson(Map<String, dynamic> json) => MfaEnrollment(
+    secret: json['secret'] as String,
+    otpAuthUri: json['otpAuthUri'] as String,
+  );
+
+  final String secret;
+  final String otpAuthUri;
+}
+
 class IdentityApi {
   IdentityApi({required this.client});
 
   final ApiClient client;
 
   String get _base => client.url('/api/v1/identity/users/self');
+
+  /// Deliberately `/user/` (singular), not `/users/self/` like [_base] -
+  /// matches the MFA guide's endpoints exactly, one of this API's several
+  /// pre-existing singular/plural routing quirks.
+  String get _mfaBase => client.url('/api/v1/identity/user/mfa');
 
   Future<UserDto> getSelf() async {
     final response = await client.dio.get<Map<String, dynamic>>(_base);
@@ -82,5 +108,61 @@ class IdentityApi {
 
   Future<void> updateSettings(Map<String, dynamic> settings) async {
     await client.dio.put<void>('$_base/settings', data: settings);
+  }
+
+  /// Re-callable before [enableMfa] succeeds - the server just re-returns
+  /// the same pending secret rather than generating a new one.
+  Future<MfaEnrollment> enrollMfa() async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      '$_mfaBase/enroll',
+    );
+    return MfaEnrollment.fromJson(response.data!);
+  }
+
+  /// Returns the eight one-time recovery codes - shown exactly once, the
+  /// server has no "view again" endpoint.
+  Future<List<String>> enableMfa(String code) async {
+    try {
+      final response = await client.dio.post<Map<String, dynamic>>(
+        '$_mfaBase/enable',
+        data: {'code': code},
+      );
+      return (response.data!['recoveryCodes'] as List).cast<String>();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 400) {
+        throw MfaActionFailedException('Invalid code.');
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> disableMfa(String password) async {
+    try {
+      await client.dio.post<void>(
+        '$_mfaBase/disable',
+        data: {'password': password},
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 400) {
+        throw MfaActionFailedException('Incorrect password.');
+      }
+      rethrow;
+    }
+  }
+
+  /// Invalidates every previously issued code the moment this succeeds.
+  Future<List<String>> regenerateRecoveryCodes(String password) async {
+    try {
+      final response = await client.dio.post<Map<String, dynamic>>(
+        '$_mfaBase/recovery-codes',
+        data: {'password': password},
+      );
+      return (response.data!['recoveryCodes'] as List).cast<String>();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 400) {
+        throw MfaActionFailedException('Incorrect password.');
+      }
+      rethrow;
+    }
   }
 }

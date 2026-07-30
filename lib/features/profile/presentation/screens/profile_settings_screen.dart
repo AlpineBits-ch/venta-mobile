@@ -17,6 +17,7 @@ import '../../../auth/data/models/notification_settings_dto.dart';
 import '../../../auth/data/models/user_dto.dart';
 import '../../bloc/self_profile_cubit.dart';
 import '../../data/models/profile_dto.dart';
+import 'mfa_settings_screen.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June', //
@@ -452,6 +453,26 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       onChanged: () => setState(() {}),
                     ),
                     const SizedBox(height: AppSpacing.m),
+                    OutlinedButton.icon(
+                      icon: Icon(
+                        _account?.mfaEnabled ?? false
+                            ? Icons.verified_user_outlined
+                            : Icons.shield_outlined,
+                      ),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => MfaSettingsScreen(
+                            enabled: _account?.mfaEnabled ?? false,
+                          ),
+                        ),
+                      ),
+                      label: Text(
+                        _account?.mfaEnabled ?? false
+                            ? 'Two-factor authentication is on'
+                            : 'Set up two-factor authentication',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s),
                     OutlinedButton(
                       onPressed: _signingOutOthers
                           ? null
