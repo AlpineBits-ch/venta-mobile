@@ -163,6 +163,13 @@ class MessageRepository {
         _eventsController.add(
           RemoteMessageDeleted(payload['messageId'] as String),
         );
+      // A moderator purge. The server has no per-message delete event for
+      // guilds - bulk is the only shape it sends - so without this a purged
+      // channel keeps showing every message until it's reopened.
+      case 'guild.MessagesBulkDeleted':
+        for (final id in (payload['messageIds'] as List? ?? const [])) {
+          if (id is String) _eventsController.add(RemoteMessageDeleted(id));
+        }
       case 'conversation.UserTyping' || 'guild.UserTyping':
         _eventsController.add(RemoteUserTyping(payload['userId'] as String));
       case 'conversation.ReactionCreated' || 'guild.ReactionCreated':

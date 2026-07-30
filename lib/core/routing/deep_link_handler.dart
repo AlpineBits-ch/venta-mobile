@@ -29,16 +29,23 @@ class InviteTarget extends DeepLinkTarget {
 /// mobile right now; they fall through to the logged no-op default so
 /// adding real support later is a new `case` plus a new route, nothing else.
 abstract final class DeepLinkHandler {
+  /// Invites are matched against the whole URL rather than by scheme+host,
+  /// mirroring Alpine's `handleDeepLink` (`url.match(/invite\/([^/?#]+)/)`).
+  ///
+  /// That is the difference between working and not: an invite reaches this
+  /// client as `venta://invite/CODE` from the custom scheme, as
+  /// `https://venta.gg/invite/CODE` when it's shared as a link, and with a
+  /// query string on either. Keying on `uri.host == 'invite'` only ever
+  /// matched the first of those.
+  static final _inviteRe = RegExp(r'invite/([^/?#]+)');
+
   static DeepLinkTarget? resolve(Uri uri) {
+    final invite = _inviteRe.firstMatch(uri.toString())?.group(1);
+    if (invite != null && invite.isNotEmpty) return InviteTarget(invite);
+
     if (uri.scheme != 'venta') return null;
 
     switch (uri.host) {
-      case 'invite':
-        final code = uri.pathSegments.isNotEmpty
-            ? uri.pathSegments.first
-            : null;
-        if (code == null || code.isEmpty) return null;
-        return InviteTarget(code);
       case 'conversation':
         final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
         if (id == null || id.isEmpty) return null;

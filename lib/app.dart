@@ -42,10 +42,29 @@ class _AppState extends State<App> {
         .listen(_router.push);
   }
 
+  /// The launch URI, held only until the stream replays it.
+  ///
+  /// `app_links` delivers a cold start's link twice - once from
+  /// [AppLinks.getInitialLink] and again on [AppLinks.uriLinkStream] - which
+  /// opened two invite popups stacked on top of each other, so dismissing
+  /// left one behind and it read as the app being stuck.
+  Uri? _launchUri;
+
   Future<void> _initDeepLinks() async {
     final initialUri = await _appLinks.getInitialLink();
-    if (initialUri != null) _handleUri(initialUri);
-    _linkSub = _appLinks.uriLinkStream.listen(_handleUri);
+    if (initialUri != null) {
+      _launchUri = initialUri;
+      _handleUri(initialUri);
+    }
+    _linkSub = _appLinks.uriLinkStream.listen((uri) {
+      // Only the first replay is swallowed - opening the same invite again
+      // later is a real second request and has to still work.
+      if (uri == _launchUri) {
+        _launchUri = null;
+        return;
+      }
+      _handleUri(uri);
+    });
   }
 
   void _handleUri(Uri uri) {
@@ -59,9 +78,23 @@ class _AppState extends State<App> {
     }
   }
 
-  void _showInviteDialog(String code) {
+  /// Shows the invite popup over whatever is on screen, waiting for a
+  /// navigator if there isn't one yet.
+  ///
+  /// A cold start *is* the invite: `getInitialLink` resolves before the first
+  /// frame, so the navigator's context is still null and dropping the code
+  /// there meant the whole point of the link was silently discarded. Retries
+  /// once per frame, and gives up rather than spinning forever if no
+  /// navigator ever appears.
+  void _showInviteDialog(String code, {int attempt = 0}) {
     final context = _router.routerDelegate.navigatorKey.currentContext;
-    if (context == null) return;
+    if (context == null) {
+      if (attempt >= 20) return;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showInviteDialog(code, attempt: attempt + 1),
+      );
+      return;
+    }
     showDialog<void>(
       context: context,
       builder: (_) => InviteDialog(code: code),

@@ -55,6 +55,10 @@ class GuildRepository {
             'guild.RolesReordered',
             'guild.MemberJoined',
             'guild.MemberLeft',
+            // Nickname changes - the member list and every author name in a
+            // channel read from the guild, so this has to invalidate it like
+            // any other membership change.
+            'guild.MemberUpdated',
             'guild.MemberBanned',
             'guild.MemberKicked',
             'guild.MemberMuted',

@@ -217,6 +217,7 @@ class _ActiveCallView extends StatelessWidget {
                         CallParticipantTile(
                           userId: participant.userId,
                           isMuted: participant.isMuted,
+                          isSpeaking: participant.isSpeaking,
                         ),
                 ],
               ),

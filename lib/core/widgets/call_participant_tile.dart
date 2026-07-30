@@ -12,10 +12,15 @@ class CallParticipantTile extends StatelessWidget {
     super.key,
     required this.userId,
     required this.isMuted,
+    this.isSpeaking = false,
   });
 
   final String userId;
   final bool isMuted;
+
+  /// Draws the talking ring. Defaults to false so the guild-voice roster,
+  /// which has no speaking events of its own yet, is unaffected.
+  final bool isSpeaking;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +30,21 @@ class CallParticipantTile extends StatelessWidget {
         Stack(
           clipBehavior: Clip.none,
           children: [
-            UserAvatar(userId: userId, radius: 44, onTap: () {}),
+            // Animated so the ring fades rather than strobing on and off with
+            // every voice-activity flip.
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSpeaking
+                      ? const Color(0xFF3BA55D)
+                      : Colors.transparent,
+                  width: 3,
+                ),
+              ),
+              child: UserAvatar(userId: userId, radius: 44, onTap: () {}),
+            ),
             if (isMuted)
               Positioned(
                 right: -2,

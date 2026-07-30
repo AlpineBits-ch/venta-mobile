@@ -20,6 +20,7 @@ class CallParticipantState extends Equatable {
     this.isMuted = false,
     this.isStreaming = false,
     this.hasCamera = false,
+    this.isSpeaking = false,
   });
 
   final String userId;
@@ -29,19 +30,31 @@ class CallParticipantState extends Equatable {
   final bool isStreaming;
   final bool hasCamera;
 
+  /// Server-side voice-activity detection - drives the ring around a talking
+  /// participant's avatar.
+  final bool isSpeaking;
+
   CallParticipantState copyWith({
     bool? isMuted,
     bool? isStreaming,
     bool? hasCamera,
+    bool? isSpeaking,
   }) => CallParticipantState(
     userId: userId,
     isMuted: isMuted ?? this.isMuted,
     isStreaming: isStreaming ?? this.isStreaming,
     hasCamera: hasCamera ?? this.hasCamera,
+    isSpeaking: isSpeaking ?? this.isSpeaking,
   );
 
   @override
-  List<Object?> get props => [userId, isMuted, isStreaming, hasCamera];
+  List<Object?> get props => [
+    userId,
+    isMuted,
+    isStreaming,
+    hasCamera,
+    isSpeaking,
+  ];
 }
 
 class CallState extends Equatable {
@@ -599,6 +612,16 @@ class CallCubit extends Cubit<CallState> {
             participants: [
               for (final p in state.participants)
                 p.userId == userId ? p.copyWith(isMuted: isMuted) : p,
+            ],
+          ),
+        );
+
+      case CallSpeakingChanged(:final userId, :final isSpeaking):
+        emit(
+          state.copyWith(
+            participants: [
+              for (final p in state.participants)
+                p.userId == userId ? p.copyWith(isSpeaking: isSpeaking) : p,
             ],
           ),
         );

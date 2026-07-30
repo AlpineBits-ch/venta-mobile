@@ -34,7 +34,16 @@ class RealtimeService {
     'conversation.ReactionRemoved',
     'conversation.MessagePinned',
     'conversation.MessageUnpinned',
-    'conversation.FriendRequestReceived',
+    // Friend requests live on the `social.` prefix and reach both parties
+    // (see RelationshipRepository). `conversation.FriendRequestReceived` was
+    // watched here for a long time and never once fired - the backend has no
+    // such method - which is why an incoming request needed an app restart to
+    // appear. Kept alongside `conversation.FriendRequestAccepted` only until
+    // the backend change ships.
+    'social.FriendRequestCreated',
+    'social.FriendRequestAccepted',
+    'social.FriendRequestRejected',
+    'social.FriendRemoved',
     'conversation.FriendRequestAccepted',
     // MLS (E2EE) key-exchange bootstrap signal, not a hydration event
     // despite the name - Alpine's handler fetches "pending welcomes" and
@@ -46,7 +55,12 @@ class RealtimeService {
     'presence.UserOffline',
     'guild.MessageCreated',
     'guild.MessageUpdated',
+    // The backend has no per-message guild delete - a purge arrives as one
+    // `MessagesBulkDeleted` carrying every id. `guild.MessageDeleted` stays
+    // watched because the handler costs nothing and the name may yet appear;
+    // the bulk one is what actually fires today.
     'guild.MessageDeleted',
+    'guild.MessagesBulkDeleted',
     'guild.UserTyping',
     'guild.ChannelCreated',
     'guild.ChannelDeleted',
@@ -76,6 +90,8 @@ class RealtimeService {
     'guild.MemberKicked',
     'guild.MemberMuted',
     'guild.MemberUnmuted',
+    // Nickname changes.
+    'guild.MemberUpdated',
     'guild.BotInstalled',
     'guild.BotUninstalled',
     'guild.PresenceChanged',
@@ -110,6 +126,7 @@ class RealtimeService {
     // Camera/screenshare - mirrors guild.voice.*'s equivalents (see
     // GuildVoiceRepository); the backend has always supported these
     // symmetrically for calls too, the client just never watched them.
+    'call.SpeakingChanged',
     'call.CameraChanged',
     'call.TrackPublished',
     'call.TrackClosed',

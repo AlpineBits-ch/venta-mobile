@@ -19,9 +19,16 @@ extension RelationshipModelX on RelationshipModel {
       owner.userId == myUserId ? target : owner;
 }
 
-/// REST relationship list merged with realtime friend-request events. The
-/// hub only sends a display name on those events (not enough to patch one
-/// entry), so a received/accepted event just triggers a full refetch.
+/// REST relationship list merged with the realtime `social.*` events.
+///
+/// All four carry the recipient's own view - `relationshipId`, `status`
+/// (`PendingIncoming`/`PendingOutgoing`/`Friends`/`None`) and the *other*
+/// party's `userId`/`profileId`/`userName` - and go to both sides. That's
+/// still not enough to patch the cache in place: a [RelationshipModel] holds
+/// both parties, and the event omits your own side, so a patched row would
+/// have to invent it (and `None` has no [RelationshipStatus] to map to).
+/// Refetching one list on a hand-initiated, infrequent event is the honest
+/// trade.
 class RelationshipRepository {
   RelationshipRepository({
     required this.api,
@@ -29,9 +36,22 @@ class RelationshipRepository {
   }) {
     _realtimeSub = realtimeService.events
         .where(
-          (e) =>
-              e.name == 'conversation.FriendRequestReceived' ||
-              e.name == 'conversation.FriendRequestAccepted',
+          (e) => const {
+            // Sent to the target *and* the initiator, so a request shows up
+            // on the receiving end without a restart, and your own outgoing
+            // one appears on your other devices.
+            'social.FriendRequestCreated',
+            'social.FriendRequestAccepted',
+            // Rejection and removal/revocation reach both sides too - these
+            // had no event at all before, so a rejected or unfriended row
+            // used to sit there until the app was restarted.
+            'social.FriendRequestRejected',
+            'social.FriendRemoved',
+            // Transitional: the deployed backend still sends this one, and
+            // will until the `social.*` change ships. Drop it after that -
+            // both do the same refetch, so overlapping is harmless.
+            'conversation.FriendRequestAccepted',
+          }.contains(e.name),
         )
         .listen((_) => _refresh());
   }

@@ -85,6 +85,14 @@ class CallMuteChanged extends VoiceRepositoryEvent {
   final bool isMuted;
 }
 
+/// Voice-activity detection from the server, driving the "who's talking"
+/// ring. Sent to every *other* participant, so it never describes you.
+class CallSpeakingChanged extends VoiceRepositoryEvent {
+  const CallSpeakingChanged({required this.userId, required this.isSpeaking});
+  final String userId;
+  final bool isSpeaking;
+}
+
 class CallCameraChanged extends VoiceRepositoryEvent {
   const CallCameraChanged({required this.userId, required this.isCameraOn});
   final String userId;
@@ -191,6 +199,13 @@ class VoiceRepository {
           CallMuteChanged(
             userId: payload['userId'] as String,
             isMuted: payload['isMuted'] as bool,
+          ),
+        );
+      case 'call.SpeakingChanged':
+        _eventsController.add(
+          CallSpeakingChanged(
+            userId: payload['userId'] as String,
+            isSpeaking: payload['isSpeaking'] as bool? ?? false,
           ),
         );
       case 'call.CallEnded':

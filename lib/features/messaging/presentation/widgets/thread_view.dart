@@ -24,6 +24,7 @@ import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/channel_dto.dart';
 import '../../../guilds/data/models/guild_member_dto.dart';
 import '../../../guilds/data/models/role_dto.dart';
+import '../../../../core/routing/deep_link_handler.dart';
 import '../../../invites/presentation/widgets/invite_dialog.dart';
 import '../../../profile/data/profile_repository.dart';
 import '../../bloc/message_thread_bloc.dart';
@@ -44,6 +45,40 @@ import 'reaction_picker_sheet.dart';
 const _imageExtensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'bmp'};
 
 final _inviteUrlRe = RegExp(r'https://venta\.gg/invite/([A-Za-z0-9_-]+)');
+
+/// Opens a link tapped in message text.
+///
+/// Anything Venta can handle itself stays in the app - an invite opens the
+/// same popup the `venta://invite/…` deep link does, rather than bouncing out
+/// to a browser and back. Everything else is somebody else's link and goes to
+/// the system handler.
+Future<void> _openMessageLink(BuildContext context, String? href) async {
+  if (href == null || href.isEmpty) return;
+  final uri = Uri.tryParse(href);
+  if (uri == null) return;
+
+  switch (DeepLinkHandler.resolve(uri)) {
+    case InviteTarget(:final code):
+      await showDialog<void>(
+        context: context,
+        builder: (_) => InviteDialog(code: code),
+      );
+    case RouteTarget(:final path):
+      if (context.mounted) context.push(path);
+    case null:
+      // `externalApplication` rather than an in-app webview: a link in a
+      // message is untrusted, and the browser is where the address bar is.
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Couldn\'t open that link.')),
+          );
+        }
+      }
+  }
+}
 
 /// Flavor-text rotations for join/leave system messages - kept verbatim from
 /// desktop's locale strings (`MESSAGE.SYSTEM.GUILD_MEMBER_JOIN/LEAVE.*`) so
@@ -1872,13 +1907,8 @@ class _MessageBody extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppRadii.chip),
                   ),
                 ),
-                onTapLink: (text, href, title) {
-                  if (href == null) return;
-                  launchUrl(
-                    Uri.parse(href),
-                    mode: LaunchMode.externalApplication,
-                  );
-                },
+                onTapLink: (text, href, title) =>
+                    _openMessageLink(context, href),
               );
             },
           ),

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -41,6 +41,7 @@ import '../di/injector.dart';
 import '../realtime/realtime_service.dart';
 import '../session/session_cubit.dart';
 import '../session/session_state.dart';
+import '../theme/widget_styles.dart';
 import 'app_shell.dart';
 import 'route_paths.dart';
 import 'route_persistence.dart';
@@ -68,8 +69,29 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
   return GoRouter(
     initialLocation: RoutePaths.login,
     refreshListenable: GoRouterRefreshStream(sessionCubit.stream),
+    // go_router's own error page offers a "Home" link to `/`, which this app
+    // doesn't route - so its one way out is itself a dead end. Anything that
+    // still fails to match gets a real way back instead.
+    errorBuilder: (context, state) =>
+        _RouteNotFoundScreen(location: state.uri.toString()),
     redirect: (context, state) {
       final session = sessionCubit.state;
+
+      // A cold start from a `venta://…` intent arrives as the platform's
+      // initial route, and go_router prefers that over `initialLocation`
+      // whenever it isn't `/` - so the router tried to match
+      // `venta://invite/CODE` as a path, found nothing, and dropped the user
+      // on "Page Not Found" whose only affordance ("Home") points at `/`,
+      // which isn't a route either. That is the dead end.
+      //
+      // Deep links are `DeepLinkHandler`/`App`'s job, not the router's: this
+      // only has to refuse to treat one as a location.
+      if (state.uri.hasScheme) {
+        return session is SessionAuthenticated
+            ? (RoutePersistence.lastLocation ?? RoutePaths.home)
+            : RoutePaths.login;
+      }
+
       final loggingIn =
           state.matchedLocation == RoutePaths.login ||
           state.matchedLocation == RoutePaths.register ||
@@ -303,4 +325,54 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       ),
     ],
   );
+}
+
+/// Replaces go_router's built-in "Page Not Found", whose only action links to
+/// `/` - a location this app doesn't route, so pressing it lands you back on
+/// the same screen with no way out.
+class _RouteNotFoundScreen extends StatelessWidget {
+  const _RouteNotFoundScreen({required this.location});
+
+  final String location;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.explore_off_outlined,
+                size: 44,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
+              ),
+              const SizedBox(height: AppSpacing.m),
+              Text(
+                'This link went nowhere',
+                style: theme.textTheme.titleSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                location,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.l),
+              FilledButton(
+                onPressed: () => context.go(RoutePaths.home),
+                child: const Text('Back to Venta'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
