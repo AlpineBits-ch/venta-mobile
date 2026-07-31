@@ -25,6 +25,15 @@ class SecureStorageService {
   /// multi-device calls/voice spec's "don't invent a second ID" note.
   static const _deviceIdKey = 'venta.device.id';
 
+  /// Public half of this installation's device identity key, base64. See
+  /// `DeviceIdService.identityPublicKey` for what it is and isn't.
+  static const _deviceIdentityKeyKey = 'venta.device.identity_key';
+
+  /// The call this device is currently connected to, if any - written by
+  /// `CallKitService` and read from the FCM background isolate, which has no
+  /// access to [CallCubit]. See `showCallKitFromPushData`.
+  static const _activeCallIdKey = 'venta.call.active_call_id';
+
   Future<String?> readAccessToken() => _storage.read(key: _accessTokenKey);
   Future<String?> readRefreshToken() => _storage.read(key: _refreshTokenKey);
   Future<String?> readServerUrl() => _storage.read(key: _serverUrlKey);
@@ -32,6 +41,18 @@ class SecureStorageService {
   Future<String?> readDeviceId() => _storage.read(key: _deviceIdKey);
   Future<void> writeDeviceId(String deviceId) =>
       _storage.write(key: _deviceIdKey, value: deviceId);
+
+  Future<String?> readDeviceIdentityKey() =>
+      _storage.read(key: _deviceIdentityKeyKey);
+  Future<void> writeDeviceIdentityKey(String key) =>
+      _storage.write(key: _deviceIdentityKeyKey, value: key);
+
+  Future<String?> readActiveCallId() => _storage.read(key: _activeCallIdKey);
+
+  /// [callId] of `null` clears it - the call ended.
+  Future<void> writeActiveCallId(String? callId) => callId == null
+      ? _storage.delete(key: _activeCallIdKey)
+      : _storage.write(key: _activeCallIdKey, value: callId);
 
   /// A call action (accept/decline) that a [CallKitService] background
   /// isolate captured while the main Flutter engine wasn't running yet - see

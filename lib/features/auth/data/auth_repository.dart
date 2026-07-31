@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/device/device_id_service.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import 'auth_api.dart';
 import 'models/server_configuration.dart';
@@ -15,10 +16,15 @@ class SessionExpiredException implements Exception {}
 /// tokens in [SecureStorageService] (Keychain/Keystore) instead of
 /// `localStorage`.
 class AuthRepository {
-  AuthRepository({required this.api, required this.secureStorage});
+  AuthRepository({
+    required this.api,
+    required this.secureStorage,
+    required this.deviceIdService,
+  });
 
   final AuthApi api;
   final SecureStorageService secureStorage;
+  final DeviceIdService deviceIdService;
 
   String _baseUrl = AppConfig.defaultApiUrl;
   String? _accessToken;
@@ -72,6 +78,7 @@ class AuthRepository {
       username: username,
       password: password,
       mfaCode: mfaCode,
+      deviceId: deviceIdService.deviceIdOrNull,
     );
     _baseUrl = resolvedBaseUrl;
     await _applyTokens(tokens.accessToken, tokens.refreshToken);

@@ -33,7 +33,7 @@ Future<void> main() async {
   await getIt<AuthRepository>().init();
   if (getIt<AuthRepository>().isAuthenticated) {
     unawaited(getIt<RealtimeService>().start());
-    unawaited(startPushServices());
+    unawaited(startAuthenticatedServices());
   }
   await SentryFlutter.init(
     (options) {

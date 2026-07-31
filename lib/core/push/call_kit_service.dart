@@ -8,6 +8,7 @@ import '../../features/auth/data/auth_repository.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/data/models/call_dto.dart';
+import '../device/device_id_service.dart';
 import '../storage/secure_storage_service.dart';
 import 'ios_call_kit_bridge.dart';
 import 'push_token_api.dart';
@@ -26,6 +27,16 @@ const _callPushType = 'call';
 /// the caller. Without this a phantom ring sits there indefinitely (Android
 /// has no CallKit-style auto-timeout for a custom incoming-call UI). See
 /// docs/native-call-push-backend-spec.md.
+///
+/// A cancel is never applied to a call this device is *in*. The server leaves
+/// the accepting device out of the fan-out, but only when that device sent a
+/// registered `X-Device-Id` on accept - and since the device-identity
+/// consolidation the user's *other* devices are deliberately included, where
+/// the whole user used to be skipped. That makes a stray cancel reaching the
+/// answering device a live possibility (an unregistered id, a token still
+/// unattached from before the migration), and acting on it hangs up a
+/// connected call. The active call id is read from secure storage because
+/// this runs in a background isolate with no access to [CallCubit].
 Future<void> showCallKitFromPushData(Map<String, dynamic> data) async {
   if (data['type'] != _callPushType) return;
   // Android only. iOS drives its CallKit UI exclusively through `AppDelegate`'s
@@ -40,6 +51,7 @@ Future<void> showCallKitFromPushData(Map<String, dynamic> data) async {
   if (Platform.isIOS) return;
   final callId = data['callId'] as String;
   if (data['callSubtype'] == 'end') {
+    if (await SecureStorageService().readActiveCallId() == callId) return;
     await FlutterCallkitIncoming.endCall(callId);
     return;
   }
@@ -110,6 +122,7 @@ class CallKitService {
     required this.profileRepository,
     required this.pushTokenApi,
     required this.secureStorage,
+    required this.deviceIdService,
   });
 
   final CallCubit callCubit;
@@ -117,6 +130,7 @@ class CallKitService {
   final ProfileRepository profileRepository;
   final PushTokenApi pushTokenApi;
   final SecureStorageService secureStorage;
+  final DeviceIdService deviceIdService;
 
   final IosCallKitBridge? _iosBridge = Platform.isIOS
       ? IosCallKitBridge()
@@ -126,6 +140,7 @@ class CallKitService {
   StreamSubscription<CallState>? _callCubitSub;
   String? _shownForCallId;
   String? _connectedForCallId;
+  String? _registeredVoipToken;
 
   Future<void> start() async {
     _callCubitSub = callCubit.stream.listen(_handleCallCubitState);
@@ -163,12 +178,34 @@ class CallKitService {
   }
 
   Future<void> _registerVoipToken() async {
+    final token = await _currentVoipToken();
+    if (token == null || token.isEmpty) return;
+    _registeredVoipToken = token;
+    await pushTokenApi.registerToken(
+      token: token,
+      kind: PushTokenKind.apnsVoip,
+      deviceId: deviceIdService.deviceIdOrNull,
+    );
+  }
+
+  /// Deregisters this installation's VoIP token. Must run while the session is
+  /// still valid (it's an authenticated call) - otherwise a signed-out handset
+  /// keeps ringing for the account it left.
+  Future<void> unregisterVoipToken() async {
+    final token = _registeredVoipToken ?? await _currentVoipToken();
+    if (token == null || token.isEmpty) return;
+    _registeredVoipToken = null;
+    await pushTokenApi.deleteToken(
+      token: token,
+      kind: PushTokenKind.apnsVoip,
+    );
+  }
+
+  Future<String?> _currentVoipToken() async {
     final iosBridge = _iosBridge;
-    final token = iosBridge != null
+    return iosBridge != null
         ? await iosBridge.getVoipToken()
         : await FlutterCallkitIncoming.getDevicePushTokenVoIP();
-    if (token == null || token.isEmpty) return;
-    await pushTokenApi.registerVoipToken(token);
   }
 
   /// Foreground/live-socket path: [CallCubit] already learned about the call
@@ -203,6 +240,10 @@ class CallKitService {
       // fallback for the majority of real calls.
       _shownForCallId = state.call!.id;
       _connectedForCallId = state.call!.id;
+      // Persisted, not just held in memory: the FCM background isolate that
+      // handles a cancel push has no CallCubit to ask, and needs to know this
+      // device is the one that answered. See showCallKitFromPushData.
+      await secureStorage.writeActiveCallId(state.call!.id);
       final iosBridge = _iosBridge;
       if (iosBridge != null) {
         await iosBridge.setCallConnected(state.call!.id);
@@ -213,6 +254,7 @@ class CallKitService {
       final id = _shownForCallId!;
       _shownForCallId = null;
       _connectedForCallId = null;
+      await secureStorage.writeActiveCallId(null);
       final iosBridge = _iosBridge;
       if (iosBridge != null) {
         await iosBridge.endCall(id);

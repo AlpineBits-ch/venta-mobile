@@ -26,7 +26,9 @@ import '../../features/voice/data/voice_repository.dart';
 import '../../features/voice/webrtc/call_webrtc_service.dart';
 import '../../features/wiki/data/wiki_api.dart';
 import '../../features/wiki/data/wiki_repository.dart';
+import '../device/device_api.dart';
 import '../device/device_id_service.dart';
+import '../device/device_registration_service.dart';
 import '../network/api_client.dart';
 import '../push/call_kit_service.dart';
 import '../push/push_notification_service.dart';
@@ -52,10 +54,24 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<AuthApi>(() => AuthApi());
   getIt.registerLazySingleton<AuthRepository>(
-    () => AuthRepository(api: getIt(), secureStorage: getIt()),
+    () => AuthRepository(
+      api: getIt(),
+      secureStorage: getIt(),
+      deviceIdService: getIt(),
+    ),
   );
   getIt.registerLazySingleton<ApiClient>(
-    () => ApiClient(authRepository: getIt()),
+    () => ApiClient(
+      authRepository: getIt(),
+      deviceId: () => getIt<DeviceIdService>().deviceIdOrNull,
+      // Resolved lazily on purpose: the registration service is built on top
+      // of this very client, so taking it eagerly here would deadlock get_it.
+      registerDevice: () => getIt<DeviceRegistrationService>().register(),
+    ),
+  );
+  getIt.registerLazySingleton<DeviceApi>(() => DeviceApi(client: getIt()));
+  getIt.registerLazySingleton<DeviceRegistrationService>(
+    () => DeviceRegistrationService(api: getIt(), deviceIdService: getIt()),
   );
   getIt.registerLazySingleton<IdentityApi>(() => IdentityApi(client: getIt()));
   getIt.registerLazySingleton<AccountRepository>(
@@ -150,7 +166,7 @@ Future<void> configureDependencies() async {
     () => PushTokenApi(client: getIt()),
   );
   getIt.registerLazySingleton<PushNotificationService>(
-    () => PushNotificationService(api: getIt()),
+    () => PushNotificationService(api: getIt(), deviceIdService: getIt()),
   );
   getIt.registerLazySingleton<CallKitService>(
     () => CallKitService(
@@ -159,6 +175,7 @@ Future<void> configureDependencies() async {
       profileRepository: getIt(),
       pushTokenApi: getIt(),
       secureStorage: getIt(),
+      deviceIdService: getIt(),
     ),
   );
 }
@@ -179,12 +196,35 @@ void resetSessionScopedCaches() {
   getIt<ConversationRepository>().clear();
   getIt<RelationshipRepository>().clear();
   getIt<GuildRepository>().clear();
+  // Device registration is per account, not per install: the id this handset
+  // registered for the previous user means nothing to the next one, and every
+  // call/voice action would be rejected until it registers again.
+  getIt<DeviceRegistrationService>().reset();
 }
 
-/// Starts the push-notification and native-call-UI services - call once per
-/// authenticated session (cold start with a restored session, or right after
-/// login/register), mirroring [RealtimeService.start]'s own call sites.
-Future<void> startPushServices() async {
+/// Registers this device and starts the push-notification and native-call-UI
+/// services - call once per authenticated session (cold start with a restored
+/// session, or right after login/register), mirroring [RealtimeService.start]'s
+/// own call sites.
+///
+/// Registration goes first and is awaited: the push tokens registered just
+/// after are attached to that device row, and the `X-Device-Id` every call and
+/// voice-join carries is only honoured once the device exists.
+Future<void> startAuthenticatedServices() async {
+  await getIt<DeviceRegistrationService>().ensureRegistered();
   await getIt<PushNotificationService>().start();
   await getIt<CallKitService>().start();
+}
+
+/// Undoes the push half of [startAuthenticatedServices] while the session is
+/// still valid - both calls need a bearer token, so this has to run *before*
+/// `AuthRepository.logout()` clears it.
+///
+/// The device registration itself deliberately survives: it names the
+/// installation, and the next login on this handset should reuse it. "Forget
+/// this device" is the explicit action that removes it
+/// ([DeviceRegistrationService.forgetThisDevice]).
+Future<void> stopAuthenticatedServices() async {
+  await getIt<PushNotificationService>().unregisterToken();
+  await getIt<CallKitService>().unregisterVoipToken();
 }

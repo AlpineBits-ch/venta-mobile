@@ -26,6 +26,16 @@ sealed class LoginSessionDto with _$LoginSessionDto {
     DateTime? createdAt,
     DateTime? lastUsedAt,
 
+    /// The registered device this login came from, by the client-supplied id
+    /// (this app's `DeviceIdService.deviceId`). Null for logins that sent
+    /// none - older builds, other clients, and every session created before
+    /// sessions were linked to devices.
+    ///
+    /// What makes the "sessions" and "devices" lists relatable at all: it is
+    /// the only field that says *which machine* a row is, as opposed to what
+    /// that machine called itself at login time.
+    String? clientDeviceId,
+
     /// The session this app is signed in with. It has no revoke button - use
     /// Log Out for that.
     @Default(false) bool isCurrent,

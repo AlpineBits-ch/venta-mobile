@@ -191,6 +191,19 @@ Only send this to participants who *aren't* the one who just took the
 action (no point tearing down your own device's UI - it's already
 transitioning via the normal in-app flow).
 
+> **Updated by the device-identity consolidation (2026-07-31).** The
+> exclusion is now per *device*, not per user: the accepting user's other
+> devices are still ringing, so they do get the cancel; only the device that
+> answered is spared. The backend can only tell them apart when the push
+> token carries a `deviceId` **and** the accept request sent a registered
+> `X-Device-Id` - both of which this client now does (`PushTokenApi`,
+> `DeviceIdInterceptor`). Because neither holds for a token registered by an
+> older build, the client no longer trusts the exclusion on its own: an
+> `end` push naming the call this device is currently in is ignored, on
+> Android via the persisted active call id (`showCallKitFromPushData`) and on
+> iOS by ending a throwaway CallKit id instead of the live one
+> (`AppDelegate.swift`).
+
 ## Payload field reference
 
 | Field | Android (FCM data) | iOS (APNs VoIP custom properties) |

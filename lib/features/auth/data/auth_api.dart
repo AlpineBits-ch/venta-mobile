@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/device/device_id_service.dart';
 import 'models/server_configuration.dart';
 import 'models/token_response.dart';
 
@@ -27,13 +28,17 @@ class EmailNotVerifiedException implements Exception {}
 /// interceptor): the token endpoint doesn't take a bearer token, and a
 /// refresh call must never itself trigger a 401-retry loop.
 class AuthApi {
-  AuthApi()
-    : _dio = Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 15),
-        ),
-      );
+  /// [dio] is for tests only - production always wants the private client
+  /// described above.
+  AuthApi({Dio? dio})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 15),
+              receiveTimeout: const Duration(seconds: 15),
+            ),
+          );
 
   final Dio _dio;
 
@@ -41,11 +46,23 @@ class AuthApi {
   /// usual [DioException] when the `401` body signals one of those two
   /// specific cases - a plain wrong-password `401` still surfaces as a
   /// [DioException], same as before.
+  ///
+  /// The three `device_*` parameters are what the session this login creates
+  /// is named and keyed by. Sending nothing left the server naming the session
+  /// after the `User-Agent`, i.e. `Dart/3.x (dart:io)` on the sessions screen,
+  /// and left the session unlinked from the device row - so revoking it
+  /// couldn't clear this handset's push tokens.
+  ///
+  /// [deviceId] is ignored server-side unless it names a device this account
+  /// has registered, which a genuinely first login can't have done yet
+  /// (registration needs a token). That's expected: the link is picked up from
+  /// the next login onwards.
   Future<TokenResponse> passwordGrant({
     required String baseUrl,
     required String username,
     required String password,
     String? mfaCode,
+    String? deviceId,
   }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
@@ -57,6 +74,9 @@ class AuthApi {
           'username': username,
           'password': password,
           if (mfaCode != null) 'mfa_code': mfaCode,
+          'device_name': kDeviceName,
+          'device_type': kDeviceType,
+          if (deviceId != null) 'device_id': deviceId,
         },
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );

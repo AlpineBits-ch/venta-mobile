@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../device/device_id_service.dart';
 import '../routing/route_paths.dart';
 import 'call_kit_service.dart';
 import 'push_token_api.dart';
@@ -37,9 +38,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// Call-signaling pushes are a separate, silent, data-only path owned by
 /// [CallKitService] - this service explicitly ignores them.
 class PushNotificationService {
-  PushNotificationService({required this.api});
+  PushNotificationService({required this.api, required this.deviceIdService});
 
   final PushTokenApi api;
+  final DeviceIdService deviceIdService;
 
   static final _localNotifications = FlutterLocalNotificationsPlugin();
   static const _messagesChannel = AndroidNotificationChannel(
@@ -98,16 +100,40 @@ class PushNotificationService {
     if (initialMessage != null) _handleTap(initialMessage);
   }
 
+  /// The token this session registered, so [unregisterToken] can name it on
+  /// sign-out without depending on Firebase still handing back the same value.
+  String? _registeredToken;
+
   /// Both platforms register their FCM registration token - the backend
   /// sends all regular push through FCM (see `PushNotifiaction.cs`), which
-  /// relays to APNs internally for iOS. Both land in the same generic
-  /// `/device-token` field server-side. VoIP/CallKit push is the one
-  /// exception and uses a separate PushKit token - see `call_kit_service.dart`.
+  /// relays to APNs internally for iOS. Both land under `kind: Fcm`
+  /// server-side. VoIP/CallKit push is the one exception and uses a separate
+  /// PushKit token - see `call_kit_service.dart`.
+  ///
+  /// Registered *with* this installation's device id: that's what lets the
+  /// backend address one of a user's devices rather than all of them, which
+  /// among other things keeps the device that answered a call from being sent
+  /// the cancel push for it.
   Future<void> _registerToken() async {
     final messaging = FirebaseMessaging.instance;
     final token = await messaging.getToken();
     if (token == null) return;
-    await api.registerDeviceToken(token);
+    _registeredToken = token;
+    await api.registerToken(
+      token: token,
+      kind: PushTokenKind.fcm,
+      deviceId: deviceIdService.deviceIdOrNull,
+    );
+  }
+
+  /// Deregisters this installation's FCM token. Must run *before* the session
+  /// is torn down - it is an authenticated call, and a token left behind keeps
+  /// a signed-out handset receiving the previous account's notifications.
+  Future<void> unregisterToken() async {
+    final token = _registeredToken ?? await FirebaseMessaging.instance.getToken();
+    if (token == null) return;
+    _registeredToken = null;
+    await api.deleteToken(token: token, kind: PushTokenKind.fcm);
   }
 
   void _handleTap(RemoteMessage message) {

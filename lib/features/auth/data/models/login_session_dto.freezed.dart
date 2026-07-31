@@ -16,7 +16,15 @@ T _$identity<T>(T value) => value;
 mixin _$LoginSessionDto {
 
  String get id; String? get deviceName;/// `Desktop`, `Mobile` or `Web` - only used to pick an icon.
- String? get deviceType; String? get ipAddress; DateTime? get createdAt; DateTime? get lastUsedAt;/// The session this app is signed in with. It has no revoke button - use
+ String? get deviceType; String? get ipAddress; DateTime? get createdAt; DateTime? get lastUsedAt;/// The registered device this login came from, by the client-supplied id
+/// (this app's `DeviceIdService.deviceId`). Null for logins that sent
+/// none - older builds, other clients, and every session created before
+/// sessions were linked to devices.
+///
+/// What makes the "sessions" and "devices" lists relatable at all: it is
+/// the only field that says *which machine* a row is, as opposed to what
+/// that machine called itself at login time.
+ String? get clientDeviceId;/// The session this app is signed in with. It has no revoke button - use
 /// Log Out for that.
  bool get isCurrent;
 /// Create a copy of LoginSessionDto
@@ -31,16 +39,16 @@ $LoginSessionDtoCopyWith<LoginSessionDto> get copyWith => _$LoginSessionDtoCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is LoginSessionDto&&(identical(other.id, id) || other.id == id)&&(identical(other.deviceName, deviceName) || other.deviceName == deviceName)&&(identical(other.deviceType, deviceType) || other.deviceType == deviceType)&&(identical(other.ipAddress, ipAddress) || other.ipAddress == ipAddress)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.lastUsedAt, lastUsedAt) || other.lastUsedAt == lastUsedAt)&&(identical(other.isCurrent, isCurrent) || other.isCurrent == isCurrent));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LoginSessionDto&&(identical(other.id, id) || other.id == id)&&(identical(other.deviceName, deviceName) || other.deviceName == deviceName)&&(identical(other.deviceType, deviceType) || other.deviceType == deviceType)&&(identical(other.ipAddress, ipAddress) || other.ipAddress == ipAddress)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.lastUsedAt, lastUsedAt) || other.lastUsedAt == lastUsedAt)&&(identical(other.clientDeviceId, clientDeviceId) || other.clientDeviceId == clientDeviceId)&&(identical(other.isCurrent, isCurrent) || other.isCurrent == isCurrent));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,deviceName,deviceType,ipAddress,createdAt,lastUsedAt,isCurrent);
+int get hashCode => Object.hash(runtimeType,id,deviceName,deviceType,ipAddress,createdAt,lastUsedAt,clientDeviceId,isCurrent);
 
 @override
 String toString() {
-  return 'LoginSessionDto(id: $id, deviceName: $deviceName, deviceType: $deviceType, ipAddress: $ipAddress, createdAt: $createdAt, lastUsedAt: $lastUsedAt, isCurrent: $isCurrent)';
+  return 'LoginSessionDto(id: $id, deviceName: $deviceName, deviceType: $deviceType, ipAddress: $ipAddress, createdAt: $createdAt, lastUsedAt: $lastUsedAt, clientDeviceId: $clientDeviceId, isCurrent: $isCurrent)';
 }
 
 
@@ -51,7 +59,7 @@ abstract mixin class $LoginSessionDtoCopyWith<$Res>  {
   factory $LoginSessionDtoCopyWith(LoginSessionDto value, $Res Function(LoginSessionDto) _then) = _$LoginSessionDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String? deviceName, String? deviceType, String? ipAddress, DateTime? createdAt, DateTime? lastUsedAt, bool isCurrent
+ String id, String? deviceName, String? deviceType, String? ipAddress, DateTime? createdAt, DateTime? lastUsedAt, String? clientDeviceId, bool isCurrent
 });
 
 
@@ -68,7 +76,7 @@ class _$LoginSessionDtoCopyWithImpl<$Res>
 
 /// Create a copy of LoginSessionDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? deviceName = freezed,Object? deviceType = freezed,Object? ipAddress = freezed,Object? createdAt = freezed,Object? lastUsedAt = freezed,Object? isCurrent = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? deviceName = freezed,Object? deviceType = freezed,Object? ipAddress = freezed,Object? createdAt = freezed,Object? lastUsedAt = freezed,Object? clientDeviceId = freezed,Object? isCurrent = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,deviceName: freezed == deviceName ? _self.deviceName : deviceName // ignore: cast_nullable_to_non_nullable
@@ -76,7 +84,8 @@ as String?,deviceType: freezed == deviceType ? _self.deviceType : deviceType // 
 as String?,ipAddress: freezed == ipAddress ? _self.ipAddress : ipAddress // ignore: cast_nullable_to_non_nullable
 as String?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,lastUsedAt: freezed == lastUsedAt ? _self.lastUsedAt : lastUsedAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,isCurrent: null == isCurrent ? _self.isCurrent : isCurrent // ignore: cast_nullable_to_non_nullable
+as DateTime?,clientDeviceId: freezed == clientDeviceId ? _self.clientDeviceId : clientDeviceId // ignore: cast_nullable_to_non_nullable
+as String?,isCurrent: null == isCurrent ? _self.isCurrent : isCurrent // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
 }
@@ -159,10 +168,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? deviceName,  String? deviceType,  String? ipAddress,  DateTime? createdAt,  DateTime? lastUsedAt,  bool isCurrent)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? deviceName,  String? deviceType,  String? ipAddress,  DateTime? createdAt,  DateTime? lastUsedAt,  String? clientDeviceId,  bool isCurrent)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _LoginSessionDto() when $default != null:
-return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that.createdAt,_that.lastUsedAt,_that.isCurrent);case _:
+return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that.createdAt,_that.lastUsedAt,_that.clientDeviceId,_that.isCurrent);case _:
   return orElse();
 
 }
@@ -180,10 +189,10 @@ return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? deviceName,  String? deviceType,  String? ipAddress,  DateTime? createdAt,  DateTime? lastUsedAt,  bool isCurrent)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? deviceName,  String? deviceType,  String? ipAddress,  DateTime? createdAt,  DateTime? lastUsedAt,  String? clientDeviceId,  bool isCurrent)  $default,) {final _that = this;
 switch (_that) {
 case _LoginSessionDto():
-return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that.createdAt,_that.lastUsedAt,_that.isCurrent);}
+return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that.createdAt,_that.lastUsedAt,_that.clientDeviceId,_that.isCurrent);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -197,10 +206,10 @@ return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? deviceName,  String? deviceType,  String? ipAddress,  DateTime? createdAt,  DateTime? lastUsedAt,  bool isCurrent)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? deviceName,  String? deviceType,  String? ipAddress,  DateTime? createdAt,  DateTime? lastUsedAt,  String? clientDeviceId,  bool isCurrent)?  $default,) {final _that = this;
 switch (_that) {
 case _LoginSessionDto() when $default != null:
-return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that.createdAt,_that.lastUsedAt,_that.isCurrent);case _:
+return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that.createdAt,_that.lastUsedAt,_that.clientDeviceId,_that.isCurrent);case _:
   return null;
 
 }
@@ -212,7 +221,7 @@ return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _LoginSessionDto implements LoginSessionDto {
-  const _LoginSessionDto({required this.id, this.deviceName, this.deviceType, this.ipAddress, this.createdAt, this.lastUsedAt, this.isCurrent = false});
+  const _LoginSessionDto({required this.id, this.deviceName, this.deviceType, this.ipAddress, this.createdAt, this.lastUsedAt, this.clientDeviceId, this.isCurrent = false});
   factory _LoginSessionDto.fromJson(Map<String, dynamic> json) => _$LoginSessionDtoFromJson(json);
 
 @override final  String id;
@@ -222,6 +231,15 @@ class _LoginSessionDto implements LoginSessionDto {
 @override final  String? ipAddress;
 @override final  DateTime? createdAt;
 @override final  DateTime? lastUsedAt;
+/// The registered device this login came from, by the client-supplied id
+/// (this app's `DeviceIdService.deviceId`). Null for logins that sent
+/// none - older builds, other clients, and every session created before
+/// sessions were linked to devices.
+///
+/// What makes the "sessions" and "devices" lists relatable at all: it is
+/// the only field that says *which machine* a row is, as opposed to what
+/// that machine called itself at login time.
+@override final  String? clientDeviceId;
 /// The session this app is signed in with. It has no revoke button - use
 /// Log Out for that.
 @override@JsonKey() final  bool isCurrent;
@@ -239,16 +257,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _LoginSessionDto&&(identical(other.id, id) || other.id == id)&&(identical(other.deviceName, deviceName) || other.deviceName == deviceName)&&(identical(other.deviceType, deviceType) || other.deviceType == deviceType)&&(identical(other.ipAddress, ipAddress) || other.ipAddress == ipAddress)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.lastUsedAt, lastUsedAt) || other.lastUsedAt == lastUsedAt)&&(identical(other.isCurrent, isCurrent) || other.isCurrent == isCurrent));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _LoginSessionDto&&(identical(other.id, id) || other.id == id)&&(identical(other.deviceName, deviceName) || other.deviceName == deviceName)&&(identical(other.deviceType, deviceType) || other.deviceType == deviceType)&&(identical(other.ipAddress, ipAddress) || other.ipAddress == ipAddress)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.lastUsedAt, lastUsedAt) || other.lastUsedAt == lastUsedAt)&&(identical(other.clientDeviceId, clientDeviceId) || other.clientDeviceId == clientDeviceId)&&(identical(other.isCurrent, isCurrent) || other.isCurrent == isCurrent));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,deviceName,deviceType,ipAddress,createdAt,lastUsedAt,isCurrent);
+int get hashCode => Object.hash(runtimeType,id,deviceName,deviceType,ipAddress,createdAt,lastUsedAt,clientDeviceId,isCurrent);
 
 @override
 String toString() {
-  return 'LoginSessionDto(id: $id, deviceName: $deviceName, deviceType: $deviceType, ipAddress: $ipAddress, createdAt: $createdAt, lastUsedAt: $lastUsedAt, isCurrent: $isCurrent)';
+  return 'LoginSessionDto(id: $id, deviceName: $deviceName, deviceType: $deviceType, ipAddress: $ipAddress, createdAt: $createdAt, lastUsedAt: $lastUsedAt, clientDeviceId: $clientDeviceId, isCurrent: $isCurrent)';
 }
 
 
@@ -259,7 +277,7 @@ abstract mixin class _$LoginSessionDtoCopyWith<$Res> implements $LoginSessionDto
   factory _$LoginSessionDtoCopyWith(_LoginSessionDto value, $Res Function(_LoginSessionDto) _then) = __$LoginSessionDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String? deviceName, String? deviceType, String? ipAddress, DateTime? createdAt, DateTime? lastUsedAt, bool isCurrent
+ String id, String? deviceName, String? deviceType, String? ipAddress, DateTime? createdAt, DateTime? lastUsedAt, String? clientDeviceId, bool isCurrent
 });
 
 
@@ -276,7 +294,7 @@ class __$LoginSessionDtoCopyWithImpl<$Res>
 
 /// Create a copy of LoginSessionDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? deviceName = freezed,Object? deviceType = freezed,Object? ipAddress = freezed,Object? createdAt = freezed,Object? lastUsedAt = freezed,Object? isCurrent = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? deviceName = freezed,Object? deviceType = freezed,Object? ipAddress = freezed,Object? createdAt = freezed,Object? lastUsedAt = freezed,Object? clientDeviceId = freezed,Object? isCurrent = null,}) {
   return _then(_LoginSessionDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,deviceName: freezed == deviceName ? _self.deviceName : deviceName // ignore: cast_nullable_to_non_nullable
@@ -284,7 +302,8 @@ as String?,deviceType: freezed == deviceType ? _self.deviceType : deviceType // 
 as String?,ipAddress: freezed == ipAddress ? _self.ipAddress : ipAddress // ignore: cast_nullable_to_non_nullable
 as String?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,lastUsedAt: freezed == lastUsedAt ? _self.lastUsedAt : lastUsedAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,isCurrent: null == isCurrent ? _self.isCurrent : isCurrent // ignore: cast_nullable_to_non_nullable
+as DateTime?,clientDeviceId: freezed == clientDeviceId ? _self.clientDeviceId : clientDeviceId // ignore: cast_nullable_to_non_nullable
+as String?,isCurrent: null == isCurrent ? _self.isCurrent : isCurrent // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
 }

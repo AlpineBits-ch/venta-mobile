@@ -201,14 +201,14 @@ import WebRTC
   // Out-of-band end: the call ended for a reason outside the user's action on
   // this device (remote hang-up, answered/declined elsewhere). reportCall(
   // endedAt:) is exactly the right tool for that and removes the CallKit call.
-  private func endReportedCall(id: String, reason: CXCallEndedReason) {
+  private func endReportedCall(id: String, reason: CXCallEndedReason, teardownAudio: Bool = true) {
     let callUUID = uuid(for: id)
     cxProvider.reportCall(with: callUUID, endedAt: Date(), reason: reason)
     callIdsByUUID.removeValue(forKey: callUUID)
     answeredCalls.remove(callUUID)
     selfInitiatedAnswers.remove(callUUID)
     selfInitiatedEnds.remove(callUUID)
-    endManualCallAudio()
+    if teardownAudio { endManualCallAudio() }
   }
 
   // User-initiated end from the app's own in-call UI. Unlike the remote case
@@ -351,9 +351,24 @@ import WebRTC
     // _terminateAppIfThereAreUnhandledVoIPPushes], which kills the
     // process) - reportCall(endedAt:) alone doesn't satisfy that, it only
     // updates a call CallKit already knows about.
+    //
+    // A cancel is never applied to a call this device already answered. The
+    // server leaves the accepting device out of the fan-out, but only when that
+    // device sent a registered X-Device-Id on accept - and since the
+    // device-identity consolidation the user's *other* devices are
+    // deliberately included, where the whole user used to be skipped. A stray
+    // cancel reaching the answering device would end a connected call (same
+    // callId -> same deterministic UUID -> endReportedCall on the live call).
+    // PushKit still demands a reportNewIncomingCall per push, so report and
+    // immediately end a throwaway id instead, leaving the real call alone.
     if payload.dictionaryPayload["type"] as? String == "end" {
-      reportIncomingCall(id: id, callerName: "") { [weak self] _ in
-        self?.endReportedCall(id: id, reason: .remoteEnded)
+      let isLiveCall = answeredCalls.contains(uuid(for: id))
+      let target = isLiveCall ? UUID().uuidString : id
+      reportIncomingCall(id: target, callerName: "") { [weak self] _ in
+        // Tearing the audio session down is right when the ring being
+        // cancelled was the only call; on the throwaway it would mute the call
+        // actually in progress.
+        self?.endReportedCall(id: target, reason: .remoteEnded, teardownAudio: !isLiveCall)
         completion()
       }
       return

@@ -20,6 +20,7 @@ _LoginSessionDto _$LoginSessionDtoFromJson(Map<String, dynamic> json) =>
         json['lastUsedAt'],
         const ApiDateTimeConverter().fromJson,
       ),
+      clientDeviceId: json['clientDeviceId'] as String?,
       isCurrent: json['isCurrent'] as bool? ?? false,
     );
 
@@ -37,6 +38,7 @@ Map<String, dynamic> _$LoginSessionDtoToJson(_LoginSessionDto instance) =>
         instance.lastUsedAt,
         const ApiDateTimeConverter().toJson,
       ),
+      'clientDeviceId': instance.clientDeviceId,
       'isCurrent': instance.isCurrent,
     };
 

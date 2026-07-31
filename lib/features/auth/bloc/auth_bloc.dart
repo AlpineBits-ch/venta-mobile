@@ -176,7 +176,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
-      unawaited(startPushServices());
+      unawaited(startAuthenticatedServices());
       emit(state.copyWith(status: AuthStatus.success));
     } on MfaRequiredException {
       emit(state.copyWith(status: AuthStatus.mfaRequired, errorMessage: null));
@@ -222,7 +222,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
-      unawaited(startPushServices());
+      unawaited(startAuthenticatedServices());
       emit(state.copyWith(status: AuthStatus.success));
     } on EmailNotVerifiedException {
       // The account is created; only the sign-in that follows it was refused.
@@ -281,7 +281,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       _pending = null;
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
-      unawaited(startPushServices());
+      unawaited(startAuthenticatedServices());
       emit(state.copyWith(status: AuthStatus.success));
     } catch (_) {
       // The address is confirmed either way - don't strand them on the code

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/device/device_id_service.dart';
+import '../../../../core/device/device_registration_service.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/format/date_time_format.dart';
 import '../../../../core/routing/route_paths.dart';
+import '../../../../core/session/session_cubit.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/settings_tiles.dart';
@@ -32,6 +36,14 @@ class _DevicesScreenState extends State<DevicesScreen> {
   /// Ids currently being revoked - per-row rather than one page-wide flag, so
   /// revoking one device doesn't lock the buttons on all the others.
   final _revoking = <String>{};
+
+  bool _forgetting = false;
+
+  /// This installation's registered device id. Sessions carry it now, which is
+  /// what lets a row say "this is the phone you're holding" rather than only
+  /// "this is the login you're using" - the two differ for every earlier login
+  /// from the same handset.
+  String? get _thisDeviceId => getIt<DeviceIdService>().deviceIdOrNull;
 
   @override
   void initState() {
@@ -117,6 +129,55 @@ class _DevicesScreenState extends State<DevicesScreen> {
     }
   }
 
+  /// Unregisters this installation and signs out. Deliberately heavier than
+  /// Log Out: the server drops the device row and, by cascade, its push tokens
+  /// - which is the only way to stop a handset you're about to wipe or sell
+  /// from being rung. It also revokes this device's sessions, so staying
+  /// signed in afterwards isn't an option.
+  Future<void> _confirmForgetDevice() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Forget this device?'),
+        content: const Text(
+          'This device will be unregistered and signed out. It will stop '
+          'receiving notifications and calls entirely. You can sign in again '
+          'to register it as a new device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Forget'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _forgetting = true);
+    final sessionCubit = context.read<SessionCubit>();
+    try {
+      await getIt<DeviceRegistrationService>().forgetThisDevice();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _forgetting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not forget this device.')),
+      );
+      return;
+    }
+    // The router's redirect drops back to /login the moment the session goes
+    // unauthenticated, so there's nothing to pop here.
+    await sessionCubit.signOut();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -180,6 +241,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
                   session: session,
                   revoking: _revoking.contains(session.id),
                   onRevoke: () => _confirmRevoke(session),
+                  isThisDevice:
+                      session.clientDeviceId != null &&
+                      session.clientDeviceId == _thisDeviceId,
                 ),
             ],
           ),
@@ -195,6 +259,29 @@ class _DevicesScreenState extends State<DevicesScreen> {
               ),
             ),
           ),
+          const SizedBox(height: AppSpacing.l),
+          SettingsSection(
+            label: 'This device',
+            children: [
+              SettingsRow(
+                icon: Icons.phonelink_erase_outlined,
+                title: 'Forget this device',
+                subtitle:
+                    'Unregister and sign out. Stops notifications and calls '
+                    'reaching this phone at all.',
+                showChevron: false,
+                destructive: true,
+                onTap: _forgetting ? null : _confirmForgetDevice,
+                trailing: _forgetting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : null,
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -206,11 +293,18 @@ class _SessionRow extends StatelessWidget {
     required this.session,
     required this.revoking,
     required this.onRevoke,
+    required this.isThisDevice,
   });
 
   final LoginSessionDto session;
   final bool revoking;
   final VoidCallback onRevoke;
+
+  /// The session came from this installation, by registered device id. Not the
+  /// same as [LoginSessionDto.isCurrent]: an earlier login from this phone
+  /// that's still alive is this device but not this session, and saying so is
+  /// the whole point of the sessions list carrying a device id.
+  final bool isThisDevice;
 
   /// "Active now · 203.0.113.4", or whichever halves actually exist - a
   /// session missing both still renders a row rather than a stray separator.
@@ -219,8 +313,10 @@ class _SessionRow extends StatelessWidget {
     final parts = [
       if (session.isCurrent)
         'Active now'
-      else if (lastUsed != null)
-        'Last used ${formatRelativeDateTime(lastUsed)}',
+      else ...[
+        if (isThisDevice) 'This device',
+        if (lastUsed != null) 'Last used ${formatRelativeDateTime(lastUsed)}',
+      ],
       if (session.ipAddress != null && session.ipAddress!.isNotEmpty)
         session.ipAddress!,
     ];
