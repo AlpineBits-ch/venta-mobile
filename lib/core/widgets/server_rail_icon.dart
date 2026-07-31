@@ -15,6 +15,7 @@ class ServerRailIcon extends StatelessWidget {
     this.label,
     this.backgroundColor,
     this.imageUrl,
+    this.child,
   });
 
   final VoidCallback onTap;
@@ -27,6 +28,11 @@ class ServerRailIcon extends StatelessWidget {
   /// [icon]/[label] while null - most guilds today, since the backend
   /// doesn't send this field yet.
   final String? imageUrl;
+
+  /// An arbitrary glyph for rails whose chip isn't a Material icon, a letter
+  /// or a fetched image - the home button, which draws the brand mark. Wins
+  /// over [icon] and [label]; [imageUrl] still wins over it.
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
@@ -69,9 +75,17 @@ class ServerRailIcon extends StatelessWidget {
                         height: 48,
                         fadeInDuration: const Duration(milliseconds: 200),
                       )
-                    : icon != null
-                    ? Icon(icon, color: theme.colorScheme.onSurface, size: 24)
-                    : Text(label ?? '', style: theme.textTheme.titleSmall),
+                    : child ??
+                          (icon != null
+                              ? Icon(
+                                  icon,
+                                  color: theme.colorScheme.onSurface,
+                                  size: 24,
+                                )
+                              : Text(
+                                  label ?? '',
+                                  style: theme.textTheme.titleSmall,
+                                )),
               ),
             ),
           ),

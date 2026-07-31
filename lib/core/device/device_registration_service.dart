@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../mls/mls_service.dart';
 import 'device_api.dart';
 import 'device_id_service.dart';
 
@@ -11,10 +12,15 @@ import 'device_id_service.dart';
 /// [DeviceIdInterceptor] recovers from. [reset] is what makes the next session
 /// register again.
 class DeviceRegistrationService {
-  DeviceRegistrationService({required this.api, required this.deviceIdService});
+  DeviceRegistrationService({
+    required this.api,
+    required this.deviceIdService,
+    required this.mls,
+  });
 
   final DeviceApi api;
   final DeviceIdService deviceIdService;
+  final MlsService mls;
 
   bool _registered = false;
   Future<void>? _inFlight;
@@ -70,6 +76,13 @@ class DeviceRegistrationService {
     final deviceId = deviceIdService.deviceIdOrNull;
     if (deviceId == null) return;
     await api.remove(deviceId);
+    // The server has just cascaded away this device's key packages and its
+    // right to be handed Welcomes. Keeping the matching MLS identity and group
+    // state here would leave a device that believes it is in groups nobody will
+    // ever address again, and every encrypted send would fail at the epoch
+    // check. This makes the encrypted history on this handset unreadable, which
+    // is what "forget this device" means.
+    await mls.forgetEverything();
     _registered = false;
   }
 

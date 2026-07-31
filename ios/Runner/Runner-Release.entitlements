@@ -4,5 +4,11 @@
 <dict>
 	<key>aps-environment</key>
 	<string>production</string>
+	<!-- See Runner.entitlements - the extension reads MLS state from this
+	     container to decrypt push notifications. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.gg.venta.mobile</string>
+	</array>
 </dict>
 </plist>

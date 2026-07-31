@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../../core/di/injector.dart';
@@ -39,16 +40,25 @@ class _RolesSettingsTabState extends State<RolesSettingsTab> {
 
   Future<void> _createRole() async {
     try {
-      await getIt<GuildRepository>().createRole(
+      final role = await getIt<GuildRepository>().createRole(
         guildId: widget.guildId,
         name: 'new-role',
       );
       await _load();
-    } catch (_) {
+      // A role called "new-role" with no permissions isn't useful on its own,
+      // so the point of the button is really "start editing a new role".
+      if (mounted) await _openEditor(role);
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Could not create role.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is DioException && e.response?.statusCode == 403
+                  ? 'You don\'t have permission to manage roles here.'
+                  : 'Could not create role.',
+            ),
+          ),
+        );
       }
     }
   }

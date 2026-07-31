@@ -15,6 +15,13 @@ abstract final class AppColors {
   static const brandDim = Color(0xFF7E8AE0);
   static const brandDark = Color(0xFF333F8C);
 
+  /// The logo's own fills, deliberately not the brand indigo above:
+  /// `Alpine/src/assets/branding/logo-mark.svg` hardcodes this coral, and the
+  /// launcher icon in `assets/icon/` is already drawn in it. The mark is a
+  /// fixed asset, so it must not follow a theme's primary the way chrome does.
+  static const logoMark = Color(0xFFFF5C39);
+  static const logoMarkEye = Color(0xFFFAF6EF);
+
   // Dark-mode surfaces (Alpine's only theme)
   static const darkLoginBg = Color(0xFF06090F);
   static const darkAppBg = Color(0xFF0D1117);

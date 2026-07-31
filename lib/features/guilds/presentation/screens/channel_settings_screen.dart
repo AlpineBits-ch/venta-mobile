@@ -5,6 +5,7 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
+import '../../../mls/presentation/screens/channel_encryption_screen.dart';
 import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
@@ -270,6 +271,33 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
                       ? const ButtonProgressIndicator()
                       : const Text('Save changes'),
                 ),
+                // Only rooms that hold messages have anything to encrypt - a
+                // household channel's rows are structured records the server
+                // has to be able to read.
+                if (channel.type.hasMessages) ...[
+                  const SizedBox(height: AppSpacing.l),
+                  const Divider(),
+                  const SizedBox(height: AppSpacing.s),
+                  Text('PRIVACY', style: theme.textTheme.labelSmall),
+                  const SizedBox(height: AppSpacing.xs),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.lock_outline),
+                    title: const Text('End-to-end encryption'),
+                    subtitle: const Text(
+                      'Stop the server being able to read this channel',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ChannelEncryptionScreen(
+                          guildId: widget.guildId,
+                          channelId: widget.channelId,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 if (channel.type.isForumLike) ...[
                   const SizedBox(height: AppSpacing.l),
                   const Divider(),

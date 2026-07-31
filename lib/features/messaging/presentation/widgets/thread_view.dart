@@ -17,9 +17,10 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/di/injector.dart';
+import '../../../../core/mls/mls_sync_service.dart';
 import '../../../../core/theme/hex_color.dart';
-import '../../../conversations/data/conversation_repository.dart';
-import '../../../conversations/data/models/conversation_dto.dart';
+import '../../../mls/presentation/widgets/channel_access_banner.dart';
+import '../../../mls/presentation/widgets/encrypted_badge.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/channel_dto.dart';
 import '../../../guilds/data/models/guild_member_dto.dart';
@@ -28,6 +29,7 @@ import '../../../../core/routing/deep_link_handler.dart';
 import '../../../invites/presentation/widgets/invite_dialog.dart';
 import '../../../profile/data/profile_repository.dart';
 import '../../bloc/message_thread_bloc.dart';
+import '../../data/message_repository.dart';
 import '../../data/bot_command_api.dart';
 import '../../data/gif_api.dart';
 import '../../data/message_content_codec.dart';
@@ -226,6 +228,23 @@ class _ThreadViewState extends State<ThreadView> {
   /// action doesn't flash on then disappear once the permission check lands.
   bool _canPinMessages = false;
 
+  /// Whether this thread is end-to-end encrypted. Kept in state rather than read
+  /// from the repository on every build because it changes underneath us - a
+  /// moderator can flip a channel while it is open, and the header badge and the
+  /// search action both have to follow.
+  bool _isEncrypted = false;
+  StreamSubscription<MlsContextChanged>? _mlsSub;
+
+  /// What the *server* says, as opposed to what this device can do about it.
+  ///
+  /// The two differ for anyone who joined a guild after a channel was encrypted:
+  /// the context is encrypted, but this device holds no group keys and so can
+  /// neither read nor send. That state needs saying out loud rather than
+  /// presenting as an empty channel.
+  bool _serverEncrypted = false;
+
+  bool get _lockedOutOfEncryption => _serverEncrypted && !_isEncrypted;
+
   @override
   void initState() {
     super.initState();
@@ -234,10 +253,47 @@ class _ThreadViewState extends State<ThreadView> {
     _loadBotCommands();
     _loadGuildMembers();
     _loadPinPermission();
+    _watchEncryptionState();
+  }
+
+  Future<void> _watchEncryptionState() async {
+    final repository = context.read<MessageThreadBloc>().repository;
+    _isEncrypted = repository.isEncrypted;
+
+    _mlsSub = getIt<MlsSyncService>().contextChanged
+        .where((e) => e.contextId == repository.contextId)
+        .listen((_) => _syncEncryptedFlag(repository));
+
+    // Reconcile with the server on open. Encryption may have been toggled while
+    // this device was away, and acting on a stale view means either sending
+    // plaintext into an encrypted room or encrypting to a group that is gone -
+    // the server refuses both, so without this the first send just fails.
+    try {
+      final state = await getIt<MlsSyncService>().refreshState(
+        repository.contextId,
+        repository.isChannel,
+      );
+      if (mounted) _serverEncrypted = state.encrypted;
+    } catch (e) {
+      debugPrint('ThreadView: could not refresh MLS state: $e');
+    }
+    _syncEncryptedFlag(repository);
+  }
+
+  void _syncEncryptedFlag(MessageRepository repository) {
+    if (!mounted) return;
+    final encrypted = repository.isEncrypted;
+    // Holding the group is proof the context is encrypted, so this keeps the
+    // two flags consistent when the change arrived over the wire rather than
+    // from our own refresh.
+    if (encrypted) _serverEncrypted = true;
+    if (_isEncrypted == encrypted) return;
+    setState(() => _isEncrypted = encrypted);
   }
 
   @override
   void dispose() {
+    _mlsSub?.cancel();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _editController.dispose();
@@ -850,20 +906,18 @@ class _ThreadViewState extends State<ThreadView> {
 
   void _openSearch() {
     final repository = context.read<MessageThreadBloc>().repository;
-    // Only DMs can be MLS-encrypted today - guild channels are always
-    // Plain, so search is always available there.
-    final isEncrypted =
-        widget.guildId == null &&
-        getIt<ConversationRepository>().cached
-                .where((c) => c.id == repository.conversationId)
-                .firstOrNull
-                ?.encryptionState ==
-            ConversationEncryption.encrypted;
+    // Guild channels can be encrypted too now, so this reads the live MLS state
+    // rather than the conversation DTO - which is a cached list that says
+    // nothing about channels and can lag a toggle in either direction.
+    //
+    // The server indexes only plaintext, so search in an encrypted context comes
+    // back empty rather than erroring; showing an explicit "not available" beats
+    // an empty-results screen the user reads as "nothing matched".
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MessageSearchScreen(
           repository: repository,
-          isEncrypted: isEncrypted,
+          isEncrypted: _isEncrypted,
         ),
       ),
     );
@@ -1015,9 +1069,13 @@ class _ThreadViewState extends State<ThreadView> {
               ),
               const SizedBox(width: AppSpacing.s),
             ],
-            Expanded(
+            Flexible(
               child: Text(widget.title, overflow: TextOverflow.ellipsis),
             ),
+            if (_isEncrypted) ...[
+              const SizedBox(width: AppSpacing.s),
+              const EncryptedBadge(showLabel: true, size: 14),
+            ],
           ],
         ),
         actions: [
@@ -1043,6 +1101,14 @@ class _ThreadViewState extends State<ThreadView> {
       body: Column(
         children: [
           ?widget.banner,
+          // Channels only: a conversation's roster is fixed at creation and
+          // everyone in it was welcomed then, so there is nobody to admit later
+          // and the server exposes no join-request route for one.
+          if (_lockedOutOfEncryption && widget.guildId != null)
+            ChannelAccessBanner(
+              key: ValueKey(context.read<MessageThreadBloc>().repository.contextId),
+              channelId: context.read<MessageThreadBloc>().repository.contextId,
+            ),
           Expanded(
             child: BlocBuilder<MessageThreadBloc, ThreadState>(
               builder: (context, state) {
@@ -1725,6 +1791,15 @@ class _MessageBubble extends StatelessWidget {
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                 ),
               ],
+              // Per-message rather than per-thread on purpose: an encrypted
+              // context has plaintext history above the point it was turned on,
+              // and the header badge alone would claim that stretch is sealed
+              // too. Alpine marks the individual message for the same reason.
+              if (message.encryptionState ==
+                  MessageEncryptionState.encrypted) ...[
+                const SizedBox(width: 6),
+                const EncryptedBadge(),
+              ],
             ],
           ),
         if (isEditing)
@@ -1814,6 +1889,11 @@ class _MessageBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Ciphertext we hold no keys for. Rendering `text` here would put base64 in
+    // the timeline - the decryptor already decided this cannot be read, so say
+    // that instead of showing the user the bytes.
+    if (message.isUndecryptable) return const UndecryptableMessageBody();
+
     if (message.type == MessageType.invite) {
       final match = _inviteUrlRe.firstMatch(text);
       final code = match?.group(1) ?? text.trim();

@@ -21,11 +21,44 @@ class AutoModBlockedException implements Exception {
   };
 }
 
+/// Thrown when a send's encryption does not match the context's.
+///
+/// Always a stale view rather than a real failure: it means encryption was
+/// toggled while this client was composing. The caller refreshes its MLS state
+/// and sends again - the server is refusing to store plaintext in a room
+/// everyone believes is encrypted, or ciphertext nobody joining later can read.
+class MlsSendConflictException implements Exception {
+  const MlsSendConflictException({
+    required this.contextId,
+    required this.encrypted,
+    required this.activeGeneration,
+    required this.reason,
+  });
+
+  final String contextId;
+
+  /// What the context's state actually is.
+  final bool encrypted;
+  final int? activeGeneration;
+  final String reason;
+
+  @override
+  String toString() => 'MlsSendConflictException($reason)';
+}
+
 class MessageApi {
   MessageApi({required this.client});
 
   final ApiClient client;
 
+  /// Posts a message.
+  ///
+  /// [content] is plaintext for a plain send and base64 MLS ciphertext for an
+  /// encrypted one; [encrypted] is what tells the server which it is, and the
+  /// server refuses a mismatch against the context's actual state rather than
+  /// storing readable content in a room everyone believes is encrypted. That
+  /// refusal is a [MlsSendConflictException], which the caller answers by
+  /// refreshing its MLS state and retrying - not by surfacing an error.
   Future<MessageDto> create({
     required String content,
     String? conversationId,
@@ -36,6 +69,10 @@ class MessageApi {
     List<String> roleMentions = const [],
     bool mentionsEveryone = false,
     bool mentionsHere = false,
+    bool encrypted = false,
+    int? mlsGeneration,
+    int? mlsEpoch,
+    String? senderDeviceId,
   }) async {
     try {
       final response = await client.dio.post<Map<String, dynamic>>(
@@ -50,7 +87,10 @@ class MessageApi {
           'roleMentions': roleMentions,
           'mentionsEveryone': mentionsEveryone,
           'mentionsHere': mentionsHere,
-          'encryptionState': 'Plain',
+          'encryptionState': encrypted ? 'Encrypted' : 'Plain',
+          'mlsGeneration': ?mlsGeneration,
+          'mlsEpoch': ?mlsEpoch,
+          'senderDeviceId': ?senderDeviceId,
         },
       );
       return MessageDto.fromJson(response.data!);
@@ -60,6 +100,14 @@ class MessageApi {
           data is Map &&
           data['error'] == 'automod_blocked') {
         throw AutoModBlockedException(data['reason']?.toString() ?? '');
+      }
+      if (e.response?.statusCode == 409 && data is Map) {
+        throw MlsSendConflictException(
+          contextId: data['contextId']?.toString() ?? '',
+          encrypted: data['encrypted'] as bool? ?? false,
+          activeGeneration: data['activeGeneration'] as int?,
+          reason: data['reason']?.toString() ?? '',
+        );
       }
       rethrow;
     }

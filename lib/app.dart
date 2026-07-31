@@ -6,6 +6,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/di/injector.dart';
+import 'core/mls/mls_session_manager.dart';
+import 'core/mls/mls_store.dart';
 import 'core/push/push_notification_service.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/deep_link_handler.dart';
@@ -30,6 +32,7 @@ class _AppState extends State<App> {
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<String>? _notificationTapSub;
+  AppLifecycleListener? _lifecycle;
 
   @override
   void initState() {
@@ -40,6 +43,28 @@ class _AppState extends State<App> {
     _initDeepLinks();
     _notificationTapSub = getIt<PushNotificationService>().onNotificationTap
         .listen(_router.push);
+
+    // Decrypted message content is written behind a short debounce, and Android
+    // kills backgrounded apps without warning. Losing that window is not a
+    // dropped cache entry - MLS ratchets forward only, so a message that was
+    // decrypted and not written is unreadable on this device forever.
+    _lifecycle = AppLifecycleListener(
+      onPause: () => unawaited(getIt<MlsStore>().flush()),
+      // Every group this device is added to burns one of its key packages. A
+      // phone app stays resident for days, so waiting for the next cold start
+      // to notice the supply is low - which is all the desktop client does -
+      // would leave it quietly unaddable to new conversations in the meantime.
+      onResume: () {
+        unawaited(getIt<MlsSessionManager>().replenishIfStale());
+        // Push notifications are decrypted outside this isolate - Android's FCM
+        // background handler, iOS's notification service extension - and MLS
+        // only lets a message be read off the wire once. Whatever they read
+        // while the app was away exists solely in that file, so a conversation
+        // opened from a notification would otherwise show "cannot decrypt" for
+        // the exact message the user tapped.
+        unawaited(getIt<MlsStore>().reloadMessageCache());
+      },
+    );
   }
 
   /// The launch URI, held only until the stream replays it.
@@ -103,6 +128,7 @@ class _AppState extends State<App> {
 
   @override
   void dispose() {
+    _lifecycle?.dispose();
     _linkSub?.cancel();
     _notificationTapSub?.cancel();
     _sessionCubit.close();

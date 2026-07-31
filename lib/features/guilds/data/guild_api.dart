@@ -150,7 +150,7 @@ class GuildApi {
       data: {
         'name': name,
         'description': description,
-        'color': color,
+        'color': color ?? defaultRoleColor,
         'type': 'None',
         'permissions': (permissions ?? GuildPermissions.none).toWireString(),
       },
@@ -170,7 +170,7 @@ class GuildApi {
       data: {
         'name': name,
         'description': description,
-        'color': color,
+        'color': color ?? defaultRoleColor,
         'permissions': permissions.toWireString(),
       },
     );
@@ -646,6 +646,22 @@ class GuildApi {
       data: {'name': name, 'description': description},
     );
     return CategoryDto.fromJson(response.data!);
+  }
+
+  /// Who can actually see a channel - the guild members holding `ViewChannel`
+  /// here, after roles and channel overwrites are resolved.
+  ///
+  /// Exists for end-to-end encryption, which needs the exact roster: anyone
+  /// handed group keys can read the traffic, so falling back to the whole member
+  /// list is a confidentiality bug on any channel with restrictive overwrites,
+  /// not a cosmetic one.
+  Future<List<String>> getChannelViewers(String channelId) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/channels/${Uri.encodeComponent(channelId)}/viewers',
+    );
+    return (response.data?['userIds'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .toList();
   }
 
   Future<List<GuildMemberDto>> getMembers(

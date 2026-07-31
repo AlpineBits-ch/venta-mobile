@@ -45,12 +45,19 @@ class RealtimeService {
     'social.FriendRequestRejected',
     'social.FriendRemoved',
     'conversation.FriendRequestAccepted',
-    // MLS (E2EE) key-exchange bootstrap signal, not a hydration event
-    // despite the name - Alpine's handler fetches "pending welcomes" and
-    // joins an MLS group for this conversationId. venta_mobile has no MLS
-    // yet (plaintext-first v1 scope), so this stays watched-but-unconsumed
-    // until E2EE lands rather than being wired to a no-op MLS stub.
+    // MLS (E2EE). All three are nudges carrying no key material - see
+    // `MlsRealtimeBridge` for what each one triggers.
+    //
+    // `Welcome` in particular is a key-exchange bootstrap signal rather than
+    // the hydration event its name suggests: it means "there is a Welcome
+    // waiting for this device", and the fetch behind it is device-scoped.
     'conversation.Welcome',
+    // A commit advanced a group we are in. Deliberately carries no commit
+    // bytes: applying commits in push-arrival order forks an MLS client off
+    // the group permanently, so the ordered GET is the only path that
+    // mutates group state.
+    'conversation.MlsCommit',
+    'conversation.MlsStateChanged',
     'presence.UserOnline',
     'presence.UserOffline',
     'guild.MessageCreated',
@@ -62,6 +69,14 @@ class RealtimeService {
     'guild.MessageDeleted',
     'guild.MessagesBulkDeleted',
     'guild.UserTyping',
+    // A channel's encryption was toggled. Messaging owns the MLS group but not
+    // channel membership, so this one is fanned out by Guild rather than
+    // riding the `conversation.` prefix like its DM equivalent.
+    'guild.ChannelMlsStateChanged',
+    // Somebody is asking to be let into an encrypted channel. Members need to
+    // see the review queue without polling; the requester is excluded from the
+    // fanout server-side.
+    'guild.ChannelMlsJoinRequested',
     'guild.ChannelCreated',
     'guild.ChannelDeleted',
     'guild.ChannelUpdated',

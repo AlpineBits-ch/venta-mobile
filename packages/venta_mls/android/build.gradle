@@ -1,0 +1,111 @@
+// Builds the Rust MLS engine for every Android ABI and hands the resulting
+// .so files to AGP as ordinary jniLibs.
+//
+// No CMake and no `externalNativeBuild`: the native code is Cargo's, and asking
+// CMake to shell out to Cargo only adds a layer that reports Cargo's failures
+// worse than Cargo does.
+
+group 'gg.venta.venta_mls'
+version '0.1.0'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.7.3'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+// ---------------------------------------------------------------------------
+// Rust
+// ---------------------------------------------------------------------------
+
+// The app sets no abiFilters, so Flutter's own defaults decide what ships:
+// arm64-v8a and armeabi-v7a for devices, x86_64 for the emulator. An ABI
+// missing here is an app that crashes on `DynamicLibrary.open` the moment it
+// runs on that architecture, so this list has to cover all three.
+def rustTargets = ['arm64-v8a', 'armeabi-v7a', 'x86_64']
+
+def rustDir = file("${projectDir}/../rust")
+def jniLibsOut = file("${buildDir}/rustJniLibs")
+
+// `cargo ndk` resolves the NDK toolchain itself; it only needs to be told where
+// the NDK is. `android.ndkDirectory` is the one path that is already correct on
+// a machine where Flutter builds at all, so it beats asking for ANDROID_NDK_HOME
+// to be exported.
+def cargoNdkExecutable = System.getProperty('os.name').toLowerCase().contains('windows')
+        ? 'cargo-ndk.exe'
+        : 'cargo-ndk'
+
+tasks.register('cargoBuildRelease', Exec) {
+    description = 'Compiles the Rust MLS engine for all Android ABIs (release)'
+    workingDir rustDir
+    environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath
+
+    def args = ['ndk']
+    rustTargets.each { args += ['-t', it] }
+    args += ['-o', jniLibsOut.absolutePath, 'build', '--release']
+
+    commandLine(['cargo'] + args)
+
+    // Cargo is already an incremental build system; letting Gradle also decide
+    // whether to skip it means a touched .rs file can produce a stale .so.
+    outputs.upToDateWhen { false }
+
+    doFirst {
+        jniLibsOut.mkdirs()
+        if (android.ndkDirectory == null || !android.ndkDirectory.exists()) {
+            throw new GradleException(
+                    'Android NDK not found. Install it via the SDK Manager (Tools > SDK Manager > ' +
+                            'SDK Tools > NDK) - the MLS engine is native code and cannot be built without it.')
+        }
+    }
+
+    doLast {
+        logger.lifecycle("venta_mls: built ${rustTargets.join(', ')} into ${jniLibsOut}")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Android library
+// ---------------------------------------------------------------------------
+
+android {
+    namespace 'gg.venta.venta_mls'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 21
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = [jniLibsOut]
+        }
+    }
+}
+
+// AGP has no public hook for "before jniLibs are collected", and the task that
+// does the collecting is named per variant. Matching on the name is what every
+// Rust-on-Android Gradle plugin ends up doing.
+tasks.configureEach { task ->
+    if (task.name =~ /^merge.*JniLibFolders$/ || task.name =~ /^merge.*NativeLibs$/) {
+        task.dependsOn tasks.named('cargoBuildRelease')
+    }
+}

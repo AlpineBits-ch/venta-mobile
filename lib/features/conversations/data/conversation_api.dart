@@ -6,18 +6,57 @@ class ConversationApi {
 
   final ApiClient client;
 
+  /// Creates a conversation.
+  ///
+  /// The encrypted variant is not a flag on an otherwise identical call: the
+  /// caller has to have built the MLS group locally first and consumed a key
+  /// package for every invitee device, because [deviceWelcomes] is what admits
+  /// those devices to it. The server refuses to create an encrypted conversation
+  /// where any member has no Welcome - a member who can never read the
+  /// conversation is worse than a failed creation.
+  ///
+  /// See `ConversationEncryptionService.createEncrypted`, which is the only
+  /// thing that should be passing the MLS arguments here.
   Future<ConversationDto> create({
     String? name,
     required List<String> memberUserIds,
+    bool encrypted = false,
+    List<Map<String, Object?>> deviceWelcomes = const [],
+    String? mlsGroupId,
+    int? mlsEpoch,
+    String? mlsGroupInfo,
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       client.url('/api/v1/messaging/conversations'),
       data: {
         'name': name,
         'members': memberUserIds.map((id) => {'userId': id}).toList(),
-        'encryption': 'Plain',
-        'deviceWelcomes': <Object>[],
+        'encryption': encrypted ? 'Encrypted' : 'Plain',
+        'deviceWelcomes': deviceWelcomes,
+        'mlsGroupId': ?mlsGroupId,
+        'mlsEpoch': ?mlsEpoch,
+        'mlsGroupInfo': ?mlsGroupInfo,
       },
+    );
+    return ConversationDto.fromJson(response.data!);
+  }
+
+  /// Adds someone to an existing group conversation.
+  ///
+  /// Roster only. For an encrypted conversation their devices still have to be
+  /// admitted to the MLS group, which only a member's client can do - see
+  /// `ConversationMemberService.addMember` for the pairing and the order it has
+  /// to happen in.
+  ///
+  /// Refused server-side on a two-person DM: growing a 1:1 into a group silently
+  /// changes what the other person thought they were in.
+  Future<ConversationDto> addMember({
+    required String conversationId,
+    required String userId,
+  }) async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      client.url('/api/v1/messaging/conversations/$conversationId/members'),
+      data: {'userId': userId},
     );
     return ConversationDto.fromJson(response.data!);
   }

@@ -25,8 +25,9 @@ class SecureStorageService {
   /// multi-device calls/voice spec's "don't invent a second ID" note.
   static const _deviceIdKey = 'venta.device.id';
 
-  /// Public half of this installation's device identity key, base64. See
-  /// `DeviceIdService.identityPublicKey` for what it is and isn't.
+  /// Public half of this installation's device identity key, base64 - which,
+  /// once MLS is set up, *is* the MLS signing public key. See
+  /// `DeviceIdService.identityPublicKey`.
   static const _deviceIdentityKeyKey = 'venta.device.identity_key';
 
   /// The call this device is currently connected to, if any - written by
@@ -46,6 +47,57 @@ class SecureStorageService {
       _storage.read(key: _deviceIdentityKeyKey);
   Future<void> writeDeviceIdentityKey(String key) =>
       _storage.write(key: _deviceIdentityKeyKey, value: key);
+
+  /// One account's MLS identity on this device: an Ed25519 keypair plus the
+  /// user id it was minted for.
+  ///
+  /// Keyed by device *and* account. By device because a reset device identifier
+  /// must not pick up the previous installation's keys - those name a leaf in
+  /// every group the old device joined. By account because the keypair signs
+  /// under a BasicCredential carrying the user id, so a second account signing
+  /// with the first's key produces a credential every other group member
+  /// rejects.
+  ///
+  /// The identity is stored alongside rather than inferred from the key, so a
+  /// mismatch can be detected rather than discovered when messages start being
+  /// refused.
+  Future<(String publicKey, String privateKey, String identity)?>
+  readMlsIdentity({required String deviceId, required String userId}) async {
+    final scope = _mlsScope(deviceId, userId);
+    final publicKey = await _storage.read(key: '$scope.pub');
+    final privateKey = await _storage.read(key: '$scope.priv');
+    final identity = await _storage.read(key: '$scope.identity');
+    if (publicKey == null || privateKey == null || identity == null) return null;
+    return (publicKey, privateKey, identity);
+  }
+
+  Future<void> writeMlsIdentity({
+    required String deviceId,
+    required String userId,
+    required String publicKey,
+    required String privateKey,
+  }) async {
+    final scope = _mlsScope(deviceId, userId);
+    await _storage.write(key: '$scope.pub', value: publicKey);
+    await _storage.write(key: '$scope.priv', value: privateKey);
+    await _storage.write(key: '$scope.identity', value: userId);
+  }
+
+  /// On account deletion or "forget this device". Deliberately *not* called on
+  /// an ordinary sign-out: the keys belong to this account on this installation,
+  /// and throwing them away would lock the handset out of every group it is in.
+  Future<void> clearMlsIdentity({
+    required String deviceId,
+    required String userId,
+  }) async {
+    final scope = _mlsScope(deviceId, userId);
+    await _storage.delete(key: '$scope.pub');
+    await _storage.delete(key: '$scope.priv');
+    await _storage.delete(key: '$scope.identity');
+  }
+
+  static String _mlsScope(String deviceId, String userId) =>
+      'venta.mls.$deviceId.$userId';
 
   Future<String?> readActiveCallId() => _storage.read(key: _activeCallIdKey);
 

@@ -1,11 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../device/device_id_service.dart';
+import '../mls/mls_store.dart';
 import '../routing/route_paths.dart';
 import 'call_kit_service.dart';
+import 'message_notifier.dart';
+import 'message_push_decryptor.dart';
+import 'message_push_payload.dart';
 import 'push_token_api.dart';
 
 /// Marks a push as call-signaling rather than a normal notification - see
@@ -25,31 +30,38 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await showCallKitFromPushData(message.data);
     return;
   }
-  await PushNotificationService.showLocalNotification(message);
+  await PushNotificationService.handleMessagePush(message);
 }
 
 /// Regular (non-call) push notifications - the Flutter counterpart to
-/// Alpine's `NotificationService`/`UserTokenService`. Registers this
-/// install's push token with the backend and surfaces incoming-message
-/// pushes as a local notification while the app is foregrounded (the OS
-/// already does this for us when backgrounded/killed, since the backend
-/// sends a `Notification`-block FCM message / `.Alert`-type APNs push).
+/// Alpine's `NotificationService`/`UserTokenService`. Registers this install's
+/// push token with the backend and draws every incoming-message notification
+/// itself, foregrounded or not.
+///
+/// Drawing it ourselves is the point: message pushes arrive data-only on
+/// Android, carrying the MLS ciphertext rather than a body, so that
+/// [MessageNotifier] can decrypt it here and show what was actually said
+/// instead of "you have a new encrypted message". iOS cannot run Dart for a
+/// notification while the app is dead, so it receives an APNs alert with
+/// `mutable-content` and the notification service extension in
+/// `ios/NotificationService/` does the same job in Swift.
 ///
 /// Call-signaling pushes are a separate, silent, data-only path owned by
 /// [CallKitService] - this service explicitly ignores them.
 class PushNotificationService {
-  PushNotificationService({required this.api, required this.deviceIdService});
+  PushNotificationService({
+    required this.api,
+    required this.deviceIdService,
+    required this.mlsStore,
+  });
 
   final PushTokenApi api;
   final DeviceIdService deviceIdService;
 
-  static final _localNotifications = FlutterLocalNotificationsPlugin();
-  static const _messagesChannel = AndroidNotificationChannel(
-    'messages',
-    'Messages',
-    description: 'New direct messages and server messages',
-    importance: Importance.high,
-  );
+  /// The app's own store, handed to the decryptor so a push decrypted while the
+  /// app is running lands in the same in-memory cache the conversation reads
+  /// from - see [MessagePushDecryptor.decrypt].
+  final MlsStore mlsStore;
 
   final _navigationController = StreamController<String>.broadcast();
 
@@ -67,17 +79,8 @@ class PushNotificationService {
   /// and [firebaseMessagingBackgroundHandler] registration have already run
   /// in `main()`.
   Future<void> start() async {
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(_messagesChannel);
-    await _localNotifications.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(),
-      ),
-    );
+    _isForeground = true;
+    await MessageNotifier.initializeForApp(onTap: _handleLocalTap);
 
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(alert: true, badge: true, sound: true);
@@ -93,7 +96,7 @@ class PushNotificationService {
         showCallKitFromPushData(message.data);
         return;
       }
-      showLocalNotification(message);
+      unawaited(handleMessagePush(message, store: mlsStore));
     });
     _openedAppSub = FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
     final initialMessage = await messaging.getInitialMessage();
@@ -137,28 +140,47 @@ class PushNotificationService {
   }
 
   void _handleTap(RemoteMessage message) {
+    final route = MessagePushPayload.tryParse(message.data)?.route;
+    if (route != null) {
+      _navigationController.add(route);
+      return;
+    }
+    // Pre-`type: message` payloads, and anything else that names a conversation.
     final conversationId = message.data['conversationId'];
     if (conversationId == null || conversationId.isEmpty) return;
     _navigationController.add(RoutePaths.conversationPath(conversationId));
   }
 
-  static Future<void> showLocalNotification(RemoteMessage message) async {
-    final notification = message.notification;
-    if (notification == null) return;
-    await _localNotifications.show(
-      id: notification.hashCode,
-      title: notification.title,
-      body: notification.body,
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          _messagesChannel.id,
-          _messagesChannel.name,
-        ),
-        iOS: const DarwinNotificationDetails(),
-      ),
-      payload: message.data['conversationId'],
-    );
+  /// Tapping a notification this app drew itself, as opposed to one the OS drew
+  /// from an APNs alert - those come back through [_handleTap] instead.
+  void _handleLocalTap(NotificationResponse response) {
+    final route = response.payload;
+    if (route != null && route.isNotEmpty) _navigationController.add(route);
   }
+
+  /// Shows a new-message push.
+  ///
+  /// Static, and reachable from the background isolate: on Android this is the
+  /// only thing that turns a data-only push into a visible notification, and it
+  /// is what decrypts the body on the way.
+  ///
+  /// iOS deliberately falls through to doing nothing while the app is
+  /// backgrounded - the system already displayed the APNs alert (as rewritten by
+  /// the notification service extension), and posting a local notification on
+  /// top of it would show the message twice.
+  static Future<void> handleMessagePush(
+    RemoteMessage message, {
+    MlsStore? store,
+  }) async {
+    final payload = MessagePushPayload.tryParse(message.data);
+    if (payload == null) return;
+    if (Platform.isIOS && !_isForeground) return;
+    await MessageNotifier.show(payload, store: store);
+  }
+
+  /// True only inside the running app. The FCM background isolate never sets
+  /// it, which is exactly the distinction iOS needs above.
+  static bool _isForeground = false;
 
   Future<void> dispose() async {
     await _foregroundSub?.cancel();

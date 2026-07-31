@@ -1,9 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 
 import '../../../core/format/api_date_time.dart';
+import '../../../core/mls/mls_service.dart';
+import '../../../core/mls/mls_sync_service.dart';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import 'message_api.dart';
+import 'message_decryptor.dart';
 import 'models/attachment_dto.dart';
 import 'models/message_dto.dart';
 
@@ -87,13 +93,16 @@ class MessageRepository {
   MessageRepository({
     required this.api,
     required RealtimeService realtimeService,
+    required this.mls,
+    required this.mlsSync,
     this.conversationId,
     this.channelId,
   }) : assert(
          (conversationId == null) != (channelId == null),
          'Exactly one of conversationId/channelId must be set.',
        ),
-       _realtimeService = realtimeService {
+       _realtimeService = realtimeService,
+       _decryptor = MessageDecryptor(mls) {
     final prefix = isChannel ? 'guild.' : 'conversation.';
     _realtimeSub = realtimeService.events
         .where((e) => e.name.startsWith(prefix))
@@ -101,12 +110,24 @@ class MessageRepository {
   }
 
   final MessageApi api;
+  final MlsService mls;
+  final MlsSyncService mlsSync;
   final String? conversationId;
   final String? channelId;
   final RealtimeService _realtimeService;
+  final MessageDecryptor _decryptor;
   late final StreamSubscription<RealtimeEvent> _realtimeSub;
 
+  /// Whether this thread is end-to-end encrypted as far as this device knows.
+  /// Read by the composer and the header badge.
+  bool get isEncrypted => mls.isEncrypted(_contextId);
+
   bool get isChannel => channelId != null;
+
+  /// The channel or conversation id, whichever this thread is. Also the MLS
+  /// context id - the server keys groups, commits and Welcomes off the same
+  /// value.
+  String get contextId => _contextId;
   String get _contextId => (channelId ?? conversationId)!;
   String get _contextKey => isChannel ? 'channelId' : 'conversationId';
   String get _methodPrefix => isChannel ? 'guild' : 'conversation';
@@ -121,8 +142,7 @@ class MessageRepository {
 
     switch (event.name) {
       case 'conversation.MessageCreated' || 'guild.MessageCreated':
-        _eventsController.add(
-          RemoteMessageReceived(
+        _emitReceived(
             MessageDto(
               id: payload['messageId'] as String,
               content: payload['content'] as String,
@@ -150,8 +170,19 @@ class MessageRepository {
               authorIdType: payload['authorIdType'] == 'Bot'
                   ? MessageAuthorType.bot
                   : MessageAuthorType.standard,
+              encryptionState: payload['encryptionState'] == 'Encrypted'
+                  ? MessageEncryptionState.encrypted
+                  : MessageEncryptionState.plain,
+              // The server's `MessageCreated` contract carries `mlsGeneration`
+              // but the send endpoint does not populate it, so in practice this
+              // arrives null and the decryptor falls back to the generation this
+              // device believes is live. Read anyway: the fallback is wrong for
+              // a message that arrives moments after a toggle, and the day the
+              // backend fills the field in, this starts being right for free.
+              mlsGeneration: (payload['mlsGeneration'] as num?)?.toInt(),
+              mlsEpoch: (payload['mlsEpoch'] as num?)?.toInt(),
+              senderDeviceId: payload['senderDeviceId'] as String?,
             ),
-          ),
         );
       case 'conversation.MessageUpdated' || 'guild.MessageUpdated':
         _eventsController.add(
@@ -206,16 +237,54 @@ class MessageRepository {
     }
   }
 
-  Future<List<MessageDto>> fetchPage({int offset = 0, int limit = 50}) =>
-      isChannel
-      ? api.getForChannel(_contextId, offset: offset, limit: limit)
-      : api.getForConversation(_contextId, offset: offset, limit: limit);
+  /// Decryption is chained rather than fired off per event so messages reach
+  /// the bloc in the order they arrived. Two ciphertexts decrypting at
+  /// different speeds would otherwise be able to swap places in the timeline.
+  Future<void> _decryptChain = Future<void>.value();
+
+  void _emitReceived(MessageDto message) {
+    // An MLS member cannot decrypt their own application message - the engine
+    // refuses it - so the echo of something this device just sent would render
+    // as "can't be decrypted" if it beat the REST response back. Dropping it is
+    // safe and not a special case: `MessageThreadBloc` already ignores the echo
+    // of our own sends, because the REST response is what confirms them.
+    //
+    // Only encrypted sends carry `senderDeviceId`, so plain messages are
+    // untouched by this.
+    final ownDeviceId = mls.deviceIdService.deviceIdOrNull;
+    if (message.senderDeviceId != null &&
+        message.senderDeviceId == ownDeviceId) {
+      return;
+    }
+
+    _decryptChain = _decryptChain.then((_) async {
+      try {
+        _eventsController.add(
+          RemoteMessageReceived(await _decryptor.decrypt(message)),
+        );
+      } catch (e) {
+        debugPrint('MessageRepository: failed to decrypt ${message.id}: $e');
+        _eventsController.add(
+          RemoteMessageReceived(message.copyWith(isUndecryptable: true)),
+        );
+      }
+    });
+  }
+
+  Future<List<MessageDto>> fetchPage({int offset = 0, int limit = 50}) async {
+    final page = isChannel
+        ? await api.getForChannel(_contextId, offset: offset, limit: limit)
+        : await api.getForConversation(_contextId, offset: offset, limit: limit);
+    return _decryptor.decryptAll(page);
+  }
 
   /// The server always base64-wraps whatever `Content` it stores when
   /// echoing/broadcasting it back (confirmed empirically - see the Phase 1
-  /// messaging debug session), so the client sends raw plaintext here and
-  /// only ever decodes, never encodes, for the wire. `MessageContentCodec`
-  /// stays the single seam for both, ready for MLS ciphertext later.
+  /// messaging debug session), so a plain send passes raw plaintext here and
+  /// only ever decodes, never encodes, for the wire.
+  ///
+  /// An encrypted send is the other branch: the content is sealed to the
+  /// context's MLS group first and what goes up is base64 ciphertext.
   Future<MessageDto> send({
     required String plaintextContent,
     String? inReplyTo,
@@ -225,10 +294,7 @@ class MessageRepository {
     bool mentionsEveryone = false,
     bool mentionsHere = false,
   }) {
-    return api.create(
-      content: plaintextContent,
-      conversationId: conversationId,
-      channelId: channelId,
+    final rest = _SendFields(
       inReplyTo: inReplyTo,
       attachments: attachments.map((a) => a.id).toList(),
       mentions: mentions,
@@ -236,6 +302,82 @@ class MessageRepository {
       mentionsEveryone: mentionsEveryone,
       mentionsHere: mentionsHere,
     );
+
+    if (!isEncrypted) return _sendPlain(plaintextContent, rest);
+    return _sendEncrypted(plaintextContent, rest);
+  }
+
+  Future<MessageDto> _sendPlain(String plaintext, _SendFields rest) =>
+      api.create(
+        content: plaintext,
+        conversationId: conversationId,
+        channelId: channelId,
+        inReplyTo: rest.inReplyTo,
+        attachments: rest.attachments,
+        mentions: rest.mentions,
+        roleMentions: rest.roleMentions,
+        mentionsEveryone: rest.mentionsEveryone,
+        mentionsHere: rest.mentionsHere,
+      );
+
+  /// Encrypts and posts, retrying once against refreshed state.
+  ///
+  /// The server refuses a message whose encryption does not match the context's
+  /// - which is exactly what happens when encryption was toggled while this
+  /// client was composing. That is a stale view, not a real failure, so it
+  /// re-reads the state and sends again rather than surfacing an error the user
+  /// can do nothing about.
+  Future<MessageDto> _sendEncrypted(String plaintext, _SendFields rest) async {
+    Future<MessageDto> attempt() async {
+      final generation = mls.knownGeneration(_contextId);
+      if (generation == null) {
+        // Encryption was turned off under us between the check and here.
+        return _sendPlain(plaintext, rest);
+      }
+
+      final groupId = mls.groupId(_contextId, generation);
+      if (groupId == null) {
+        throw StateError(
+          'No MLS group for $_contextId generation $generation - this device '
+          'has not been admitted to it',
+        );
+      }
+
+      final plaintextB64 = base64Encode(utf8.encode(plaintext));
+      final sealed = await mls.encrypt(
+        groupIdB64: groupId,
+        plaintextB64: plaintextB64,
+      );
+
+      final confirmed = await api.create(
+        content: sealed.ciphertext,
+        conversationId: conversationId,
+        channelId: channelId,
+        inReplyTo: rest.inReplyTo,
+        attachments: rest.attachments,
+        mentions: rest.mentions,
+        roleMentions: rest.roleMentions,
+        mentionsEveryone: rest.mentionsEveryone,
+        mentionsHere: rest.mentionsHere,
+        encrypted: true,
+        mlsGeneration: generation,
+        mlsEpoch: sealed.epoch,
+        senderDeviceId: mls.deviceIdService.deviceIdOrNull,
+      );
+
+      // Keep the plaintext for display. The server stores ciphertext and MLS
+      // ratchets forward only, so this is the one moment we can cache it -
+      // after this, our own message is as unreadable to us as anyone else's.
+      mls.cacheMessage(confirmed.id, plaintextB64);
+      return confirmed.copyWith(content: plaintextB64);
+    }
+
+    try {
+      return await attempt();
+    } on MlsSendConflictException {
+      await mlsSync.refreshState(_contextId, isChannel);
+      return attempt();
+    }
   }
 
   /// Uploads and waits for processing on one file, for the composer's
@@ -283,9 +425,15 @@ class MessageRepository {
     );
   }
 
-  Future<List<MessageDto>> search(String query) => isChannel
-      ? api.searchChannel(_contextId, query)
-      : api.searchConversation(_contextId, query);
+  /// Server-side full-text search, which only ever indexes plaintext - an
+  /// encrypted context always comes back empty rather than erroring. `ThreadView`
+  /// is what refuses to open the search screen there in the first place.
+  Future<List<MessageDto>> search(String query) async {
+    final results = isChannel
+        ? await api.searchChannel(_contextId, query)
+        : await api.searchConversation(_contextId, query);
+    return _decryptor.decryptAll(results);
+  }
 
   Future<MessageDto> editMessage(String messageId, String plaintextContent) =>
       api.update(messageId: messageId, content: plaintextContent);
@@ -294,12 +442,18 @@ class MessageRepository {
 
   /// Used to resolve a reply reference that's scrolled out of the currently
   /// loaded page - mirrors Alpine's `MessageStore.getOrFetchMessage`.
-  Future<MessageDto> getMessageById(String messageId) => isChannel
-      ? api.getChannelMessage(channelId: _contextId, messageId: messageId)
-      : api.getConversationMessage(
-          conversationId: _contextId,
-          messageId: messageId,
-        );
+  Future<MessageDto> getMessageById(String messageId) async {
+    final message = isChannel
+        ? await api.getChannelMessage(
+            channelId: _contextId,
+            messageId: messageId,
+          )
+        : await api.getConversationMessage(
+            conversationId: _contextId,
+            messageId: messageId,
+          );
+    return _decryptor.decrypt(message);
+  }
 
   Future<void> addReaction(String messageId, String emoji, {String? emojiId}) =>
       api.addReaction(
@@ -324,9 +478,12 @@ class MessageRepository {
 
   Future<void> unpinMessage(String messageId) => api.unpinMessage(messageId);
 
-  Future<List<MessageDto>> getPinnedMessages() => isChannel
-      ? api.getPinnedMessages(channelId: _contextId)
-      : api.getPinnedMessages(conversationId: _contextId);
+  Future<List<MessageDto>> getPinnedMessages() async {
+    final pinned = isChannel
+        ? await api.getPinnedMessages(channelId: _contextId)
+        : await api.getPinnedMessages(conversationId: _contextId);
+    return _decryptor.decryptAll(pinned);
+  }
 
   Future<void> sendTypingIndicator() =>
       _realtimeService.invoke('$_methodPrefix.StartTyping', args: [_contextId]);
@@ -342,4 +499,24 @@ class MessageRepository {
     _realtimeSub.cancel();
     _eventsController.close();
   }
+}
+
+/// Everything about a send that is the same whether or not it is encrypted.
+/// Bundled so the two branches cannot drift apart in which fields they forward.
+class _SendFields {
+  const _SendFields({
+    required this.inReplyTo,
+    required this.attachments,
+    required this.mentions,
+    required this.roleMentions,
+    required this.mentionsEveryone,
+    required this.mentionsHere,
+  });
+
+  final String? inReplyTo;
+  final List<String> attachments;
+  final List<String> mentions;
+  final List<String> roleMentions;
+  final bool mentionsEveryone;
+  final bool mentionsHere;
 }

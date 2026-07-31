@@ -43,8 +43,10 @@ sealed class MessageDto with _$MessageDto {
   const factory MessageDto({
     required String id,
 
-    /// Always base64(UTF-8) on the wire, even in Plain mode - see
-    /// `MessageContentCodec`, the seam where MLS decrypt gets added later.
+    /// Base64 on the wire either way, but of different things: UTF-8 plaintext
+    /// when [encryptionState] is plain, a TLS-serialized MLS message when it is
+    /// encrypted. `MessageDecryptor` is what turns the latter into the former;
+    /// `MessageContentCodec` only ever handles the plaintext side.
     required String content,
     String? conversationId,
     String? channelId,
@@ -74,12 +76,38 @@ sealed class MessageDto with _$MessageDto {
     /// rotation) - null/out-of-range falls back to variant 0.
     int? systemMessageVariant,
 
+    /// Which `MlsGroupGeneration` of the context this was encrypted under. Null
+    /// on plaintext messages.
+    ///
+    /// Required to decrypt: encryption can be toggled off and on, and each
+    /// stretch is a distinct group whose epochs restart at zero, so the epoch
+    /// alone is ambiguous the moment a context has been toggled twice.
+    int? mlsGeneration,
+
+    /// Group epoch this was encrypted at.
+    int? mlsEpoch,
+
+    /// Client device id of the sender. Set on encrypted messages so a device can
+    /// recognise its own traffic coming back to it.
+    String? senderDeviceId,
+
     /// Client-only: a synthetic placeholder for an in-flight/failed bot
     /// command invocation, never sent or received over the wire - see
     /// `ThreadBotPlaceholderAdded` in `MessageThreadBloc`.
     @JsonKey(includeFromJson: false, includeToJson: false)
     @Default(false)
     bool isBotCommandPlaceholder,
+
+    /// Client-only: this message is ciphertext we hold no keys for.
+    ///
+    /// MLS ratchets forward and never backward, so a message can be decrypted
+    /// from the wire exactly once, on a device that was in the group at the
+    /// time. Anything older than this install - or from a generation it was
+    /// never admitted to - lands here. The flag exists so the UI can say so
+    /// plainly instead of rendering base64 at the user.
+    @JsonKey(includeFromJson: false, includeToJson: false)
+    @Default(false)
+    bool isUndecryptable,
   }) = _MessageDto;
 
   factory MessageDto.fromJson(Map<String, dynamic> json) =>

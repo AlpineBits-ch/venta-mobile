@@ -1,7 +1,22 @@
 import 'package:dio/dio.dart';
 
+import '../../features/mls/data/models/mls_dtos.dart';
 import '../network/api_client.dart';
 import '../network/device_id_interceptor.dart';
+
+/// One key package on its way up to the server.
+///
+/// [isLastResort] marks the device's single reusable package - the floor that
+/// keeps it addable to new groups after its single-use supply runs dry. A device
+/// with neither is silently left out of every new conversation, which from the
+/// user's side is indistinguishable from the app being broken.
+class KeyPackageUpload {
+  const KeyPackageUpload({required this.keyPackage, this.isLastResort = false});
+
+  /// Base64 TLS-serialized KeyPackage.
+  final String keyPackage;
+  final bool isLastResort;
+}
 
 /// One row of `GET /api/v1/identity/devices` - a registered installation of
 /// some client on this account. Deliberately hand-rolled rather than
@@ -67,6 +82,48 @@ class DeviceApi {
       // routed back into it.
       options: Options(extra: {DeviceIdInterceptor.skipRecoveryKey: true}),
     );
+  }
+
+  /// How many key packages this device should generate and upload to get back
+  /// to the server's target, plus whether it needs a last-resort package.
+  ///
+  /// Doubles as the server's housekeeping hook - expired and long-consumed rows
+  /// are swept here - which is why it is called on every authenticated launch
+  /// rather than only when something looks low.
+  Future<GenerateKeyPackagesDto> keyPackagesToGenerate(
+    String clientDeviceId,
+  ) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/client/$clientDeviceId/generate',
+    );
+    return GenerateKeyPackagesDto.fromJson(response.data!);
+  }
+
+  /// Uploads MLS key packages for this device. Each one is consumed by exactly
+  /// one group this device is later added to.
+  ///
+  /// An empty list is a legitimate no-op, not an error: the replenish flow posts
+  /// whatever [keyPackagesToGenerate] asked for, and a fully stocked device is
+  /// asked for nothing.
+  Future<int> uploadKeyPackages({
+    required String clientDeviceId,
+    required List<KeyPackageUpload> keyPackages,
+  }) async {
+    if (keyPackages.isEmpty) return 0;
+    final response = await client.dio.post<Map<String, dynamic>>(
+      '$_base/client/$clientDeviceId/key-packages',
+      data: {
+        'keyPackages': keyPackages
+            .map(
+              (p) => {
+                'keyPackage': p.keyPackage,
+                'isLastResort': p.isLastResort,
+              },
+            )
+            .toList(),
+      },
+    );
+    return response.data?['added'] as int? ?? 0;
   }
 
   Future<List<RegisteredDeviceDto>> list() async {

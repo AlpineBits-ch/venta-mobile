@@ -17,11 +17,10 @@ const kDeviceType = 'Mobile';
 
 /// The stable per-installation device identifier required by the
 /// multi-device calls/guild-voice contract (`X-Device-Id` header, `deviceId`
-/// hub query param) and by device registration (`ClientDeviceId`).
-/// venta_mobile has no MLS/E2EE yet (deferred - see architecture plan), so
-/// there's no existing `ClientDeviceId` to reuse as the spec suggests; this
-/// generates and persists its own, under a storage key generic enough to
-/// become that same value once E2EE lands.
+/// hub query param), by device registration (`ClientDeviceId`), and by MLS -
+/// where it is what Welcomes and per-device pushes are addressed to.
+///
+/// Generated once per install and persisted; the same value serves all three.
 ///
 /// Generated once per install and cached in memory - [init] must be awaited
 /// before [deviceId] is read (done once at app startup, alongside
@@ -48,16 +47,27 @@ class DeviceIdService {
   /// Base64 of this installation's device identity public key, which device
   /// registration requires (`identityPublicKey`, a non-null column server-side).
   ///
-  /// It is a placeholder: with no MLS on mobile there is no real identity
-  /// keypair to publish, so this is 32 persisted random bytes - stable, unique
-  /// per installation, and never used to verify anything. When E2EE lands this
-  /// must become the actual MLS identity key, which means deleting the device
-  /// registration (`DeviceRegistrationService.forgetThisDevice`) and
-  /// re-registering: the server returns the existing row unchanged for an id
-  /// it already knows.
+  /// Once `MlsSessionManager.prepareIdentity` has run this is the device's MLS
+  /// Ed25519 signing public key, matching what Alpine publishes. Before that -
+  /// and on an install that registered before MLS existed - it is 32 persisted
+  /// random bytes.
+  ///
+  /// The placeholder is harmless where it survives: the server stores this
+  /// column and never reads it, and MLS carries the real signing key inside each
+  /// KeyPackage's credential rather than looking it up here. Correcting an
+  /// already-registered row would mean deleting and re-creating it, which
+  /// revokes that device's login sessions.
   String get identityPublicKey =>
       _identityPublicKey ??
       (throw StateError('DeviceIdService.init() must be awaited before use'));
+
+  /// Re-reads the identity key after MLS has replaced it with the real signing
+  /// key, so the registration that follows publishes the new value rather than
+  /// the placeholder this session started with.
+  Future<void> refreshIdentityPublicKey() async {
+    final stored = await secureStorage.readDeviceIdentityKey();
+    if (stored != null && stored.isNotEmpty) _identityPublicKey = stored;
+  }
 
   Future<void> init() async {
     _deviceId ??= await _loadOrCreate(

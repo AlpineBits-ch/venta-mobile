@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
+import '../../../core/mls/mls_sync_service.dart';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import 'conversation_api.dart';
@@ -12,6 +15,7 @@ import 'models/conversation_dto.dart';
 class ConversationRepository {
   ConversationRepository({
     required this.api,
+    required this.mlsSync,
     required RealtimeService realtimeService,
   }) {
     _realtimeSub = realtimeService.events
@@ -25,6 +29,7 @@ class ConversationRepository {
   }
 
   final ConversationApi api;
+  final MlsSyncService mlsSync;
   late final StreamSubscription<RealtimeEvent> _realtimeSub;
 
   final _conversationsController =
@@ -75,6 +80,19 @@ class ConversationRepository {
   /// above turns into a refetch anyway; the [fetch] here is just so the row
   /// disappears without waiting on the socket.
   Future<void> close(String conversationId) async {
+    // Leave the MLS group *first*. Leaving drops this device's keys immediately,
+    // so even if the delete below fails we have already given up the ability to
+    // read anything sent afterwards - which is the half that matters for our own
+    // forward secrecy. Doing it after would leave the keys behind on every
+    // failed request.
+    //
+    // A plaintext conversation has no group and this is a no-op.
+    try {
+      await mlsSync.leaveContext(conversationId, false);
+    } catch (e) {
+      debugPrint('Could not leave the MLS group for $conversationId: $e');
+    }
+
     await api.delete(conversationId);
     ConversationPrefs.forget(conversationId);
     await fetch();

@@ -1,0 +1,40 @@
+[package]
+name = "venta_mls"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "MLS (RFC 9420) engine for venta_mobile, ported from Alpine's src-tauri/src/crypto/mls.rs"
+
+[lib]
+# cdylib for Android (.so loaded with DynamicLibrary.open), staticlib for iOS
+# (linked into the app binary, where DynamicLibrary.process() resolves it).
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+# Pinned to exactly what Alpine builds against. MLS is a wire protocol: a
+# different openmls major/minor can change TLS-serialized shapes, and a mobile
+# client that cannot deserialize a Welcome written by the desktop client is
+# locked out of every group it is invited to. Bump both together or neither.
+openmls = "0.8.1"
+openmls_rust_crypto = "0.5"
+openmls_basic_credential = { version = "0.5", features = ["test-utils"] }
+
+aes-gcm = "0.10"
+base64 = "0.22"
+# Key-package fingerprints. Alpine had this in its desktop-only target block until
+# the join-request work moved it into the base dependencies for exactly this reason.
+sha2 = "0.10"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+# Deliberately *not* `panic = "abort"`. The FFI entry point wraps every call in
+# `catch_unwind` so a poisoned lock or an openmls invariant failure comes back
+# to Dart as a normal error string. Aborting would take the whole app down over
+# one unreadable message.

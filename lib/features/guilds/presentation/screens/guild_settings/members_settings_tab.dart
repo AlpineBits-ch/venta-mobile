@@ -6,9 +6,9 @@ import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/widget_styles.dart';
 import '../../../../../core/widgets/user_avatar.dart';
 import '../../../data/guild_repository.dart';
-import '../../../data/models/guild_dto.dart';
-import '../../../data/models/guild_features.dart';
 import '../../../data/models/guild_member_dto.dart';
+import '../../../data/models/role_dto.dart';
+import 'member_editor_screen.dart';
 
 class MembersSettingsTab extends StatefulWidget {
   const MembersSettingsTab({super.key, required this.guildId});
@@ -57,39 +57,17 @@ class _MembersSettingsTabState extends State<MembersSettingsTab> {
     );
   }
 
-  Future<void> _kick(GuildMemberDto member) async {
-    final displayName =
-        member.nickname ?? member.profile?.userName ?? member.userId;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Kick member?'),
-        content: Text('$displayName can rejoin with a new invite.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Kick'),
-          ),
-        ],
+  Future<void> _openMember(GuildMemberDto member) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) =>
+            MemberEditorScreen(guildId: widget.guildId, member: member),
       ),
     );
-    if (confirmed != true) return;
-    try {
-      await getIt<GuildRepository>().kickMember(widget.guildId, member.id);
+    // The roles a member holds are only in the list payload, so a change made
+    // in there is only reflected by re-listing.
+    if (changed == true && mounted) {
       await _load(query: _searchController.text.trim());
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not kick that member.')),
-        );
-      }
     }
   }
 
@@ -123,7 +101,14 @@ class _MembersSettingsTabState extends State<MembersSettingsTab> {
                         member.nickname ??
                         member.profile?.userName ??
                         'Unknown';
+                    final roleNames = [
+                      for (final membership in member.roleMembers)
+                        if (!membership.hasLapsed &&
+                            membership.role.type != RoleType.everyone)
+                          membership.role.name,
+                    ];
                     return ListTile(
+                      onTap: () => _openMember(member),
                       // `nickname` is guild-local and the avatar is not, so
                       // the fallback initial has to come from the profile -
                       // otherwise a nicknamed member's disc and their disc
@@ -131,6 +116,14 @@ class _MembersSettingsTabState extends State<MembersSettingsTab> {
                       leading: UserAvatar(
                         userId: member.userId,
                         fallbackLabel: member.profile?.userName ?? displayName,
+                        // Without this the avatar swallows the tap and opens
+                        // the public profile instead of the row's own action.
+                        onTap: () => _openMember(member),
+                      ),
+                      subtitle: Text(
+                        roleNames.isEmpty ? 'No roles' : roleNames.join(', '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       title: Row(
                         children: [
@@ -167,20 +160,12 @@ class _MembersSettingsTabState extends State<MembersSettingsTab> {
                           ],
                         ],
                       ),
-                      // Kicking belongs to the Moderation module - a guild
-                      // without it has no kick affordance at all, owner
-                      // included.
-                      trailing:
-                          (getIt<GuildRepository>()
-                                  .cachedById(widget.guildId)
-                                  ?.hasFeature(GuildFeature.moderation) ??
-                              true)
-                          ? IconButton(
-                              icon: const Icon(Icons.person_remove_outlined),
-                              tooltip: 'Kick',
-                              onPressed: () => _kick(member),
-                            )
-                          : null,
+                      // Kick used to live here as the row's only action,
+                      // which left a guild without the Moderation module
+                      // showing rows with nothing on them at all. It moved
+                      // into MemberEditorScreen alongside the roles, and the
+                      // row just says "there's more in here".
+                      trailing: const Icon(Icons.chevron_right),
                     );
                   },
                 ),

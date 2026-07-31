@@ -91,6 +91,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
         repository: MessageRepository(
           api: getIt<MessageApi>(),
           realtimeService: getIt(),
+          mls: getIt(),
+          mlsSync: getIt(),
           conversationId: widget.conversationId,
         ),
         myUserId: myUserId,

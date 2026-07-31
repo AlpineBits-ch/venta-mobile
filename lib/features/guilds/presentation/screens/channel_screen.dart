@@ -124,6 +124,8 @@ class _ChannelScreenState extends State<ChannelScreen> {
         repository: MessageRepository(
           api: getIt<MessageApi>(),
           realtimeService: getIt(),
+          mls: getIt(),
+          mlsSync: getIt(),
           channelId: widget.channelId,
         ),
         myUserId: myUserId,

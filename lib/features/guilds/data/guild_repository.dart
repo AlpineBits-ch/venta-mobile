@@ -142,11 +142,27 @@ class GuildRepository {
   void clear() {
     _guilds.clear();
     _emojiCache.clear();
+    // The next account's list has not been fetched, whatever this one's had.
+    _hasFetchedList = false;
     _guildsController.add(List.unmodifiable(_guilds));
   }
 
+  /// Whether [fetch] has ever completed - i.e. whether [cached] is the user's
+  /// *whole* guild list rather than the handful of guilds [fetchGuild] happens
+  /// to have put there.
+  ///
+  /// The distinction matters because the cache has two writers. `fetch` fills
+  /// it from `GET /guilds`; `fetchGuild` adds one guild at a time and runs
+  /// from any screen that opens a guild directly - a restored deep route, an
+  /// invite landing. A caller that decides "the cache isn't empty, so the list
+  /// must be loaded" gets it wrong exactly then, and shows a rail with one
+  /// server on it. See `AppShell`.
+  bool get hasFetchedList => _hasFetchedList;
+  bool _hasFetchedList = false;
+
   Future<List<GuildDto>> fetch() async {
     final list = await api.getGuilds();
+    _hasFetchedList = true;
     _guilds
       ..clear()
       ..addAll(list);
@@ -340,6 +356,12 @@ class GuildRepository {
     int skip = 0,
     int take = 50,
   }) => api.getMembers(guildId, skip: skip, take: take);
+
+  /// Exactly who can see a channel, resolved server-side against the same
+  /// permission logic that gates reads. See [GuildApi.getChannelViewers] - this
+  /// is the roster end-to-end encryption needs, not the guild's member list.
+  Future<List<String>> getChannelViewers(String channelId) =>
+      api.getChannelViewers(channelId);
 
   Future<GuildSelfPermissions> getOwnMember(String guildId) =>
       api.getOwnMember(guildId);
@@ -797,13 +819,21 @@ class GuildRepository {
 
   Future<InviteDto> previewInvite(String code) => api.getInviteByCode(code);
 
-  /// Redeems the invite, then refetches the guild list (which now includes
-  /// the newly-joined guild) so callers can navigate straight to it.
+  /// Redeems the invite, then refetches the guild list so callers can
+  /// navigate straight to the guild they just joined.
+  ///
+  /// The list refetch alone is not enough to land on. Whether it comes back
+  /// carrying the new guild depends on the join being visible to the query
+  /// that serves it, and a caller that navigates on the assumption it is gets
+  /// a guild the rail doesn't list and the cache doesn't hold. So the guild is
+  /// fetched by id afterwards regardless, through [fetchGuild] rather than the
+  /// api directly - that is what puts it in the cache and emits it, which is
+  /// what the rail and the guild screen are both reading.
   Future<GuildDto> redeemInvite(String code) async {
     final invite = await api.getInviteByCode(code);
     await api.redeemInvite(invite.id);
     await fetch();
-    return cachedById(invite.guildId) ?? await api.getGuild(invite.guildId);
+    return fetchGuild(invite.guildId);
   }
 
   void dispose() {

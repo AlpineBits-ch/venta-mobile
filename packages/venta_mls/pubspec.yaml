@@ -1,0 +1,29 @@
+name: venta_mls
+description: >-
+  MLS (RFC 9420) end-to-end encryption engine for venta_mobile. Wraps the same
+  openmls build the desktop client uses, so both can join each other's groups.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.12.2
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.4
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      # No Dart-facing plugin class on either platform: the whole surface is
+      # `dart:ffi` against a library the native build produces. `ffiPlugin`
+      # tells the tool to build and bundle that library and nothing else.
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true

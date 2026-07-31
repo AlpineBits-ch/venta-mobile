@@ -28,6 +28,15 @@ import WebRTC
 {
   private static let channelName = "gg.venta.mobile/callkit"
 
+  // Where MLS state lives so that *both* this app and the notification service
+  // extension can open it. The extension is a separate process with its own
+  // sandbox and cannot see Application Support at all, so without a shared
+  // container it has no way to decrypt the message it is being asked to
+  // display. Kept in sync with `ios/NotificationService/NotificationService.swift`
+  // and with the App Group on both targets' entitlements.
+  static let appGroupIdentifier = "group.gg.venta.mobile"
+  private static let sharedContainerChannelName = "venta/shared_container"
+
   private lazy var cxProvider: CXProvider = {
     let config = CXProviderConfiguration(localizedName: "Venta Mobile")
     config.supportsVideo = false
@@ -112,6 +121,24 @@ import WebRTC
       self?.handleMethodCall(call, result: result)
     }
     callKitChannel = channel
+    attachSharedContainerChannel(messenger: messenger)
+  }
+
+  // Answers with nil rather than an error when the App Group is missing: a build
+  // signed without the entitlement must still run, it just keeps MLS state in the
+  // app's own directory and shows the encrypted placeholder in notifications.
+  private func attachSharedContainerChannel(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: Self.sharedContainerChannelName, binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "containerPath" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let url = FileManager.default.containerURL(
+        forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier)
+      result(url?.path)
+    }
   }
 
   // `pendingEvents` is the single source of truth - relayEvent always

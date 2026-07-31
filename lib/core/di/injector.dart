@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:get_it/get_it.dart';
 
 import '../../features/auth/data/account_repository.dart';
@@ -18,6 +20,7 @@ import '../../features/household/data/household_api.dart';
 import '../../features/household/data/household_repository.dart';
 import '../../features/messaging/data/bot_command_api.dart';
 import '../../features/messaging/data/message_api.dart';
+import '../../features/mls/data/mls_api.dart';
 import '../../features/profile/data/profile_api.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/voice/bloc/call_cubit.dart';
@@ -29,6 +32,15 @@ import '../../features/wiki/data/wiki_repository.dart';
 import '../device/device_api.dart';
 import '../device/device_id_service.dart';
 import '../device/device_registration_service.dart';
+import '../mls/channel_encryption_service.dart';
+import '../mls/conversation_encryption_service.dart';
+import '../mls/conversation_member_service.dart';
+import '../mls/mls_join_request_service.dart';
+import '../mls/mls_realtime_bridge.dart';
+import '../mls/mls_service.dart';
+import '../mls/mls_session_manager.dart';
+import '../mls/mls_store.dart';
+import '../mls/mls_sync_service.dart';
 import '../network/api_client.dart';
 import '../push/call_kit_service.dart';
 import '../push/push_notification_service.dart';
@@ -71,7 +83,11 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<DeviceApi>(() => DeviceApi(client: getIt()));
   getIt.registerLazySingleton<DeviceRegistrationService>(
-    () => DeviceRegistrationService(api: getIt(), deviceIdService: getIt()),
+    () => DeviceRegistrationService(
+      api: getIt(),
+      deviceIdService: getIt(),
+      mls: getIt(),
+    ),
   );
   getIt.registerLazySingleton<IdentityApi>(() => IdentityApi(client: getIt()));
   getIt.registerLazySingleton<AccountRepository>(
@@ -105,9 +121,69 @@ Future<void> configureDependencies() async {
     () => ConversationApi(client: getIt()),
   );
   getIt.registerLazySingleton<ConversationRepository>(
-    () => ConversationRepository(api: getIt(), realtimeService: getIt()),
+    () => ConversationRepository(
+      api: getIt(),
+      mlsSync: getIt(),
+      realtimeService: getIt(),
+    ),
   );
   getIt.registerLazySingleton<MessageApi>(() => MessageApi(client: getIt()));
+  getIt.registerLazySingleton<MlsApi>(() => MlsApi(client: getIt()));
+  getIt.registerLazySingleton<MlsStore>(() => MlsStore());
+  getIt.registerLazySingleton<MlsService>(
+    () => MlsService(
+      store: getIt(),
+      secureStorage: getIt(),
+      deviceIdService: getIt(),
+    ),
+  );
+  getIt.registerLazySingleton<MlsSyncService>(
+    () => MlsSyncService(mls: getIt(), api: getIt(), deviceIdService: getIt()),
+  );
+  getIt.registerLazySingleton<MlsSessionManager>(
+    () => MlsSessionManager(
+      mls: getIt(),
+      sync_: getIt(),
+      deviceApi: getIt(),
+      deviceIdService: getIt(),
+      authRepository: getIt(),
+      secureStorage: getIt(),
+    ),
+  );
+  getIt.registerLazySingleton<MlsRealtimeBridge>(
+    () => MlsRealtimeBridge(
+      realtimeService: getIt(),
+      mls: getIt(),
+      sync: getIt(),
+    ),
+  );
+  getIt.registerLazySingleton<ConversationEncryptionService>(
+    () => ConversationEncryptionService(
+      mls: getIt(),
+      api: getIt(),
+      conversationApi: getIt(),
+      deviceIdService: getIt(),
+    ),
+  );
+  getIt.registerLazySingleton<ConversationMemberService>(
+    () => ConversationMemberService(api: getIt(), mls: getIt(), sync: getIt()),
+  );
+  getIt.registerLazySingleton<MlsJoinRequestService>(
+    () => MlsJoinRequestService(
+      mls: getIt(),
+      sync: getIt(),
+      api: getIt(),
+      deviceIdService: getIt(),
+    ),
+  );
+  getIt.registerLazySingleton<ChannelEncryptionService>(
+    () => ChannelEncryptionService(
+      mls: getIt(),
+      sync: getIt(),
+      api: getIt(),
+      deviceIdService: getIt(),
+    ),
+  );
   getIt.registerLazySingleton<BotCommandApi>(
     () => BotCommandApi(client: getIt()),
   );
@@ -166,7 +242,11 @@ Future<void> configureDependencies() async {
     () => PushTokenApi(client: getIt()),
   );
   getIt.registerLazySingleton<PushNotificationService>(
-    () => PushNotificationService(api: getIt(), deviceIdService: getIt()),
+    () => PushNotificationService(
+      api: getIt(),
+      deviceIdService: getIt(),
+      mlsStore: getIt(),
+    ),
   );
   getIt.registerLazySingleton<CallKitService>(
     () => CallKitService(
@@ -200,6 +280,12 @@ void resetSessionScopedCaches() {
   // registered for the previous user means nothing to the next one, and every
   // call/voice action would be rejected until it registers again.
   getIt<DeviceRegistrationService>().reset();
+  // MLS is deliberately *not* reset here. It is per account too, and more
+  // sharply so - an identity is credentialed to one user id - but this function
+  // is synchronous and unloading group state is not, so doing it here would race
+  // the `MlsSessionManager.prepareIdentity` that runs moments later on sign-in.
+  // `MlsService.init` takes the user id and swaps state itself when it changes,
+  // which is the same outcome without the race.
 }
 
 /// Registers this device and starts the push-notification and native-call-UI
@@ -207,13 +293,24 @@ void resetSessionScopedCaches() {
 /// session, or right after login/register), mirroring [RealtimeService.start]'s
 /// own call sites.
 ///
-/// Registration goes first and is awaited: the push tokens registered just
-/// after are attached to that device row, and the `X-Device-Id` every call and
-/// voice-join carries is only honoured once the device exists.
+/// The MLS identity comes first and registration second, because the key the
+/// former mints is what the latter publishes as this device's
+/// `identityPublicKey` - see `MlsSessionManager` for the phase split.
+///
+/// Registration is awaited before the push services: the push tokens registered
+/// just after are attached to that device row, and the `X-Device-Id` every call
+/// and voice-join carries is only honoured once the device exists.
+///
+/// The MLS *sync* half runs detached. Uploading key packages and joining every
+/// group this device was invited to while away can take several round-trips, and
+/// none of the app's other screens need to wait on it.
 Future<void> startAuthenticatedServices() async {
+  await getIt<MlsSessionManager>().prepareIdentity();
   await getIt<DeviceRegistrationService>().ensureRegistered();
   await getIt<PushNotificationService>().start();
   await getIt<CallKitService>().start();
+  getIt<MlsRealtimeBridge>().start();
+  unawaited(getIt<MlsSessionManager>().sync());
 }
 
 /// Undoes the push half of [startAuthenticatedServices] while the session is
@@ -227,4 +324,10 @@ Future<void> startAuthenticatedServices() async {
 Future<void> stopAuthenticatedServices() async {
   await getIt<PushNotificationService>().unregisterToken();
   await getIt<CallKitService>().unregisterVoipToken();
+  await getIt<MlsRealtimeBridge>().stop();
+  // Locks the session, keeping the groups and the identity. Those belong to the
+  // installation, and throwing them away on an ordinary sign-out would lock this
+  // handset out of every group it is in - `MlsService.forgetEverything` is the
+  // deliberate version, wired to "forget this device".
+  await getIt<MlsSessionManager>().stop();
 }

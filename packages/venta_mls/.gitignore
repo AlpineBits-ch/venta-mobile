@@ -1,0 +1,11 @@
+# Cargo build artifacts. ~1.3GB after building every Android ABI - the .so files
+# that matter are produced into the Gradle build directory and packaged from
+# there, so nothing here needs tracking.
+rust/target/
+
+# Produced by ios/build_rust.sh on demand.
+ios/build/
+
+.dart_tool/
+.packages
+pubspec.lock

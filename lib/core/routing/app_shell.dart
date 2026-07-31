@@ -16,6 +16,7 @@ import '../theme/widget_styles.dart';
 import '../widgets/connection_status_banner.dart';
 import '../widgets/server_rail_icon.dart';
 import '../widgets/user_banner.dart';
+import '../widgets/venta_logo_mark.dart';
 import 'route_paths.dart';
 
 /// Persistent chrome for the authenticated app: a docked server-icon rail on
@@ -54,7 +55,14 @@ class _AppShellState extends State<AppShell> {
     guildRepo.guildsStream.listen((guilds) {
       if (mounted) setState(() => _guilds = guilds);
     });
-    if (_guilds.isEmpty) {
+    // Gated on "has the list ever been fetched", not on "is the cache empty".
+    // Those differ whenever a screen that opens a single guild mounted first -
+    // a restored `/server/:id/...` route, or the guild an invite just landed
+    // on - because `fetchGuild` seeds the cache with that one guild. Reading
+    // the old emptiness check, this skipped the list fetch entirely and left
+    // the rail showing one server out of however many the user is in, until
+    // something else happened to call `fetch`.
+    if (!guildRepo.hasFetchedList) {
       guildRepo.fetch().catchError((Object e, StackTrace st) {
         debugPrint('guild fetch failed: $e\n$st');
         return <GuildDto>[];
@@ -294,10 +302,8 @@ class _AppShellState extends State<AppShell> {
             child: Column(
               children: [
                 const SizedBox(height: AppSpacing.s),
-                ServerRailIcon(
+                _HomeRailIcon(
                   selected: onHome,
-                  icon: Icons.forum_rounded,
-                  backgroundColor: onHome ? theme.colorScheme.primary : null,
                   onTap: () => context.go(RoutePaths.home),
                 ),
                 Padding(
@@ -354,6 +360,37 @@ class _AppShellState extends State<AppShell> {
   String? _guildIdFromLocation(String location) {
     final match = RegExp(r'^/server/([^/]+)').firstMatch(location);
     return match?.group(1);
+  }
+}
+
+/// The rail's home button. Its own widget because the brand mark needs the
+/// chip's fill for the eyes, and that fill is otherwise decided inside
+/// [ServerRailIcon] - resolving it once here keeps the two from drifting.
+class _HomeRailIcon extends StatelessWidget {
+  const _HomeRailIcon({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final chipColor = selected
+        ? theme.colorScheme.primary
+        : context.statusColors.hover;
+    return ServerRailIcon(
+      selected: selected,
+      backgroundColor: chipColor,
+      onTap: onTap,
+      // Monochrome rather than the logo's coral: on the selected chip's brand
+      // indigo the coral is barely a 2:1 contrast, so the mark reads as a
+      // smudge exactly when it's meant to read as "you are here".
+      child: VentaLogoMark(
+        size: 34,
+        bodyColor: theme.colorScheme.onSurface,
+        eyeColor: chipColor,
+      ),
+    );
   }
 }
 

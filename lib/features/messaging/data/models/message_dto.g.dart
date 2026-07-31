@@ -62,6 +62,9 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
   ),
   pinnedById: json['pinnedById'] as String?,
   systemMessageVariant: (json['systemMessageVariant'] as num?)?.toInt(),
+  mlsGeneration: (json['mlsGeneration'] as num?)?.toInt(),
+  mlsEpoch: (json['mlsEpoch'] as num?)?.toInt(),
+  senderDeviceId: json['senderDeviceId'] as String?,
 );
 
 Map<String, dynamic> _$MessageDtoToJson(
@@ -95,6 +98,9 @@ Map<String, dynamic> _$MessageDtoToJson(
   ),
   'pinnedById': instance.pinnedById,
   'systemMessageVariant': instance.systemMessageVariant,
+  'mlsGeneration': instance.mlsGeneration,
+  'mlsEpoch': instance.mlsEpoch,
+  'senderDeviceId': instance.senderDeviceId,
 };
 
 Value? _$JsonConverterFromJson<Json, Value>(

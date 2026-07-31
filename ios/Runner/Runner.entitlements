@@ -4,5 +4,13 @@
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Shared with the NotificationService extension, which needs to read this
+	     app's MLS group state to decrypt the message it is about to display.
+	     Both targets must carry the identical group or the extension's
+	     containerURL(forSecurityApplicationGroupIdentifier:) returns nil. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.gg.venta.mobile</string>
+	</array>
 </dict>
 </plist>

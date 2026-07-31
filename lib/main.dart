@@ -25,6 +25,7 @@ Future<void> main() async {
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   HydratedBloc.storage = await HydratedStorage.build(
     storageDirectory: HydratedStorageDirectory(
+      
       (await getApplicationDocumentsDirectory()).path,
     ),
   );

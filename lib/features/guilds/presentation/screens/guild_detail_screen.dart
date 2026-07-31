@@ -234,7 +234,17 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     final guildId = widget.guildId;
     final repository = getIt<GuildRepository>();
     final cached = repository.cachedById(guildId);
-    if (cached != null && !_isStale(guildId)) {
+    // Painting the cache first is only worth doing when there is something to
+    // paint. A cached guild carrying no channels *and* no categories renders
+    // as a blank sidebar that is indistinguishable from "this server is
+    // empty" - which is a worse thing to show for the second it takes the
+    // fetch below to answer than the skeleton is, and it is exactly what a
+    // guild you have just joined looks like if it reached the cache before
+    // its contents did.
+    final cacheIsPaintable =
+        cached != null &&
+        (cached.channels.isNotEmpty || cached.categories.isNotEmpty);
+    if (cached != null && cacheIsPaintable && !_isStale(guildId)) {
       setState(() => _guild = cached);
       _hydrateVoiceRosters(cached);
       unawaited(_loadOwnPermissions(guildId, cached.ownerId));

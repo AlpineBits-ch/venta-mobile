@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/button_progress_indicator.dart';
+import '../../../../core/widgets/venta_logo_mark.dart';
 import '../../bloc/auth_bloc.dart';
 import '../widgets/verification_code_form.dart';
 
@@ -72,19 +73,19 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Icon(
-                        Icons.forum_rounded,
-                        color: theme.colorScheme.onPrimary,
-                        size: 32,
-                      ),
+                    // The desktop client's login lockup: the mark on the page,
+                    // not boxed inside a coloured tile of its own.
+                    Row(
+                      children: [
+                        const VentaLogoMark(size: 40),
+                        const SizedBox(width: AppSpacing.s),
+                        Text(
+                          'Venta',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: AppSpacing.l),
                     Text('Welcome back', style: theme.textTheme.titleLarge),
