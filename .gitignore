@@ -52,3 +52,5 @@ ios/ExportOptions.plist
 /ios/vendor/
 /android/app/release
 packages/*/pubspec.lock
+
+sentry.properties
