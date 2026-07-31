@@ -8,11 +8,12 @@ part of 'cf_signaling_dto.dart';
 
 _CfTrackResultDto _$CfTrackResultDtoFromJson(Map<String, dynamic> json) =>
     _CfTrackResultDto(
-      mid: json['mid'] as String,
+      mid: json['mid'] as String?,
       trackName: json['trackName'] as String,
       sessionId: json['sessionId'] as String?,
       location: json['location'] as String?,
-      error: json['error'] as String?,
+      errorCode: json['errorCode'] as String?,
+      errorDescription: json['errorDescription'] as String?,
     );
 
 Map<String, dynamic> _$CfTrackResultDtoToJson(_CfTrackResultDto instance) =>
@@ -21,7 +22,8 @@ Map<String, dynamic> _$CfTrackResultDtoToJson(_CfTrackResultDto instance) =>
       'trackName': instance.trackName,
       'sessionId': instance.sessionId,
       'location': instance.location,
-      'error': instance.error,
+      'errorCode': instance.errorCode,
+      'errorDescription': instance.errorDescription,
     };
 
 _CfTracksNewResponseDto _$CfTracksNewResponseDtoFromJson(

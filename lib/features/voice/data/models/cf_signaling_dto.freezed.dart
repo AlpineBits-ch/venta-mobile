@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$CfTrackResultDto {
 
- String get mid; String get trackName; String? get sessionId; String? get location; String? get error;
+ String? get mid; String get trackName; String? get sessionId; String? get location; String? get errorCode; String? get errorDescription;
 /// Create a copy of CfTrackResultDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $CfTrackResultDtoCopyWith<CfTrackResultDto> get copyWith => _$CfTrackResultDtoCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is CfTrackResultDto&&(identical(other.mid, mid) || other.mid == mid)&&(identical(other.trackName, trackName) || other.trackName == trackName)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.location, location) || other.location == location)&&(identical(other.error, error) || other.error == error));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CfTrackResultDto&&(identical(other.mid, mid) || other.mid == mid)&&(identical(other.trackName, trackName) || other.trackName == trackName)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.location, location) || other.location == location)&&(identical(other.errorCode, errorCode) || other.errorCode == errorCode)&&(identical(other.errorDescription, errorDescription) || other.errorDescription == errorDescription));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,mid,trackName,sessionId,location,error);
+int get hashCode => Object.hash(runtimeType,mid,trackName,sessionId,location,errorCode,errorDescription);
 
 @override
 String toString() {
-  return 'CfTrackResultDto(mid: $mid, trackName: $trackName, sessionId: $sessionId, location: $location, error: $error)';
+  return 'CfTrackResultDto(mid: $mid, trackName: $trackName, sessionId: $sessionId, location: $location, errorCode: $errorCode, errorDescription: $errorDescription)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $CfTrackResultDtoCopyWith<$Res>  {
   factory $CfTrackResultDtoCopyWith(CfTrackResultDto value, $Res Function(CfTrackResultDto) _then) = _$CfTrackResultDtoCopyWithImpl;
 @useResult
 $Res call({
- String mid, String trackName, String? sessionId, String? location, String? error
+ String? mid, String trackName, String? sessionId, String? location, String? errorCode, String? errorDescription
 });
 
 
@@ -65,13 +65,14 @@ class _$CfTrackResultDtoCopyWithImpl<$Res>
 
 /// Create a copy of CfTrackResultDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? mid = null,Object? trackName = null,Object? sessionId = freezed,Object? location = freezed,Object? error = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? mid = freezed,Object? trackName = null,Object? sessionId = freezed,Object? location = freezed,Object? errorCode = freezed,Object? errorDescription = freezed,}) {
   return _then(_self.copyWith(
-mid: null == mid ? _self.mid : mid // ignore: cast_nullable_to_non_nullable
-as String,trackName: null == trackName ? _self.trackName : trackName // ignore: cast_nullable_to_non_nullable
+mid: freezed == mid ? _self.mid : mid // ignore: cast_nullable_to_non_nullable
+as String?,trackName: null == trackName ? _self.trackName : trackName // ignore: cast_nullable_to_non_nullable
 as String,sessionId: freezed == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
 as String?,location: freezed == location ? _self.location : location // ignore: cast_nullable_to_non_nullable
-as String?,error: freezed == error ? _self.error : error // ignore: cast_nullable_to_non_nullable
+as String?,errorCode: freezed == errorCode ? _self.errorCode : errorCode // ignore: cast_nullable_to_non_nullable
+as String?,errorDescription: freezed == errorDescription ? _self.errorDescription : errorDescription // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -154,10 +155,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String mid,  String trackName,  String? sessionId,  String? location,  String? error)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? mid,  String trackName,  String? sessionId,  String? location,  String? errorCode,  String? errorDescription)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _CfTrackResultDto() when $default != null:
-return $default(_that.mid,_that.trackName,_that.sessionId,_that.location,_that.error);case _:
+return $default(_that.mid,_that.trackName,_that.sessionId,_that.location,_that.errorCode,_that.errorDescription);case _:
   return orElse();
 
 }
@@ -175,10 +176,10 @@ return $default(_that.mid,_that.trackName,_that.sessionId,_that.location,_that.e
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String mid,  String trackName,  String? sessionId,  String? location,  String? error)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? mid,  String trackName,  String? sessionId,  String? location,  String? errorCode,  String? errorDescription)  $default,) {final _that = this;
 switch (_that) {
 case _CfTrackResultDto():
-return $default(_that.mid,_that.trackName,_that.sessionId,_that.location,_that.error);}
+return $default(_that.mid,_that.trackName,_that.sessionId,_that.location,_that.errorCode,_that.errorDescription);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -192,10 +193,10 @@ return $default(_that.mid,_that.trackName,_that.sessionId,_that.location,_that.e
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String mid,  String trackName,  String? sessionId,  String? location,  String? error)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? mid,  String trackName,  String? sessionId,  String? location,  String? errorCode,  String? errorDescription)?  $default,) {final _that = this;
 switch (_that) {
 case _CfTrackResultDto() when $default != null:
-return $default(_that.mid,_that.trackName,_that.sessionId,_that.location,_that.error);case _:
+return $default(_that.mid,_that.trackName,_that.sessionId,_that.location,_that.errorCode,_that.errorDescription);case _:
   return null;
 
 }
@@ -207,14 +208,15 @@ return $default(_that.mid,_that.trackName,_that.sessionId,_that.location,_that.e
 @JsonSerializable()
 
 class _CfTrackResultDto implements CfTrackResultDto {
-  const _CfTrackResultDto({required this.mid, required this.trackName, this.sessionId, this.location, this.error});
+  const _CfTrackResultDto({this.mid, required this.trackName, this.sessionId, this.location, this.errorCode, this.errorDescription});
   factory _CfTrackResultDto.fromJson(Map<String, dynamic> json) => _$CfTrackResultDtoFromJson(json);
 
-@override final  String mid;
+@override final  String? mid;
 @override final  String trackName;
 @override final  String? sessionId;
 @override final  String? location;
-@override final  String? error;
+@override final  String? errorCode;
+@override final  String? errorDescription;
 
 /// Create a copy of CfTrackResultDto
 /// with the given fields replaced by the non-null parameter values.
@@ -229,16 +231,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CfTrackResultDto&&(identical(other.mid, mid) || other.mid == mid)&&(identical(other.trackName, trackName) || other.trackName == trackName)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.location, location) || other.location == location)&&(identical(other.error, error) || other.error == error));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CfTrackResultDto&&(identical(other.mid, mid) || other.mid == mid)&&(identical(other.trackName, trackName) || other.trackName == trackName)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.location, location) || other.location == location)&&(identical(other.errorCode, errorCode) || other.errorCode == errorCode)&&(identical(other.errorDescription, errorDescription) || other.errorDescription == errorDescription));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,mid,trackName,sessionId,location,error);
+int get hashCode => Object.hash(runtimeType,mid,trackName,sessionId,location,errorCode,errorDescription);
 
 @override
 String toString() {
-  return 'CfTrackResultDto(mid: $mid, trackName: $trackName, sessionId: $sessionId, location: $location, error: $error)';
+  return 'CfTrackResultDto(mid: $mid, trackName: $trackName, sessionId: $sessionId, location: $location, errorCode: $errorCode, errorDescription: $errorDescription)';
 }
 
 
@@ -249,7 +251,7 @@ abstract mixin class _$CfTrackResultDtoCopyWith<$Res> implements $CfTrackResultD
   factory _$CfTrackResultDtoCopyWith(_CfTrackResultDto value, $Res Function(_CfTrackResultDto) _then) = __$CfTrackResultDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String mid, String trackName, String? sessionId, String? location, String? error
+ String? mid, String trackName, String? sessionId, String? location, String? errorCode, String? errorDescription
 });
 
 
@@ -266,13 +268,14 @@ class __$CfTrackResultDtoCopyWithImpl<$Res>
 
 /// Create a copy of CfTrackResultDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? mid = null,Object? trackName = null,Object? sessionId = freezed,Object? location = freezed,Object? error = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? mid = freezed,Object? trackName = null,Object? sessionId = freezed,Object? location = freezed,Object? errorCode = freezed,Object? errorDescription = freezed,}) {
   return _then(_CfTrackResultDto(
-mid: null == mid ? _self.mid : mid // ignore: cast_nullable_to_non_nullable
-as String,trackName: null == trackName ? _self.trackName : trackName // ignore: cast_nullable_to_non_nullable
+mid: freezed == mid ? _self.mid : mid // ignore: cast_nullable_to_non_nullable
+as String?,trackName: null == trackName ? _self.trackName : trackName // ignore: cast_nullable_to_non_nullable
 as String,sessionId: freezed == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
 as String?,location: freezed == location ? _self.location : location // ignore: cast_nullable_to_non_nullable
-as String?,error: freezed == error ? _self.error : error // ignore: cast_nullable_to_non_nullable
+as String?,errorCode: freezed == errorCode ? _self.errorCode : errorCode // ignore: cast_nullable_to_non_nullable
+as String?,errorDescription: freezed == errorDescription ? _self.errorDescription : errorDescription // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }

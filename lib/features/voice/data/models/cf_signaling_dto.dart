@@ -7,14 +7,27 @@ part 'cf_signaling_dto.g.dart';
 /// typed class - it's only ever handed straight to `RTCSessionDescription`
 /// by `CallWebRtcService`, the one place that needs the flutter_webrtc type.
 
+/// One entry of Cloudflare's `tracks/new` response.
+///
+/// [mid] is nullable because Cloudflare omits it on a failed track - it used
+/// to be `required String`, so a failure response didn't just lose its error,
+/// it blew up deserialization. Never substitute a locally resolved transceiver
+/// mid for a missing one: media never arrives on it, and the subscribe looks
+/// like it worked.
+///
+/// [errorCode]/[errorDescription] are Cloudflare's per-track failure fields.
+/// The backend proxy now answers a response carrying them with a 502 instead
+/// of relaying it as a success, so they should not reach this client - they are
+/// declared because the wire contract has them.
 @freezed
 sealed class CfTrackResultDto with _$CfTrackResultDto {
   const factory CfTrackResultDto({
-    required String mid,
+    String? mid,
     required String trackName,
     String? sessionId,
     String? location,
-    String? error,
+    String? errorCode,
+    String? errorDescription,
   }) = _CfTrackResultDto;
 
   factory CfTrackResultDto.fromJson(Map<String, dynamic> json) =>

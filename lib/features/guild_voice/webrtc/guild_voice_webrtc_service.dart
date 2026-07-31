@@ -96,14 +96,17 @@ class GuildVoiceWebRtcService {
   Future<void> connect(String guildId, String channelId) async {
     _guildId = guildId;
     _channelId = channelId;
-    _pc = await createPeerConnection({
-      'sdpSemantics': 'unified-plan',
-      'bundlePolicy': 'max-bundle',
-    });
-    _pc!.onTrack = _handleRemoteTrack;
 
-    _cfSessionId = await api.cfCreateSession(guildId, channelId);
-
+    // Acquire the microphone BEFORE creating the Cloudflare session, matching
+    // Alpine's ordering. `POST /session` records this participant's
+    // CfSessionId in the channel roster, and until the audio track is actually
+    // published there is a window in which the roster advertises a session
+    // that carries nothing. The server no longer announces participants in
+    // that state, but getUserMedia here can block for seconds on the OS
+    // permission prompt - by far the widest such window anywhere in the stack,
+    // and the reason "no audio" was reported against mobile participants far
+    // more often than desktop ones. Opening it last shrinks it to the
+    // round-trip it has to be.
     final stream = await navigator.mediaDevices.getUserMedia({
       'audio': true,
       'video': false,
@@ -111,6 +114,14 @@ class GuildVoiceWebRtcService {
     final track = stream.getAudioTracks().first;
     _localStream = stream;
     _localAudioTrack = track;
+
+    _pc = await createPeerConnection({
+      'sdpSemantics': 'unified-plan',
+      'bundlePolicy': 'max-bundle',
+    });
+    _pc!.onTrack = _handleRemoteTrack;
+
+    _cfSessionId = await api.cfCreateSession(guildId, channelId);
 
     await _publishTrack(track: track, trackName: 'audio');
 
@@ -250,6 +261,16 @@ class GuildVoiceWebRtcService {
     mediaType: RTCRtpMediaType.RTCRtpMediaTypeVideo,
   );
 
+  /// Subscribes to one remote track, rolling the [_subscribedKeys] guard back
+  /// on any failure - see the identical method in `CallWebRtcService` for why
+  /// that rollback is what makes a failed subscribe recoverable instead of
+  /// permanent.
+  ///
+  /// Guild voice has no HTTP reconciliation path at all (the channel state
+  /// endpoint deliberately omits cfSessionId/audioTrackName), so
+  /// `guild.voice.ParticipantJoined` is the only thing that can ever retry
+  /// this - which makes leaving the guard consumed strictly worse here than in
+  /// a 1:1 call.
   Future<void> _subscribeTrack({
     required String userId,
     required String cfSessionId,
@@ -261,31 +282,45 @@ class GuildVoiceWebRtcService {
     final key = '$userId|${kind.name}';
     if (pc == null || !_subscribedKeys.add(key)) return;
 
-    final transceiver = await pc.addTransceiver(
-      kind: mediaType,
-      init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
-    );
+    try {
+      await pc.addTransceiver(
+        kind: mediaType,
+        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+      );
 
-    final results = await _offerAnswerCycle(
-      (pc) async => [
-        {
-          'location': 'remote',
-          'sessionId': cfSessionId,
-          'trackName': trackName,
-        },
-      ],
-    );
+      final results = await _offerAnswerCycle(
+        (pc) async => [
+          {
+            'location': 'remote',
+            'sessionId': cfSessionId,
+            'trackName': trackName,
+          },
+        ],
+      );
 
-    final mid =
-        results.firstWhere(
-              (r) => r['trackName'] == trackName,
-              orElse: () => const {},
-            )['mid']
-            as String? ??
-        await _resolveMid(pc, transceiver) ??
-        '';
-    _midOwners[mid] = (userId: userId, kind: kind);
-    _processPendingTracks();
+      // Only Cloudflare's own mid can route this track. A locally resolved one
+      // would name a transceiver Cloudflare never attached anything to.
+      final mid =
+          results.firstWhere(
+                (r) => r['trackName'] == trackName,
+                orElse: () => const {},
+              )['mid']
+              as String?;
+      if (mid == null || mid.isEmpty) {
+        throw StateError(
+          'Cloudflare returned no mid for ${kind.name} track "$trackName" '
+          'on session $cfSessionId',
+        );
+      }
+
+      _midOwners[mid] = (userId: userId, kind: kind);
+      _processPendingTracks();
+    } catch (e) {
+      _subscribedKeys.remove(key);
+      debugPrint(
+        '[GuildVoice] subscribe failed for $userId (${kind.name}, "$trackName"): $e',
+      );
+    }
   }
 
   // flutter_webrtc's RTCRtpTransceiver.mid is a snapshot taken when
@@ -417,8 +452,9 @@ class GuildVoiceWebRtcService {
     if (pc == null ||
         guildId == null ||
         channelId == null ||
-        cfSessionId == null)
+        cfSessionId == null) {
       return const [];
+    }
 
     final offer = await pc.createOffer();
     await pc.setLocalDescription(offer);

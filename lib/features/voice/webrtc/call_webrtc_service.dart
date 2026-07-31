@@ -97,14 +97,12 @@ class CallWebRtcService {
 
   Future<void> connect(String callId) async {
     _callId = callId;
-    _pc = await createPeerConnection({
-      'sdpSemantics': 'unified-plan',
-      'bundlePolicy': 'max-bundle',
-    });
-    _pc!.onTrack = _handleRemoteTrack;
 
-    _cfSessionId = await api.cfCreateSession(callId);
-
+    // Microphone first, then the Cloudflare session - see the same reordering
+    // in GuildVoiceWebRtcService.connect. `POST /session` publishes this
+    // participant as connected, and getUserMedia can block for seconds on the
+    // OS permission prompt; doing it first keeps the gap between "announced"
+    // and "actually publishing audio" down to a round trip.
     final stream = await navigator.mediaDevices.getUserMedia({
       'audio': true,
       'video': false,
@@ -112,6 +110,14 @@ class CallWebRtcService {
     final track = stream.getAudioTracks().first;
     _localStream = stream;
     _localAudioTrack = track;
+
+    _pc = await createPeerConnection({
+      'sdpSemantics': 'unified-plan',
+      'bundlePolicy': 'max-bundle',
+    });
+    _pc!.onTrack = _handleRemoteTrack;
+
+    _cfSessionId = await api.cfCreateSession(callId);
 
     await _publishTrack(track: track, trackName: 'audio');
 
@@ -249,6 +255,16 @@ class CallWebRtcService {
     mediaType: RTCRtpMediaType.RTCRtpMediaTypeVideo,
   );
 
+  /// Subscribes to one remote track, rolling the [_subscribedKeys] guard back
+  /// on any failure.
+  ///
+  /// That rollback is the whole point: every path that could ever retry this
+  /// subscription (the live `ParticipantJoined`, the reconnect backfill) is
+  /// gated behind the same guard, so a single failure used to mean this
+  /// participant was silently inaudible for the rest of the session. There was
+  /// no try/catch here at all, and the mid fallback chain ended in `?? ''`,
+  /// which registered `_midOwners['']` - an owner entry no inbound track can
+  /// ever match, and one that every subsequent failed subscribe overwrote.
   Future<void> _subscribeTrack({
     required String userId,
     required String cfSessionId,
@@ -260,31 +276,45 @@ class CallWebRtcService {
     final key = '$userId|${kind.name}';
     if (pc == null || !_subscribedKeys.add(key)) return;
 
-    final transceiver = await pc.addTransceiver(
-      kind: mediaType,
-      init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
-    );
+    try {
+      await pc.addTransceiver(
+        kind: mediaType,
+        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+      );
 
-    final results = await _offerAnswerCycle(
-      (pc) async => [
-        {
-          'location': 'remote',
-          'sessionId': cfSessionId,
-          'trackName': trackName,
-        },
-      ],
-    );
+      final results = await _offerAnswerCycle(
+        (pc) async => [
+          {
+            'location': 'remote',
+            'sessionId': cfSessionId,
+            'trackName': trackName,
+          },
+        ],
+      );
 
-    final mid =
-        results.firstWhere(
-              (r) => r['trackName'] == trackName,
-              orElse: () => const {},
-            )['mid']
-            as String? ??
-        await _resolveMid(pc, transceiver) ??
-        '';
-    _midOwners[mid] = (userId: userId, kind: kind);
-    _processPendingTracks();
+      // Only Cloudflare's own mid can route this track. A locally resolved one
+      // would name a transceiver Cloudflare never attached anything to.
+      final mid =
+          results.firstWhere(
+                (r) => r['trackName'] == trackName,
+                orElse: () => const {},
+              )['mid']
+              as String?;
+      if (mid == null || mid.isEmpty) {
+        throw StateError(
+          'Cloudflare returned no mid for ${kind.name} track "$trackName" '
+          'on session $cfSessionId',
+        );
+      }
+
+      _midOwners[mid] = (userId: userId, kind: kind);
+      _processPendingTracks();
+    } catch (e) {
+      _subscribedKeys.remove(key);
+      debugPrint(
+        '[WebRTC] subscribe failed for $userId (${kind.name}, "$trackName"): $e',
+      );
+    }
   }
 
   // flutter_webrtc's RTCRtpTransceiver.mid is a snapshot taken when
