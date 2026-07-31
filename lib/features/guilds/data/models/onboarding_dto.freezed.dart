@@ -1633,7 +1633,7 @@ return $default(_that.memberId,_that.userId,_that.nickname,_that.joinedAt);case 
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _PendingMemberDto implements PendingMemberDto {
   const _PendingMemberDto({required this.memberId, required this.userId, this.nickname, this.joinedAt});
   factory _PendingMemberDto.fromJson(Map<String, dynamic> json) => _$PendingMemberDtoFromJson(json);

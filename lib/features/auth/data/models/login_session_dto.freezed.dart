@@ -210,7 +210,7 @@ return $default(_that.id,_that.deviceName,_that.deviceType,_that.ipAddress,_that
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _LoginSessionDto implements LoginSessionDto {
   const _LoginSessionDto({required this.id, this.deviceName, this.deviceType, this.ipAddress, this.createdAt, this.lastUsedAt, this.isCurrent = false});
   factory _LoginSessionDto.fromJson(Map<String, dynamic> json) => _$LoginSessionDtoFromJson(json);

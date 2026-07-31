@@ -217,7 +217,7 @@ return $default(_that.id,_that.guildId,_that.actorUserId,_that.actionType,_that.
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _AuditLogEntryDto implements AuditLogEntryDto {
   const _AuditLogEntryDto({required this.id, required this.guildId, required this.actorUserId, @JsonKey(unknownEnumValue: AuditActionType.unknown) required this.actionType, @JsonKey(name: 'actionType', includeToJson: false) this.rawActionType = '', this.targetId, this.metadata, this.createdAt});
   factory _AuditLogEntryDto.fromJson(Map<String, dynamic> json) => _$AuditLogEntryDtoFromJson(json);

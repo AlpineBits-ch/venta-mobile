@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 import 'guild_features.dart';
 import 'guild_permissions.dart';
 
@@ -110,6 +112,7 @@ extension ChannelPermissionDtoX on ChannelPermissionDto {
 
 @freezed
 sealed class ChannelDto with _$ChannelDto {
+  @ApiDateTimeConverter()
   const factory ChannelDto({
     required String id,
     required String name,

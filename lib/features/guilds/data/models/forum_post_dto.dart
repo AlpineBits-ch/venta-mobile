@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'forum_post_dto.freezed.dart';
 part 'forum_post_dto.g.dart';
 
@@ -15,6 +17,7 @@ part 'forum_post_dto.g.dart';
 /// card).
 @freezed
 sealed class ForumPostDto with _$ForumPostDto {
+  @ApiDateTimeConverter()
   const factory ForumPostDto({
     required String id,
     required String guildId,

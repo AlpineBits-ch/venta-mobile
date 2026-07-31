@@ -9,20 +9,28 @@ part of 'user_dto.dart';
 _UserDto _$UserDtoFromJson(Map<String, dynamic> json) => _UserDto(
   id: json['id'] as String,
   status: $enumDecode(_$UserStatusEnumMap, json['status']),
-  deletionRequestedAt: json['deletionRequestedAt'] == null
-      ? null
-      : DateTime.parse(json['deletionRequestedAt'] as String),
-  purgeScheduledAt: json['purgeScheduledAt'] == null
-      ? null
-      : DateTime.parse(json['purgeScheduledAt'] as String),
+  deletionRequestedAt: _$JsonConverterFromJson<String, DateTime>(
+    json['deletionRequestedAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
+  purgeScheduledAt: _$JsonConverterFromJson<String, DateTime>(
+    json['purgeScheduledAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
   mfaEnabled: json['mfaEnabled'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$UserDtoToJson(_UserDto instance) => <String, dynamic>{
   'id': instance.id,
   'status': _$UserStatusEnumMap[instance.status]!,
-  'deletionRequestedAt': instance.deletionRequestedAt?.toIso8601String(),
-  'purgeScheduledAt': instance.purgeScheduledAt?.toIso8601String(),
+  'deletionRequestedAt': _$JsonConverterToJson<String, DateTime>(
+    instance.deletionRequestedAt,
+    const ApiDateTimeConverter().toJson,
+  ),
+  'purgeScheduledAt': _$JsonConverterToJson<String, DateTime>(
+    instance.purgeScheduledAt,
+    const ApiDateTimeConverter().toJson,
+  ),
   'mfaEnabled': instance.mfaEnabled,
 };
 
@@ -34,3 +42,13 @@ const _$UserStatusEnumMap = {
   UserStatus.inactive: 'Inactive',
   UserStatus.banned: 'Banned',
 };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

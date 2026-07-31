@@ -108,6 +108,7 @@ Future<Set<String>?> showForumTagPickerSheet(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
+    useSafeArea: true,
     builder: (sheetContext) => _TagPickerSheet(
       tags: tags,
       initialSelection: initialSelection,

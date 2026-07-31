@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venta_mobile/features/household/data/models/house_dto.dart';
 import 'package:venta_mobile/features/household/data/money.dart';
+import 'package:venta_mobile/features/household/presentation/widgets/household_widgets.dart';
 
 /// The two pieces of household logic that live on the client rather than the
 /// server, and where being wrong is expensive: money (a mis-parsed amount is a
@@ -96,6 +97,31 @@ void main() {
       expect(formatMinuteOfDay(7 * 60), '07:00');
       expect(formatMinuteOfDay(22 * 60 + 30), '22:30');
       expect(formatMinuteOfDay(23 * 60 + 59), '23:59');
+    });
+  });
+
+  /// A list item's quantity is a server-supplied string and the pantry's is a
+  /// local `double`, so the pantry restock that writes `5.0 Tab` onto the
+  /// shopping list put `5.0 Tab` and `5` on screen for the same stock.
+  group('formatListQuantity', () {
+    test('respells a leading decimal the way the pantry does', () {
+      expect(formatListQuantity('5.0 Tab'), '5 Tab');
+      expect(formatListQuantity('5.50 kg'), '5.5 kg');
+      expect(formatListQuantity('2.0'), '2');
+    });
+
+    test('leaves free text alone', () {
+      expect(formatListQuantity('a bunch of the small ones'), 'a bunch of the '
+          'small ones');
+      expect(formatListQuantity('2x6 pack'), '2x6 pack');
+      expect(formatListQuantity('half a kilo'), 'half a kilo');
+      expect(formatListQuantity(''), '');
+      expect(formatListQuantity('   '), '');
+    });
+
+    test('keeps a quantity that was already tidy', () {
+      expect(formatListQuantity('5 Tab'), '5 Tab');
+      expect(formatListQuantity('1.5 l'), '1.5 l');
     });
   });
 }

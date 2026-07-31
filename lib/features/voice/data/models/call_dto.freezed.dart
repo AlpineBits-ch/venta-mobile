@@ -733,7 +733,7 @@ return $default(_that.id,_that.conversationId,_that.status,_that.createdAt,_that
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _CallDto implements CallDto {
   const _CallDto({required this.id, required this.conversationId, this.status, this.createdAt, this.updatedAt, final  List<CallTrackDto> tracks = const <CallTrackDto>[], final  List<CallParticipantDto> participants = const <CallParticipantDto>[]}): _tracks = tracks,_participants = participants;
   factory _CallDto.fromJson(Map<String, dynamic> json) => _$CallDtoFromJson(json);

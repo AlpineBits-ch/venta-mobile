@@ -212,7 +212,7 @@ return $default(_that.id,_that.guildId,_that.creatorUserId,_that.title,_that.des
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _ScheduledEventDto implements ScheduledEventDto {
   const _ScheduledEventDto({required this.id, required this.guildId, required this.creatorUserId, required this.title, this.description, required this.startsAt, this.endsAt, this.location, this.voiceChannelId, this.status = EventStatus.scheduled, this.interestedCount = 0, this.isInterested = false});
   factory _ScheduledEventDto.fromJson(Map<String, dynamic> json) => _$ScheduledEventDtoFromJson(json);

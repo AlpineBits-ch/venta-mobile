@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'ledger_dto.freezed.dart';
 part 'ledger_dto.g.dart';
 
@@ -67,6 +69,7 @@ sealed class ExpenseShareDto with _$ExpenseShareDto {
 /// you'll disagree with the server on rounding.
 @freezed
 sealed class ExpenseDto with _$ExpenseDto {
+  @ApiDateTimeConverter()
   const factory ExpenseDto({
     required String id,
     required String channelId,

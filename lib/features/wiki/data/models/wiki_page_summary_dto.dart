@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'wiki_page_summary_dto.freezed.dart';
 part 'wiki_page_summary_dto.g.dart';
 
@@ -19,6 +21,7 @@ enum WikiVisibility {
 /// `WikiPageSummaryDto`.
 @freezed
 sealed class WikiPageSummaryDto with _$WikiPageSummaryDto {
+  @ApiDateTimeConverter()
   const factory WikiPageSummaryDto({
     required String id,
     required String guildId,

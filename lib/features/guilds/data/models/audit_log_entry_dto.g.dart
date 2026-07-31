@@ -19,9 +19,10 @@ _AuditLogEntryDto _$AuditLogEntryDtoFromJson(Map<String, dynamic> json) =>
       rawActionType: json['actionType'] as String? ?? '',
       targetId: json['targetId'] as String?,
       metadata: json['metadata'] as String?,
-      createdAt: json['createdAt'] == null
-          ? null
-          : DateTime.parse(json['createdAt'] as String),
+      createdAt: _$JsonConverterFromJson<String, DateTime>(
+        json['createdAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
     );
 
 Map<String, dynamic> _$AuditLogEntryDtoToJson(_AuditLogEntryDto instance) =>
@@ -32,7 +33,10 @@ Map<String, dynamic> _$AuditLogEntryDtoToJson(_AuditLogEntryDto instance) =>
       'actionType': _$AuditActionTypeEnumMap[instance.actionType]!,
       'targetId': instance.targetId,
       'metadata': instance.metadata,
-      'createdAt': instance.createdAt?.toIso8601String(),
+      'createdAt': _$JsonConverterToJson<String, DateTime>(
+        instance.createdAt,
+        const ApiDateTimeConverter().toJson,
+      ),
     };
 
 const _$AuditActionTypeEnumMap = {
@@ -78,3 +82,13 @@ const _$AuditActionTypeEnumMap = {
   AuditActionType.channelFollowRemoved: 'ChannelFollowRemoved',
   AuditActionType.unknown: 'unknown',
 };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

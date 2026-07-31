@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'message_reaction_dto.freezed.dart';
 part 'message_reaction_dto.g.dart';
 
@@ -8,6 +10,7 @@ part 'message_reaction_dto.g.dart';
 /// `MessageReaction` (`dtos/response/message.dto.ts`).
 @freezed
 sealed class MessageReactionDto with _$MessageReactionDto {
+  @ApiDateTimeConverter()
   const factory MessageReactionDto({
     required String messageId,
     required String emoji,

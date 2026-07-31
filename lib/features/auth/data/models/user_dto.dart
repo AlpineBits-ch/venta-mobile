@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'user_dto.freezed.dart';
 part 'user_dto.g.dart';
 
@@ -20,6 +22,7 @@ enum UserStatus {
 
 @freezed
 sealed class UserDto with _$UserDto {
+  @ApiDateTimeConverter()
   const factory UserDto({
     required String id,
     required UserStatus status,

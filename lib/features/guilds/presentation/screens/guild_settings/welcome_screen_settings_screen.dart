@@ -129,6 +129,7 @@ class _WelcomeScreenSettingsScreenState
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) => SafeArea(
         child: ListView(
           shrinkWrap: true,

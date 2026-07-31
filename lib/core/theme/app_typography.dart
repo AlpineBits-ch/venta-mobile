@@ -3,8 +3,26 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// Discord-like type scale, set in Inter (Alpine's `--font-sans`).
 abstract final class AppTypography {
+  /// Inter has no emoji coverage at all, and `google_fonts` hands Flutter a
+  /// family with no fallback list - so every emoji in the app is relying on
+  /// the engine's implicit walk of the platform font chain, which is where
+  /// tofu boxes come from when it doesn't find one. Naming the platform emoji
+  /// families explicitly puts them ahead of that guess on both platforms.
+  ///
+  /// Note this can only help for codepoints some installed font actually has:
+  /// an emoji newer than the device's emoji font still has nothing to fall
+  /// back *to*, and only bundling a font would fix that.
+  static const _emojiFallback = <String>[
+    'Noto Color Emoji', // Android
+    'Noto Emoji',
+    'Apple Color Emoji', // iOS/macOS
+    'Segoe UI Emoji', // Windows
+  ];
+
   static TextTheme textTheme(Color primary, Color secondary, Color muted) {
-    final base = GoogleFonts.interTextTheme();
+    final base = GoogleFonts.interTextTheme().apply(
+      fontFamilyFallback: _emojiFallback,
+    );
     return base.copyWith(
       // Dialog titles (AlertDialog's Material 3 default reads headlineSmall)
       // and any other display/headline text - left uncolored here before,

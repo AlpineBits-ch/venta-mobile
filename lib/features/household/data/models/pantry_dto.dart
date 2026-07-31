@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'pantry_dto.freezed.dart';
 part 'pantry_dto.g.dart';
 
@@ -10,6 +12,7 @@ part 'pantry_dto.g.dart';
 /// compared against [lowThreshold] to drive the restock loop.
 @freezed
 sealed class PantryItemDto with _$PantryItemDto {
+  @ApiDateTimeConverter()
   const factory PantryItemDto({
     required String id,
     required String channelId,
@@ -43,9 +46,7 @@ extension PantryItemX on PantryItemDto {
     final expiry = expiresAt;
     if (expiry == null) return false;
     final reference = now ?? DateTime.now();
-    return expiry.toLocal().isBefore(
-      reference.add(Duration(days: days)),
-    );
+    return expiry.toLocal().isBefore(reference.add(Duration(days: days)));
   }
 
   bool isExpired({DateTime? now}) =>

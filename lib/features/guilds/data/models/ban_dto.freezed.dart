@@ -206,7 +206,7 @@ return $default(_that.id,_that.guildId,_that.bannedUserId,_that.bannedByUserId,_
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _BanDto implements BanDto {
   const _BanDto({required this.id, required this.guildId, required this.bannedUserId, this.bannedByUserId, this.reason, this.createdAt});
   factory _BanDto.fromJson(Map<String, dynamic> json) => _$BanDtoFromJson(json);

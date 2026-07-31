@@ -209,7 +209,7 @@ return $default(_that.id,_that.guildId,_that.name,_that.animated,_that.createdBy
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _GuildEmojiDto implements GuildEmojiDto {
   const _GuildEmojiDto({required this.id, required this.guildId, required this.name, this.animated = false, required this.createdByUserId, this.createdAt, required this.imageUrl});
   factory _GuildEmojiDto.fromJson(Map<String, dynamic> json) => _$GuildEmojiDtoFromJson(json);

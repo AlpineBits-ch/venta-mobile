@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'guild_emoji_dto.freezed.dart';
 part 'guild_emoji_dto.g.dart';
 
@@ -9,6 +11,7 @@ part 'guild_emoji_dto.g.dart';
 /// this pass, reactions only.
 @freezed
 sealed class GuildEmojiDto with _$GuildEmojiDto {
+  @ApiDateTimeConverter()
   const factory GuildEmojiDto({
     required String id,
     required String guildId,

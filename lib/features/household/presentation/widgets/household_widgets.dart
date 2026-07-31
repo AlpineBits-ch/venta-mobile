@@ -26,6 +26,33 @@ HouseholdApi get householdApi => getIt<HouseholdApi>();
 String householdErrorText(Object error, String fallback) =>
     apiErrorMessage(error) ?? fallback;
 
+/// `1.0` -> `1`, `1.5` -> `1.5`. Stock is decimal on the wire because it's
+/// compared against a threshold, but "1.0 eggs" reads like a bug.
+String formatQuantity(double value) {
+  if (value == value.roundToDouble()) return value.toInt().toString();
+  return value
+      .toStringAsFixed(2)
+      .replaceAll(RegExp(r'0+$'), '')
+      .replaceAll(RegExp(r'\.$'), '');
+}
+
+/// A list item's quantity is free text ("a bunch of the small ones"), so it's
+/// shown as typed - except when the pantry wrote it. The restock hand-off
+/// stringifies a decimal server-side and lands `5.0 Tab` on the shopping list
+/// while the pantry itself shows the same stock as `5`: one number, two
+/// spellings, both on screen at once. Only a leading number is touched, and
+/// only to give it the same spelling [formatQuantity] would.
+final _leadingNumberRe = RegExp(r'^(\d+(?:\.\d+)?)(?=$|\s)');
+
+String formatListQuantity(String raw) {
+  final trimmed = raw.trim();
+  final match = _leadingNumberRe.firstMatch(trimmed);
+  if (match == null) return trimmed;
+  final value = double.tryParse(match.group(1)!);
+  if (value == null) return trimmed;
+  return formatQuantity(value) + trimmed.substring(match.end);
+}
+
 /// A person's display name, resolved from their id.
 ///
 /// Says "You" for yourself, because every one of these screens is fundamentally
@@ -231,9 +258,19 @@ class HouseEmptyState extends StatelessWidget {
 /// both wrong and infuriating. The channel and its contents are still there;
 /// only the module is off.
 class ModuleOffView extends StatelessWidget {
-  const ModuleOffView({super.key, required this.feature, this.onOpenSettings});
+  const ModuleOffView({
+    super.key,
+    required this.feature,
+    this.guildNoun = 'server',
+    this.onOpenSettings,
+  });
 
   final String feature;
+
+  /// What this guild's members call it - `GuildKind.noun`, lowercased. A
+  /// household calling its own settings "server settings" is the one piece of
+  /// gaming-server vocabulary that leaks into an otherwise house-shaped UI.
+  final String guildNoun;
 
   /// Only passed when the viewer actually has `ManageGuild` - for everyone
   /// else this is information, not a task.
@@ -247,13 +284,13 @@ class ModuleOffView extends StatelessWidget {
       title: '$label is switched off',
       body:
           'This channel and everything in it is still here. Turning the '
-          '$label module back on in server settings brings it back exactly '
+          '$label module back on in $guildNoun settings brings it back exactly '
           'as it was.',
       action: onOpenSettings == null
           ? null
           : OutlinedButton(
               onPressed: onOpenSettings,
-              child: const Text('Open server settings'),
+              child: Text('Open $guildNoun settings'),
             ),
     );
   }
@@ -418,6 +455,12 @@ class HouseSheet extends StatelessWidget {
 /// Sheets are opened on the root navigator throughout this app - the shell's
 /// nav rail lives in a sibling of the content pane's own Navigator, so a
 /// sheet opened locally is clipped to the pane instead of covering the device.
+///
+/// `useSafeArea` is what keeps a tall sheet (the chore editor is the tallest)
+/// off the status bar: `isScrollControlled` lets it grow to the full height of
+/// the screen, and `showModalBottomSheet` strips the top padding from the
+/// `MediaQuery` it hands the builder - so [HouseSheet]'s own `SafeArea` has
+/// nothing left to work with and the title lands on top of the system clock.
 Future<T?> showHouseSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -425,5 +468,6 @@ Future<T?> showHouseSheet<T>({
   context: context,
   useRootNavigator: true,
   isScrollControlled: true,
+  useSafeArea: true,
   builder: builder,
 );

@@ -1,10 +1,13 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'wiki_revision_dto.freezed.dart';
 part 'wiki_revision_dto.g.dart';
 
 @freezed
 sealed class WikiRevisionDto with _$WikiRevisionDto {
+  @ApiDateTimeConverter()
   const factory WikiRevisionDto({
     required String id,
     required String pageId,

@@ -169,6 +169,7 @@ abstract class HouseholdChannelState<W extends StatefulWidget> extends State<W> 
   /// The body to render instead of the module's own when it's switched off.
   Widget buildModuleOff() => ModuleOffView(
     feature: requiredFeature,
+    guildNoun: (guild?.kind.noun ?? 'Server').toLowerCase(),
     onOpenSettings: can('ManageGuild')
         ? () => context.push(RoutePaths.serverSettingsPath(guildId))
         : null,

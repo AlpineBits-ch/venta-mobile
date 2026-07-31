@@ -81,7 +81,8 @@ class _ModulesSettingsTabState extends State<ModulesSettingsTab> {
       builder: (dialogContext) => AlertDialog(
         title: Text('Make this a ${kind.label.toLowerCase()}?'),
         content: Text(
-          'Switching to ${kind.label} can replace this server\'s modules with '
+          'Switching to ${kind.label} can replace this '
+          '${guild.kind.noun.toLowerCase()}\'s modules with '
           'that preset. Nothing is deleted either way - modules only hide '
           'things, and turning one back on brings it back intact.',
         ),
@@ -200,10 +201,10 @@ class _ModulesSettingsTabState extends State<ModulesSettingsTab> {
             ],
           ),
         ),
-        const SettingsFootnote(
+        SettingsFootnote(
           'The first five each add a kind of channel. The last three are about '
-          'the whole house rather than one channel, and show up on the server '
-          'itself.',
+          'the whole house rather than one channel, and show up on the '
+          '${(_guild?.kind.noun ?? 'server').toLowerCase()} itself.',
         ),
         if (_error != null) ...[
           const SizedBox(height: AppSpacing.m),

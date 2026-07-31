@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'call_dto.freezed.dart';
 part 'call_dto.g.dart';
 
@@ -36,6 +38,7 @@ sealed class CallDto with _$CallDto {
   /// [status] is the backend's `CallStatus` enum as a string (Pending,
   /// Ringing, Rejected, Connected, Completed) - used to detect a missed
   /// `call.CallEnded` event on reconnect.
+  @ApiDateTimeConverter()
   const factory CallDto({
     required String id,
     required String conversationId,

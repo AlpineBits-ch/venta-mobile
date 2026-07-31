@@ -215,7 +215,7 @@ return $default(_that.messageId,_that.emoji,_that.userId,_that.emojiId,_that.con
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _MessageReactionDto implements MessageReactionDto {
   const _MessageReactionDto({required this.messageId, required this.emoji, required this.userId, this.emojiId, this.contextId, this.createdAt, this.conversationId, this.channelId});
   factory _MessageReactionDto.fromJson(Map<String, dynamic> json) => _$MessageReactionDtoFromJson(json);

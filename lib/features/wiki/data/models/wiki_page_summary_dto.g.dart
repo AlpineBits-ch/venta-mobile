@@ -14,12 +14,14 @@ _WikiPageSummaryDto _$WikiPageSummaryDtoFromJson(Map<String, dynamic> json) =>
       slug: json['slug'] as String,
       authorId: json['authorId'] as String,
       lastEditorId: json['lastEditorId'] as String?,
-      createdAt: json['createdAt'] == null
-          ? null
-          : DateTime.parse(json['createdAt'] as String),
-      updatedAt: json['updatedAt'] == null
-          ? null
-          : DateTime.parse(json['updatedAt'] as String),
+      createdAt: _$JsonConverterFromJson<String, DateTime>(
+        json['createdAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
+      updatedAt: _$JsonConverterFromJson<String, DateTime>(
+        json['updatedAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
       parentPageId: json['parentPageId'] as String?,
       categoryId: json['categoryId'] as String?,
       visibility:
@@ -40,8 +42,14 @@ Map<String, dynamic> _$WikiPageSummaryDtoToJson(_WikiPageSummaryDto instance) =>
       'slug': instance.slug,
       'authorId': instance.authorId,
       'lastEditorId': instance.lastEditorId,
-      'createdAt': instance.createdAt?.toIso8601String(),
-      'updatedAt': instance.updatedAt?.toIso8601String(),
+      'createdAt': _$JsonConverterToJson<String, DateTime>(
+        instance.createdAt,
+        const ApiDateTimeConverter().toJson,
+      ),
+      'updatedAt': _$JsonConverterToJson<String, DateTime>(
+        instance.updatedAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'parentPageId': instance.parentPageId,
       'categoryId': instance.categoryId,
       'visibility': _$WikiVisibilityEnumMap[instance.visibility]!,
@@ -50,7 +58,17 @@ Map<String, dynamic> _$WikiPageSummaryDtoToJson(_WikiPageSummaryDto instance) =>
       'revisionCount': instance.revisionCount,
     };
 
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
 const _$WikiVisibilityEnumMap = {
   WikiVisibility.public: 'Public',
   WikiVisibility.private: 'Private',
 };
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

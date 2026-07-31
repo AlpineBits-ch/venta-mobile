@@ -482,7 +482,7 @@ return $default(_that.id,_that.channelId,_that.payerUserId,_that.description,_th
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _ExpenseDto implements ExpenseDto {
   const _ExpenseDto({required this.id, required this.channelId, this.payerUserId = '', this.description = '', this.amountMinor = 0, this.currency = 'CHF', this.occurredAt, @JsonKey(unknownEnumValue: SplitKind.equal) this.splitKind = SplitKind.equal, this.createdByUserId = '', final  List<ExpenseShareDto> shares = const <ExpenseShareDto>[]}): _shares = shares;
   factory _ExpenseDto.fromJson(Map<String, dynamic> json) => _$ExpenseDtoFromJson(json);

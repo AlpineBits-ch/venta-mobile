@@ -13,12 +13,14 @@ _ForumPostDto _$ForumPostDtoFromJson(Map<String, dynamic> json) =>
       parentChannelId: json['parentChannelId'] as String?,
       name: json['name'] as String,
       description: json['description'] as String?,
-      createdAt: json['createdAt'] == null
-          ? null
-          : DateTime.parse(json['createdAt'] as String),
-      updatedAt: json['updatedAt'] == null
-          ? null
-          : DateTime.parse(json['updatedAt'] as String),
+      createdAt: _$JsonConverterFromJson<String, DateTime>(
+        json['createdAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
+      updatedAt: _$JsonConverterFromJson<String, DateTime>(
+        json['updatedAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
       createdByUserId: json['createdByUserId'] as String?,
       tagIds:
           (json['tagIds'] as List<dynamic>?)
@@ -28,13 +30,15 @@ _ForumPostDto _$ForumPostDtoFromJson(Map<String, dynamic> json) =>
       isPinned: json['isPinned'] as bool? ?? false,
       isLocked: json['isLocked'] as bool? ?? false,
       isArchived: json['isArchived'] as bool? ?? false,
-      autoArchiveAt: json['autoArchiveAt'] == null
-          ? null
-          : DateTime.parse(json['autoArchiveAt'] as String),
+      autoArchiveAt: _$JsonConverterFromJson<String, DateTime>(
+        json['autoArchiveAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
       autoArchiveMinutes: (json['autoArchiveMinutes'] as num?)?.toInt(),
-      lastActivityAt: json['lastActivityAt'] == null
-          ? null
-          : DateTime.parse(json['lastActivityAt'] as String),
+      lastActivityAt: _$JsonConverterFromJson<String, DateTime>(
+        json['lastActivityAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
       messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
       isAgeRestricted: json['isAgeRestricted'] as bool? ?? false,
       isPrivate: json['isPrivate'] as bool? ?? false,
@@ -48,21 +52,43 @@ Map<String, dynamic> _$ForumPostDtoToJson(_ForumPostDto instance) =>
       'parentChannelId': instance.parentChannelId,
       'name': instance.name,
       'description': instance.description,
-      'createdAt': instance.createdAt?.toIso8601String(),
-      'updatedAt': instance.updatedAt?.toIso8601String(),
+      'createdAt': _$JsonConverterToJson<String, DateTime>(
+        instance.createdAt,
+        const ApiDateTimeConverter().toJson,
+      ),
+      'updatedAt': _$JsonConverterToJson<String, DateTime>(
+        instance.updatedAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'createdByUserId': instance.createdByUserId,
       'tagIds': instance.tagIds,
       'isPinned': instance.isPinned,
       'isLocked': instance.isLocked,
       'isArchived': instance.isArchived,
-      'autoArchiveAt': instance.autoArchiveAt?.toIso8601String(),
+      'autoArchiveAt': _$JsonConverterToJson<String, DateTime>(
+        instance.autoArchiveAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'autoArchiveMinutes': instance.autoArchiveMinutes,
-      'lastActivityAt': instance.lastActivityAt?.toIso8601String(),
+      'lastActivityAt': _$JsonConverterToJson<String, DateTime>(
+        instance.lastActivityAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'messageCount': instance.messageCount,
       'isAgeRestricted': instance.isAgeRestricted,
       'isPrivate': instance.isPrivate,
       'slowModeSeconds': instance.slowModeSeconds,
     };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);
 
 _ForumPostPageDto _$ForumPostPageDtoFromJson(Map<String, dynamic> json) =>
     _ForumPostPageDto(

@@ -45,6 +45,10 @@ class _Entry {
       keywords.toLowerCase().contains(query);
 }
 
+/// What the Log Out row matches on - the [_Entry.keywords] equivalent for the
+/// one row that isn't an entry.
+const _logOutKeywords = 'log out logout sign out signout leave account';
+
 /// The settings index: search, grouped rows, log out. Everything that isn't
 /// your public profile lives behind here, which is what lets
 /// `SelfProfileScreen` stay a profile instead of the wall of forms it used to
@@ -169,6 +173,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final visible = query.isEmpty
         ? _entries
         : _entries.where((e) => e.matches(query)).toList();
+    // Log Out isn't an `_Entry` (it acts in place rather than pushing a page),
+    // which is exactly how it ended up rendering underneath the RESULTS of a
+    // search it doesn't match. It filters like everything else now.
+    final showLogOut = query.isEmpty || _logOutKeywords.contains(query);
     final sections = <String, List<_Entry>>{};
     for (final entry in visible) {
       sections
@@ -213,7 +221,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.l),
-          if (visible.isEmpty)
+          if (visible.isEmpty && !showLogOut)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
               child: Center(
@@ -240,17 +248,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: AppSpacing.l),
           ],
-          SettingsSection(
-            children: [
-              SettingsRow(
-                icon: Icons.logout,
-                title: 'Log Out',
-                destructive: true,
-                showChevron: false,
-                onTap: _confirmLogOut,
-              ),
-            ],
-          ),
+          if (showLogOut)
+            SettingsSection(
+              children: [
+                SettingsRow(
+                  icon: Icons.logout,
+                  title: 'Log Out',
+                  destructive: true,
+                  showChevron: false,
+                  onTap: _confirmLogOut,
+                ),
+              ],
+            ),
           const SizedBox(height: AppSpacing.m),
           // Which account these settings belong to - resolved rather than read
           // from cache, since this page can be the first thing a cold start

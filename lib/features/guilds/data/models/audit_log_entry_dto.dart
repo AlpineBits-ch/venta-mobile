@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'audit_log_entry_dto.freezed.dart';
 part 'audit_log_entry_dto.g.dart';
 
@@ -99,6 +101,7 @@ enum AuditActionType {
 
 @freezed
 sealed class AuditLogEntryDto with _$AuditLogEntryDto {
+  @ApiDateTimeConverter()
   const factory AuditLogEntryDto({
     required String id,
     required String guildId,

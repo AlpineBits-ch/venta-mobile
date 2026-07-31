@@ -593,9 +593,14 @@ class _ExpenseCard extends StatelessWidget {
             children: [
               HousePill(
                 label: switch (expense.splitKind) {
+                  // A one-person "split" isn't one - it's somebody covering
+                  // their own coffee, and the pill says so rather than
+                  // reading "Split equally, 1 ways".
                   SplitKind.equal =>
                     expense.shares.isEmpty
                         ? 'Split with everyone'
+                        : expense.shares.length == 1
+                        ? 'Not split'
                         : 'Split equally, ${expense.shares.length} ways',
                   SplitKind.shares => 'Split by shares',
                   SplitKind.exact => 'Exact amounts',

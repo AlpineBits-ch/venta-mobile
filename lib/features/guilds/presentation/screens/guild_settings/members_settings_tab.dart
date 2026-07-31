@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/widget_styles.dart';
+import '../../../../../core/widgets/user_avatar.dart';
 import '../../../data/guild_repository.dart';
 import '../../../data/models/guild_dto.dart';
 import '../../../data/models/guild_features.dart';
@@ -123,6 +124,14 @@ class _MembersSettingsTabState extends State<MembersSettingsTab> {
                         member.profile?.userName ??
                         'Unknown';
                     return ListTile(
+                      // `nickname` is guild-local and the avatar is not, so
+                      // the fallback initial has to come from the profile -
+                      // otherwise a nicknamed member's disc and their disc
+                      // everywhere else show different letters.
+                      leading: UserAvatar(
+                        userId: member.userId,
+                        fallbackLabel: member.profile?.userName ?? displayName,
+                      ),
                       title: Row(
                         children: [
                           Flexible(

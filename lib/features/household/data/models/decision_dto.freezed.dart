@@ -750,7 +750,7 @@ return $default(_that.id,_that.channelId,_that.title,_that.description,_that.cre
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _DecisionDto implements DecisionDto {
   const _DecisionDto({required this.id, required this.channelId, this.title = '', this.description, this.createdByUserId = '', this.closesAt, this.quorum, @JsonKey(unknownEnumValue: DecisionStatus.open) this.status = DecisionStatus.open, this.outcomeOptionId, final  List<DecisionOptionDto> options = const <DecisionOptionDto>[], final  List<DecisionBlockDto> blocks = const <DecisionBlockDto>[], this.myVoteOptionId, @JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) this.myVoteKind}): _options = options,_blocks = blocks;
   factory _DecisionDto.fromJson(Map<String, dynamic> json) => _$DecisionDtoFromJson(json);

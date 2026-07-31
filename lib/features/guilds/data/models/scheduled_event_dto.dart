@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'scheduled_event_dto.freezed.dart';
 part 'scheduled_event_dto.g.dart';
 
@@ -20,6 +22,7 @@ enum EventStatus {
 /// rather than relying on [status] for that, per the backend guide.
 @freezed
 sealed class ScheduledEventDto with _$ScheduledEventDto {
+  @ApiDateTimeConverter()
   const factory ScheduledEventDto({
     required String id,
     required String guildId,

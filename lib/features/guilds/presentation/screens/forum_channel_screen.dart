@@ -414,6 +414,7 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) => _CreatePostSheet(
         tags: _tags,
         guildEmojis: _guildEmojis,

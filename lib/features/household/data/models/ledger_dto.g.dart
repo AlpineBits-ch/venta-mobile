@@ -27,9 +27,10 @@ _ExpenseDto _$ExpenseDtoFromJson(Map<String, dynamic> json) => _ExpenseDto(
   description: json['description'] as String? ?? '',
   amountMinor: (json['amountMinor'] as num?)?.toInt() ?? 0,
   currency: json['currency'] as String? ?? 'CHF',
-  occurredAt: json['occurredAt'] == null
-      ? null
-      : DateTime.parse(json['occurredAt'] as String),
+  occurredAt: _$JsonConverterFromJson<String, DateTime>(
+    json['occurredAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
   splitKind:
       $enumDecodeNullable(
         _$SplitKindEnumMap,
@@ -53,17 +54,30 @@ Map<String, dynamic> _$ExpenseDtoToJson(_ExpenseDto instance) =>
       'description': instance.description,
       'amountMinor': instance.amountMinor,
       'currency': instance.currency,
-      'occurredAt': instance.occurredAt?.toIso8601String(),
+      'occurredAt': _$JsonConverterToJson<String, DateTime>(
+        instance.occurredAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'splitKind': _$SplitKindEnumMap[instance.splitKind]!,
       'createdByUserId': instance.createdByUserId,
       'shares': instance.shares,
     };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
 
 const _$SplitKindEnumMap = {
   SplitKind.equal: 'Equal',
   SplitKind.shares: 'Shares',
   SplitKind.exact: 'Exact',
 };
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);
 
 _LedgerBalanceDto _$LedgerBalanceDtoFromJson(Map<String, dynamic> json) =>
     _LedgerBalanceDto(

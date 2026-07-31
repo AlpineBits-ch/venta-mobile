@@ -1,3 +1,4 @@
+import '../../../../core/format/api_date_time.dart';
 import 'guild_permissions.dart';
 
 /// Result of `GET /guilds/{id}/me` - deliberately NOT parsed through
@@ -34,9 +35,7 @@ class GuildSelfPermissions {
       // stopped granting anything the instant it expired - so a UI built from
       // this would otherwise keep offering the pet sitter buttons that now
       // 403.
-      final expiresAt = DateTime.tryParse(
-        membership['expiresAt'] as String? ?? '',
-      );
+      final expiresAt = tryParseApiDateTime(membership['expiresAt']);
       if (expiresAt != null && expiresAt.isBefore(DateTime.now().toUtc())) {
         continue;
       }

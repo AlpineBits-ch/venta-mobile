@@ -4,6 +4,7 @@ import '../../../../core/format/date_time_format.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/profile_resolver.dart';
+import '../../../../core/widgets/read_only_notice.dart';
 import '../../data/message_content_codec.dart';
 import '../../data/message_repository.dart';
 import '../../data/models/message_dto.dart';
@@ -157,43 +158,53 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                 ),
               ),
             )
-          : ListView.builder(
-              itemCount: _results.length,
-              itemBuilder: (context, index) {
-                final message = _results[index];
-                final text = MessageContentCodec.decode(message.content);
-                return ListTile(
-                  title: ProfileResolver(
-                    userId: message.authorId,
-                    builder: (context, profile) =>
-                        Text(profile?.userName ?? '…'),
-                  ),
-                  subtitle: Text.rich(
-                    TextSpan(
-                      children: _highlightedSpans(
-                        text.isEmpty ? '(attachment)' : text,
-                        _lastQuery,
-                        theme.textTheme.bodySmall,
-                        theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          backgroundColor: theme.colorScheme.primary.withValues(
-                            alpha: 0.12,
-                          ),
+          : Column(
+              children: [
+                const ReadOnlyNotice(
+                  'Results are read-only - opening one in the thread isn\'t '
+                  'available yet.',
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _results.length,
+                    itemBuilder: (context, index) {
+                      final message = _results[index];
+                      final text = MessageContentCodec.decode(message.content);
+                      return ListTile(
+                        title: ProfileResolver(
+                          userId: message.authorId,
+                          builder: (context, profile) =>
+                              Text(profile?.userName ?? '…'),
                         ),
-                      ),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                        subtitle: Text.rich(
+                          TextSpan(
+                            children: _highlightedSpans(
+                              text.isEmpty ? '(attachment)' : text,
+                              _lastQuery,
+                              theme.textTheme.bodySmall,
+                              theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                backgroundColor: theme.colorScheme.primary
+                                    .withValues(alpha: 0.12),
+                              ),
+                            ),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: message.createdAt != null
+                            ? Text(
+                                formatRelativeDateTime(message.createdAt!),
+                                style: theme.textTheme.labelSmall,
+                              )
+                            : null,
+                      );
+                    },
                   ),
-                  trailing: message.createdAt != null
-                      ? Text(
-                          formatRelativeDateTime(message.createdAt!),
-                          style: theme.textTheme.labelSmall,
-                        )
-                      : null,
-                );
-              },
+                ),
+              ],
             ),
     );
   }

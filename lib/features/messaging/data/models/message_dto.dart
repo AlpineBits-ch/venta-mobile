@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 import 'attachment_dto.dart';
 import 'message_reaction_dto.dart';
 
@@ -37,6 +39,7 @@ enum MessageAuthorType {
 
 @freezed
 sealed class MessageDto with _$MessageDto {
+  @ApiDateTimeConverter()
   const factory MessageDto({
     required String id,
 

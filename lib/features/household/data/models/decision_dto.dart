@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'decision_dto.freezed.dart';
 part 'decision_dto.g.dart';
 
@@ -93,6 +95,7 @@ sealed class DecisionBlockDto with _$DecisionBlockDto {
 /// as a tally row.
 @freezed
 sealed class DecisionDto with _$DecisionDto {
+  @ApiDateTimeConverter()
   const factory DecisionDto({
     required String id,
     required String channelId,

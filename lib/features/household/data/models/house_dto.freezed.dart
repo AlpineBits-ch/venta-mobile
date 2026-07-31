@@ -205,7 +205,7 @@ return $default(_that.userId,_that.kind,_that.note,_that.expiresAt);case _:
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _HomeStatusDto implements HomeStatusDto {
   const _HomeStatusDto({this.userId = '', @JsonKey(unknownEnumValue: HomeStatusKind.home) this.kind = HomeStatusKind.home, this.note, this.expiresAt});
   factory _HomeStatusDto.fromJson(Map<String, dynamic> json) => _$HomeStatusDtoFromJson(json);

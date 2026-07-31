@@ -127,9 +127,14 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
     }
   }
 
+  /// What this guild's own members would call it - "House"/"Team"/"Server".
+  /// Every noun on this page comes from here, so a household never reads as a
+  /// gaming server in its own settings.
+  String get _noun => _guild?.kind.noun ?? 'Server';
+
   Future<void> _saveAsTemplate() async {
     final nameController = TextEditingController(
-      text: '${_guild?.name ?? 'Server'} template',
+      text: '${_guild?.name ?? _noun} template',
     );
     final name = await showDialog<String>(
       context: context,
@@ -164,7 +169,8 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
           builder: (context) => AlertDialog(
             title: const Text('Template created'),
             content: SelectableText(
-              'Share this id so others can create a server from it:\n\n'
+              'Share this id so others can create a '
+              '${_noun.toLowerCase()} from it:\n\n'
               '${template.id}',
             ),
             actions: [
@@ -186,13 +192,14 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
   }
 
   Future<void> _confirmDeleteServer() async {
+    final noun = _noun.toLowerCase();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete server?'),
+        title: Text('Delete $noun?'),
         content: Text(
-          'This permanently deletes "${_guild?.name ?? 'this server'}" and everything in it. '
-          'This cannot be undone.',
+          'This permanently deletes "${_guild?.name ?? 'this $noun'}" and '
+          'everything in it. This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -215,9 +222,9 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not delete server.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not delete that $noun.')));
       }
     }
   }
@@ -287,7 +294,7 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
         const SizedBox(height: AppSpacing.m),
         TextField(
           controller: _nameController,
-          decoration: const InputDecoration(labelText: 'Server name'),
+          decoration: InputDecoration(labelText: '$_noun name'),
         ),
         const SizedBox(height: AppSpacing.s),
         TextField(
@@ -358,7 +365,7 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
             foregroundColor: theme.colorScheme.error,
           ),
           onPressed: _confirmDeleteServer,
-          child: const Text('Delete server'),
+          child: Text('Delete ${_noun.toLowerCase()}'),
         ),
       ],
     );

@@ -6,6 +6,7 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../conversations/data/conversation_repository.dart';
 import '../../bloc/friends_bloc.dart';
@@ -207,11 +208,13 @@ class _RelationshipTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final other = relationship.otherParty(myUserId);
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: context.statusColors.hover,
-        child: Text(
-          other.userName.isNotEmpty ? other.userName[0].toUpperCase() : '?',
-        ),
+      // The same widget the DM list uses, presence dot included - a friend row
+      // and a DM row are the same person one screen apart, and rendering them
+      // differently makes the friends list look like it failed to load.
+      leading: UserAvatar(
+        userId: other.userId,
+        fallbackLabel: other.userName,
+        showStatus: true,
       ),
       title: Text(other.userName),
       subtitle: subtitle != null ? Text(subtitle!) : null,

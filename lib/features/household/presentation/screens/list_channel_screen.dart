@@ -512,6 +512,14 @@ class _ListChannelScreenState
                     borderRadius: BorderRadius.circular(AppRadii.composerPill),
                     borderSide: BorderSide.none,
                   ),
+                  // The theme's focus ring is for forms. A composer is a
+                  // permanently-docked bar you type in constantly, and the
+                  // message composer already suppresses it for that reason -
+                  // the two sat side by side disagreeing.
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadii.composerPill),
+                    borderSide: BorderSide.none,
+                  ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.m,
                     vertical: 10,
@@ -556,7 +564,7 @@ class _ListItemRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
-    final quantity = item.quantity?.trim();
+    final quantity = formatListQuantity(item.quantity ?? '');
     final note = item.note?.trim();
 
     return Opacity(
@@ -600,7 +608,7 @@ class _ListItemRow extends StatelessWidget {
                       // Free text, so it can be as long as "a bunch of the
                       // small ones" - it gets to shrink before the item name
                       // does, and ellipsizes rather than overflowing.
-                      if (quantity != null && quantity.isNotEmpty) ...[
+                      if (quantity.isNotEmpty) ...[
                         const SizedBox(width: AppSpacing.s),
                         Flexible(child: HousePill(label: quantity)),
                       ],

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/format/api_date_time.dart';
 import '../../../core/network/api_client.dart';
 import 'models/login_session_dto.dart';
 import 'models/user_dto.dart';
@@ -90,7 +91,7 @@ class IdentityApi {
   /// deletion is cancellable via [cancelDeletion] until that point.
   Future<DateTime> requestDeletion() async {
     final response = await client.dio.delete<Map<String, dynamic>>(_base);
-    return DateTime.parse(response.data!['purgeScheduledAt'] as String);
+    return parseApiDateTime(response.data!['purgeScheduledAt'] as String);
   }
 
   Future<void> cancelDeletion() async {

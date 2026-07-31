@@ -230,7 +230,7 @@ return $default(_that.id,_that.guildId,_that.parentChannelId,_that.name,_that.de
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _ForumPostDto implements ForumPostDto {
   const _ForumPostDto({required this.id, required this.guildId, this.parentChannelId, required this.name, this.description, this.createdAt, this.updatedAt, this.createdByUserId, final  List<String> tagIds = const <String>[], this.isPinned = false, this.isLocked = false, this.isArchived = false, this.autoArchiveAt, this.autoArchiveMinutes, this.lastActivityAt, this.messageCount = 0, this.isAgeRestricted = false, this.isPrivate = false, this.slowModeSeconds = 0}): _tagIds = tagIds;
   factory _ForumPostDto.fromJson(Map<String, dynamic> json) => _$ForumPostDtoFromJson(json);

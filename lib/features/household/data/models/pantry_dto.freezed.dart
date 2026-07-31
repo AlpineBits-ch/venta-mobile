@@ -215,7 +215,7 @@ return $default(_that.id,_that.channelId,_that.name,_that.quantity,_that.unit,_t
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _PantryItemDto implements PantryItemDto {
   const _PantryItemDto({required this.id, required this.channelId, required this.name, this.quantity = 0, this.unit, this.lowThreshold, this.expiresAt, this.isLow = false, this.restockedAt, this.addedByUserId = ''});
   factory _PantryItemDto.fromJson(Map<String, dynamic> json) => _$PantryItemDtoFromJson(json);

@@ -38,12 +38,14 @@ _CallDto _$CallDtoFromJson(Map<String, dynamic> json) => _CallDto(
   id: json['id'] as String,
   conversationId: json['conversationId'] as String,
   status: json['status'] as String?,
-  createdAt: json['createdAt'] == null
-      ? null
-      : DateTime.parse(json['createdAt'] as String),
-  updatedAt: json['updatedAt'] == null
-      ? null
-      : DateTime.parse(json['updatedAt'] as String),
+  createdAt: _$JsonConverterFromJson<String, DateTime>(
+    json['createdAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
+  updatedAt: _$JsonConverterFromJson<String, DateTime>(
+    json['updatedAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
   tracks:
       (json['tracks'] as List<dynamic>?)
           ?.map((e) => CallTrackDto.fromJson(e as Map<String, dynamic>))
@@ -60,8 +62,24 @@ Map<String, dynamic> _$CallDtoToJson(_CallDto instance) => <String, dynamic>{
   'id': instance.id,
   'conversationId': instance.conversationId,
   'status': instance.status,
-  'createdAt': instance.createdAt?.toIso8601String(),
-  'updatedAt': instance.updatedAt?.toIso8601String(),
+  'createdAt': _$JsonConverterToJson<String, DateTime>(
+    instance.createdAt,
+    const ApiDateTimeConverter().toJson,
+  ),
+  'updatedAt': _$JsonConverterToJson<String, DateTime>(
+    instance.updatedAt,
+    const ApiDateTimeConverter().toJson,
+  ),
   'tracks': instance.tracks,
   'participants': instance.participants,
 };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

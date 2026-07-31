@@ -218,7 +218,7 @@ return $default(_that.id,_that.channelId,_that.text,_that.quantity,_that.note,_t
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _ListItemDto implements ListItemDto {
   const _ListItemDto({required this.id, required this.channelId, required this.text, this.quantity, this.note, this.section, this.assigneeUserId, this.addedByUserId = '', this.isChecked = false, this.checkedAt, this.checkedByUserId, this.position = 0, this.sourcePantryItemId, this.createdAt});
   factory _ListItemDto.fromJson(Map<String, dynamic> json) => _$ListItemDtoFromJson(json);

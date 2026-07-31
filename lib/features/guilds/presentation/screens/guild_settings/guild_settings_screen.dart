@@ -94,7 +94,10 @@ class _GuildSettingsScreenState extends State<GuildSettingsScreen> {
           leading: AppBackButton(
             fallbackLocation: RoutePaths.serverPath(widget.guildId),
           ),
-          title: const Text('Server Settings'),
+          // "Server Settings" on a household reads as a different product to
+          // the one every other screen in it is describing - `GuildKind` has
+          // carried the right noun for each kind since it was introduced.
+          title: Text('${guild?.kind.noun ?? 'Server'} Settings'),
           // The tab strip doesn't fit on a phone width, so it's scrollable -
           // this fade hints that without it, "Audit Log"/"Invites" just look
           // like they're cut off at the edge with no way to reach them.

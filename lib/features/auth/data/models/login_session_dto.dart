@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'login_session_dto.freezed.dart';
 part 'login_session_dto.g.dart';
 
@@ -13,6 +15,7 @@ part 'login_session_dto.g.dart';
 /// fallbacks rather than failing to parse the whole page over one blank field.
 @freezed
 sealed class LoginSessionDto with _$LoginSessionDto {
+  @ApiDateTimeConverter()
   const factory LoginSessionDto({
     required String id,
     String? deviceName,

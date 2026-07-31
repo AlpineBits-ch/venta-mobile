@@ -15,16 +15,6 @@ import '../../data/models/pantry_dto.dart';
 import '../widgets/household_widgets.dart';
 import 'household_channel_base.dart';
 
-/// `1.0` -> `1`, `1.5` -> `1.5`. Stock is decimal on the wire because it's
-/// compared against a threshold, but "1.0 eggs" reads like a bug.
-String formatQuantity(double value) {
-  if (value == value.roundToDouble()) return value.toInt().toString();
-  return value
-      .toStringAsFixed(2)
-      .replaceAll(RegExp(r'0+$'), '')
-      .replaceAll(RegExp(r'\.$'), '');
-}
-
 /// A `Pantry` channel - one location: the fridge, the freezer, the cellar.
 ///
 /// The restock loop is the thing worth designing for: when something drops to

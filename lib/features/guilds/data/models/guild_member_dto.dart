@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 import '../../../profile/data/models/profile_dto.dart';
 import 'guild_permissions.dart';
 import 'role_dto.dart';
@@ -16,6 +18,7 @@ enum MemberType {
 
 @freezed
 sealed class RoleMembershipDto with _$RoleMembershipDto {
+  @ApiDateTimeConverter()
   const factory RoleMembershipDto({
     required RoleDto role,
 

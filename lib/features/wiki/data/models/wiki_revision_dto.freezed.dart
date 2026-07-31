@@ -207,7 +207,7 @@ return $default(_that.id,_that.pageId,_that.content,_that.editorId,_that.created
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _WikiRevisionDto implements WikiRevisionDto {
   const _WikiRevisionDto({required this.id, required this.pageId, required this.content, required this.editorId, this.createdAt, this.revisionNumber = 0, this.summary});
   factory _WikiRevisionDto.fromJson(Map<String, dynamic> json) => _$WikiRevisionDtoFromJson(json);

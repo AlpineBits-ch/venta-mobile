@@ -496,7 +496,7 @@ return $default(_that.id,_that.name,_that.description,_that.type,_that.guildId,_
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _ChannelDto implements ChannelDto {
   const _ChannelDto({required this.id, required this.name, this.description, @JsonKey(unknownEnumValue: ChannelType.unknown) required this.type, required this.guildId, this.isAgeRestricted = false, this.isPrivate = false, this.categoryId, final  List<ChannelPermissionDto> permissions = const <ChannelPermissionDto>[], this.position = 0, this.slowModeSeconds = 0, this.parentChannelId, final  List<String> tagIds = const <String>[], this.isPinned = false, this.isLocked = false, this.isArchived = false, this.lastActivityAt, this.messageCount = 0, this.autoArchiveAt}): _permissions = permissions,_tagIds = tagIds;
   factory _ChannelDto.fromJson(Map<String, dynamic> json) => _$ChannelDtoFromJson(json);

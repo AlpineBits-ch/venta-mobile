@@ -44,9 +44,10 @@ _DecisionDto _$DecisionDtoFromJson(Map<String, dynamic> json) => _DecisionDto(
   title: json['title'] as String? ?? '',
   description: json['description'] as String?,
   createdByUserId: json['createdByUserId'] as String? ?? '',
-  closesAt: json['closesAt'] == null
-      ? null
-      : DateTime.parse(json['closesAt'] as String),
+  closesAt: _$JsonConverterFromJson<String, DateTime>(
+    json['closesAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
   quorum: (json['quorum'] as num?)?.toInt(),
   status:
       $enumDecodeNullable(
@@ -81,7 +82,10 @@ Map<String, dynamic> _$DecisionDtoToJson(_DecisionDto instance) =>
       'title': instance.title,
       'description': instance.description,
       'createdByUserId': instance.createdByUserId,
-      'closesAt': instance.closesAt?.toIso8601String(),
+      'closesAt': _$JsonConverterToJson<String, DateTime>(
+        instance.closesAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'quorum': instance.quorum,
       'status': _$DecisionStatusEnumMap[instance.status]!,
       'outcomeOptionId': instance.outcomeOptionId,
@@ -90,6 +94,11 @@ Map<String, dynamic> _$DecisionDtoToJson(_DecisionDto instance) =>
       'myVoteOptionId': instance.myVoteOptionId,
       'myVoteKind': _$VoteKindEnumMap[instance.myVoteKind],
     };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
 
 const _$DecisionStatusEnumMap = {
   DecisionStatus.open: 'Open',
@@ -104,3 +113,8 @@ const _$VoteKindEnumMap = {
   VoteKind.abstain: 'Abstain',
   VoteKind.block: 'Block',
 };
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

@@ -13,9 +13,10 @@ _MessageReactionDto _$MessageReactionDtoFromJson(Map<String, dynamic> json) =>
       userId: json['userId'] as String,
       emojiId: json['emojiId'] as String?,
       contextId: json['contextId'] as String?,
-      createdAt: json['createdAt'] == null
-          ? null
-          : DateTime.parse(json['createdAt'] as String),
+      createdAt: _$JsonConverterFromJson<String, DateTime>(
+        json['createdAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
       conversationId: json['conversationId'] as String?,
       channelId: json['channelId'] as String?,
     );
@@ -27,7 +28,20 @@ Map<String, dynamic> _$MessageReactionDtoToJson(_MessageReactionDto instance) =>
       'userId': instance.userId,
       'emojiId': instance.emojiId,
       'contextId': instance.contextId,
-      'createdAt': instance.createdAt?.toIso8601String(),
+      'createdAt': _$JsonConverterToJson<String, DateTime>(
+        instance.createdAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'conversationId': instance.conversationId,
       'channelId': instance.channelId,
     };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

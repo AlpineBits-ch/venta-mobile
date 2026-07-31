@@ -218,7 +218,7 @@ return $default(_that.id,_that.channelId,_that.title,_that.description,_that.int
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _ChoreDto implements ChoreDto {
   const _ChoreDto({required this.id, required this.channelId, required this.title, this.description, this.intervalDays = 7, this.anchorAt, this.effortMinutes = 15, this.rotationRoleId, this.fixedAssigneeUserId, this.graceHours = 0, this.isPaused = false, this.nextDueAt});
   factory _ChoreDto.fromJson(Map<String, dynamic> json) => _$ChoreDtoFromJson(json);
@@ -516,7 +516,7 @@ return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _ChoreOccurrenceDto implements ChoreOccurrenceDto {
   const _ChoreOccurrenceDto({required this.id, required this.choreId, required this.channelId, this.title = '', required this.dueAt, this.assignedUserId = '', this.effortMinutes = 0, this.completedAt, this.completedByUserId, this.skippedAt, this.isOverdue = false});
   factory _ChoreOccurrenceDto.fromJson(Map<String, dynamic> json) => _$ChoreOccurrenceDtoFromJson(json);

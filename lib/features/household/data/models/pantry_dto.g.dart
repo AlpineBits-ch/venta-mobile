@@ -14,13 +14,15 @@ _PantryItemDto _$PantryItemDtoFromJson(Map<String, dynamic> json) =>
       quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
       unit: json['unit'] as String?,
       lowThreshold: (json['lowThreshold'] as num?)?.toDouble(),
-      expiresAt: json['expiresAt'] == null
-          ? null
-          : DateTime.parse(json['expiresAt'] as String),
+      expiresAt: _$JsonConverterFromJson<String, DateTime>(
+        json['expiresAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
       isLow: json['isLow'] as bool? ?? false,
-      restockedAt: json['restockedAt'] == null
-          ? null
-          : DateTime.parse(json['restockedAt'] as String),
+      restockedAt: _$JsonConverterFromJson<String, DateTime>(
+        json['restockedAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
       addedByUserId: json['addedByUserId'] as String? ?? '',
     );
 
@@ -32,11 +34,27 @@ Map<String, dynamic> _$PantryItemDtoToJson(_PantryItemDto instance) =>
       'quantity': instance.quantity,
       'unit': instance.unit,
       'lowThreshold': instance.lowThreshold,
-      'expiresAt': instance.expiresAt?.toIso8601String(),
+      'expiresAt': _$JsonConverterToJson<String, DateTime>(
+        instance.expiresAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'isLow': instance.isLow,
-      'restockedAt': instance.restockedAt?.toIso8601String(),
+      'restockedAt': _$JsonConverterToJson<String, DateTime>(
+        instance.restockedAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'addedByUserId': instance.addedByUserId,
     };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);
 
 _PantryConfigDto _$PantryConfigDtoFromJson(Map<String, dynamic> json) =>
     _PantryConfigDto(

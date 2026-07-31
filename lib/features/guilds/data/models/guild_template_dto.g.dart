@@ -11,7 +11,9 @@ _GuildTemplateDto _$GuildTemplateDtoFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       name: json['name'] as String,
       description: json['description'] as String?,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: const ApiDateTimeConverter().fromJson(
+        json['createdAt'] as String,
+      ),
     );
 
 Map<String, dynamic> _$GuildTemplateDtoToJson(_GuildTemplateDto instance) =>
@@ -19,7 +21,7 @@ Map<String, dynamic> _$GuildTemplateDtoToJson(_GuildTemplateDto instance) =>
       'id': instance.id,
       'name': instance.name,
       'description': instance.description,
-      'createdAt': instance.createdAt.toIso8601String(),
+      'createdAt': const ApiDateTimeConverter().toJson(instance.createdAt),
     };
 
 _TemplateChannelDto _$TemplateChannelDtoFromJson(Map<String, dynamic> json) =>
@@ -110,7 +112,7 @@ _GuildTemplateDetailDto _$GuildTemplateDetailDtoFromJson(
   name: json['name'] as String,
   description: json['description'] as String?,
   creatorUserId: json['creatorUserId'] as String,
-  createdAt: DateTime.parse(json['createdAt'] as String),
+  createdAt: const ApiDateTimeConverter().fromJson(json['createdAt'] as String),
   usageCount: (json['usageCount'] as num?)?.toInt() ?? 0,
   snapshot: TemplateSnapshotDto.fromJson(
     json['snapshot'] as Map<String, dynamic>,
@@ -124,7 +126,7 @@ Map<String, dynamic> _$GuildTemplateDetailDtoToJson(
   'name': instance.name,
   'description': instance.description,
   'creatorUserId': instance.creatorUserId,
-  'createdAt': instance.createdAt.toIso8601String(),
+  'createdAt': const ApiDateTimeConverter().toJson(instance.createdAt),
   'usageCount': instance.usageCount,
   'snapshot': instance.snapshot,
 };

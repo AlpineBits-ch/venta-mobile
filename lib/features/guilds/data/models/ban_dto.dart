@@ -1,10 +1,13 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'ban_dto.freezed.dart';
 part 'ban_dto.g.dart';
 
 @freezed
 sealed class BanDto with _$BanDto {
+  @ApiDateTimeConverter()
   const factory BanDto({
     required String id,
     required String guildId,

@@ -12,12 +12,14 @@ _LoginSessionDto _$LoginSessionDtoFromJson(Map<String, dynamic> json) =>
       deviceName: json['deviceName'] as String?,
       deviceType: json['deviceType'] as String?,
       ipAddress: json['ipAddress'] as String?,
-      createdAt: json['createdAt'] == null
-          ? null
-          : DateTime.parse(json['createdAt'] as String),
-      lastUsedAt: json['lastUsedAt'] == null
-          ? null
-          : DateTime.parse(json['lastUsedAt'] as String),
+      createdAt: _$JsonConverterFromJson<String, DateTime>(
+        json['createdAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
+      lastUsedAt: _$JsonConverterFromJson<String, DateTime>(
+        json['lastUsedAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
       isCurrent: json['isCurrent'] as bool? ?? false,
     );
 
@@ -27,7 +29,23 @@ Map<String, dynamic> _$LoginSessionDtoToJson(_LoginSessionDto instance) =>
       'deviceName': instance.deviceName,
       'deviceType': instance.deviceType,
       'ipAddress': instance.ipAddress,
-      'createdAt': instance.createdAt?.toIso8601String(),
-      'lastUsedAt': instance.lastUsedAt?.toIso8601String(),
+      'createdAt': _$JsonConverterToJson<String, DateTime>(
+        instance.createdAt,
+        const ApiDateTimeConverter().toJson,
+      ),
+      'lastUsedAt': _$JsonConverterToJson<String, DateTime>(
+        instance.lastUsedAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'isCurrent': instance.isCurrent,
     };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

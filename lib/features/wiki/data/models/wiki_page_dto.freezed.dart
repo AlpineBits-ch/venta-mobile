@@ -215,7 +215,7 @@ return $default(_that.id,_that.guildId,_that.title,_that.slug,_that.authorId,_th
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _WikiPageDto implements WikiPageDto {
   const _WikiPageDto({required this.id, required this.guildId, required this.title, required this.slug, required this.authorId, this.lastEditorId, this.createdAt, this.updatedAt, this.parentPageId, this.categoryId, this.visibility = WikiVisibility.private, final  List<String> tags = const <String>[], this.isPinned = false, this.revisionCount = 0, this.content = ''}): _tags = tags;
   factory _WikiPageDto.fromJson(Map<String, dynamic> json) => _$WikiPageDtoFromJson(json);

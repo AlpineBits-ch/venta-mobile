@@ -3,9 +3,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
-import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/button_progress_indicator.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../friends/data/models/relationship_model.dart';
 import '../../../friends/data/relationship_repository.dart';
@@ -163,13 +163,12 @@ class _NewConversationDialogState extends State<_NewConversationDialog> {
                         return CheckboxListTile(
                           value: selected,
                           onChanged: (_) => _toggle(friend.userId),
-                          secondary: CircleAvatar(
-                            backgroundColor: context.statusColors.hover,
-                            child: Text(
-                              friend.userName.isNotEmpty
-                                  ? friend.userName[0].toUpperCase()
-                                  : '?',
-                            ),
+                          // Tapping a row here toggles the checkbox; the
+                          // avatar must not navigate away mid-selection.
+                          secondary: UserAvatar(
+                            userId: friend.userId,
+                            fallbackLabel: friend.userName,
+                            onTap: () => _toggle(friend.userId),
                           ),
                           title: Text(friend.userName),
                         );

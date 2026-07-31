@@ -141,6 +141,7 @@ class _EventsScreenState extends State<EventsScreen> {
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (context) => _EventEditorSheet(
         guildId: widget.guildId,
         existing: existing,

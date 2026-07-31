@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'house_dto.freezed.dart';
 part 'house_dto.g.dart';
 
@@ -57,6 +59,7 @@ extension HomeStatusKindX on HomeStatusKind {
 /// set someone else's; "Anna is asleep" is only Anna's to assert.
 @freezed
 sealed class HomeStatusDto with _$HomeStatusDto {
+  @ApiDateTimeConverter()
   const factory HomeStatusDto({
     @Default('') String userId,
     @Default(HomeStatusKind.home)

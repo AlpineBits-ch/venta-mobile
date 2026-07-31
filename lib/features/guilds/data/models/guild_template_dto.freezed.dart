@@ -204,7 +204,7 @@ return $default(_that.id,_that.name,_that.description,_that.createdAt);case _:
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _GuildTemplateDto implements GuildTemplateDto {
   const _GuildTemplateDto({required this.id, required this.name, this.description, required this.createdAt});
   factory _GuildTemplateDto.fromJson(Map<String, dynamic> json) => _$GuildTemplateDtoFromJson(json);
@@ -1564,7 +1564,7 @@ return $default(_that.id,_that.name,_that.description,_that.creatorUserId,_that.
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _GuildTemplateDetailDto implements GuildTemplateDetailDto {
   const _GuildTemplateDetailDto({required this.id, required this.name, this.description, required this.creatorUserId, required this.createdAt, this.usageCount = 0, required this.snapshot});
   factory _GuildTemplateDetailDto.fromJson(Map<String, dynamic> json) => _$GuildTemplateDetailDtoFromJson(json);

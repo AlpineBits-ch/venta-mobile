@@ -163,9 +163,10 @@ _PendingMemberDto _$PendingMemberDtoFromJson(Map<String, dynamic> json) =>
       memberId: json['memberId'] as String,
       userId: json['userId'] as String,
       nickname: json['nickname'] as String?,
-      joinedAt: json['joinedAt'] == null
-          ? null
-          : DateTime.parse(json['joinedAt'] as String),
+      joinedAt: _$JsonConverterFromJson<String, DateTime>(
+        json['joinedAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
     );
 
 Map<String, dynamic> _$PendingMemberDtoToJson(_PendingMemberDto instance) =>
@@ -173,5 +174,18 @@ Map<String, dynamic> _$PendingMemberDtoToJson(_PendingMemberDto instance) =>
       'memberId': instance.memberId,
       'userId': instance.userId,
       'nickname': instance.nickname,
-      'joinedAt': instance.joinedAt?.toIso8601String(),
+      'joinedAt': _$JsonConverterToJson<String, DateTime>(
+        instance.joinedAt,
+        const ApiDateTimeConverter().toJson,
+      ),
     };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

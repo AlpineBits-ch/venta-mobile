@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'onboarding_dto.freezed.dart';
 part 'onboarding_dto.g.dart';
 
@@ -147,6 +149,7 @@ sealed class OnboardingResponseDto with _$OnboardingResponseDto {
 /// report behind a "3 members haven't accepted the rules" nudge.
 @freezed
 sealed class PendingMemberDto with _$PendingMemberDto {
+  @ApiDateTimeConverter()
   const factory PendingMemberDto({
     required String memberId,
     required String userId,

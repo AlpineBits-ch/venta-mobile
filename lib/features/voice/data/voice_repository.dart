@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../../core/device/device_id_service.dart';
+import '../../../core/format/api_date_time.dart';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/realtime/realtime_transport.dart';
@@ -231,7 +232,7 @@ class VoiceRepository {
         _eventsController.add(
           CallAlone(
             callId: payload['callId'] as String,
-            deadline: DateTime.parse(payload['deadline'] as String),
+            deadline: parseApiDateTime(payload['deadline'] as String),
           ),
         );
       case 'call.CameraChanged':

@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'guild_template_dto.freezed.dart';
 part 'guild_template_dto.g.dart';
 
@@ -7,6 +9,7 @@ part 'guild_template_dto.g.dart';
 /// snapshot payload.
 @freezed
 sealed class GuildTemplateDto with _$GuildTemplateDto {
+  @ApiDateTimeConverter()
   const factory GuildTemplateDto({
     required String id,
     required String name,
@@ -77,6 +80,7 @@ sealed class TemplateSnapshotDto with _$TemplateSnapshotDto {
 /// scope).
 @freezed
 sealed class GuildTemplateDetailDto with _$GuildTemplateDetailDto {
+  @ApiDateTimeConverter()
   const factory GuildTemplateDetailDto({
     required String id,
     required String name,

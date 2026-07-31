@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'list_item_dto.freezed.dart';
 part 'list_item_dto.g.dart';
 
@@ -12,6 +14,7 @@ part 'list_item_dto.g.dart';
 /// type for no gain.
 @freezed
 sealed class ListItemDto with _$ListItemDto {
+  @ApiDateTimeConverter()
   const factory ListItemDto({
     required String id,
     required String channelId,

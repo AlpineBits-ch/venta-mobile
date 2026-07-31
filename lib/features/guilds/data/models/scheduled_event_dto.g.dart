@@ -13,10 +13,13 @@ _ScheduledEventDto _$ScheduledEventDtoFromJson(Map<String, dynamic> json) =>
       creatorUserId: json['creatorUserId'] as String,
       title: json['title'] as String,
       description: json['description'] as String?,
-      startsAt: DateTime.parse(json['startsAt'] as String),
-      endsAt: json['endsAt'] == null
-          ? null
-          : DateTime.parse(json['endsAt'] as String),
+      startsAt: const ApiDateTimeConverter().fromJson(
+        json['startsAt'] as String,
+      ),
+      endsAt: _$JsonConverterFromJson<String, DateTime>(
+        json['endsAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
       location: json['location'] as String?,
       voiceChannelId: json['voiceChannelId'] as String?,
       status:
@@ -33,8 +36,11 @@ Map<String, dynamic> _$ScheduledEventDtoToJson(_ScheduledEventDto instance) =>
       'creatorUserId': instance.creatorUserId,
       'title': instance.title,
       'description': instance.description,
-      'startsAt': instance.startsAt.toIso8601String(),
-      'endsAt': instance.endsAt?.toIso8601String(),
+      'startsAt': const ApiDateTimeConverter().toJson(instance.startsAt),
+      'endsAt': _$JsonConverterToJson<String, DateTime>(
+        instance.endsAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'location': instance.location,
       'voiceChannelId': instance.voiceChannelId,
       'status': _$EventStatusEnumMap[instance.status]!,
@@ -42,9 +48,19 @@ Map<String, dynamic> _$ScheduledEventDtoToJson(_ScheduledEventDto instance) =>
       'isInterested': instance.isInterested,
     };
 
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
 const _$EventStatusEnumMap = {
   EventStatus.scheduled: 'Scheduled',
   EventStatus.active: 'Active',
   EventStatus.completed: 'Completed',
   EventStatus.cancelled: 'Cancelled',
 };
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 import 'wiki_page_summary_dto.dart';
 
 part 'wiki_page_dto.freezed.dart';
@@ -12,6 +14,7 @@ part 'wiki_page_dto.g.dart';
 /// freezed doesn't support class inheritance.
 @freezed
 sealed class WikiPageDto with _$WikiPageDto {
+  @ApiDateTimeConverter()
   const factory WikiPageDto({
     required String id,
     required String guildId,

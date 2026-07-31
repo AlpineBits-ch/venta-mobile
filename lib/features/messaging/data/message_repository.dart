@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../../core/format/api_date_time.dart';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import 'message_api.dart';
@@ -195,7 +196,7 @@ class MessageRepository {
           RemoteMessagePinned(
             messageId: payload['messageId'] as String,
             pinnedById: payload['pinnedById'] as String,
-            pinnedAt: DateTime.parse(payload['pinnedAt'] as String),
+            pinnedAt: parseApiDateTime(payload['pinnedAt'] as String),
           ),
         );
       case 'conversation.MessageUnpinned' || 'guild.MessageUnpinned':

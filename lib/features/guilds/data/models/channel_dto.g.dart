@@ -57,13 +57,15 @@ _ChannelDto _$ChannelDtoFromJson(Map<String, dynamic> json) => _ChannelDto(
   isPinned: json['isPinned'] as bool? ?? false,
   isLocked: json['isLocked'] as bool? ?? false,
   isArchived: json['isArchived'] as bool? ?? false,
-  lastActivityAt: json['lastActivityAt'] == null
-      ? null
-      : DateTime.parse(json['lastActivityAt'] as String),
+  lastActivityAt: _$JsonConverterFromJson<String, DateTime>(
+    json['lastActivityAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
   messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
-  autoArchiveAt: json['autoArchiveAt'] == null
-      ? null
-      : DateTime.parse(json['autoArchiveAt'] as String),
+  autoArchiveAt: _$JsonConverterFromJson<String, DateTime>(
+    json['autoArchiveAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
 );
 
 Map<String, dynamic> _$ChannelDtoToJson(_ChannelDto instance) =>
@@ -84,9 +86,15 @@ Map<String, dynamic> _$ChannelDtoToJson(_ChannelDto instance) =>
       'isPinned': instance.isPinned,
       'isLocked': instance.isLocked,
       'isArchived': instance.isArchived,
-      'lastActivityAt': instance.lastActivityAt?.toIso8601String(),
+      'lastActivityAt': _$JsonConverterToJson<String, DateTime>(
+        instance.lastActivityAt,
+        const ApiDateTimeConverter().toJson,
+      ),
       'messageCount': instance.messageCount,
-      'autoArchiveAt': instance.autoArchiveAt?.toIso8601String(),
+      'autoArchiveAt': _$JsonConverterToJson<String, DateTime>(
+        instance.autoArchiveAt,
+        const ApiDateTimeConverter().toJson,
+      ),
     };
 
 const _$ChannelTypeEnumMap = {
@@ -103,3 +111,13 @@ const _$ChannelTypeEnumMap = {
   ChannelType.decisions: 'Decisions',
   ChannelType.unknown: 'unknown',
 };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

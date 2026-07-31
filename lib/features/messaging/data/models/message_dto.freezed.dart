@@ -231,7 +231,7 @@ return $default(_that.id,_that.content,_that.conversationId,_that.channelId,_tha
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _MessageDto implements MessageDto {
   const _MessageDto({required this.id, required this.content, this.conversationId, this.channelId, required this.authorId, this.createdAt, this.isPending = false, this.isFailed = false, this.inReplyTo, final  List<String> mentions = const <String>[], final  List<String> roleMentions = const <String>[], this.mentionsEveryone = false, this.mentionsHere = false, final  List<AttachmentDto> attachments = const <AttachmentDto>[], final  List<MessageReactionDto> reactions = const <MessageReactionDto>[], this.encryptionState = MessageEncryptionState.plain, this.type = MessageType.message, @JsonKey(unknownEnumValue: MessageAuthorType.standard) this.authorIdType = MessageAuthorType.standard, this.isPinned = false, this.pinnedAt, this.pinnedById, this.systemMessageVariant, @JsonKey(includeFromJson: false, includeToJson: false) this.isBotCommandPlaceholder = false}): _mentions = mentions,_roleMentions = roleMentions,_attachments = attachments,_reactions = reactions;
   factory _MessageDto.fromJson(Map<String, dynamic> json) => _$MessageDtoFromJson(json);

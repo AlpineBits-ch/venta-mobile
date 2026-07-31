@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/format/api_date_time.dart';
+
 part 'chore_dto.freezed.dart';
 part 'chore_dto.g.dart';
 
@@ -13,6 +15,7 @@ part 'chore_dto.g.dart';
 /// [effortMinutes] matters and why skipping doesn't get you off the hook.
 @freezed
 sealed class ChoreDto with _$ChoreDto {
+  @ApiDateTimeConverter()
   const factory ChoreDto({
     required String id,
     required String channelId,
@@ -50,6 +53,7 @@ sealed class ChoreDto with _$ChoreDto {
 /// washing-up").
 @freezed
 sealed class ChoreOccurrenceDto with _$ChoreOccurrenceDto {
+  @ApiDateTimeConverter()
   const factory ChoreOccurrenceDto({
     required String id,
     required String choreId,

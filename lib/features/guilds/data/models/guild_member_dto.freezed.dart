@@ -216,7 +216,7 @@ return $default(_that.role,_that.expiresAt);case _:
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _RoleMembershipDto implements RoleMembershipDto {
   const _RoleMembershipDto({required this.role, this.expiresAt});
   factory _RoleMembershipDto.fromJson(Map<String, dynamic> json) => _$RoleMembershipDtoFromJson(json);

@@ -12,9 +12,10 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
   conversationId: json['conversationId'] as String?,
   channelId: json['channelId'] as String?,
   authorId: json['authorId'] as String,
-  createdAt: json['createdAt'] == null
-      ? null
-      : DateTime.parse(json['createdAt'] as String),
+  createdAt: _$JsonConverterFromJson<String, DateTime>(
+    json['createdAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
   isPending: json['isPending'] as bool? ?? false,
   isFailed: json['isFailed'] as bool? ?? false,
   inReplyTo: json['inReplyTo'] as String?,
@@ -55,9 +56,10 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
       ) ??
       MessageAuthorType.standard,
   isPinned: json['isPinned'] as bool? ?? false,
-  pinnedAt: json['pinnedAt'] == null
-      ? null
-      : DateTime.parse(json['pinnedAt'] as String),
+  pinnedAt: _$JsonConverterFromJson<String, DateTime>(
+    json['pinnedAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
   pinnedById: json['pinnedById'] as String?,
   systemMessageVariant: (json['systemMessageVariant'] as num?)?.toInt(),
 );
@@ -70,7 +72,10 @@ Map<String, dynamic> _$MessageDtoToJson(
   'conversationId': instance.conversationId,
   'channelId': instance.channelId,
   'authorId': instance.authorId,
-  'createdAt': instance.createdAt?.toIso8601String(),
+  'createdAt': _$JsonConverterToJson<String, DateTime>(
+    instance.createdAt,
+    const ApiDateTimeConverter().toJson,
+  ),
   'isPending': instance.isPending,
   'isFailed': instance.isFailed,
   'inReplyTo': instance.inReplyTo,
@@ -84,10 +89,18 @@ Map<String, dynamic> _$MessageDtoToJson(
   'type': _$MessageTypeEnumMap[instance.type]!,
   'authorIdType': _$MessageAuthorTypeEnumMap[instance.authorIdType]!,
   'isPinned': instance.isPinned,
-  'pinnedAt': instance.pinnedAt?.toIso8601String(),
+  'pinnedAt': _$JsonConverterToJson<String, DateTime>(
+    instance.pinnedAt,
+    const ApiDateTimeConverter().toJson,
+  ),
   'pinnedById': instance.pinnedById,
   'systemMessageVariant': instance.systemMessageVariant,
 };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
 
 const _$MessageEncryptionStateEnumMap = {
   MessageEncryptionState.plain: 'Plain',
@@ -106,3 +119,8 @@ const _$MessageAuthorTypeEnumMap = {
   MessageAuthorType.standard: 'Default',
   MessageAuthorType.bot: 'Bot',
 };
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

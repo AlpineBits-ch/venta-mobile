@@ -205,7 +205,7 @@ return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeSched
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _UserDto implements UserDto {
   const _UserDto({required this.id, required this.status, this.deletionRequestedAt, this.purgeScheduledAt, this.mfaEnabled = false});
   factory _UserDto.fromJson(Map<String, dynamic> json) => _$UserDtoFromJson(json);

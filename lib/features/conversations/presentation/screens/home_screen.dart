@@ -175,6 +175,10 @@ class _ConversationTile extends StatelessWidget {
           ? UserAvatar(
               userId: others.single.userId,
               fallbackLabel: title.isNotEmpty ? title[0].toUpperCase() : '?',
+              // `UserAvatar` names DM lists as the case presence is for and
+              // this one wasn't opting in, so the Friends screen next door had
+              // nothing to be consistent with.
+              showStatus: true,
               onTap: () =>
                   context.push(RoutePaths.conversationPath(conversation.id)),
             )
