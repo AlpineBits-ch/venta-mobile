@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/routing/route_paths.dart';
-import '../../../../core/theme/avatar_palette.dart';
+import '../../../../core/widgets/avatar_image.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
@@ -266,36 +266,19 @@ class _EditableBannerAndAvatar extends StatelessWidget {
                 clipBehavior: Clip.none,
                 children: [
                   Container(
-                    width: 88,
-                    height: 88,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: theme.scaffoldBackgroundColor,
                         width: 4,
                       ),
-                      color: AvatarPalette.colorForUserId(profile.userId),
-                      image: profile.avatarUrl != null
-                          ? DecorationImage(
-                              image: CachedNetworkImageProvider(
-                                profile.avatarUrl!,
-                              ),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
                     ),
-                    child: profile.avatarUrl == null
-                        ? Center(
-                            child: Text(
-                              profile.userName.isNotEmpty
-                                  ? profile.userName[0].toUpperCase()
-                                  : '?',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
-                          )
-                        : null,
+                    child: AvatarImage(
+                      userId: profile.userId,
+                      imageUrl: profile.avatarUrl,
+                      label: profile.userName,
+                      radius: 44,
+                    ),
                   ),
                   const Positioned(right: -2, bottom: 0, child: _CameraBadge()),
                 ],

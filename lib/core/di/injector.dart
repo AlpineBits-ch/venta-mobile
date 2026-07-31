@@ -73,7 +73,11 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<ProfileApi>(() => ProfileApi(client: getIt()));
   getIt.registerLazySingleton<ProfileRepository>(
-    () => ProfileRepository(api: getIt(), realtimeService: getIt()),
+    () => ProfileRepository(
+      api: getIt(),
+      authRepository: getIt(),
+      realtimeService: getIt(),
+    ),
   );
   getIt.registerLazySingleton<RelationshipApi>(
     () => RelationshipApi(client: getIt()),
@@ -95,8 +99,8 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<GuildRepository>(
     () => GuildRepository(
       api: getIt(),
+      authRepository: getIt(),
       realtimeService: getIt(),
-      myUserId: getIt<AuthRepository>().currentUserId ?? '',
     ),
   );
   getIt.registerLazySingleton<HouseholdApi>(
@@ -159,6 +163,24 @@ Future<void> configureDependencies() async {
       secureStorage: getIt(),
     ),
   );
+}
+
+/// Wipes every app-lifetime cache that belongs to one signed-in account.
+///
+/// These repositories are lazy singletons, so they outlive the session that
+/// filled them: without this, signing in as someone else keeps the previous
+/// account's profile (which is what the user banner renders), DM list,
+/// friends and guilds in memory, and the cache-first readers in front of them
+/// never refetch. Call on sign-in as well as sign-out - an expired session
+/// followed by a fresh login never passes through an explicit logout.
+///
+/// Resolving each one constructs it if it hasn't been already; that's cheap
+/// and they all get built the moment any authenticated screen mounts anyway.
+void resetSessionScopedCaches() {
+  getIt<ProfileRepository>().clear();
+  getIt<ConversationRepository>().clear();
+  getIt<RelationshipRepository>().clear();
+  getIt<GuildRepository>().clear();
 }
 
 /// Starts the push-notification and native-call-UI services - call once per

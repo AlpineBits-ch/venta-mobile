@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import 'conversation_api.dart';
+import 'conversation_prefs.dart';
 import 'models/conversation_dto.dart';
 
 /// REST conversation list merged with realtime structural events
@@ -66,6 +67,25 @@ class ConversationRepository {
     final created = await api.create(memberUserIds: [otherUserId]);
     await fetch();
     return created;
+  }
+
+  /// "Close DM" - drops the conversation off Home.
+  ///
+  /// The server broadcasts `ConversationDeleted`, which the realtime listener
+  /// above turns into a refetch anyway; the [fetch] here is just so the row
+  /// disappears without waiting on the socket.
+  Future<void> close(String conversationId) async {
+    await api.delete(conversationId);
+    ConversationPrefs.forget(conversationId);
+    await fetch();
+  }
+
+  /// Drops the cached DM list on a session change - see
+  /// `resetSessionScopedCaches()`. Emits so anything already listening
+  /// (the Home list) empties instead of showing the previous account's DMs.
+  void clear() {
+    _cache = [];
+    _conversationsController.add(_cache);
   }
 
   void dispose() => _realtimeSub.cancel();

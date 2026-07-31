@@ -546,10 +546,12 @@ class HouseholdApi {
       data: {
         'title': title,
         if (description != null) 'description': description,
-        'options': [
-          for (var i = 0; i < options.length; i++)
-            {'title': options[i], 'position': i},
-        ],
+        // Bare strings, not `{title, position}` objects: the server binds this
+        // to a `List<String>` and assigns each option's position from the
+        // order it arrives in. Sending objects fails the whole request with a
+        // 400 "Invalid JSON format ... could not be converted to
+        // System.String. Path: $.options[0]".
+        'options': options,
         if (quorum != null) 'quorum': quorum,
         if (closesAt != null) 'closesAt': _iso(closesAt),
       },

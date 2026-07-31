@@ -1,16 +1,15 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
-import '../../../../core/theme/avatar_palette.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
+import '../../../../core/widgets/avatar_image.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/status_dot.dart';
 import '../../../profile/data/models/profile_dto.dart';
@@ -272,17 +271,11 @@ class _MemberTile extends StatelessWidget {
       leading: Stack(
         clipBehavior: Clip.none,
         children: [
-          CircleAvatar(
-            backgroundColor: AvatarPalette.colorForUserId(member.userId),
-            backgroundImage: member.profile?.avatarUrl != null
-                ? CachedNetworkImageProvider(member.profile!.avatarUrl!)
-                : null,
-            child: member.profile?.avatarUrl == null
-                ? Text(
-                    displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-                    style: const TextStyle(color: Colors.white),
-                  )
-                : null,
+          AvatarImage(
+            userId: member.userId,
+            imageUrl: member.profile?.avatarUrl,
+            label: displayName,
+            radius: AppRadii.avatarMedium,
           ),
           if (!isBot)
             Positioned(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../../core/realtime/realtime_service.dart';
+import '../../auth/data/auth_repository.dart';
 import 'profile_api.dart';
 import 'models/profile_dto.dart';
 
@@ -8,9 +9,13 @@ import 'models/profile_dto.dart';
 /// relationships, conversation members) so features can resolve a display
 /// name/avatar without a network round trip once it's been seen once.
 /// Also the sole listener for `presence.*` realtime events.
+///
+/// Everything cached here is scoped to one signed-in account - see [clear],
+/// which `resetSessionScopedCaches()` calls whenever the session changes.
 class ProfileRepository {
   ProfileRepository({
     required this.api,
+    required this.authRepository,
     required RealtimeService realtimeService,
   }) {
     realtimeService.events.where((e) => e.name == 'presence.UserOnline').listen(
@@ -26,14 +31,39 @@ class ProfileRepository {
   }
 
   final ProfileApi api;
+  final AuthRepository authRepository;
 
   final Map<String, ProfileDto> _byUserId = {};
   ProfileDto? _self;
 
   final _selfController = StreamController<ProfileDto>.broadcast();
 
-  ProfileDto? get cachedSelf => _self;
+  /// Never returns a profile belonging to anyone but whoever the current
+  /// access token says we are.
+  ///
+  /// `SelfProfileResolver` reads this synchronously on mount and only fetches
+  /// when it comes back null, so one stale hit is permanent for that widget's
+  /// lifetime - which is how the user banner ended up showing the *previous*
+  /// account's name and avatar after signing in as someone else. [clear] on
+  /// session change is the primary fix; this guard is what makes a missed
+  /// reset impossible to see.
+  ProfileDto? get cachedSelf {
+    final profile = _self;
+    if (profile == null) return null;
+    final userId = authRepository.currentUserId;
+    if (userId != null && profile.userId != userId) return null;
+    return profile;
+  }
+
   ProfileDto? cachedByUserId(String userId) => _byUserId[userId];
+
+  /// Drops every cached profile. Called on sign-in, sign-out and session
+  /// expiry: these are another account's name, avatar and presence, and on a
+  /// self-hosted server they may not even be resolvable ids anymore.
+  void clear() {
+    _byUserId.clear();
+    _self = null;
+  }
 
   /// Every change to the signed-in user's own profile - avatar, banner, bio,
   /// status. The persistent user banner in `AppShell` and any open profile

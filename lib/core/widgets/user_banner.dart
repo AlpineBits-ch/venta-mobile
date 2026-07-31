@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,10 +7,10 @@ import '../../features/profile/presentation/widgets/status_label.dart';
 import '../../features/profile/presentation/widgets/status_picker_sheet.dart';
 import '../di/injector.dart';
 import '../routing/route_paths.dart';
-import '../theme/avatar_palette.dart';
 import '../theme/hex_color.dart';
 import '../theme/status_colors_extension.dart';
 import '../theme/widget_styles.dart';
+import 'avatar_image.dart';
 import 'profile_resolver.dart';
 
 /// The signed-in user's permanent footer, Discord-style: avatar with presence
@@ -195,31 +194,17 @@ class _PresenceAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final avatarUrl = profile?.avatarUrl;
-    final userName = profile?.userName ?? '';
-
     return SizedBox(
       width: 44,
       height: 40,
       child: Stack(
         children: [
-          CircleAvatar(
+          AvatarImage(
+            userId:
+                profile?.userId ?? getIt<AuthRepository>().currentUserId ?? '',
+            imageUrl: profile?.avatarUrl,
+            label: profile?.userName ?? '',
             radius: 20,
-            backgroundColor: AvatarPalette.colorForUserId(
-              profile?.userId ?? getIt<AuthRepository>().currentUserId ?? '',
-            ),
-            backgroundImage: avatarUrl != null
-                ? CachedNetworkImageProvider(avatarUrl)
-                : null,
-            child: avatarUrl == null
-                ? Text(
-                    userName.isNotEmpty ? userName[0].toUpperCase() : '?',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: Colors.white,
-                    ),
-                  )
-                : null,
           ),
           // Always drawn, unlike `StatusDot` - the banner spells the status out
           // in words right beside it, so a missing dot would look broken. The

@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/hex_color.dart';
-import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
+import '../../../../core/widgets/avatar_image.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../conversations/data/conversation_repository.dart';
 import '../../../friends/data/models/relationship_model.dart';
@@ -256,32 +256,19 @@ class _BannerAndAvatar extends StatelessWidget {
             left: AppSpacing.m,
             bottom: 0,
             child: Container(
-              width: 88,
-              height: 88,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: Theme.of(context).scaffoldBackgroundColor,
                   width: 4,
                 ),
-                color: context.statusColors.hover,
-                image: profile.avatarUrl != null
-                    ? DecorationImage(
-                        image: NetworkImage(profile.avatarUrl!),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
               ),
-              child: profile.avatarUrl == null
-                  ? Center(
-                      child: Text(
-                        profile.userName.isNotEmpty
-                            ? profile.userName[0].toUpperCase()
-                            : '?',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    )
-                  : null,
+              child: AvatarImage(
+                userId: profile.userId,
+                imageUrl: profile.avatarUrl,
+                label: profile.userName,
+                radius: 44,
+              ),
             ),
           ),
         ],

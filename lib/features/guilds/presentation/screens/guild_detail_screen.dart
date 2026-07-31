@@ -97,10 +97,22 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
         });
   }
 
-  Future<void> _loadOwnPermissions(String ownerId) async {
+  /// Whether a response that was requested for [guildId] should still be
+  /// allowed to touch this screen's state.
+  ///
+  /// This `State` is reused when the rail switches guilds (see
+  /// [didUpdateWidget]), so a slow fetch for the guild you just left resolves
+  /// *after* the fast one for the guild you're now on and would otherwise
+  /// overwrite it - you tap a big server, tap back to a small one, and a
+  /// second later the big server's channels reappear under the small one's
+  /// rail selection. Every `await` below has to re-check this, not just
+  /// [mounted].
+  bool _isStale(String guildId) => !mounted || widget.guildId != guildId;
+
+  Future<void> _loadOwnPermissions(String guildId, String ownerId) async {
     try {
-      final self = await getIt<GuildRepository>().getOwnMember(widget.guildId);
-      if (!mounted) return;
+      final self = await getIt<GuildRepository>().getOwnMember(guildId);
+      if (_isStale(guildId)) return;
       setState(() {
         _permissions = self.effectivePermissions(ownerId);
         _unread = {
@@ -184,7 +196,24 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   @override
   void didUpdateWidget(covariant GuildDetailScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.guildId != widget.guildId) _load();
+    if (oldWidget.guildId == widget.guildId) return;
+    // Every field below describes the guild we just left. Dropping them now
+    // means the switch shows this guild's own skeleton rather than the
+    // previous one's channels and badges, and lets the new guild's onboarding
+    // wizard open even if the last one's already had.
+    //
+    // No flicker when the new guild is cached: `_load` writes the cached guild
+    // synchronously before its first `await`, so both `setState`s land in the
+    // same frame.
+    setState(() {
+      _guild = null;
+      _permissions = GuildPermissions.none;
+      _unread = {};
+      _onboarding = null;
+      _hasSelfServePrompts = false;
+      _onboardingShown = false;
+    });
+    _load();
   }
 
   @override
@@ -199,22 +228,28 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   }
 
   Future<void> _load() async {
+    // Captured once: `widget.guildId` can change under this method while the
+    // fetch below is in flight, and every write here belongs to the guild the
+    // load was started for.
+    final guildId = widget.guildId;
     final repository = getIt<GuildRepository>();
-    final cached = repository.cachedById(widget.guildId);
-    if (cached != null && mounted) setState(() => _guild = cached);
-    if (cached != null) {
+    final cached = repository.cachedById(guildId);
+    if (cached != null && !_isStale(guildId)) {
+      setState(() => _guild = cached);
       _hydrateVoiceRosters(cached);
-      unawaited(_loadOwnPermissions(cached.ownerId));
+      unawaited(_loadOwnPermissions(guildId, cached.ownerId));
     }
     try {
-      final guild = await repository.fetchGuild(widget.guildId);
-      if (mounted) setState(() => _guild = guild);
+      final guild = await repository.fetchGuild(guildId);
+      if (_isStale(guildId)) return;
+      setState(() => _guild = guild);
       _hydrateVoiceRosters(guild);
-      unawaited(_loadOwnPermissions(guild.ownerId));
+      unawaited(_loadOwnPermissions(guildId, guild.ownerId));
     } catch (_) {
       // Keep whatever was cached; the realtime-driven refetch will retry.
     }
-    unawaited(_checkOnboarding());
+    if (_isStale(guildId)) return;
+    unawaited(_checkOnboarding(guildId));
   }
 
   /// Cheap enough to call on every guild-open per the backend guide.
@@ -224,12 +259,12 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   /// `completed: false` forever, and is not actually restricted - showing them
   /// a rules screen they can't get rid of was exactly the bug `enabled` was
   /// added to fix.
-  Future<void> _checkOnboarding() async {
+  Future<void> _checkOnboarding(String guildId) async {
     final repository = getIt<GuildRepository>();
     // Onboarding is a module: with it off there is no rules gate, no prompts
     // and no Channels & Roles, so neither request is worth making.
     if (!(_guild?.hasFeature(GuildFeature.onboarding) ?? true)) {
-      if (mounted && (_onboarding != null || _hasSelfServePrompts)) {
+      if (!_isStale(guildId) && (_onboarding != null || _hasSelfServePrompts)) {
         setState(() {
           _onboarding = null;
           _hasSelfServePrompts = false;
@@ -238,8 +273,8 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
       return;
     }
     try {
-      final status = await repository.getOwnOnboardingStatus(widget.guildId);
-      if (!mounted) return;
+      final status = await repository.getOwnOnboardingStatus(guildId);
+      if (_isStale(guildId)) return;
       setState(() => _onboarding = status);
       if (status.enabled && !status.completed && !_onboardingShown) {
         _onboardingShown = true;
@@ -253,8 +288,9 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
       // Channels & Roles covers every prompt, including the ones that never
       // appear in the join flow - so its entry point can't be inferred from
       // the join-flow status above.
-      final prompts = await repository.getOnboardingPrompts(widget.guildId);
-      if (mounted) setState(() => _hasSelfServePrompts = prompts.isNotEmpty);
+      final prompts = await repository.getOnboardingPrompts(guildId);
+      if (_isStale(guildId)) return;
+      setState(() => _hasSelfServePrompts = prompts.isNotEmpty);
     } catch (_) {
       // Leave the Channels & Roles row hidden.
     }

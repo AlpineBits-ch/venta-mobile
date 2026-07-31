@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
-import '../../../../core/theme/avatar_palette.dart';
+import '../../../../core/widgets/avatar_image.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/settings_tiles.dart';
@@ -276,36 +276,19 @@ class _ProfileHeader extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: 96,
-                  height: 96,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: theme.scaffoldBackgroundColor,
                       width: 5,
                     ),
-                    color: AvatarPalette.colorForUserId(profile.userId),
-                    image: profile.avatarUrl != null
-                        ? DecorationImage(
-                            image: CachedNetworkImageProvider(
-                              profile.avatarUrl!,
-                            ),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
                   ),
-                  child: profile.avatarUrl == null
-                      ? Center(
-                          child: Text(
-                            profile.userName.isNotEmpty
-                                ? profile.userName[0].toUpperCase()
-                                : '?',
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              color: Colors.white,
-                            ),
-                          ),
-                        )
-                      : null,
+                  child: AvatarImage(
+                    userId: profile.userId,
+                    imageUrl: profile.avatarUrl,
+                    label: profile.userName,
+                    radius: 48,
+                  ),
                 ),
                 Positioned(
                   right: 2,

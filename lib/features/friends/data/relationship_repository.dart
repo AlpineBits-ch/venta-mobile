@@ -74,6 +74,14 @@ class RelationshipRepository {
     return list;
   }
 
+  /// Drops the cached friends/requests on a session change - see
+  /// `resetSessionScopedCaches()`. Emits so the friends screen empties
+  /// instead of showing the previous account's relationships.
+  void clear() {
+    _cache = [];
+    _relationshipsController.add(_cache);
+  }
+
   Future<void> _refresh() async {
     try {
       await fetch();

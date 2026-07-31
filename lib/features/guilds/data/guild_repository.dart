@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
+import '../../auth/data/auth_repository.dart';
 import 'guild_api.dart';
 import 'models/audit_log_entry_dto.dart';
 import 'models/auto_mod_config_dto.dart';
@@ -34,8 +35,8 @@ import 'models/role_dto.dart';
 class GuildRepository {
   GuildRepository({
     required this.api,
+    required this.authRepository,
     required RealtimeService realtimeService,
-    required this.myUserId,
   }) {
     _realtimeSub = realtimeService.events
         .where(
@@ -98,8 +99,14 @@ class GuildRepository {
   }
 
   final GuildApi api;
-  final String myUserId;
+  final AuthRepository authRepository;
   late final StreamSubscription<RealtimeEvent> _realtimeSub;
+
+  /// Read live off the current access token, never captured at construction:
+  /// this is a lazy app-lifetime singleton, so a value baked in when it was
+  /// first resolved would stay the *previous* account's id for the rest of
+  /// the process - and every `isSelf` check below would then be wrong.
+  String get myUserId => authRepository.currentUserId ?? '';
 
   final List<GuildDto> _guilds = [];
   final _guildsController = StreamController<List<GuildDto>>.broadcast();
@@ -127,6 +134,15 @@ class GuildRepository {
       if (guild.id == guildId) return guild;
     }
     return null;
+  }
+
+  /// Drops the joined-guild and emoji caches on a session change - see
+  /// `resetSessionScopedCaches()`. Emits so the server rail empties instead
+  /// of offering the previous account's guilds, which it can no longer open.
+  void clear() {
+    _guilds.clear();
+    _emojiCache.clear();
+    _guildsController.add(List.unmodifiable(_guilds));
   }
 
   Future<List<GuildDto>> fetch() async {

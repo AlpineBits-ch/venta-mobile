@@ -1,9 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../routing/route_paths.dart';
-import '../theme/avatar_palette.dart';
+import 'avatar_image.dart';
 import 'profile_resolver.dart';
 import 'status_dot.dart';
 
@@ -38,21 +37,14 @@ class UserAvatar extends StatelessWidget {
       userId: userId,
       builder: (context, profile) {
         final label = profile?.userName.isNotEmpty ?? false
-            ? profile!.userName[0].toUpperCase()
+            ? profile!.userName
             : (fallbackLabel ?? '?');
 
-        final avatar = CircleAvatar(
+        final avatar = AvatarImage(
+          userId: userId,
+          imageUrl: profile?.avatarUrl,
+          label: label,
           radius: radius,
-          backgroundColor: AvatarPalette.colorForUserId(userId),
-          backgroundImage: profile?.avatarUrl != null
-              ? CachedNetworkImageProvider(profile!.avatarUrl!)
-              : null,
-          child: profile?.avatarUrl == null
-              ? Text(
-                  label,
-                  style: TextStyle(color: Colors.white, fontSize: radius * 0.7),
-                )
-              : null,
         );
 
         return GestureDetector(
