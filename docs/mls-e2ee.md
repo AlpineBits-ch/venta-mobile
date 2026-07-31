@@ -161,9 +161,13 @@ shown, rather than the server sending "you have a new encrypted message" — see
 - The plaintext cache has more than one writer (the app, plus Android's FCM
   background isolate or iOS's notification service extension), so every write to
   it merges rather than overwrites.
-- On iOS, MLS state lives in the App Group container so the extension can read
+- On iOS, MLS state moves into the App Group container so the extension can read
   it, and the extension opens the engine read-only so it can never write a stale
-  copy over what the app committed.
+  copy over what the app committed. The App Group entitlement and the release
+  provisioning profile have to change together — declaring one the profile does
+  not carry fails the archive outright, so
+  [push-decryption.md](push-decryption.md#setup-and-why-the-order-matters) sets
+  out the order.
 
 ## Who gets keys
 

@@ -103,25 +103,77 @@ The extension is a **separate process**, which drives two decisions:
    decrypt consumed costs nothing, because the plaintext goes into the message
    cache, which is where history is read from anyway.
 
-### Setup (needed once per checkout)
+### Setup, and why the order matters
 
 The extension's sources are checked in; the Xcode target is not, because
-`project.pbxproj` is not a file to hand-edit.
+`project.pbxproj` has to be written by Xcode itself.
 
-```sh
-cd ios && ruby scripts/add_notification_extension.rb
-pod install
+`ios/Runner/Runner.entitlements` declaring an App Group that the provisioning
+profile does not carry is not a degraded build, it is a **hard archive failure**:
+
+```
+Provisioning profile "Venta Mobile App Store" doesn't include the App Groups capability.
 ```
 
-Then, in Xcode / on the Apple Developer portal:
+and the profile in `.github/workflows/release.yml` is a pre-generated base64
+secret (`IOS_PROVISION_PROFILE_BASE64`), not something the build can mint.
 
-- Select a signing team for the `NotificationService` target.
-- Create the App Group `group.gg.venta.mobile` and enable it on **both** the app
-  id and the extension's app id, then regenerate both provisioning profiles.
+So it goes in two phases, and the entitlement can only be declared once phase 1
+has landed.
 
-Without the App Group the app still runs — `SharedContainer.directory()` returns
-null, MLS state stays where it was, and encrypted notifications show the
-placeholder.
+### Phase 1 — the App Group (no Mac needed)
+
+The app's own profile is the only thing blocking the archive, because the
+extension is not a target yet.
+
+1. [Register the App Group](https://developer.apple.com/account/resources/identifiers/list/applicationGroup)
+   `group.gg.venta.mobile`. This is the one step with no API equivalent — there
+   is no public `/v1/appGroups` endpoint.
+2. On the `gg.venta.mobile` App ID, tick **App Groups** → Configure → select the
+   group → Save. Existing profiles go invalid; that is expected.
+3. Regenerate the **Venta Mobile App Store** profile and download it. Keep the
+   name: `ExportOptions.plist` maps the bundle id to it.
+4. `IOS_PROVISION_PROFILE_BASE64` ← the new profile, base64, no trailing newline.
+5. Declare `com.apple.security.application-groups` in **both**
+   `Runner.entitlements` and `Runner-Release.entitlements` — in the same commit
+   as step 4, never before it.
+
+### Phase 2 — the extension (needs a Mac)
+
+6. In Xcode: **File → New → Target → Notification Service Extension**, product
+   name `NotificationService`, embed in `Runner`. The wizard writes into
+   `ios/NotificationService/`, so move the checked-in sources aside first and
+   copy them back over its generated ones afterwards — ours keep
+   `$(FLUTTER_BUILD_NAME)`/`$(FLUTTER_BUILD_NUMBER)` in `Info.plist`, and an
+   extension whose version does not match the app's is rejected at upload.
+
+   Create the target in Xcode rather than by editing `project.pbxproj`. A
+   previous blind edit from a non-Mac machine produced a file `xcodebuild`
+   refused to parse, twice — the workflow still carries a warning about it.
+
+7. On the new target: bridging header
+   `NotificationService/NotificationService-Bridging-Header.h`, `Other Linker
+   Flags` = `$(SRCROOT)/../packages/venta_mls/ios/build/libventa_mls.a`,
+   deployment target 15.0, and a Run Script phase **above** Compile Sources
+   running `"${SRCROOT}/../packages/venta_mls/ios/build_rust.sh"`. Nothing else
+   orders the pod's build of that archive against this target, and linking a
+   missing one fails with no useful explanation.
+
+8. App Groups capability on the extension target too, same group.
+
+9. Register the App ID `gg.venta.mobile.NotificationService` with App Groups,
+   generate an App Store profile for it, and put it in
+   `IOS_EXT_PROVISION_PROFILE_BASE64`. The workflow installs it and adds the
+   second `provisioningProfiles` entry automatically; with the secret unset it
+   skips both, so this file stays valid either side of the change.
+
+10. Commit `project.pbxproj`.
+
+The first launch after this moves existing MLS state into the App Group container
+(`MlsStore.resolveRoot`). That migration is the one irreversible step here — if it
+fails, the device loses its encrypted history — so it falls back from `rename` to
+a recursive copy, and a failure leaves the app usable and re-joining from
+Welcomes.
 
 ## The plaintext cache has two writers
 

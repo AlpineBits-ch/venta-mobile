@@ -5,7 +5,9 @@
 	<key>aps-environment</key>
 	<string>production</string>
 	<!-- See Runner.entitlements - the extension reads MLS state from this
-	     container to decrypt push notifications. -->
+	     container to decrypt push notifications. This is the file the release
+	     workflow signs against, so the App Store profile in
+	     IOS_PROVISION_PROFILE_BASE64 must carry the App Groups capability. -->
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.gg.venta.mobile</string>
