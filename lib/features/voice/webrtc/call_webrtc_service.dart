@@ -14,6 +14,16 @@ import '../data/voice_api.dart';
 /// right per-kind bucket instead of assuming everything is audio.
 typedef _TrackOwner = ({String userId, TrackKind kind});
 
+/// A subscribe request deferred until [CallWebRtcService.connect] has a peer
+/// connection and Cloudflare session to issue it against.
+typedef _PendingSubscribe = ({
+  String userId,
+  String cfSessionId,
+  String trackName,
+  TrackKind kind,
+  RTCRtpMediaType mediaType,
+});
+
 /// Manages the WebRTC plumbing for one Cloudflare Calls SFU session - the
 /// mobile counterpart to Alpine desktop's `CallWebRtcService`. One instance
 /// is created per active call by `CallCubit`, which owns the participant
@@ -56,6 +66,35 @@ class CallWebRtcService {
   final Map<String, MediaStreamTrack> _remoteVideoTracks = {};
   final Map<String, MediaStreamTrack> _remoteScreenTracks = {};
   final List<RTCTrackEvent> _pendingTracks = [];
+
+  // Subscribe requests that arrived before [connect] finished building the
+  // peer connection and Cloudflare session, keyed like [_subscribedKeys].
+  //
+  // This window is much wider than it looks and is hit constantly in 1:1
+  // calls. `CallCubit` moves to `CallPhase.active` and starts handling
+  // `call.ParticipantJoined` the moment the accept/create response lands,
+  // while `connect` is still awaiting `getUserMedia` - which blocks for
+  // seconds behind the OS microphone prompt on a cold start. The other party
+  // publishes their audio in exactly that window (they're doing it
+  // concurrently, not waiting on us), so their `ParticipantJoined` is
+  // routinely the event that lands first. It used to be dropped on the floor
+  // by the `_pc == null` guard below, permanently: the backfill in
+  // `CallCubit._connect` reads the *accept response*, which was serialized
+  // before the other side published and so carries no `cfSessionId` for them
+  // either, and nothing else retries short of a full SignalR reconnect. The
+  // result was a call that connected cleanly and stayed silent one way.
+  //
+  // Guild voice shares the same guard but rarely trips it - you join a
+  // channel whose occupants published long ago, so the join-response roster
+  // backfill already names their sessions and the live event is redundant.
+  final Map<String, _PendingSubscribe> _pendingSubscribes = {};
+
+  /// Keys of subscribe requests currently deferred, in `"userId|kind"` form.
+  /// Exposed because the flush itself can only run against a live peer
+  /// connection (platform channels), so the queueing half is what unit tests
+  /// can reach - see `test/call_pending_subscribe_test.dart`.
+  @visibleForTesting
+  Iterable<String> get pendingSubscribeKeys => _pendingSubscribes.keys;
 
   // RTCPeerConnection only allows one offer/answer exchange at a time -
   // chaining through this serializes publish/subscribe calls that would
@@ -123,6 +162,26 @@ class CallWebRtcService {
 
     await Helper.setSpeakerphoneOnButPreferBluetooth();
     _startStatsLogging();
+    await _flushPendingSubscribes();
+  }
+
+  /// Issues any subscribe requests that arrived while [connect] was still
+  /// getting the microphone and opening the Cloudflare session. Draining a
+  /// snapshot (rather than iterating the live map) keeps this safe against
+  /// [_subscribeTrack] re-adding a failed entry mid-flush.
+  Future<void> _flushPendingSubscribes() async {
+    if (_pendingSubscribes.isEmpty) return;
+    final pending = _pendingSubscribes.values.toList();
+    _pendingSubscribes.clear();
+    for (final p in pending) {
+      await _subscribeTrack(
+        userId: p.userId,
+        cfSessionId: p.cfSessionId,
+        trackName: p.trackName,
+        kind: p.kind,
+        mediaType: p.mediaType,
+      );
+    }
   }
 
   /// Starts local camera capture and publishes it as a `"camera"` track -
@@ -274,7 +333,21 @@ class CallWebRtcService {
   }) async {
     final pc = _pc;
     final key = '$userId|${kind.name}';
-    if (pc == null || !_subscribedKeys.add(key)) return;
+    if (pc == null || _cfSessionId == null) {
+      // Not connected yet - hold the request rather than dropping it, and
+      // leave [_subscribedKeys] alone so the flush is what claims the key.
+      // See [_pendingSubscribes].
+      _pendingSubscribes[key] = (
+        userId: userId,
+        cfSessionId: cfSessionId,
+        trackName: trackName,
+        kind: kind,
+        mediaType: mediaType,
+      );
+      return;
+    }
+    _pendingSubscribes.remove(key);
+    if (!_subscribedKeys.add(key)) return;
 
     try {
       await pc.addTransceiver(
@@ -361,7 +434,11 @@ class CallWebRtcService {
       case TrackKind.screen:
         _remoteScreenTracks.remove(userId);
     }
-    _subscribedKeys.remove('$userId|${kind.name}');
+    final key = '$userId|${kind.name}';
+    _subscribedKeys.remove(key);
+    // Also drop a request still waiting on [connect] - a participant who left
+    // during that window must not be subscribed to by the flush afterwards.
+    _pendingSubscribes.remove(key);
     _midOwners.removeWhere(
       (mid, owner) => owner.userId == userId && owner.kind == kind,
     );
@@ -416,6 +493,7 @@ class CallWebRtcService {
     _remoteVideoTracks.clear();
     _remoteScreenTracks.clear();
     _pendingTracks.clear();
+    _pendingSubscribes.clear();
     _subscribedKeys.clear();
     _deafened = false;
     _negotiationChain = Future.value();

@@ -110,13 +110,11 @@ Future<void> configureDependencies() async {
     () => HouseholdRepository(realtimeService: getIt()),
   );
   getIt.registerLazySingleton<SoundService>(() => SoundService());
-  getIt.registerLazySingleton<VoiceApi>(() => VoiceApi(client: getIt()));
+  getIt.registerLazySingleton<VoiceApi>(
+    () => VoiceApi(client: getIt(), deviceIdService: getIt()),
+  );
   getIt.registerLazySingleton<VoiceRepository>(
-    () => VoiceRepository(
-      api: getIt(),
-      realtimeService: getIt(),
-      deviceIdService: getIt(),
-    ),
+    () => VoiceRepository(api: getIt(), realtimeService: getIt()),
   );
   getIt.registerLazySingleton<CallCubit>(
     () => CallCubit(

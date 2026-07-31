@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import '../../../core/device/device_id_service.dart';
 import '../../../core/format/api_date_time.dart';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
@@ -155,12 +154,8 @@ class CallEndedRemotely extends VoiceRepositoryEvent {
 /// connection's `call.*` events need to reach the incoming-call banner even
 /// when no call screen is on-screen yet, so this can't be scoped to one call.
 class VoiceRepository {
-  VoiceRepository({
-    required this.api,
-    required RealtimeService realtimeService,
-    required DeviceIdService deviceIdService,
-  }) : _realtimeService = realtimeService,
-       _deviceIdService = deviceIdService {
+  VoiceRepository({required this.api, required RealtimeService realtimeService})
+    : _realtimeService = realtimeService {
     _realtimeSub = realtimeService.events
         .where((e) => e.name.startsWith('call.'))
         .listen(_handleRealtimeEvent);
@@ -168,7 +163,6 @@ class VoiceRepository {
 
   final VoiceApi api;
   final RealtimeService _realtimeService;
-  final DeviceIdService _deviceIdService;
   late final StreamSubscription<RealtimeEvent> _realtimeSub;
 
   final _eventsController = StreamController<VoiceRepositoryEvent>.broadcast();
@@ -274,28 +268,28 @@ class VoiceRepository {
     }
   }
 
+  /// The `X-Device-Id` header these all depend on is applied inside
+  /// [VoiceApi] itself rather than threaded through here - it has to be on
+  /// the Cloudflare session/track endpoints too, which this repository never
+  /// touches (they're driven straight from `CallWebRtcService`). See the
+  /// class comment on [VoiceApi].
   Future<CallDto> createCall({
     required String conversationId,
     required List<String> participantUserIds,
   }) => api.createCall(
     conversationId: conversationId,
     participantUserIds: participantUserIds,
-    deviceId: _deviceIdService.deviceId,
   );
 
-  Future<CallDto> acceptCall(String callId) =>
-      api.acceptCall(callId, deviceId: _deviceIdService.deviceId);
+  Future<CallDto> acceptCall(String callId) => api.acceptCall(callId);
 
-  Future<CallDto> declineCall(String callId) =>
-      api.declineCall(callId, deviceId: _deviceIdService.deviceId);
+  Future<CallDto> declineCall(String callId) => api.declineCall(callId);
 
   /// Removes the local user from the call without ending it for anyone else
   /// still connected - see [VoiceApi.leaveCall].
-  Future<CallDto> leaveCall(String callId) =>
-      api.leaveCall(callId, deviceId: _deviceIdService.deviceId);
+  Future<CallDto> leaveCall(String callId) => api.leaveCall(callId);
 
-  Future<CallDto> endCall(String callId) =>
-      api.endCall(callId, deviceId: _deviceIdService.deviceId);
+  Future<CallDto> endCall(String callId) => api.endCall(callId);
 
   Future<CallDto> getCall(String callId) => api.getCall(callId);
 
