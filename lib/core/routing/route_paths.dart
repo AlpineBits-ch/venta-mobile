@@ -63,6 +63,45 @@ abstract final class RoutePaths {
   /// error page.
   static const legacyProfileSettings = '/profile-settings';
 
+  /// Where [location] goes when it's asked to go back and has nothing beneath
+  /// it on the stack, or `null` if there is nowhere above it (the auth screens,
+  /// and [home] itself - backing out of those closes the app).
+  ///
+  /// Deliberately the same targets the screens pass to `AppBackButton`: the
+  /// arrow in the app bar and the system back button on the same screen going
+  /// to different places is its own bug. This exists because the system back
+  /// button has no screen to ask - see `UpBackButtonDispatcher`.
+  static String? parentOf(String location) {
+    return switch (Uri.parse(location).pathSegments) {
+      // A channel's own sub-screens (settings, forum config) go back to the
+      // channel; the channel itself goes back to the guild.
+      ['server', final guildId, 'channel', final channelId, ...final rest] =>
+        rest.isEmpty
+            ? serverPath(guildId)
+            : serverChannelPath(guildId, channelId),
+      // The editor is reached from the wiki index as often as from the page
+      // it edits, and `WikiEditorScreen` resolves that tie towards the index.
+      ['server', final guildId, 'wiki', _, 'edit'] => serverWikiPath(guildId),
+      ['server', final guildId, 'wiki', final pageId, ...final rest] =>
+        rest.isEmpty || pageId == 'new'
+            ? serverWikiPath(guildId)
+            : serverWikiPagePath(guildId, pageId),
+      // Everything else hanging off a guild - members, settings, events, the
+      // wiki index, Channels & Roles.
+      ['server', final guildId, _, ...] => serverPath(guildId),
+      ['server', _] => home,
+      ['home'] => null,
+      // Friends and conversations both sit under Home.
+      ['home', ...] => home,
+      ['me'] => home,
+      ['me', ...] => selfProfile,
+      ['settings'] => home,
+      ['settings', ...] => settings,
+      ['user', ...] => home,
+      _ => null,
+    };
+  }
+
   static String conversationPath(String conversationId) =>
       '/home/conversation/$conversationId';
 

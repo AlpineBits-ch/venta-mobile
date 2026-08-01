@@ -10,6 +10,7 @@ import 'core/mls/mls_session_manager.dart';
 import 'core/mls/mls_store.dart';
 import 'core/push/push_notification_service.dart';
 import 'core/routing/app_router.dart';
+import 'core/routing/back_navigation.dart';
 import 'core/routing/deep_link_handler.dart';
 import 'core/session/session_cubit.dart';
 import 'core/theme/app_theme.dart';
@@ -29,6 +30,7 @@ class App extends StatefulWidget {
 class _AppState extends State<App> {
   late final SessionCubit _sessionCubit;
   late final GoRouter _router;
+  late final UpBackButtonDispatcher _backButtonDispatcher;
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<String>? _notificationTapSub;
@@ -40,6 +42,7 @@ class _AppState extends State<App> {
     _sessionCubit = SessionCubit(authRepository: getIt<AuthRepository>())
       ..restore();
     _router = buildAppRouter(_sessionCubit);
+    _backButtonDispatcher = UpBackButtonDispatcher(_router);
     _initDeepLinks();
     _notificationTapSub = getIt<PushNotificationService>().onNotificationTap
         .listen(_router.push);
@@ -157,7 +160,14 @@ class _AppState extends State<App> {
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
             themeMode: themeMode,
-            routerConfig: _router,
+            // Spelled out rather than passed as `routerConfig`, which is the
+            // same four fields but hard-wires `GoRouter`'s own back button
+            // dispatcher - and the one thing that needs changing is what
+            // happens when nothing pops.
+            routerDelegate: _router.routerDelegate,
+            routeInformationParser: _router.routeInformationParser,
+            routeInformationProvider: _router.routeInformationProvider,
+            backButtonDispatcher: _backButtonDispatcher,
           );
         },
       ),

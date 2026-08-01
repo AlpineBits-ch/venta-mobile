@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'route_paths.dart';
+
 /// Going "up" from a screen with nothing beneath it, and the page builder that
 /// makes it *look* like going up.
 ///
@@ -31,13 +33,50 @@ abstract final class BackNavigation {
       context.pop();
       return;
     }
+    goUp(GoRouter.of(context), location);
+  }
+
+  /// Replaces the stack with [location], animated as if it had been popped to.
+  ///
+  /// Only for when there is genuinely nothing to pop - [goBack] is the one to
+  /// call from a screen.
+  static void goUp(GoRouter router, String location) {
     _target = Uri.parse(location).path;
-    context.go(location);
+    router.go(location);
   }
 
   static bool _isReturningTo(GoRouterState state) {
     if (_target == null || _target != state.uri.path) return false;
     _target = null;
+    return true;
+  }
+}
+
+/// Sends the Android back button up to the parent location when the navigator
+/// has nothing to pop, instead of closing the app.
+///
+/// The same one-page stack behind [BackNavigation]: cold-start restore, deep
+/// links and notification taps all open their screen as the only entry, and a
+/// back press there went straight past Flutter to Android, which read "no
+/// route to pop" as "close the app" - from a channel the user had merely
+/// reopened, with the app bar showing a back arrow that did work.
+///
+/// Runs strictly after the navigator has declined: a `PopScope` that blocked
+/// the pop (an in-progress call, an unsaved editor) counts as handling it, so
+/// this never overrides one.
+class UpBackButtonDispatcher extends RootBackButtonDispatcher {
+  UpBackButtonDispatcher(this._router);
+
+  final GoRouter _router;
+
+  @override
+  Future<bool> invokeCallback(Future<bool> defaultValue) async {
+    if (await super.invokeCallback(defaultValue)) return true;
+    final parent = RoutePaths.parentOf(_router.state.uri.path);
+    // Nowhere above this screen - let Android have the back press and close
+    // the app, which from Home is what it should do.
+    if (parent == null) return false;
+    BackNavigation.goUp(_router, parent);
     return true;
   }
 }

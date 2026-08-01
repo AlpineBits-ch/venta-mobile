@@ -393,7 +393,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/../packages/venta_mls/ios/build_rust.sh\"\n";
+			shellScript = "bash \"${SRCROOT}/../packages/venta_mls/ios/build_rust.sh\"\n";
 		};
 		27639E9AC92DDDDEF3E7005A /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;

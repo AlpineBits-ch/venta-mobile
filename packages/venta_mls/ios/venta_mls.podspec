@@ -35,7 +35,12 @@ join each other's groups and read each other's ciphertext.
 
   s.script_phase = {
     :name => 'Build Rust MLS engine',
-    :script => '"${PODS_TARGET_SRCROOT}/build_rust.sh"',
+    # Invoked through `bash` rather than directly: this repo is developed on
+    # Windows, where the executable bit exists only in the git index and is
+    # silently dropped by anything that re-adds the file. Losing it fails the
+    # archive with a bare "Permission denied" from a generated Script-*.sh.
+    # `bash` and not `sh` because the script uses arrays.
+    :script => 'bash "${PODS_TARGET_SRCROOT}/build_rust.sh"',
     :execution_position => :before_compile,
     :output_files => ['${PODS_TARGET_SRCROOT}/build/libventa_mls.a'],
   }
