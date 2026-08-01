@@ -3,11 +3,14 @@ PODS:
   - flutter_webrtc (1.4.0):
     - Flutter
     - WebRTC-SDK (= 144.7559.09)
+  - venta_mls (0.1.0):
+    - Flutter
   - WebRTC-SDK (144.7559.09)
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_webrtc (from `.symlinks/plugins/flutter_webrtc/ios`)
+  - venta_mls (from `.symlinks/plugins/venta_mls/ios`)
 
 SPEC REPOS:
   trunk:
@@ -18,12 +21,15 @@ EXTERNAL SOURCES:
     :path: Flutter
   flutter_webrtc:
     :path: ".symlinks/plugins/flutter_webrtc/ios"
+  venta_mls:
+    :path: ".symlinks/plugins/venta_mls/ios"
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_webrtc: 3ee86aa10e0313c38c93fdb215dd86e77014f96a
+  venta_mls: 869c92c0576f766e735ae877ea5f943acf84f032
   WebRTC-SDK: e6006119cd730d6315d875e4a421b6cc8bb88833
 
-PODFILE CHECKSUM: c342e4b4786b47692de140512d7014f99e3bb3a3
+PODFILE CHECKSUM: 7b3e184cbeeb5600b9a2c5d5240d2cd5bee0d0ae
 
 COCOAPODS: 1.16.2

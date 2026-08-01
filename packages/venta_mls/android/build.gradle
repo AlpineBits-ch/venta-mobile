@@ -70,6 +70,28 @@ tasks.register('cargoBuildRelease', Exec) {
                     'Android NDK not found. Install it via the SDK Manager (Tools > SDK Manager > ' +
                             'SDK Tools > NDK) - the MLS engine is native code and cannot be built without it.')
         }
+
+        // `cargo ndk` is a separate crate, not part of a stock Rust install, so a
+        // fresh machine (and CI) has `cargo` but not the `ndk` subcommand - the
+        // build then dies with `error: no such command: ndk`. Install it on
+        // demand, and make sure the per-ABI rustup targets it compiles for exist,
+        // mirroring what build_rust.sh already does for the iOS side.
+        def cargoNdkPresent = exec {
+            commandLine 'cargo', 'ndk', '--version'
+            ignoreExitValue true
+            standardOutput = new ByteArrayOutputStream()
+            errorOutput = new ByteArrayOutputStream()
+        }.exitValue == 0
+        if (!cargoNdkPresent) {
+            logger.lifecycle('venta_mls: cargo-ndk not found - installing it (cargo install cargo-ndk)')
+            exec { commandLine 'cargo', 'install', 'cargo-ndk' }
+        }
+        ['aarch64-linux-android', 'armv7-linux-androideabi', 'x86_64-linux-android'].each { triple ->
+            exec {
+                commandLine 'rustup', 'target', 'add', triple
+                ignoreExitValue true
+            }
+        }
     }
 
     doLast {
