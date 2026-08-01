@@ -183,7 +183,35 @@ extension is not a target yet.
    `check_specifier` in the workflow compares the two up front so that surfaces
    in seconds instead.
 
-10. Commit `project.pbxproj`.
+10. Remove `${TARGET_BUILD_DIR}/${INFOPLIST_PATH}` from the **Input Files** of
+    the `Thin Binary` build phase on the **Runner** target — Xcode's own
+    Build Phases editor, or the `inputPaths` list in `project.pbxproj`, which
+    is a value edit rather than a structural one.
+
+    Without this the archive fails with `Cycle inside Runner; building could
+    produce unreliable results`, and never gets as far as signing:
+
+    ```
+    CodeSign Runner.app  ->  Frameworks/WebRTC.framework
+      ->  [CP] Embed Pods Frameworks   (phase 8)
+      ->  Thin Binary                  (phase 7)
+      ->  Runner.app/Info.plist        <- that input
+      ->  Copy NotificationService.appex into Runner.app/PlugIns
+      ->  Embed Foundation Extensions  (phase 9, after the Pods phase)
+    ```
+
+    Xcode appends `Embed Foundation Extensions` last when the wizard adds an
+    extension, which is what closes the loop — the Pods phase and the appex
+    copy each end up waiting on the other. Flutter declares that input so its
+    thinning script is ordered after Info.plist processing, which it writes to
+    in debug/profile builds (`AddObservatoryBonjourService`); release builds,
+    the only ones this workflow makes, return from that early. The phase is
+    `alwaysOutOfDate`, so dropping the input doesn't stop it running.
+
+    A `flutter create`-style project regeneration would put the input back and
+    the cycle with it.
+
+11. Commit `project.pbxproj`.
 
 The first launch after this moves existing MLS state into the App Group container
 (`MlsStore.resolveRoot`). That migration is the one irreversible step here — if it

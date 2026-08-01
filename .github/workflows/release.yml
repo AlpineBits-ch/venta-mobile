@@ -219,6 +219,11 @@ jobs:
       # machine produced a file xcodebuild refused to parse twice over.
       # Changing the *value* of an existing build setting is safe enough by
       # hand; adding objects and their references is not.
+      #
+      # One such value edit is load-bearing: the Runner's `Thin Binary` phase
+      # must not list ${TARGET_BUILD_DIR}/${INFOPLIST_PATH} as an input. With
+      # it, embedding the extension makes the archive fail as "Cycle inside
+      # Runner" before it reaches signing - see docs/push-decryption.md.
 
       # `flutter build ipa` runs `pod install` itself as part of the archive
       # step, so no separate CocoaPods step is needed here.
