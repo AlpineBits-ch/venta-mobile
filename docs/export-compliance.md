@@ -41,16 +41,25 @@ application and in the wrong place.
 
 ## 1. Info.plist — done
 
-`ios/Runner/Info.plist` declares `ITSAppUsesNonExemptEncryption` = `true`. It
-said `false` until 2026-08-01, which is why no build was ever asked the
-questionnaire.
+`ios/Runner/Info.plist` carries **no** `ITSAppUsesNonExemptEncryption` key,
+which means "ask me in App Store Connect". It said `false` until 2026-08-01,
+which is why no build was ever asked the questionnaire.
 
-Once App Store Connect has been answered once (step 3), it returns an export
-compliance code. Adding it as `ITSEncryptionExportComplianceCode` stops ASC
-asking again on every build.
+**Do not simply flip it to `true`.** That was tried and it breaks the upload —
+altool then requires a matching `ITSEncryptionExportComplianceCode`:
 
-Expect the next TestFlight upload to show **Missing Compliance** until step 3 is
-done.
+```
+[altool] Invalid Export Compliance Code. The export compliance key value []
+in the app's Info.plist doesn't match the key value of the app's export
+compliance documentation. (90592)
+```
+
+The code only exists once there is an approved declaration in App Store
+Connect, and that needs an uploaded build — so `true` with no code is a
+deadlock. Omitting the key breaks it: the build uploads, ASC flags it
+**Missing Compliance**, you answer the questionnaire (step 3), and the code it
+returns can then be pinned as `ITSEncryptionExportComplianceCode` next to a
+`true` if you want to stop being asked per build.
 
 ## 2. Annual self-classification report
 

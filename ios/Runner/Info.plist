@@ -37,18 +37,31 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<!-- true, not false: the app ships its own cryptography rather than only
+	<!-- ITSAppUsesNonExemptEncryption is deliberately absent, which means "ask
+	     me in App Store Connect" rather than making a claim here.
+
+	     It cannot be false: the app ships its own cryptography rather than only
 	     calling Apple's. venta_mls links OpenMLS (RFC 9420) for end-to-end
 	     message encryption, and WebRTC.framework carries BoringSSL for
 	     DTLS-SRTP. Neither is covered by the exemptions, which are for
-	     HTTPS/CryptoKit/Keychain, authentication-only use, or DRM.
+	     HTTPS/CryptoKit/Keychain, authentication-only use, or DRM. It said
+	     false until 2026-08-01, which is why no build was ever asked.
 
-	     All of it is standard published cryptography - HPKE, X25519, Ed25519,
-	     AES-GCM, ChaCha20-Poly1305, HKDF - so this is a self-classified
-	     ECCN 5D992.c mass market item, not a CCATS case. See
-	     docs/export-compliance.md before changing this value. -->
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<true/>
+	     It cannot be true on its own either - altool then demands a matching
+	     ITSEncryptionExportComplianceCode and rejects the upload with
+
+	       Invalid Export Compliance Code ... key value [] ... (90592)
+
+	     and that code only exists after a declaration in App Store Connect,
+	     which needs an uploaded build. Absent breaks the loop: the build
+	     uploads, App Store Connect marks it Missing Compliance, you answer the
+	     questionnaire once, and the code it returns can then be pinned here
+	     alongside a true.
+
+	     All of the crypto is standard published algorithms - HPKE, X25519,
+	     Ed25519, AES-GCM, ChaCha20-Poly1305, HKDF - so this is a
+	     self-classified ECCN 5D992.c mass market item. Read
+	     docs/export-compliance.md before touching either key. -->
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
