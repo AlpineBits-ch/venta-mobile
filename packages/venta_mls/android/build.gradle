@@ -44,9 +44,24 @@ def jniLibsOut = file("${buildDir}/rustJniLibs")
 // the NDK is. `android.ndkDirectory` is the one path that is already correct on
 // a machine where Flutter builds at all, so it beats asking for ANDROID_NDK_HOME
 // to be exported.
-def cargoNdkExecutable = System.getProperty('os.name').toLowerCase().contains('windows')
-        ? 'cargo-ndk.exe'
-        : 'cargo-ndk'
+
+// Gradle 9 removed `Project.exec {}`. Called from inside a task action the name
+// then resolves against the Exec task instead - which has no `exec` method - and
+// the build dies with "Could not find method exec()". ProcessBuilder is the
+// least ceremonious replacement for the handful of setup commands below; the
+// alternative is injecting ExecOperations, which means turning this into a
+// custom task class for three one-line invocations.
+def runCommand = { List<String> cmd, boolean ignoreFailure ->
+    def process = new ProcessBuilder(cmd).redirectErrorStream(true).start()
+    // Drain before waiting: a command that fills the pipe buffer deadlocks
+    // against a `waitFor` that nobody is reading for.
+    def output = process.inputStream.text
+    def code = process.waitFor()
+    if (code != 0 && !ignoreFailure) {
+        throw new GradleException("`${cmd.join(' ')}` failed with exit code ${code}:\n${output}")
+    }
+    return code
+}
 
 tasks.register('cargoBuildRelease', Exec) {
     description = 'Compiles the Rust MLS engine for all Android ABIs (release)'
@@ -76,21 +91,12 @@ tasks.register('cargoBuildRelease', Exec) {
         // build then dies with `error: no such command: ndk`. Install it on
         // demand, and make sure the per-ABI rustup targets it compiles for exist,
         // mirroring what build_rust.sh already does for the iOS side.
-        def cargoNdkPresent = exec {
-            commandLine 'cargo', 'ndk', '--version'
-            ignoreExitValue true
-            standardOutput = new ByteArrayOutputStream()
-            errorOutput = new ByteArrayOutputStream()
-        }.exitValue == 0
-        if (!cargoNdkPresent) {
+        if (runCommand(['cargo', 'ndk', '--version'], true) != 0) {
             logger.lifecycle('venta_mls: cargo-ndk not found - installing it (cargo install cargo-ndk)')
-            exec { commandLine 'cargo', 'install', 'cargo-ndk' }
+            runCommand(['cargo', 'install', 'cargo-ndk'], false)
         }
         ['aarch64-linux-android', 'armv7-linux-androideabi', 'x86_64-linux-android'].each { triple ->
-            exec {
-                commandLine 'rustup', 'target', 'add', triple
-                ignoreExitValue true
-            }
+            runCommand(['rustup', 'target', 'add', triple], true)
         }
     }
 

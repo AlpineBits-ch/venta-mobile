@@ -713,6 +713,8 @@
 				OTHER_LDFLAGS = "$(SRCROOT)/../packages/venta_mls/ios/build/libventa_mls.a";
 				PRODUCT_BUNDLE_IDENTIFIER = gg.venta.mobile.NotificationService;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "Venta Mobile Notification Service App Store";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -759,6 +761,8 @@
 				OTHER_LDFLAGS = "$(SRCROOT)/../packages/venta_mls/ios/build/libventa_mls.a";
 				PRODUCT_BUNDLE_IDENTIFIER = gg.venta.mobile.NotificationService;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "Venta Mobile Notification Service App Store";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

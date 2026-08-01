@@ -161,11 +161,25 @@ extension is not a target yet.
 
 8. App Groups capability on the extension target too, same group.
 
-9. Register the App ID `gg.venta.mobile.NotificationService` with App Groups,
-   generate an App Store profile for it, and put it in
+9. Register the App ID `gg.venta.mobile.NotificationService` with App Groups —
+   the same `group.gg.venta.mobile`, not a second group — generate an App Store
+   profile named **Venta Mobile Notification Service App Store**, and put it in
    `IOS_EXT_PROVISION_PROFILE_BASE64`. The workflow installs it and adds the
    second `provisioningProfiles` entry automatically; with the secret unset it
    skips both, so this file stays valid either side of the change.
+
+   The name is not cosmetic. Both targets sign manually, so each names its
+   profile literally in `project.pbxproj`
+   (`PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]`). A profile that doesn't
+   match fails half a minute into the archive with a message that mentions
+   neither name:
+
+   ```
+   "NotificationService" requires a provisioning profile with the App Groups feature.
+   ```
+
+   `check_specifier` in the workflow compares the two up front so that surfaces
+   in seconds instead.
 
 10. Commit `project.pbxproj`.
 

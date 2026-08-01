@@ -131,13 +131,30 @@ jobs:
             cp "$path" ~/Library/MobileDevice/Provisioning\ Profiles/"$uuid".mobileprovision
             echo "$var=$name" >> "$GITHUB_ENV"
             echo "Installed profile '$name' ($uuid)"
+            LAST_PROFILE_NAME="$name"
+          }
+
+          # Signing is manual, so each target names its profile in project.pbxproj
+          # by literal string. A profile whose name doesn't match fails half a
+          # minute into the archive, with a message that never mentions either
+          # name ("requires a provisioning profile with the ... feature"), so the
+          # comparison is worth doing up front.
+          check_specifier() {
+            if grep -qF "\"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]\" = \"$1\";" ios/Runner.xcodeproj/project.pbxproj; then
+              return 0
+            fi
+            echo "::error::Installed profile is named '$1', but no target in project.pbxproj asks for it. Targets want:"
+            grep -n 'PROVISIONING_PROFILE_SPECIFIER\[sdk' ios/Runner.xcodeproj/project.pbxproj || true
+            exit 1
           }
 
           install_profile "$PP_PATH" PROFILE_NAME
+          check_specifier "$LAST_PROFILE_NAME"
 
           if [ -n "${EXT_PROVISION_PROFILE_BASE64:-}" ]; then
             echo -n "$EXT_PROVISION_PROFILE_BASE64" | base64 --decode -o "$EXT_PP_PATH"
             install_profile "$EXT_PP_PATH" EXT_PROFILE_NAME
+            check_specifier "$LAST_PROFILE_NAME"
           else
             echo "No extension profile secret set - skipping (expected until the NotificationService target exists)."
           fi
@@ -181,27 +198,20 @@ jobs:
           cat ios/ExportOptions.plist
           plutil -lint ios/ExportOptions.plist
 
-      # NOTE: ios/Runner.xcodeproj/project.pbxproj currently has no signing
-      # configuration at all (still Flutter's default `CODE_SIGN_STYLE =
-      # Automatic`, no team) - it's never been opened in real Xcode. A
-      # previous attempt to patch in manual signing settings blind, from a
-      # non-Mac machine, produced a project file that xcodebuild refused to
-      # even parse ("damaged... parse error") twice in a row for reasons
-      # that were never fully diagnosed. That edit has been reverted.
+      # NOTE: signing for both targets lives in project.pbxproj, written by
+      # Xcode on a Mac: `CODE_SIGN_STYLE = Manual`, team S33LPKH83B, and a
+      # `PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]` naming the profile
+      # this job installs above. The steps above are therefore sufficient on
+      # their own - nothing patches the project file in CI.
       #
-      # Do not repeat that: configure signing once via Xcode's Signing &
-      # Capabilities UI on a real Mac (Runner target > Signing & Capabilities
-      # > pick the team > either enable "Automatically manage signing", or
-      # disable it and select the App Store provisioning profile manually),
-      # then commit the resulting project.pbxproj. Xcode writes well-formed
-      # entries; hand-editing this file blind is what broke it. Once that's
-      # committed, this job's cert/profile import steps above should be
-      # sufficient on their own - no CI-side pbxproj patching needed.
+      # Structural changes here (adding a target, a build phase, a file) go
+      # through Xcode. An early attempt to write them blind from a non-Mac
+      # machine produced a file xcodebuild refused to parse twice over.
+      # Changing the *value* of an existing build setting is safe enough by
+      # hand; adding objects and their references is not.
 
-      # `flutter build ipa` generates `ios/Podfile` (if missing, as it
-      # currently is - iOS has never been built on this Windows dev
-      # machine) and runs `pod install` itself as part of the archive step,
-      # so no separate CocoaPods step is needed here.
+      # `flutter build ipa` runs `pod install` itself as part of the archive
+      # step, so no separate CocoaPods step is needed here.
       - name: flutter build ipa
         run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
 
