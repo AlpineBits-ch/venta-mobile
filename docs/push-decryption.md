@@ -183,33 +183,33 @@ extension is not a target yet.
    `check_specifier` in the workflow compares the two up front so that surfaces
    in seconds instead.
 
-10. Remove `${TARGET_BUILD_DIR}/${INFOPLIST_PATH}` from the **Input Files** of
-    the `Thin Binary` build phase on the **Runner** target — Xcode's own
-    Build Phases editor, or the `inputPaths` list in `project.pbxproj`, which
-    is a value edit rather than a structural one.
+10. On the **Runner** target, drag **Embed Foundation Extensions** up so it runs
+    *before* `Embed Frameworks`, `Thin Binary` and `[CP] Embed Pods Frameworks`
+    — directly after `Copy Bundle Resources`.
 
-    Without this the archive fails with `Cycle inside Runner; building could
-    produce unreliable results`, and never gets as far as signing:
+    Xcode appends that phase last when the wizard adds an extension, and last
+    is where it deadlocks. Every archive then fails with `Cycle inside Runner;
+    building could produce unreliable results`, before signing:
 
     ```
     CodeSign Runner.app  ->  Frameworks/WebRTC.framework
       ->  [CP] Embed Pods Frameworks   (phase 8)
       ->  Thin Binary                  (phase 7)
-      ->  Runner.app/Info.plist        <- that input
+      ->  Runner.app/Info.plist        (a declared input of Thin Binary)
       ->  Copy NotificationService.appex into Runner.app/PlugIns
-      ->  Embed Foundation Extensions  (phase 9, after the Pods phase)
+      ->  Embed Foundation Extensions  (phase 9 — back above the Pods phase)
     ```
 
-    Xcode appends `Embed Foundation Extensions` last when the wizard adds an
-    extension, which is what closes the loop — the Pods phase and the appex
-    copy each end up waiting on the other. Flutter declares that input so its
-    thinning script is ordered after Info.plist processing, which it writes to
-    in debug/profile builds (`AddObservatoryBonjourService`); release builds,
-    the only ones this workflow makes, return from that early. The phase is
-    `alwaysOutOfDate`, so dropping the input doesn't stop it running.
+    Moving the phase to 6 makes every edge in that chain point backwards
+    through the phase order, so there is no loop left to find.
 
-    A `flutter create`-style project regeneration would put the input back and
-    the cycle with it.
+    **Do not try to fix this by deleting `${TARGET_BUILD_DIR}/${INFOPLIST_PATH}`
+    from `Thin Binary`'s input paths** — the advice you'll find for this error,
+    and it does not survive contact with Flutter. `flutter build` runs
+    `XcodeThinBinaryBuildPhaseInputPathsMigration`, which rewrites
+    `project.pbxproj` and puts the input straight back; the log line is
+    `Adding input path to Thin Binary build phase.` and the archive then fails
+    with a byte-identical trace. That cost a release cycle (v1.0.51).
 
 11. Commit `project.pbxproj`.
 

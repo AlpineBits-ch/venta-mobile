@@ -220,10 +220,13 @@ jobs:
       # Changing the *value* of an existing build setting is safe enough by
       # hand; adding objects and their references is not.
       #
-      # One such value edit is load-bearing: the Runner's `Thin Binary` phase
-      # must not list ${TARGET_BUILD_DIR}/${INFOPLIST_PATH} as an input. With
-      # it, embedding the extension makes the archive fail as "Cycle inside
-      # Runner" before it reaches signing - see docs/push-decryption.md.
+      # One ordering in there is load-bearing: on the Runner target, "Embed
+      # Foundation Extensions" must run *before* "Thin Binary" and "[CP] Embed
+      # Pods Frameworks". Xcode adds it last, which deadlocks the archive as
+      # "Cycle inside Runner" before it reaches signing. Deleting Thin Binary's
+      # ${TARGET_BUILD_DIR}/${INFOPLIST_PATH} input is the fix you'll find
+      # elsewhere and it does not work - `flutter build` re-adds it every time.
+      # See docs/push-decryption.md.
 
       # `flutter build ipa` runs `pod install` itself as part of the archive
       # step, so no separate CocoaPods step is needed here.
