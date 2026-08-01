@@ -75,6 +75,12 @@ sealed class MlsCommitDto with _$MlsCommitDto {
     required String commit,
     required String senderUserId,
     required String senderDeviceId,
+
+    /// Set by the server. Read rather than inferred: a proposal must not count
+    /// toward the "did this page make progress" decision, and guessing from the
+    /// payload means parsing MLS bytes the transport layer has no business
+    /// parsing.
+    @Default(false) bool isProposal,
     DateTime? createdAt,
   }) = _MlsCommitDto;
 
@@ -88,6 +94,15 @@ sealed class PublishMlsCommitDto with _$PublishMlsCommitDto {
     required int epoch,
     required String commit,
     required String senderDeviceId,
+
+    /// True for a Remove **proposal** riding the commit channel.
+    ///
+    /// A wire flag rather than something the server infers: it has to be told,
+    /// or it advances the group epoch for a payload that advances nobody's MLS
+    /// epoch - which is what made catch-up return the same row forever. The
+    /// unique index on (generation, epoch) is filtered on this, so a proposal no
+    /// longer occupies the slot the real commit needs.
+    @Default(false) bool isProposal,
 
     /// Always sent. Omitting it makes the server assume the live generation,
     /// which is exactly wrong if encryption was toggled while we were building.
@@ -115,6 +130,15 @@ sealed class MlsCommitPublishedDto with _$MlsCommitPublishedDto {
     String? conversationId,
     required int generation,
     required int epoch,
+    @Default(false) bool isProposal,
+
+    /// The §E4 idempotent replay: this exact commit was already stored, matched
+    /// on (senderDeviceId, generation, epoch, payload hash).
+    ///
+    /// **The publish succeeded.** It is not a lost race, so the staged commit
+    /// must be merged and kept - discarding it here is precisely the bug that
+    /// stranded a device whose first response went missing.
+    @Default(false) bool duplicate,
   }) = _MlsCommitPublishedDto;
 
   factory MlsCommitPublishedDto.fromJson(Map<String, dynamic> json) =>
@@ -335,6 +359,19 @@ sealed class MlsJoinRequestDto with _$MlsJoinRequestDto {
     /// who else did - a second opinion is only worth something if you can tell
     /// whose it was.
     @Default(<String>[]) List<String> approverUserIds,
+
+    /// The server's published verdict on whether this may be admitted without a
+    /// human (contract §J.4).
+    ///
+    /// The server cannot *enforce* it - it holds no group keys, so only a
+    /// member's client can produce an Add commit or decline to. It decides the
+    /// 24h auto-admission budget and records how it was spent; honouring the
+    /// answer is entirely on this side.
+    @Default(false) bool requiresManualApproval,
+
+    /// Display only, so an approval prompt can say "Alice's new phone" instead
+    /// of an opaque id. Nothing is authorized on it.
+    String? requesterDeviceName,
   }) = _MlsJoinRequestDto;
 
   factory MlsJoinRequestDto.fromJson(Map<String, dynamic> json) =>
@@ -379,4 +416,56 @@ sealed class GenerateKeyPackagesDto with _$GenerateKeyPackagesDto {
 
   factory GenerateKeyPackagesDto.fromJson(Map<String, dynamic> json) =>
       _$GenerateKeyPackagesDtoFromJson(json);
+}
+
+/// A challenge an existing device issued for a pending admission (contract §G.1).
+///
+/// 32 random bytes plus an expiry. The bytes must be unpredictable to the
+/// *server*, or it could precompute a proof for a challenge it intends to issue
+/// later; the expiry and single use are what stop a proof captured once from
+/// admitting a device forever.
+@freezed
+sealed class MlsAdmissionChallengeDto with _$MlsAdmissionChallengeDto {
+  @ApiDateTimeConverter()
+  const factory MlsAdmissionChallengeDto({
+    required String id,
+    required String requestId,
+
+    /// 32 random bytes, base64.
+    required String challenge,
+
+    /// Which device issued it - shown to the joiner so "your laptop is checking
+    /// this device" is something the user can recognise or not.
+    String? issuedByDeviceId,
+    DateTime? expiresAt,
+  }) = _MlsAdmissionChallengeDto;
+
+  factory MlsAdmissionChallengeDto.fromJson(Map<String, dynamic> json) =>
+      _$MlsAdmissionChallengeDtoFromJson(json);
+
+  const MlsAdmissionChallengeDto._();
+
+  /// §G.2: valid for 15 minutes from issue and single-use. Checked here as well
+  /// as server-side, because a client that accepts an expired proof is a client
+  /// that can be replayed against regardless of what the server does.
+  bool get isExpired {
+    final at = expiresAt;
+    return at != null && DateTime.now().toUtc().isAfter(at.toUtc());
+  }
+}
+
+/// The joining device's answer to a challenge.
+@freezed
+sealed class MlsAdmissionProofDto with _$MlsAdmissionProofDto {
+  const factory MlsAdmissionProofDto({
+    required String challengeId,
+    required String requestId,
+
+    /// HMAC over `challenge || requesterDeviceId || signatureKeyFingerprint`,
+    /// keyed by HKDF of the account master key. Base64.
+    required String proof,
+  }) = _MlsAdmissionProofDto;
+
+  factory MlsAdmissionProofDto.fromJson(Map<String, dynamic> json) =>
+      _$MlsAdmissionProofDtoFromJson(json);
 }

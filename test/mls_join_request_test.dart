@@ -87,7 +87,8 @@ void main() {
     when(() => mls.activeGroupId(_channel)).thenReturn(_group);
     when(
       () => api.approveJoinRequest(
-        channelId: any(named: 'channelId'),
+        contextId: any(named: 'contextId'),
+        isChannel: any(named: 'isChannel'),
         requestId: any(named: 'requestId'),
       ),
     ).thenAnswer(
@@ -116,7 +117,7 @@ void main() {
           .thenAnswer((_) async => _info());
 
       final admitted = await service.approve(
-        channelId: _channel,
+        contextId: _channel,
         request: _request(),
       );
 
@@ -133,7 +134,8 @@ void main() {
     test('does not add anything before the threshold is met', () async {
       when(
         () => api.approveJoinRequest(
-          channelId: any(named: 'channelId'),
+          contextId: any(named: 'contextId'),
+          isChannel: any(named: 'isChannel'),
           requestId: any(named: 'requestId'),
         ),
       ).thenAnswer(
@@ -146,7 +148,7 @@ void main() {
       );
 
       final admitted = await service.approve(
-        channelId: _channel,
+        contextId: _channel,
         request: _request(),
       );
 
@@ -166,7 +168,7 @@ void main() {
           .thenAnswer((_) async => _info(hash: 'a-different-hash'));
 
       await expectLater(
-        service.approve(channelId: _channel, request: _request()),
+        service.approve(contextId: _channel, request: _request()),
         throwsA(isA<JoinRequestVerificationException>()),
       );
 
@@ -184,7 +186,7 @@ void main() {
           .thenAnswer((_) async => _info(fingerprint: 'FFFFF-FFFFF'));
 
       await expectLater(
-        service.approve(channelId: _channel, request: _request()),
+        service.approve(contextId: _channel, request: _request()),
         throwsA(isA<JoinRequestVerificationException>()),
       );
     });
@@ -194,7 +196,7 @@ void main() {
           .thenAnswer((_) async => _info(identity: 'user_someone_else'));
 
       await expectLater(
-        service.approve(channelId: _channel, request: _request()),
+        service.approve(contextId: _channel, request: _request()),
         throwsA(isA<JoinRequestVerificationException>()),
       );
     });
@@ -202,7 +204,8 @@ void main() {
     test('refuses when the server claims a threshold but sends no bytes', () async {
       when(
         () => api.approveJoinRequest(
-          channelId: any(named: 'channelId'),
+          contextId: any(named: 'contextId'),
+          isChannel: any(named: 'isChannel'),
           requestId: any(named: 'requestId'),
         ),
       ).thenAnswer(
@@ -216,7 +219,7 @@ void main() {
       );
 
       await expectLater(
-        service.approve(channelId: _channel, request: _request()),
+        service.approve(contextId: _channel, request: _request()),
         throwsA(isA<JoinRequestVerificationException>()),
       );
     });
@@ -259,7 +262,8 @@ void main() {
           .thenAnswer((_) async => _info());
       when(
         () => api.requestAccess(
-          channelId: any(named: 'channelId'),
+          contextId: any(named: 'contextId'),
+          isChannel: any(named: 'isChannel'),
           keyPackage: any(named: 'keyPackage'),
           deviceId: any(named: 'deviceId'),
           signatureKeyFingerprint: any(named: 'signatureKeyFingerprint'),
@@ -274,7 +278,8 @@ void main() {
       verify(() => mls.generateKeyPackages(1)).called(1);
       verify(
         () => api.requestAccess(
-          channelId: _channel,
+          contextId: _channel,
+          isChannel: true,
           keyPackage: _keyPackage,
           deviceId: 'device-approver',
           signatureKeyFingerprint: _fingerprint,

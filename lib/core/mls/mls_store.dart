@@ -81,7 +81,18 @@ class MlsStore {
   File? _registryFile;
   File? _cacheFile;
   Directory? _dir;
+
+  /// Which account [_dir] belongs to - see [stateDirectory].
+  String? _dirUserId;
+
+  /// Which account [init] loaded. Used to catch a second `init` for a different
+  /// user, which would otherwise return early and leave this store serving the
+  /// first account's registry under the second account's name.
+  String? _userId;
   bool _ready = false;
+
+  /// The account whose state is loaded, or null before [init].
+  String? get loadedUserId => _userId;
 
   Timer? _cacheFlush;
   Future<void> _writeChain = Future<void>.value();
@@ -100,12 +111,17 @@ class MlsStore {
   /// sharing a directory would have the second load the first's groups and sign
   /// as the first's identity. Separate directories also mean switching back to
   /// an account finds its history intact rather than wiped.
+  /// The cache is keyed by the user it was resolved for, not merely by "have we
+  /// resolved one". A push notification for account B arriving while account A
+  /// is loaded used to be handed A's directory, which meant B's engine reading
+  /// A's private keys - a confidentiality bug, not a mix-up.
   Future<Directory> stateDirectory(String userId) async {
     final cached = _dir;
-    if (cached != null) return cached;
+    if (cached != null && _dirUserId == userId) return cached;
     final root = await _directory();
     final dir = Directory('${root.path}/mls/${_sanitize(userId)}');
     await dir.create(recursive: true);
+    _dirUserId = userId;
     return _dir = dir;
   }
 
@@ -114,9 +130,17 @@ class MlsStore {
   static String _sanitize(String userId) =>
       userId.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
 
-  /// Loads both files. Safe to call more than once; only the first does work.
+  /// Loads both files. Safe to call more than once for the same account; only
+  /// the first does work.
+  ///
+  /// A call for a *different* account resets first rather than returning early.
+  /// The background push isolate initialises whichever account a notification
+  /// names, and the early return used to hand it the loaded account's registry
+  /// and plaintext cache.
   Future<void> init(String userId) async {
-    if (_ready) return;
+    if (_ready && _userId == userId) return;
+    if (_ready) await reset();
+    _userId = userId;
     final dir = await stateDirectory(userId);
     _registryFile = File('${dir.path}/mls_group_registry.json');
     _cacheFile = File('${dir.path}/mls_message_cache.json');
@@ -138,6 +162,8 @@ class MlsStore {
     _registryFile = null;
     _cacheFile = null;
     _dir = null;
+    _dirUserId = null;
+    _userId = null;
     _ready = false;
   }
 
@@ -167,6 +193,40 @@ class MlsStore {
 
   String? groupId(String contextId, int generation) =>
       _registry[_groupKey(contextId, generation)] as String?;
+
+  /// How many (context, generation) groups this device is registered in.
+  ///
+  /// Counts the group mappings only - the `#active` pointers share the map but
+  /// are bookkeeping, not membership. Used to tell "first run on this handset"
+  /// apart from "the signing key is gone but the groups are not", which look
+  /// identical from the keychain's side.
+  int get groupCount => _registry.values.whereType<String>().length;
+
+  /// The raw registry, for the backup envelope's `groupRegistry` field.
+  Map<String, Object> get snapshot => Map<String, Object>.unmodifiable(_registry);
+
+  /// The decrypted history, for the backup envelope's `messageCache` field.
+  Map<String, String> get messageCacheSnapshot =>
+      Map<String, String>.unmodifiable(_messageCache);
+
+  /// Merges a restored registry in. Existing entries win: whatever this device
+  /// joined since the backup was taken is newer than the backup.
+  Future<void> restoreRegistry(Map<String, Object> entries) {
+    for (final entry in entries.entries) {
+      _registry.putIfAbsent(entry.key, () => entry.value);
+    }
+    return _saveRegistry();
+  }
+
+  /// Merges restored plaintext in. Same rule, and for the same reason as
+  /// [reloadMessageCache]: a message read off the wire since the backup cannot
+  /// be read again, so the in-memory copy is the only one.
+  Future<void> restoreMessageCache(Map<String, String> entries) {
+    for (final entry in entries.entries) {
+      _messageCache.putIfAbsent(entry.key, () => entry.value);
+    }
+    return flush();
+  }
 
   /// The generation this device last saw as live for the context.
   int? knownGeneration(String contextId) {

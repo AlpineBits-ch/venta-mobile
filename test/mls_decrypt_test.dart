@@ -3,35 +3,59 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:venta_mls/venta_mls.dart';
+import 'package:venta_mobile/core/mls/mls_failure_log.dart';
 import 'package:venta_mobile/core/mls/mls_service.dart';
+import 'package:venta_mobile/features/messaging/data/message_content_codec.dart';
 import 'package:venta_mobile/features/messaging/data/message_decryptor.dart';
 import 'package:venta_mobile/features/messaging/data/models/message_dto.dart';
 
 /// What these cover: the read side of encryption, where every failure mode is
 /// silent.
 ///
-/// MLS ratchets forward and never backward, so a message decrypts from the wire
-/// exactly once. Everything else has to come from the plaintext cache, and
-/// anything that comes from neither has to be *said* - rendering the base64 is
-/// how a user learns their history is gone by squinting at it.
+/// The first group is the one that matters. `Message.Content` is a `byte[]`
+/// server-side but `CreateMessageDto.Content` is a `string`, so the server
+/// stores `Encoding.UTF8.GetBytes(dto.Content)` and `System.Text.Json` base64s
+/// it on the way out. Whatever was POSTed therefore comes back as
+/// `base64(utf8(posted))` - and for an encrypted message what was POSTed is
+/// already a base64 MLS `PrivateMessage`, so the reader gets base64 of base64.
+/// The desktop client strips the outer layer; this one did not, so **every**
+/// encrypted message read over REST or the socket failed to decrypt. The engine
+/// base64-decoded once, got ASCII, and `tls_deserialize_exact_bytes` refused it
+/// - into a bare `catch (_)` that logged nothing.
 ///
-/// The generation lookup is the subtle one: a context toggled off and on has two
-/// distinct groups whose epochs both start at zero, so decrypting an old message
-/// against the current group is not an error, it is silent garbage.
+/// The push path is deliberately the other shape: `MessagePushService` unwraps
+/// server-side, so its `ciphertext` is single-encoded and must **not** be
+/// stripped again. That asymmetry is why the bug read as intermittent rather
+/// than total - when a notification landed and decrypted, the plaintext went
+/// into the cache and the conversation rendered; when it was dropped, throttled
+/// or beaten by the socket, the message was unreadable forever.
+///
+/// The rest cover what was already true: MLS ratchets forward and never
+/// backward, so a message decrypts from the wire exactly once. Everything else
+/// comes from the plaintext cache, and anything that comes from neither has to
+/// be *said* - rendering base64 is how a user learns their history is gone by
+/// squinting at it.
 
 class _MockMls extends Mock implements MlsService {}
 
 const _context = 'conv_1';
 const _group = 'Z3JvdXA=';
 
+/// A realistic MLS ciphertext: base64, and long enough that it is not
+/// accidentally also valid base64 of something meaningful.
+const _mlsCiphertext = 'AAEAAhBKduzb5gwNUj51Y+/mkX6WAAAAAAAAAAIBABxDzoxZ';
+
+/// What the server hands back for it - the extra layer this client has to strip.
+final _wireContent = base64Encode(utf8.encode(_mlsCiphertext));
+
 MessageDto _encrypted({
   String id = 'msg_1',
-  String content = 'ciphertext',
+  String? content,
   int? generation,
   MessageType type = MessageType.message,
 }) => MessageDto(
   id: id,
-  content: content,
+  content: content ?? _wireContent,
   conversationId: _context,
   authorId: 'user_other',
   encryptionState: MessageEncryptionState.encrypted,
@@ -51,13 +75,15 @@ MlsProcessedMessage _decrypted(String plaintextB64) => MlsProcessedMessage(
 
 void main() {
   late _MockMls mls;
+  late MlsFailureLog failures;
   late MessageDecryptor decryptor;
 
   final helloB64 = base64Encode(utf8.encode('hello'));
 
   setUp(() {
     mls = _MockMls();
-    decryptor = MessageDecryptor(mls);
+    failures = MlsFailureLog();
+    decryptor = MessageDecryptor(mls, failures: failures);
 
     when(() => mls.isUnlocked).thenReturn(true);
     when(() => mls.cachedMessage(any())).thenReturn(null);
@@ -70,6 +96,84 @@ void main() {
         groupIdB64: any(named: 'groupIdB64'),
       ),
     ).thenAnswer((_) async => true);
+  });
+
+  group('wire encoding', () {
+    test('hands the engine exactly what was posted, not the server\'s wrapper', () async {
+      // The regression guard for the headline bug. Given `content ==
+      // base64(utf8(posted))`, what reaches `processMessage` must be byte-identical
+      // to `posted` - the engine decodes base64 exactly once, so an undecoded
+      // value arrives as ASCII where TLS bytes are expected.
+      final captured = <String>[];
+      when(
+        () => mls.processMessage(
+          groupIdB64: any(named: 'groupIdB64'),
+          messageB64: any(named: 'messageB64'),
+        ),
+      ).thenAnswer((invocation) async {
+        captured.add(invocation.namedArguments[#messageB64] as String);
+        return _decrypted(helloB64);
+      });
+
+      await decryptor.decrypt(_encrypted());
+
+      expect(captured.single, _mlsCiphertext);
+      expect(
+        captured.single,
+        isNot(_wireContent),
+        reason: 'the raw wire value is what used to be passed through',
+      );
+    });
+
+    test('what _sendEncrypted posts survives the server\'s round trip', () async {
+      // Written from the sender's side rather than with a literal, so the two
+      // halves of the envelope cannot drift apart without this failing: the
+      // sender posts `sealed.ciphertext`, the server stores
+      // `Encoding.UTF8.GetBytes(...)` of it, and serializes that back as base64.
+      const posted = _mlsCiphertext;
+      final asStoredAndSerialized = base64Encode(utf8.encode(posted));
+
+      expect(
+        MessageContentCodec.decodeStrict(asStoredAndSerialized),
+        posted,
+        reason: 'decode(base64(utf8(encrypt(x)))) == encrypt(x)',
+      );
+    });
+
+    test('the push envelope is a different shape and must not be stripped', () async {
+      // `MessagePushService.cs` does `Encoding.UTF8.GetString(payload.Content)`
+      // before putting the ciphertext on the notification, so the push payload
+      // is already single-encoded. Decoding it again here would break the one
+      // path that always worked.
+      const posted = _mlsCiphertext;
+      final restWire = base64Encode(utf8.encode(posted));
+      final pushWire = utf8.decode(utf8.encode(posted));
+
+      expect(pushWire, posted, reason: 'decode(utf8(encrypt(x))) == encrypt(x)');
+      expect(
+        restWire,
+        isNot(pushWire),
+        reason: 'the two transports must not be treated identically',
+      );
+    });
+
+    test('flags rather than throws when the envelope is malformed', () async {
+      // A value that is not base64 at all. It must fall through to
+      // `isUndecryptable` rather than escaping as an exception, and must never
+      // reach the engine - a raw pass-through is exactly the bug.
+      final result = await decryptor.decrypt(
+        _encrypted(content: 'not base64 at all!'),
+      );
+
+      expect(result.isUndecryptable, isTrue);
+      verifyNever(
+        () => mls.processMessage(
+          groupIdB64: any(named: 'groupIdB64'),
+          messageB64: any(named: 'messageB64'),
+        ),
+      );
+      expect(failures.decryptFailures(_context), 1);
+    });
   });
 
   test('plaintext messages are passed straight through', () async {
@@ -93,10 +197,7 @@ void main() {
 
   test('decrypts and caches, so the next read never touches the ratchet', () async {
     when(
-      () => mls.processMessage(
-        groupIdB64: _group,
-        messageB64: 'ciphertext',
-      ),
+      () => mls.processMessage(groupIdB64: _group, messageB64: _mlsCiphertext),
     ).thenAnswer((_) async => _decrypted(helloB64));
 
     final result = await decryptor.decrypt(_encrypted());
@@ -145,8 +246,15 @@ void main() {
     expect(result.isUndecryptable, isTrue);
     expect(
       result.content,
-      'ciphertext',
+      _wireContent,
       reason: 'content is left alone - the UI branches on the flag, not on it',
+    );
+    expect(
+      failures.decryptFailures(_context),
+      0,
+      reason: 'holding no group for a generation is not a decrypt failure - the '
+          'join-request affordance covers it, and counting it would report '
+          'every message of a context we were never in',
     );
   });
 
@@ -163,27 +271,77 @@ void main() {
     expect(result.isUndecryptable, isTrue);
   });
 
-  test('refuses a sender who is not in the group roster', () async {
-    // A compromised server replaying valid ciphertext under a spoofed
-    // credential looks exactly like this. Showing it decrypted would attribute
-    // a message to someone who never sent it.
-    when(
-      () => mls.processMessage(
-        groupIdB64: any(named: 'groupIdB64'),
-        messageB64: any(named: 'messageB64'),
-      ),
-    ).thenAnswer((_) async => _decrypted(helloB64));
-    when(
-      () => mls.verifySenderInRoster(
-        senderIdentity: any(named: 'senderIdentity'),
-        groupIdB64: any(named: 'groupIdB64'),
-      ),
-    ).thenAnswer((_) async => false);
+  group('surfacing failures', () {
+    test('counts them, so a broken device can be told apart from old history', () async {
+      when(
+        () => mls.processMessage(
+          groupIdB64: any(named: 'groupIdB64'),
+          messageB64: any(named: 'messageB64'),
+        ),
+      ).thenThrow(const MlsException(MlsErrorKind.wrongEpoch, 'too old'));
 
-    final result = await decryptor.decrypt(_encrypted());
+      for (var i = 0; i < MlsFailureLog.unreadableThreshold; i++) {
+        await decryptor.decrypt(_encrypted(id: 'msg_$i'));
+      }
 
-    expect(result.isUndecryptable, isTrue);
-    verifyNever(() => mls.cacheMessage(any(), any()));
+      expect(failures.decryptFailures(_context), MlsFailureLog.unreadableThreshold);
+      expect(
+        failures.cannotRead(_context),
+        isTrue,
+        reason: 'this is what puts the "re-link this device" affordance on screen',
+      );
+      expect(failures.lastReason(_context), contains('too old'));
+    });
+
+    test('one success clears the streak', () async {
+      var fail = true;
+      when(
+        () => mls.processMessage(
+          groupIdB64: any(named: 'groupIdB64'),
+          messageB64: any(named: 'messageB64'),
+        ),
+      ).thenAnswer((_) async {
+        if (fail) throw const MlsException(MlsErrorKind.wrongEpoch, 'too old');
+        return _decrypted(helloB64);
+      });
+
+      await decryptor.decrypt(_encrypted(id: 'a'));
+      await decryptor.decrypt(_encrypted(id: 'b'));
+      expect(failures.decryptFailures(_context), 2);
+
+      // Paging back past the ratchet is normal; a device that then reads a
+      // current message is plainly still in the group.
+      fail = false;
+      await decryptor.decrypt(_encrypted(id: 'c'));
+
+      expect(failures.decryptFailures(_context), 0);
+      expect(failures.cannotRead(_context), isFalse);
+    });
+
+    test('a spoofed sender is a rejection, not an inability to read', () async {
+      // A compromised server replaying valid ciphertext under a spoofed
+      // credential looks exactly like this. Showing it decrypted would attribute
+      // a message to someone who never sent it - but the keys worked, so telling
+      // the user to re-link the device would be exactly the wrong advice.
+      when(
+        () => mls.processMessage(
+          groupIdB64: any(named: 'groupIdB64'),
+          messageB64: any(named: 'messageB64'),
+        ),
+      ).thenAnswer((_) async => _decrypted(helloB64));
+      when(
+        () => mls.verifySenderInRoster(
+          senderIdentity: any(named: 'senderIdentity'),
+          groupIdB64: any(named: 'groupIdB64'),
+        ),
+      ).thenAnswer((_) async => false);
+
+      final result = await decryptor.decrypt(_encrypted());
+
+      expect(result.isUndecryptable, isTrue);
+      verifyNever(() => mls.cacheMessage(any(), any()));
+      expect(failures.cannotRead(_context), isFalse);
+    });
   });
 
   test('flags everything while the session is locked', () async {

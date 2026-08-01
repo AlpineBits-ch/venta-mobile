@@ -572,7 +572,11 @@ as DateTime?,
 mixin _$MlsCommitDto {
 
  String get id; String get contextId; String? get conversationId; String? get channelId; int get generation;/// Group epoch *after* this commit is applied.
- int get epoch; String get commit; String get senderUserId; String get senderDeviceId; DateTime? get createdAt;
+ int get epoch; String get commit; String get senderUserId; String get senderDeviceId;/// Set by the server. Read rather than inferred: a proposal must not count
+/// toward the "did this page make progress" decision, and guessing from the
+/// payload means parsing MLS bytes the transport layer has no business
+/// parsing.
+ bool get isProposal; DateTime? get createdAt;
 /// Create a copy of MlsCommitDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -585,16 +589,16 @@ $MlsCommitDtoCopyWith<MlsCommitDto> get copyWith => _$MlsCommitDtoCopyWithImpl<M
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsCommitDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.commit, commit) || other.commit == commit)&&(identical(other.senderUserId, senderUserId) || other.senderUserId == senderUserId)&&(identical(other.senderDeviceId, senderDeviceId) || other.senderDeviceId == senderDeviceId)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsCommitDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.commit, commit) || other.commit == commit)&&(identical(other.senderUserId, senderUserId) || other.senderUserId == senderUserId)&&(identical(other.senderDeviceId, senderDeviceId) || other.senderDeviceId == senderDeviceId)&&(identical(other.isProposal, isProposal) || other.isProposal == isProposal)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,contextId,conversationId,channelId,generation,epoch,commit,senderUserId,senderDeviceId,createdAt);
+int get hashCode => Object.hash(runtimeType,id,contextId,conversationId,channelId,generation,epoch,commit,senderUserId,senderDeviceId,isProposal,createdAt);
 
 @override
 String toString() {
-  return 'MlsCommitDto(id: $id, contextId: $contextId, conversationId: $conversationId, channelId: $channelId, generation: $generation, epoch: $epoch, commit: $commit, senderUserId: $senderUserId, senderDeviceId: $senderDeviceId, createdAt: $createdAt)';
+  return 'MlsCommitDto(id: $id, contextId: $contextId, conversationId: $conversationId, channelId: $channelId, generation: $generation, epoch: $epoch, commit: $commit, senderUserId: $senderUserId, senderDeviceId: $senderDeviceId, isProposal: $isProposal, createdAt: $createdAt)';
 }
 
 
@@ -605,7 +609,7 @@ abstract mixin class $MlsCommitDtoCopyWith<$Res>  {
   factory $MlsCommitDtoCopyWith(MlsCommitDto value, $Res Function(MlsCommitDto) _then) = _$MlsCommitDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String contextId, String? conversationId, String? channelId, int generation, int epoch, String commit, String senderUserId, String senderDeviceId, DateTime? createdAt
+ String id, String contextId, String? conversationId, String? channelId, int generation, int epoch, String commit, String senderUserId, String senderDeviceId, bool isProposal, DateTime? createdAt
 });
 
 
@@ -622,7 +626,7 @@ class _$MlsCommitDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsCommitDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? contextId = null,Object? conversationId = freezed,Object? channelId = freezed,Object? generation = null,Object? epoch = null,Object? commit = null,Object? senderUserId = null,Object? senderDeviceId = null,Object? createdAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? contextId = null,Object? conversationId = freezed,Object? channelId = freezed,Object? generation = null,Object? epoch = null,Object? commit = null,Object? senderUserId = null,Object? senderDeviceId = null,Object? isProposal = null,Object? createdAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
@@ -633,7 +637,8 @@ as int,epoch: null == epoch ? _self.epoch : epoch // ignore: cast_nullable_to_no
 as int,commit: null == commit ? _self.commit : commit // ignore: cast_nullable_to_non_nullable
 as String,senderUserId: null == senderUserId ? _self.senderUserId : senderUserId // ignore: cast_nullable_to_non_nullable
 as String,senderDeviceId: null == senderDeviceId ? _self.senderDeviceId : senderDeviceId // ignore: cast_nullable_to_non_nullable
-as String,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as String,isProposal: null == isProposal ? _self.isProposal : isProposal // ignore: cast_nullable_to_non_nullable
+as bool,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
 }
@@ -716,10 +721,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String contextId,  String? conversationId,  String? channelId,  int generation,  int epoch,  String commit,  String senderUserId,  String senderDeviceId,  DateTime? createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String contextId,  String? conversationId,  String? channelId,  int generation,  int epoch,  String commit,  String senderUserId,  String senderDeviceId,  bool isProposal,  DateTime? createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _MlsCommitDto() when $default != null:
-return $default(_that.id,_that.contextId,_that.conversationId,_that.channelId,_that.generation,_that.epoch,_that.commit,_that.senderUserId,_that.senderDeviceId,_that.createdAt);case _:
+return $default(_that.id,_that.contextId,_that.conversationId,_that.channelId,_that.generation,_that.epoch,_that.commit,_that.senderUserId,_that.senderDeviceId,_that.isProposal,_that.createdAt);case _:
   return orElse();
 
 }
@@ -737,10 +742,10 @@ return $default(_that.id,_that.contextId,_that.conversationId,_that.channelId,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String contextId,  String? conversationId,  String? channelId,  int generation,  int epoch,  String commit,  String senderUserId,  String senderDeviceId,  DateTime? createdAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String contextId,  String? conversationId,  String? channelId,  int generation,  int epoch,  String commit,  String senderUserId,  String senderDeviceId,  bool isProposal,  DateTime? createdAt)  $default,) {final _that = this;
 switch (_that) {
 case _MlsCommitDto():
-return $default(_that.id,_that.contextId,_that.conversationId,_that.channelId,_that.generation,_that.epoch,_that.commit,_that.senderUserId,_that.senderDeviceId,_that.createdAt);}
+return $default(_that.id,_that.contextId,_that.conversationId,_that.channelId,_that.generation,_that.epoch,_that.commit,_that.senderUserId,_that.senderDeviceId,_that.isProposal,_that.createdAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -754,10 +759,10 @@ return $default(_that.id,_that.contextId,_that.conversationId,_that.channelId,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String contextId,  String? conversationId,  String? channelId,  int generation,  int epoch,  String commit,  String senderUserId,  String senderDeviceId,  DateTime? createdAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String contextId,  String? conversationId,  String? channelId,  int generation,  int epoch,  String commit,  String senderUserId,  String senderDeviceId,  bool isProposal,  DateTime? createdAt)?  $default,) {final _that = this;
 switch (_that) {
 case _MlsCommitDto() when $default != null:
-return $default(_that.id,_that.contextId,_that.conversationId,_that.channelId,_that.generation,_that.epoch,_that.commit,_that.senderUserId,_that.senderDeviceId,_that.createdAt);case _:
+return $default(_that.id,_that.contextId,_that.conversationId,_that.channelId,_that.generation,_that.epoch,_that.commit,_that.senderUserId,_that.senderDeviceId,_that.isProposal,_that.createdAt);case _:
   return null;
 
 }
@@ -769,7 +774,7 @@ return $default(_that.id,_that.contextId,_that.conversationId,_that.channelId,_t
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _MlsCommitDto implements MlsCommitDto {
-  const _MlsCommitDto({required this.id, required this.contextId, this.conversationId, this.channelId, required this.generation, required this.epoch, required this.commit, required this.senderUserId, required this.senderDeviceId, this.createdAt});
+  const _MlsCommitDto({required this.id, required this.contextId, this.conversationId, this.channelId, required this.generation, required this.epoch, required this.commit, required this.senderUserId, required this.senderDeviceId, this.isProposal = false, this.createdAt});
   factory _MlsCommitDto.fromJson(Map<String, dynamic> json) => _$MlsCommitDtoFromJson(json);
 
 @override final  String id;
@@ -782,6 +787,11 @@ class _MlsCommitDto implements MlsCommitDto {
 @override final  String commit;
 @override final  String senderUserId;
 @override final  String senderDeviceId;
+/// Set by the server. Read rather than inferred: a proposal must not count
+/// toward the "did this page make progress" decision, and guessing from the
+/// payload means parsing MLS bytes the transport layer has no business
+/// parsing.
+@override@JsonKey() final  bool isProposal;
 @override final  DateTime? createdAt;
 
 /// Create a copy of MlsCommitDto
@@ -797,16 +807,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsCommitDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.commit, commit) || other.commit == commit)&&(identical(other.senderUserId, senderUserId) || other.senderUserId == senderUserId)&&(identical(other.senderDeviceId, senderDeviceId) || other.senderDeviceId == senderDeviceId)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsCommitDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.commit, commit) || other.commit == commit)&&(identical(other.senderUserId, senderUserId) || other.senderUserId == senderUserId)&&(identical(other.senderDeviceId, senderDeviceId) || other.senderDeviceId == senderDeviceId)&&(identical(other.isProposal, isProposal) || other.isProposal == isProposal)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,contextId,conversationId,channelId,generation,epoch,commit,senderUserId,senderDeviceId,createdAt);
+int get hashCode => Object.hash(runtimeType,id,contextId,conversationId,channelId,generation,epoch,commit,senderUserId,senderDeviceId,isProposal,createdAt);
 
 @override
 String toString() {
-  return 'MlsCommitDto(id: $id, contextId: $contextId, conversationId: $conversationId, channelId: $channelId, generation: $generation, epoch: $epoch, commit: $commit, senderUserId: $senderUserId, senderDeviceId: $senderDeviceId, createdAt: $createdAt)';
+  return 'MlsCommitDto(id: $id, contextId: $contextId, conversationId: $conversationId, channelId: $channelId, generation: $generation, epoch: $epoch, commit: $commit, senderUserId: $senderUserId, senderDeviceId: $senderDeviceId, isProposal: $isProposal, createdAt: $createdAt)';
 }
 
 
@@ -817,7 +827,7 @@ abstract mixin class _$MlsCommitDtoCopyWith<$Res> implements $MlsCommitDtoCopyWi
   factory _$MlsCommitDtoCopyWith(_MlsCommitDto value, $Res Function(_MlsCommitDto) _then) = __$MlsCommitDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String contextId, String? conversationId, String? channelId, int generation, int epoch, String commit, String senderUserId, String senderDeviceId, DateTime? createdAt
+ String id, String contextId, String? conversationId, String? channelId, int generation, int epoch, String commit, String senderUserId, String senderDeviceId, bool isProposal, DateTime? createdAt
 });
 
 
@@ -834,7 +844,7 @@ class __$MlsCommitDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsCommitDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? contextId = null,Object? conversationId = freezed,Object? channelId = freezed,Object? generation = null,Object? epoch = null,Object? commit = null,Object? senderUserId = null,Object? senderDeviceId = null,Object? createdAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? contextId = null,Object? conversationId = freezed,Object? channelId = freezed,Object? generation = null,Object? epoch = null,Object? commit = null,Object? senderUserId = null,Object? senderDeviceId = null,Object? isProposal = null,Object? createdAt = freezed,}) {
   return _then(_MlsCommitDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
@@ -845,7 +855,8 @@ as int,epoch: null == epoch ? _self.epoch : epoch // ignore: cast_nullable_to_no
 as int,commit: null == commit ? _self.commit : commit // ignore: cast_nullable_to_non_nullable
 as String,senderUserId: null == senderUserId ? _self.senderUserId : senderUserId // ignore: cast_nullable_to_non_nullable
 as String,senderDeviceId: null == senderDeviceId ? _self.senderDeviceId : senderDeviceId // ignore: cast_nullable_to_non_nullable
-as String,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as String,isProposal: null == isProposal ? _self.isProposal : isProposal // ignore: cast_nullable_to_non_nullable
+as bool,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
 }
@@ -857,7 +868,14 @@ as DateTime?,
 /// @nodoc
 mixin _$PublishMlsCommitDto {
 
- int get epoch; String get commit; String get senderDeviceId;/// Always sent. Omitting it makes the server assume the live generation,
+ int get epoch; String get commit; String get senderDeviceId;/// True for a Remove **proposal** riding the commit channel.
+///
+/// A wire flag rather than something the server infers: it has to be told,
+/// or it advances the group epoch for a payload that advances nobody's MLS
+/// epoch - which is what made catch-up return the same row forever. The
+/// unique index on (generation, epoch) is filtered on this, so a proposal no
+/// longer occupies the slot the real commit needs.
+ bool get isProposal;/// Always sent. Omitting it makes the server assume the live generation,
 /// which is exactly wrong if encryption was toggled while we were building.
  int? get generation;/// Refreshed GroupInfo so a device that falls too far behind can rejoin by
 /// external commit.
@@ -877,16 +895,16 @@ $PublishMlsCommitDtoCopyWith<PublishMlsCommitDto> get copyWith => _$PublishMlsCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PublishMlsCommitDto&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.commit, commit) || other.commit == commit)&&(identical(other.senderDeviceId, senderDeviceId) || other.senderDeviceId == senderDeviceId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.groupInfo, groupInfo) || other.groupInfo == groupInfo)&&const DeepCollectionEquality().equals(other.welcomes, welcomes)&&const DeepCollectionEquality().equals(other.fulfilledJoinRequestIds, fulfilledJoinRequestIds));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PublishMlsCommitDto&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.commit, commit) || other.commit == commit)&&(identical(other.senderDeviceId, senderDeviceId) || other.senderDeviceId == senderDeviceId)&&(identical(other.isProposal, isProposal) || other.isProposal == isProposal)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.groupInfo, groupInfo) || other.groupInfo == groupInfo)&&const DeepCollectionEquality().equals(other.welcomes, welcomes)&&const DeepCollectionEquality().equals(other.fulfilledJoinRequestIds, fulfilledJoinRequestIds));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,epoch,commit,senderDeviceId,generation,groupInfo,const DeepCollectionEquality().hash(welcomes),const DeepCollectionEquality().hash(fulfilledJoinRequestIds));
+int get hashCode => Object.hash(runtimeType,epoch,commit,senderDeviceId,isProposal,generation,groupInfo,const DeepCollectionEquality().hash(welcomes),const DeepCollectionEquality().hash(fulfilledJoinRequestIds));
 
 @override
 String toString() {
-  return 'PublishMlsCommitDto(epoch: $epoch, commit: $commit, senderDeviceId: $senderDeviceId, generation: $generation, groupInfo: $groupInfo, welcomes: $welcomes, fulfilledJoinRequestIds: $fulfilledJoinRequestIds)';
+  return 'PublishMlsCommitDto(epoch: $epoch, commit: $commit, senderDeviceId: $senderDeviceId, isProposal: $isProposal, generation: $generation, groupInfo: $groupInfo, welcomes: $welcomes, fulfilledJoinRequestIds: $fulfilledJoinRequestIds)';
 }
 
 
@@ -897,7 +915,7 @@ abstract mixin class $PublishMlsCommitDtoCopyWith<$Res>  {
   factory $PublishMlsCommitDtoCopyWith(PublishMlsCommitDto value, $Res Function(PublishMlsCommitDto) _then) = _$PublishMlsCommitDtoCopyWithImpl;
 @useResult
 $Res call({
- int epoch, String commit, String senderDeviceId, int? generation, String? groupInfo, List<DeviceWelcomeDto> welcomes, List<String> fulfilledJoinRequestIds
+ int epoch, String commit, String senderDeviceId, bool isProposal, int? generation, String? groupInfo, List<DeviceWelcomeDto> welcomes, List<String> fulfilledJoinRequestIds
 });
 
 
@@ -914,12 +932,13 @@ class _$PublishMlsCommitDtoCopyWithImpl<$Res>
 
 /// Create a copy of PublishMlsCommitDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? epoch = null,Object? commit = null,Object? senderDeviceId = null,Object? generation = freezed,Object? groupInfo = freezed,Object? welcomes = null,Object? fulfilledJoinRequestIds = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? epoch = null,Object? commit = null,Object? senderDeviceId = null,Object? isProposal = null,Object? generation = freezed,Object? groupInfo = freezed,Object? welcomes = null,Object? fulfilledJoinRequestIds = null,}) {
   return _then(_self.copyWith(
 epoch: null == epoch ? _self.epoch : epoch // ignore: cast_nullable_to_non_nullable
 as int,commit: null == commit ? _self.commit : commit // ignore: cast_nullable_to_non_nullable
 as String,senderDeviceId: null == senderDeviceId ? _self.senderDeviceId : senderDeviceId // ignore: cast_nullable_to_non_nullable
-as String,generation: freezed == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
+as String,isProposal: null == isProposal ? _self.isProposal : isProposal // ignore: cast_nullable_to_non_nullable
+as bool,generation: freezed == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
 as int?,groupInfo: freezed == groupInfo ? _self.groupInfo : groupInfo // ignore: cast_nullable_to_non_nullable
 as String?,welcomes: null == welcomes ? _self.welcomes : welcomes // ignore: cast_nullable_to_non_nullable
 as List<DeviceWelcomeDto>,fulfilledJoinRequestIds: null == fulfilledJoinRequestIds ? _self.fulfilledJoinRequestIds : fulfilledJoinRequestIds // ignore: cast_nullable_to_non_nullable
@@ -1005,10 +1024,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int epoch,  String commit,  String senderDeviceId,  int? generation,  String? groupInfo,  List<DeviceWelcomeDto> welcomes,  List<String> fulfilledJoinRequestIds)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int epoch,  String commit,  String senderDeviceId,  bool isProposal,  int? generation,  String? groupInfo,  List<DeviceWelcomeDto> welcomes,  List<String> fulfilledJoinRequestIds)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _PublishMlsCommitDto() when $default != null:
-return $default(_that.epoch,_that.commit,_that.senderDeviceId,_that.generation,_that.groupInfo,_that.welcomes,_that.fulfilledJoinRequestIds);case _:
+return $default(_that.epoch,_that.commit,_that.senderDeviceId,_that.isProposal,_that.generation,_that.groupInfo,_that.welcomes,_that.fulfilledJoinRequestIds);case _:
   return orElse();
 
 }
@@ -1026,10 +1045,10 @@ return $default(_that.epoch,_that.commit,_that.senderDeviceId,_that.generation,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int epoch,  String commit,  String senderDeviceId,  int? generation,  String? groupInfo,  List<DeviceWelcomeDto> welcomes,  List<String> fulfilledJoinRequestIds)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int epoch,  String commit,  String senderDeviceId,  bool isProposal,  int? generation,  String? groupInfo,  List<DeviceWelcomeDto> welcomes,  List<String> fulfilledJoinRequestIds)  $default,) {final _that = this;
 switch (_that) {
 case _PublishMlsCommitDto():
-return $default(_that.epoch,_that.commit,_that.senderDeviceId,_that.generation,_that.groupInfo,_that.welcomes,_that.fulfilledJoinRequestIds);}
+return $default(_that.epoch,_that.commit,_that.senderDeviceId,_that.isProposal,_that.generation,_that.groupInfo,_that.welcomes,_that.fulfilledJoinRequestIds);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -1043,10 +1062,10 @@ return $default(_that.epoch,_that.commit,_that.senderDeviceId,_that.generation,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int epoch,  String commit,  String senderDeviceId,  int? generation,  String? groupInfo,  List<DeviceWelcomeDto> welcomes,  List<String> fulfilledJoinRequestIds)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int epoch,  String commit,  String senderDeviceId,  bool isProposal,  int? generation,  String? groupInfo,  List<DeviceWelcomeDto> welcomes,  List<String> fulfilledJoinRequestIds)?  $default,) {final _that = this;
 switch (_that) {
 case _PublishMlsCommitDto() when $default != null:
-return $default(_that.epoch,_that.commit,_that.senderDeviceId,_that.generation,_that.groupInfo,_that.welcomes,_that.fulfilledJoinRequestIds);case _:
+return $default(_that.epoch,_that.commit,_that.senderDeviceId,_that.isProposal,_that.generation,_that.groupInfo,_that.welcomes,_that.fulfilledJoinRequestIds);case _:
   return null;
 
 }
@@ -1058,12 +1077,20 @@ return $default(_that.epoch,_that.commit,_that.senderDeviceId,_that.generation,_
 @JsonSerializable()
 
 class _PublishMlsCommitDto implements PublishMlsCommitDto {
-  const _PublishMlsCommitDto({required this.epoch, required this.commit, required this.senderDeviceId, this.generation, this.groupInfo, final  List<DeviceWelcomeDto> welcomes = const <DeviceWelcomeDto>[], final  List<String> fulfilledJoinRequestIds = const <String>[]}): _welcomes = welcomes,_fulfilledJoinRequestIds = fulfilledJoinRequestIds;
+  const _PublishMlsCommitDto({required this.epoch, required this.commit, required this.senderDeviceId, this.isProposal = false, this.generation, this.groupInfo, final  List<DeviceWelcomeDto> welcomes = const <DeviceWelcomeDto>[], final  List<String> fulfilledJoinRequestIds = const <String>[]}): _welcomes = welcomes,_fulfilledJoinRequestIds = fulfilledJoinRequestIds;
   factory _PublishMlsCommitDto.fromJson(Map<String, dynamic> json) => _$PublishMlsCommitDtoFromJson(json);
 
 @override final  int epoch;
 @override final  String commit;
 @override final  String senderDeviceId;
+/// True for a Remove **proposal** riding the commit channel.
+///
+/// A wire flag rather than something the server infers: it has to be told,
+/// or it advances the group epoch for a payload that advances nobody's MLS
+/// epoch - which is what made catch-up return the same row forever. The
+/// unique index on (generation, epoch) is filtered on this, so a proposal no
+/// longer occupies the slot the real commit needs.
+@override@JsonKey() final  bool isProposal;
 /// Always sent. Omitting it makes the server assume the live generation,
 /// which is exactly wrong if encryption was toggled while we were building.
 @override final  int? generation;
@@ -1104,16 +1131,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PublishMlsCommitDto&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.commit, commit) || other.commit == commit)&&(identical(other.senderDeviceId, senderDeviceId) || other.senderDeviceId == senderDeviceId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.groupInfo, groupInfo) || other.groupInfo == groupInfo)&&const DeepCollectionEquality().equals(other._welcomes, _welcomes)&&const DeepCollectionEquality().equals(other._fulfilledJoinRequestIds, _fulfilledJoinRequestIds));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PublishMlsCommitDto&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.commit, commit) || other.commit == commit)&&(identical(other.senderDeviceId, senderDeviceId) || other.senderDeviceId == senderDeviceId)&&(identical(other.isProposal, isProposal) || other.isProposal == isProposal)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.groupInfo, groupInfo) || other.groupInfo == groupInfo)&&const DeepCollectionEquality().equals(other._welcomes, _welcomes)&&const DeepCollectionEquality().equals(other._fulfilledJoinRequestIds, _fulfilledJoinRequestIds));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,epoch,commit,senderDeviceId,generation,groupInfo,const DeepCollectionEquality().hash(_welcomes),const DeepCollectionEquality().hash(_fulfilledJoinRequestIds));
+int get hashCode => Object.hash(runtimeType,epoch,commit,senderDeviceId,isProposal,generation,groupInfo,const DeepCollectionEquality().hash(_welcomes),const DeepCollectionEquality().hash(_fulfilledJoinRequestIds));
 
 @override
 String toString() {
-  return 'PublishMlsCommitDto(epoch: $epoch, commit: $commit, senderDeviceId: $senderDeviceId, generation: $generation, groupInfo: $groupInfo, welcomes: $welcomes, fulfilledJoinRequestIds: $fulfilledJoinRequestIds)';
+  return 'PublishMlsCommitDto(epoch: $epoch, commit: $commit, senderDeviceId: $senderDeviceId, isProposal: $isProposal, generation: $generation, groupInfo: $groupInfo, welcomes: $welcomes, fulfilledJoinRequestIds: $fulfilledJoinRequestIds)';
 }
 
 
@@ -1124,7 +1151,7 @@ abstract mixin class _$PublishMlsCommitDtoCopyWith<$Res> implements $PublishMlsC
   factory _$PublishMlsCommitDtoCopyWith(_PublishMlsCommitDto value, $Res Function(_PublishMlsCommitDto) _then) = __$PublishMlsCommitDtoCopyWithImpl;
 @override @useResult
 $Res call({
- int epoch, String commit, String senderDeviceId, int? generation, String? groupInfo, List<DeviceWelcomeDto> welcomes, List<String> fulfilledJoinRequestIds
+ int epoch, String commit, String senderDeviceId, bool isProposal, int? generation, String? groupInfo, List<DeviceWelcomeDto> welcomes, List<String> fulfilledJoinRequestIds
 });
 
 
@@ -1141,12 +1168,13 @@ class __$PublishMlsCommitDtoCopyWithImpl<$Res>
 
 /// Create a copy of PublishMlsCommitDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? epoch = null,Object? commit = null,Object? senderDeviceId = null,Object? generation = freezed,Object? groupInfo = freezed,Object? welcomes = null,Object? fulfilledJoinRequestIds = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? epoch = null,Object? commit = null,Object? senderDeviceId = null,Object? isProposal = null,Object? generation = freezed,Object? groupInfo = freezed,Object? welcomes = null,Object? fulfilledJoinRequestIds = null,}) {
   return _then(_PublishMlsCommitDto(
 epoch: null == epoch ? _self.epoch : epoch // ignore: cast_nullable_to_non_nullable
 as int,commit: null == commit ? _self.commit : commit // ignore: cast_nullable_to_non_nullable
 as String,senderDeviceId: null == senderDeviceId ? _self.senderDeviceId : senderDeviceId // ignore: cast_nullable_to_non_nullable
-as String,generation: freezed == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
+as String,isProposal: null == isProposal ? _self.isProposal : isProposal // ignore: cast_nullable_to_non_nullable
+as bool,generation: freezed == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
 as int?,groupInfo: freezed == groupInfo ? _self.groupInfo : groupInfo // ignore: cast_nullable_to_non_nullable
 as String?,welcomes: null == welcomes ? _self._welcomes : welcomes // ignore: cast_nullable_to_non_nullable
 as List<DeviceWelcomeDto>,fulfilledJoinRequestIds: null == fulfilledJoinRequestIds ? _self._fulfilledJoinRequestIds : fulfilledJoinRequestIds // ignore: cast_nullable_to_non_nullable
@@ -1161,7 +1189,13 @@ as List<String>,
 /// @nodoc
 mixin _$MlsCommitPublishedDto {
 
- String get contextId; String? get conversationId; int get generation; int get epoch;
+ String get contextId; String? get conversationId; int get generation; int get epoch; bool get isProposal;/// The §E4 idempotent replay: this exact commit was already stored, matched
+/// on (senderDeviceId, generation, epoch, payload hash).
+///
+/// **The publish succeeded.** It is not a lost race, so the staged commit
+/// must be merged and kept - discarding it here is precisely the bug that
+/// stranded a device whose first response went missing.
+ bool get duplicate;
 /// Create a copy of MlsCommitPublishedDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1174,16 +1208,16 @@ $MlsCommitPublishedDtoCopyWith<MlsCommitPublishedDto> get copyWith => _$MlsCommi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsCommitPublishedDto&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.epoch, epoch) || other.epoch == epoch));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsCommitPublishedDto&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.isProposal, isProposal) || other.isProposal == isProposal)&&(identical(other.duplicate, duplicate) || other.duplicate == duplicate));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,contextId,conversationId,generation,epoch);
+int get hashCode => Object.hash(runtimeType,contextId,conversationId,generation,epoch,isProposal,duplicate);
 
 @override
 String toString() {
-  return 'MlsCommitPublishedDto(contextId: $contextId, conversationId: $conversationId, generation: $generation, epoch: $epoch)';
+  return 'MlsCommitPublishedDto(contextId: $contextId, conversationId: $conversationId, generation: $generation, epoch: $epoch, isProposal: $isProposal, duplicate: $duplicate)';
 }
 
 
@@ -1194,7 +1228,7 @@ abstract mixin class $MlsCommitPublishedDtoCopyWith<$Res>  {
   factory $MlsCommitPublishedDtoCopyWith(MlsCommitPublishedDto value, $Res Function(MlsCommitPublishedDto) _then) = _$MlsCommitPublishedDtoCopyWithImpl;
 @useResult
 $Res call({
- String contextId, String? conversationId, int generation, int epoch
+ String contextId, String? conversationId, int generation, int epoch, bool isProposal, bool duplicate
 });
 
 
@@ -1211,13 +1245,15 @@ class _$MlsCommitPublishedDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsCommitPublishedDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? contextId = null,Object? conversationId = freezed,Object? generation = null,Object? epoch = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? contextId = null,Object? conversationId = freezed,Object? generation = null,Object? epoch = null,Object? isProposal = null,Object? duplicate = null,}) {
   return _then(_self.copyWith(
 contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
 as String,conversationId: freezed == conversationId ? _self.conversationId : conversationId // ignore: cast_nullable_to_non_nullable
 as String?,generation: null == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
 as int,epoch: null == epoch ? _self.epoch : epoch // ignore: cast_nullable_to_non_nullable
-as int,
+as int,isProposal: null == isProposal ? _self.isProposal : isProposal // ignore: cast_nullable_to_non_nullable
+as bool,duplicate: null == duplicate ? _self.duplicate : duplicate // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -1299,10 +1335,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String contextId,  String? conversationId,  int generation,  int epoch)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String contextId,  String? conversationId,  int generation,  int epoch,  bool isProposal,  bool duplicate)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _MlsCommitPublishedDto() when $default != null:
-return $default(_that.contextId,_that.conversationId,_that.generation,_that.epoch);case _:
+return $default(_that.contextId,_that.conversationId,_that.generation,_that.epoch,_that.isProposal,_that.duplicate);case _:
   return orElse();
 
 }
@@ -1320,10 +1356,10 @@ return $default(_that.contextId,_that.conversationId,_that.generation,_that.epoc
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String contextId,  String? conversationId,  int generation,  int epoch)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String contextId,  String? conversationId,  int generation,  int epoch,  bool isProposal,  bool duplicate)  $default,) {final _that = this;
 switch (_that) {
 case _MlsCommitPublishedDto():
-return $default(_that.contextId,_that.conversationId,_that.generation,_that.epoch);}
+return $default(_that.contextId,_that.conversationId,_that.generation,_that.epoch,_that.isProposal,_that.duplicate);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -1337,10 +1373,10 @@ return $default(_that.contextId,_that.conversationId,_that.generation,_that.epoc
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String contextId,  String? conversationId,  int generation,  int epoch)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String contextId,  String? conversationId,  int generation,  int epoch,  bool isProposal,  bool duplicate)?  $default,) {final _that = this;
 switch (_that) {
 case _MlsCommitPublishedDto() when $default != null:
-return $default(_that.contextId,_that.conversationId,_that.generation,_that.epoch);case _:
+return $default(_that.contextId,_that.conversationId,_that.generation,_that.epoch,_that.isProposal,_that.duplicate);case _:
   return null;
 
 }
@@ -1352,13 +1388,21 @@ return $default(_that.contextId,_that.conversationId,_that.generation,_that.epoc
 @JsonSerializable()
 
 class _MlsCommitPublishedDto implements MlsCommitPublishedDto {
-  const _MlsCommitPublishedDto({required this.contextId, this.conversationId, required this.generation, required this.epoch});
+  const _MlsCommitPublishedDto({required this.contextId, this.conversationId, required this.generation, required this.epoch, this.isProposal = false, this.duplicate = false});
   factory _MlsCommitPublishedDto.fromJson(Map<String, dynamic> json) => _$MlsCommitPublishedDtoFromJson(json);
 
 @override final  String contextId;
 @override final  String? conversationId;
 @override final  int generation;
 @override final  int epoch;
+@override@JsonKey() final  bool isProposal;
+/// The §E4 idempotent replay: this exact commit was already stored, matched
+/// on (senderDeviceId, generation, epoch, payload hash).
+///
+/// **The publish succeeded.** It is not a lost race, so the staged commit
+/// must be merged and kept - discarding it here is precisely the bug that
+/// stranded a device whose first response went missing.
+@override@JsonKey() final  bool duplicate;
 
 /// Create a copy of MlsCommitPublishedDto
 /// with the given fields replaced by the non-null parameter values.
@@ -1373,16 +1417,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsCommitPublishedDto&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.epoch, epoch) || other.epoch == epoch));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsCommitPublishedDto&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.epoch, epoch) || other.epoch == epoch)&&(identical(other.isProposal, isProposal) || other.isProposal == isProposal)&&(identical(other.duplicate, duplicate) || other.duplicate == duplicate));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,contextId,conversationId,generation,epoch);
+int get hashCode => Object.hash(runtimeType,contextId,conversationId,generation,epoch,isProposal,duplicate);
 
 @override
 String toString() {
-  return 'MlsCommitPublishedDto(contextId: $contextId, conversationId: $conversationId, generation: $generation, epoch: $epoch)';
+  return 'MlsCommitPublishedDto(contextId: $contextId, conversationId: $conversationId, generation: $generation, epoch: $epoch, isProposal: $isProposal, duplicate: $duplicate)';
 }
 
 
@@ -1393,7 +1437,7 @@ abstract mixin class _$MlsCommitPublishedDtoCopyWith<$Res> implements $MlsCommit
   factory _$MlsCommitPublishedDtoCopyWith(_MlsCommitPublishedDto value, $Res Function(_MlsCommitPublishedDto) _then) = __$MlsCommitPublishedDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String contextId, String? conversationId, int generation, int epoch
+ String contextId, String? conversationId, int generation, int epoch, bool isProposal, bool duplicate
 });
 
 
@@ -1410,13 +1454,15 @@ class __$MlsCommitPublishedDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsCommitPublishedDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? contextId = null,Object? conversationId = freezed,Object? generation = null,Object? epoch = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? contextId = null,Object? conversationId = freezed,Object? generation = null,Object? epoch = null,Object? isProposal = null,Object? duplicate = null,}) {
   return _then(_MlsCommitPublishedDto(
 contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
 as String,conversationId: freezed == conversationId ? _self.conversationId : conversationId // ignore: cast_nullable_to_non_nullable
 as String?,generation: null == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
 as int,epoch: null == epoch ? _self.epoch : epoch // ignore: cast_nullable_to_non_nullable
-as int,
+as int,isProposal: null == isProposal ? _self.isProposal : isProposal // ignore: cast_nullable_to_non_nullable
+as bool,duplicate: null == duplicate ? _self.duplicate : duplicate // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -4148,7 +4194,16 @@ mixin _$MlsJoinRequestDto {
  String get signatureKeyFingerprint;@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState get state; DateTime? get createdAt; DateTime? get expiresAt; int get requiredApprovals;/// Who has already vouched. Lets a reviewer see they have approved, and see
 /// who else did - a second opinion is only worth something if you can tell
 /// whose it was.
- List<String> get approverUserIds;
+ List<String> get approverUserIds;/// The server's published verdict on whether this may be admitted without a
+/// human (contract §J.4).
+///
+/// The server cannot *enforce* it - it holds no group keys, so only a
+/// member's client can produce an Add commit or decline to. It decides the
+/// 24h auto-admission budget and records how it was spent; honouring the
+/// answer is entirely on this side.
+ bool get requiresManualApproval;/// Display only, so an approval prompt can say "Alice's new phone" instead
+/// of an opaque id. Nothing is authorized on it.
+ String? get requesterDeviceName;
 /// Create a copy of MlsJoinRequestDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -4161,16 +4216,16 @@ $MlsJoinRequestDtoCopyWith<MlsJoinRequestDto> get copyWith => _$MlsJoinRequestDt
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsJoinRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requesterUserId, requesterUserId) || other.requesterUserId == requesterUserId)&&(identical(other.requesterDeviceId, requesterDeviceId) || other.requesterDeviceId == requesterDeviceId)&&(identical(other.keyPackageHash, keyPackageHash) || other.keyPackageHash == keyPackageHash)&&(identical(other.signatureKeyFingerprint, signatureKeyFingerprint) || other.signatureKeyFingerprint == signatureKeyFingerprint)&&(identical(other.state, state) || other.state == state)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.requiredApprovals, requiredApprovals) || other.requiredApprovals == requiredApprovals)&&const DeepCollectionEquality().equals(other.approverUserIds, approverUserIds));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsJoinRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requesterUserId, requesterUserId) || other.requesterUserId == requesterUserId)&&(identical(other.requesterDeviceId, requesterDeviceId) || other.requesterDeviceId == requesterDeviceId)&&(identical(other.keyPackageHash, keyPackageHash) || other.keyPackageHash == keyPackageHash)&&(identical(other.signatureKeyFingerprint, signatureKeyFingerprint) || other.signatureKeyFingerprint == signatureKeyFingerprint)&&(identical(other.state, state) || other.state == state)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.requiredApprovals, requiredApprovals) || other.requiredApprovals == requiredApprovals)&&const DeepCollectionEquality().equals(other.approverUserIds, approverUserIds)&&(identical(other.requiresManualApproval, requiresManualApproval) || other.requiresManualApproval == requiresManualApproval)&&(identical(other.requesterDeviceName, requesterDeviceName) || other.requesterDeviceName == requesterDeviceName));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,contextId,channelId,conversationId,generation,requesterUserId,requesterDeviceId,keyPackageHash,signatureKeyFingerprint,state,createdAt,expiresAt,requiredApprovals,const DeepCollectionEquality().hash(approverUserIds));
+int get hashCode => Object.hash(runtimeType,id,contextId,channelId,conversationId,generation,requesterUserId,requesterDeviceId,keyPackageHash,signatureKeyFingerprint,state,createdAt,expiresAt,requiredApprovals,const DeepCollectionEquality().hash(approverUserIds),requiresManualApproval,requesterDeviceName);
 
 @override
 String toString() {
-  return 'MlsJoinRequestDto(id: $id, contextId: $contextId, channelId: $channelId, conversationId: $conversationId, generation: $generation, requesterUserId: $requesterUserId, requesterDeviceId: $requesterDeviceId, keyPackageHash: $keyPackageHash, signatureKeyFingerprint: $signatureKeyFingerprint, state: $state, createdAt: $createdAt, expiresAt: $expiresAt, requiredApprovals: $requiredApprovals, approverUserIds: $approverUserIds)';
+  return 'MlsJoinRequestDto(id: $id, contextId: $contextId, channelId: $channelId, conversationId: $conversationId, generation: $generation, requesterUserId: $requesterUserId, requesterDeviceId: $requesterDeviceId, keyPackageHash: $keyPackageHash, signatureKeyFingerprint: $signatureKeyFingerprint, state: $state, createdAt: $createdAt, expiresAt: $expiresAt, requiredApprovals: $requiredApprovals, approverUserIds: $approverUserIds, requiresManualApproval: $requiresManualApproval, requesterDeviceName: $requesterDeviceName)';
 }
 
 
@@ -4181,7 +4236,7 @@ abstract mixin class $MlsJoinRequestDtoCopyWith<$Res>  {
   factory $MlsJoinRequestDtoCopyWith(MlsJoinRequestDto value, $Res Function(MlsJoinRequestDto) _then) = _$MlsJoinRequestDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String contextId, String? channelId, String? conversationId, int generation, String requesterUserId, String requesterDeviceId, String keyPackageHash, String signatureKeyFingerprint,@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState state, DateTime? createdAt, DateTime? expiresAt, int requiredApprovals, List<String> approverUserIds
+ String id, String contextId, String? channelId, String? conversationId, int generation, String requesterUserId, String requesterDeviceId, String keyPackageHash, String signatureKeyFingerprint,@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState state, DateTime? createdAt, DateTime? expiresAt, int requiredApprovals, List<String> approverUserIds, bool requiresManualApproval, String? requesterDeviceName
 });
 
 
@@ -4198,7 +4253,7 @@ class _$MlsJoinRequestDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsJoinRequestDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? contextId = null,Object? channelId = freezed,Object? conversationId = freezed,Object? generation = null,Object? requesterUserId = null,Object? requesterDeviceId = null,Object? keyPackageHash = null,Object? signatureKeyFingerprint = null,Object? state = null,Object? createdAt = freezed,Object? expiresAt = freezed,Object? requiredApprovals = null,Object? approverUserIds = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? contextId = null,Object? channelId = freezed,Object? conversationId = freezed,Object? generation = null,Object? requesterUserId = null,Object? requesterDeviceId = null,Object? keyPackageHash = null,Object? signatureKeyFingerprint = null,Object? state = null,Object? createdAt = freezed,Object? expiresAt = freezed,Object? requiredApprovals = null,Object? approverUserIds = null,Object? requiresManualApproval = null,Object? requesterDeviceName = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
@@ -4214,7 +4269,9 @@ as MlsJoinRequestState,createdAt: freezed == createdAt ? _self.createdAt : creat
 as DateTime?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,requiredApprovals: null == requiredApprovals ? _self.requiredApprovals : requiredApprovals // ignore: cast_nullable_to_non_nullable
 as int,approverUserIds: null == approverUserIds ? _self.approverUserIds : approverUserIds // ignore: cast_nullable_to_non_nullable
-as List<String>,
+as List<String>,requiresManualApproval: null == requiresManualApproval ? _self.requiresManualApproval : requiresManualApproval // ignore: cast_nullable_to_non_nullable
+as bool,requesterDeviceName: freezed == requesterDeviceName ? _self.requesterDeviceName : requesterDeviceName // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -4296,10 +4353,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds,  bool requiresManualApproval,  String? requesterDeviceName)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _MlsJoinRequestDto() when $default != null:
-return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds);case _:
+return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds,_that.requiresManualApproval,_that.requesterDeviceName);case _:
   return orElse();
 
 }
@@ -4317,10 +4374,10 @@ return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds,  bool requiresManualApproval,  String? requesterDeviceName)  $default,) {final _that = this;
 switch (_that) {
 case _MlsJoinRequestDto():
-return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds);}
+return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds,_that.requiresManualApproval,_that.requesterDeviceName);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -4334,10 +4391,10 @@ return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds,  bool requiresManualApproval,  String? requesterDeviceName)?  $default,) {final _that = this;
 switch (_that) {
 case _MlsJoinRequestDto() when $default != null:
-return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds);case _:
+return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds,_that.requiresManualApproval,_that.requesterDeviceName);case _:
   return null;
 
 }
@@ -4349,7 +4406,7 @@ return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_t
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _MlsJoinRequestDto implements MlsJoinRequestDto {
-  const _MlsJoinRequestDto({required this.id, required this.contextId, this.channelId, this.conversationId, required this.generation, required this.requesterUserId, required this.requesterDeviceId, required this.keyPackageHash, required this.signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending) required this.state, this.createdAt, this.expiresAt, this.requiredApprovals = 0, final  List<String> approverUserIds = const <String>[]}): _approverUserIds = approverUserIds;
+  const _MlsJoinRequestDto({required this.id, required this.contextId, this.channelId, this.conversationId, required this.generation, required this.requesterUserId, required this.requesterDeviceId, required this.keyPackageHash, required this.signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending) required this.state, this.createdAt, this.expiresAt, this.requiredApprovals = 0, final  List<String> approverUserIds = const <String>[], this.requiresManualApproval = false, this.requesterDeviceName}): _approverUserIds = approverUserIds;
   factory _MlsJoinRequestDto.fromJson(Map<String, dynamic> json) => _$MlsJoinRequestDtoFromJson(json);
 
 @override final  String id;
@@ -4384,6 +4441,17 @@ class _MlsJoinRequestDto implements MlsJoinRequestDto {
   return EqualUnmodifiableListView(_approverUserIds);
 }
 
+/// The server's published verdict on whether this may be admitted without a
+/// human (contract §J.4).
+///
+/// The server cannot *enforce* it - it holds no group keys, so only a
+/// member's client can produce an Add commit or decline to. It decides the
+/// 24h auto-admission budget and records how it was spent; honouring the
+/// answer is entirely on this side.
+@override@JsonKey() final  bool requiresManualApproval;
+/// Display only, so an approval prompt can say "Alice's new phone" instead
+/// of an opaque id. Nothing is authorized on it.
+@override final  String? requesterDeviceName;
 
 /// Create a copy of MlsJoinRequestDto
 /// with the given fields replaced by the non-null parameter values.
@@ -4398,16 +4466,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsJoinRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requesterUserId, requesterUserId) || other.requesterUserId == requesterUserId)&&(identical(other.requesterDeviceId, requesterDeviceId) || other.requesterDeviceId == requesterDeviceId)&&(identical(other.keyPackageHash, keyPackageHash) || other.keyPackageHash == keyPackageHash)&&(identical(other.signatureKeyFingerprint, signatureKeyFingerprint) || other.signatureKeyFingerprint == signatureKeyFingerprint)&&(identical(other.state, state) || other.state == state)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.requiredApprovals, requiredApprovals) || other.requiredApprovals == requiredApprovals)&&const DeepCollectionEquality().equals(other._approverUserIds, _approverUserIds));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsJoinRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requesterUserId, requesterUserId) || other.requesterUserId == requesterUserId)&&(identical(other.requesterDeviceId, requesterDeviceId) || other.requesterDeviceId == requesterDeviceId)&&(identical(other.keyPackageHash, keyPackageHash) || other.keyPackageHash == keyPackageHash)&&(identical(other.signatureKeyFingerprint, signatureKeyFingerprint) || other.signatureKeyFingerprint == signatureKeyFingerprint)&&(identical(other.state, state) || other.state == state)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.requiredApprovals, requiredApprovals) || other.requiredApprovals == requiredApprovals)&&const DeepCollectionEquality().equals(other._approverUserIds, _approverUserIds)&&(identical(other.requiresManualApproval, requiresManualApproval) || other.requiresManualApproval == requiresManualApproval)&&(identical(other.requesterDeviceName, requesterDeviceName) || other.requesterDeviceName == requesterDeviceName));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,contextId,channelId,conversationId,generation,requesterUserId,requesterDeviceId,keyPackageHash,signatureKeyFingerprint,state,createdAt,expiresAt,requiredApprovals,const DeepCollectionEquality().hash(_approverUserIds));
+int get hashCode => Object.hash(runtimeType,id,contextId,channelId,conversationId,generation,requesterUserId,requesterDeviceId,keyPackageHash,signatureKeyFingerprint,state,createdAt,expiresAt,requiredApprovals,const DeepCollectionEquality().hash(_approverUserIds),requiresManualApproval,requesterDeviceName);
 
 @override
 String toString() {
-  return 'MlsJoinRequestDto(id: $id, contextId: $contextId, channelId: $channelId, conversationId: $conversationId, generation: $generation, requesterUserId: $requesterUserId, requesterDeviceId: $requesterDeviceId, keyPackageHash: $keyPackageHash, signatureKeyFingerprint: $signatureKeyFingerprint, state: $state, createdAt: $createdAt, expiresAt: $expiresAt, requiredApprovals: $requiredApprovals, approverUserIds: $approverUserIds)';
+  return 'MlsJoinRequestDto(id: $id, contextId: $contextId, channelId: $channelId, conversationId: $conversationId, generation: $generation, requesterUserId: $requesterUserId, requesterDeviceId: $requesterDeviceId, keyPackageHash: $keyPackageHash, signatureKeyFingerprint: $signatureKeyFingerprint, state: $state, createdAt: $createdAt, expiresAt: $expiresAt, requiredApprovals: $requiredApprovals, approverUserIds: $approverUserIds, requiresManualApproval: $requiresManualApproval, requesterDeviceName: $requesterDeviceName)';
 }
 
 
@@ -4418,7 +4486,7 @@ abstract mixin class _$MlsJoinRequestDtoCopyWith<$Res> implements $MlsJoinReques
   factory _$MlsJoinRequestDtoCopyWith(_MlsJoinRequestDto value, $Res Function(_MlsJoinRequestDto) _then) = __$MlsJoinRequestDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String contextId, String? channelId, String? conversationId, int generation, String requesterUserId, String requesterDeviceId, String keyPackageHash, String signatureKeyFingerprint,@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState state, DateTime? createdAt, DateTime? expiresAt, int requiredApprovals, List<String> approverUserIds
+ String id, String contextId, String? channelId, String? conversationId, int generation, String requesterUserId, String requesterDeviceId, String keyPackageHash, String signatureKeyFingerprint,@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState state, DateTime? createdAt, DateTime? expiresAt, int requiredApprovals, List<String> approverUserIds, bool requiresManualApproval, String? requesterDeviceName
 });
 
 
@@ -4435,7 +4503,7 @@ class __$MlsJoinRequestDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsJoinRequestDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? contextId = null,Object? channelId = freezed,Object? conversationId = freezed,Object? generation = null,Object? requesterUserId = null,Object? requesterDeviceId = null,Object? keyPackageHash = null,Object? signatureKeyFingerprint = null,Object? state = null,Object? createdAt = freezed,Object? expiresAt = freezed,Object? requiredApprovals = null,Object? approverUserIds = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? contextId = null,Object? channelId = freezed,Object? conversationId = freezed,Object? generation = null,Object? requesterUserId = null,Object? requesterDeviceId = null,Object? keyPackageHash = null,Object? signatureKeyFingerprint = null,Object? state = null,Object? createdAt = freezed,Object? expiresAt = freezed,Object? requiredApprovals = null,Object? approverUserIds = null,Object? requiresManualApproval = null,Object? requesterDeviceName = freezed,}) {
   return _then(_MlsJoinRequestDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
@@ -4451,7 +4519,9 @@ as MlsJoinRequestState,createdAt: freezed == createdAt ? _self.createdAt : creat
 as DateTime?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,requiredApprovals: null == requiredApprovals ? _self.requiredApprovals : requiredApprovals // ignore: cast_nullable_to_non_nullable
 as int,approverUserIds: null == approverUserIds ? _self._approverUserIds : approverUserIds // ignore: cast_nullable_to_non_nullable
-as List<String>,
+as List<String>,requiresManualApproval: null == requiresManualApproval ? _self.requiresManualApproval : requiresManualApproval // ignore: cast_nullable_to_non_nullable
+as bool,requesterDeviceName: freezed == requesterDeviceName ? _self.requesterDeviceName : requesterDeviceName // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -4999,6 +5069,548 @@ class __$GenerateKeyPackagesDtoCopyWithImpl<$Res>
 count: null == count ? _self.count : count // ignore: cast_nullable_to_non_nullable
 as int,needsLastResort: null == needsLastResort ? _self.needsLastResort : needsLastResort // ignore: cast_nullable_to_non_nullable
 as bool,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$MlsAdmissionChallengeDto {
+
+ String get id; String get requestId;/// 32 random bytes, base64.
+ String get challenge;/// Which device issued it - shown to the joiner so "your laptop is checking
+/// this device" is something the user can recognise or not.
+ String? get issuedByDeviceId; DateTime? get expiresAt;
+/// Create a copy of MlsAdmissionChallengeDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$MlsAdmissionChallengeDtoCopyWith<MlsAdmissionChallengeDto> get copyWith => _$MlsAdmissionChallengeDtoCopyWithImpl<MlsAdmissionChallengeDto>(this as MlsAdmissionChallengeDto, _$identity);
+
+  /// Serializes this MlsAdmissionChallengeDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsAdmissionChallengeDto&&(identical(other.id, id) || other.id == id)&&(identical(other.requestId, requestId) || other.requestId == requestId)&&(identical(other.challenge, challenge) || other.challenge == challenge)&&(identical(other.issuedByDeviceId, issuedByDeviceId) || other.issuedByDeviceId == issuedByDeviceId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,requestId,challenge,issuedByDeviceId,expiresAt);
+
+@override
+String toString() {
+  return 'MlsAdmissionChallengeDto(id: $id, requestId: $requestId, challenge: $challenge, issuedByDeviceId: $issuedByDeviceId, expiresAt: $expiresAt)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $MlsAdmissionChallengeDtoCopyWith<$Res>  {
+  factory $MlsAdmissionChallengeDtoCopyWith(MlsAdmissionChallengeDto value, $Res Function(MlsAdmissionChallengeDto) _then) = _$MlsAdmissionChallengeDtoCopyWithImpl;
+@useResult
+$Res call({
+ String id, String requestId, String challenge, String? issuedByDeviceId, DateTime? expiresAt
+});
+
+
+
+
+}
+/// @nodoc
+class _$MlsAdmissionChallengeDtoCopyWithImpl<$Res>
+    implements $MlsAdmissionChallengeDtoCopyWith<$Res> {
+  _$MlsAdmissionChallengeDtoCopyWithImpl(this._self, this._then);
+
+  final MlsAdmissionChallengeDto _self;
+  final $Res Function(MlsAdmissionChallengeDto) _then;
+
+/// Create a copy of MlsAdmissionChallengeDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? requestId = null,Object? challenge = null,Object? issuedByDeviceId = freezed,Object? expiresAt = freezed,}) {
+  return _then(_self.copyWith(
+id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String,requestId: null == requestId ? _self.requestId : requestId // ignore: cast_nullable_to_non_nullable
+as String,challenge: null == challenge ? _self.challenge : challenge // ignore: cast_nullable_to_non_nullable
+as String,issuedByDeviceId: freezed == issuedByDeviceId ? _self.issuedByDeviceId : issuedByDeviceId // ignore: cast_nullable_to_non_nullable
+as String?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [MlsAdmissionChallengeDto].
+extension MlsAdmissionChallengeDtoPatterns on MlsAdmissionChallengeDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _MlsAdmissionChallengeDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _MlsAdmissionChallengeDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _MlsAdmissionChallengeDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _MlsAdmissionChallengeDto():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _MlsAdmissionChallengeDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _MlsAdmissionChallengeDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String requestId,  String challenge,  String? issuedByDeviceId,  DateTime? expiresAt)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _MlsAdmissionChallengeDto() when $default != null:
+return $default(_that.id,_that.requestId,_that.challenge,_that.issuedByDeviceId,_that.expiresAt);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String requestId,  String challenge,  String? issuedByDeviceId,  DateTime? expiresAt)  $default,) {final _that = this;
+switch (_that) {
+case _MlsAdmissionChallengeDto():
+return $default(_that.id,_that.requestId,_that.challenge,_that.issuedByDeviceId,_that.expiresAt);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String requestId,  String challenge,  String? issuedByDeviceId,  DateTime? expiresAt)?  $default,) {final _that = this;
+switch (_that) {
+case _MlsAdmissionChallengeDto() when $default != null:
+return $default(_that.id,_that.requestId,_that.challenge,_that.issuedByDeviceId,_that.expiresAt);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+@ApiDateTimeConverter()
+class _MlsAdmissionChallengeDto extends MlsAdmissionChallengeDto {
+  const _MlsAdmissionChallengeDto({required this.id, required this.requestId, required this.challenge, this.issuedByDeviceId, this.expiresAt}): super._();
+  factory _MlsAdmissionChallengeDto.fromJson(Map<String, dynamic> json) => _$MlsAdmissionChallengeDtoFromJson(json);
+
+@override final  String id;
+@override final  String requestId;
+/// 32 random bytes, base64.
+@override final  String challenge;
+/// Which device issued it - shown to the joiner so "your laptop is checking
+/// this device" is something the user can recognise or not.
+@override final  String? issuedByDeviceId;
+@override final  DateTime? expiresAt;
+
+/// Create a copy of MlsAdmissionChallengeDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$MlsAdmissionChallengeDtoCopyWith<_MlsAdmissionChallengeDto> get copyWith => __$MlsAdmissionChallengeDtoCopyWithImpl<_MlsAdmissionChallengeDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$MlsAdmissionChallengeDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsAdmissionChallengeDto&&(identical(other.id, id) || other.id == id)&&(identical(other.requestId, requestId) || other.requestId == requestId)&&(identical(other.challenge, challenge) || other.challenge == challenge)&&(identical(other.issuedByDeviceId, issuedByDeviceId) || other.issuedByDeviceId == issuedByDeviceId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,requestId,challenge,issuedByDeviceId,expiresAt);
+
+@override
+String toString() {
+  return 'MlsAdmissionChallengeDto(id: $id, requestId: $requestId, challenge: $challenge, issuedByDeviceId: $issuedByDeviceId, expiresAt: $expiresAt)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$MlsAdmissionChallengeDtoCopyWith<$Res> implements $MlsAdmissionChallengeDtoCopyWith<$Res> {
+  factory _$MlsAdmissionChallengeDtoCopyWith(_MlsAdmissionChallengeDto value, $Res Function(_MlsAdmissionChallengeDto) _then) = __$MlsAdmissionChallengeDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String id, String requestId, String challenge, String? issuedByDeviceId, DateTime? expiresAt
+});
+
+
+
+
+}
+/// @nodoc
+class __$MlsAdmissionChallengeDtoCopyWithImpl<$Res>
+    implements _$MlsAdmissionChallengeDtoCopyWith<$Res> {
+  __$MlsAdmissionChallengeDtoCopyWithImpl(this._self, this._then);
+
+  final _MlsAdmissionChallengeDto _self;
+  final $Res Function(_MlsAdmissionChallengeDto) _then;
+
+/// Create a copy of MlsAdmissionChallengeDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? requestId = null,Object? challenge = null,Object? issuedByDeviceId = freezed,Object? expiresAt = freezed,}) {
+  return _then(_MlsAdmissionChallengeDto(
+id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String,requestId: null == requestId ? _self.requestId : requestId // ignore: cast_nullable_to_non_nullable
+as String,challenge: null == challenge ? _self.challenge : challenge // ignore: cast_nullable_to_non_nullable
+as String,issuedByDeviceId: freezed == issuedByDeviceId ? _self.issuedByDeviceId : issuedByDeviceId // ignore: cast_nullable_to_non_nullable
+as String?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$MlsAdmissionProofDto {
+
+ String get challengeId; String get requestId;/// HMAC over `challenge || requesterDeviceId || signatureKeyFingerprint`,
+/// keyed by HKDF of the account master key. Base64.
+ String get proof;
+/// Create a copy of MlsAdmissionProofDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$MlsAdmissionProofDtoCopyWith<MlsAdmissionProofDto> get copyWith => _$MlsAdmissionProofDtoCopyWithImpl<MlsAdmissionProofDto>(this as MlsAdmissionProofDto, _$identity);
+
+  /// Serializes this MlsAdmissionProofDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsAdmissionProofDto&&(identical(other.challengeId, challengeId) || other.challengeId == challengeId)&&(identical(other.requestId, requestId) || other.requestId == requestId)&&(identical(other.proof, proof) || other.proof == proof));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,challengeId,requestId,proof);
+
+@override
+String toString() {
+  return 'MlsAdmissionProofDto(challengeId: $challengeId, requestId: $requestId, proof: $proof)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $MlsAdmissionProofDtoCopyWith<$Res>  {
+  factory $MlsAdmissionProofDtoCopyWith(MlsAdmissionProofDto value, $Res Function(MlsAdmissionProofDto) _then) = _$MlsAdmissionProofDtoCopyWithImpl;
+@useResult
+$Res call({
+ String challengeId, String requestId, String proof
+});
+
+
+
+
+}
+/// @nodoc
+class _$MlsAdmissionProofDtoCopyWithImpl<$Res>
+    implements $MlsAdmissionProofDtoCopyWith<$Res> {
+  _$MlsAdmissionProofDtoCopyWithImpl(this._self, this._then);
+
+  final MlsAdmissionProofDto _self;
+  final $Res Function(MlsAdmissionProofDto) _then;
+
+/// Create a copy of MlsAdmissionProofDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? challengeId = null,Object? requestId = null,Object? proof = null,}) {
+  return _then(_self.copyWith(
+challengeId: null == challengeId ? _self.challengeId : challengeId // ignore: cast_nullable_to_non_nullable
+as String,requestId: null == requestId ? _self.requestId : requestId // ignore: cast_nullable_to_non_nullable
+as String,proof: null == proof ? _self.proof : proof // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [MlsAdmissionProofDto].
+extension MlsAdmissionProofDtoPatterns on MlsAdmissionProofDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _MlsAdmissionProofDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _MlsAdmissionProofDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _MlsAdmissionProofDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _MlsAdmissionProofDto():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _MlsAdmissionProofDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _MlsAdmissionProofDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String challengeId,  String requestId,  String proof)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _MlsAdmissionProofDto() when $default != null:
+return $default(_that.challengeId,_that.requestId,_that.proof);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String challengeId,  String requestId,  String proof)  $default,) {final _that = this;
+switch (_that) {
+case _MlsAdmissionProofDto():
+return $default(_that.challengeId,_that.requestId,_that.proof);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String challengeId,  String requestId,  String proof)?  $default,) {final _that = this;
+switch (_that) {
+case _MlsAdmissionProofDto() when $default != null:
+return $default(_that.challengeId,_that.requestId,_that.proof);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _MlsAdmissionProofDto implements MlsAdmissionProofDto {
+  const _MlsAdmissionProofDto({required this.challengeId, required this.requestId, required this.proof});
+  factory _MlsAdmissionProofDto.fromJson(Map<String, dynamic> json) => _$MlsAdmissionProofDtoFromJson(json);
+
+@override final  String challengeId;
+@override final  String requestId;
+/// HMAC over `challenge || requesterDeviceId || signatureKeyFingerprint`,
+/// keyed by HKDF of the account master key. Base64.
+@override final  String proof;
+
+/// Create a copy of MlsAdmissionProofDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$MlsAdmissionProofDtoCopyWith<_MlsAdmissionProofDto> get copyWith => __$MlsAdmissionProofDtoCopyWithImpl<_MlsAdmissionProofDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$MlsAdmissionProofDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsAdmissionProofDto&&(identical(other.challengeId, challengeId) || other.challengeId == challengeId)&&(identical(other.requestId, requestId) || other.requestId == requestId)&&(identical(other.proof, proof) || other.proof == proof));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,challengeId,requestId,proof);
+
+@override
+String toString() {
+  return 'MlsAdmissionProofDto(challengeId: $challengeId, requestId: $requestId, proof: $proof)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$MlsAdmissionProofDtoCopyWith<$Res> implements $MlsAdmissionProofDtoCopyWith<$Res> {
+  factory _$MlsAdmissionProofDtoCopyWith(_MlsAdmissionProofDto value, $Res Function(_MlsAdmissionProofDto) _then) = __$MlsAdmissionProofDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String challengeId, String requestId, String proof
+});
+
+
+
+
+}
+/// @nodoc
+class __$MlsAdmissionProofDtoCopyWithImpl<$Res>
+    implements _$MlsAdmissionProofDtoCopyWith<$Res> {
+  __$MlsAdmissionProofDtoCopyWithImpl(this._self, this._then);
+
+  final _MlsAdmissionProofDto _self;
+  final $Res Function(_MlsAdmissionProofDto) _then;
+
+/// Create a copy of MlsAdmissionProofDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? challengeId = null,Object? requestId = null,Object? proof = null,}) {
+  return _then(_MlsAdmissionProofDto(
+challengeId: null == challengeId ? _self.challengeId : challengeId // ignore: cast_nullable_to_non_nullable
+as String,requestId: null == requestId ? _self.requestId : requestId // ignore: cast_nullable_to_non_nullable
+as String,proof: null == proof ? _self.proof : proof // ignore: cast_nullable_to_non_nullable
+as String,
   ));
 }
 

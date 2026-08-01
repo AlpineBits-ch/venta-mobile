@@ -106,12 +106,14 @@ class MlsCommitOut {
     required this.commit,
     required this.welcome,
     required this.epoch,
+    this.groupInfo,
   });
 
   factory MlsCommitOut.fromJson(Map<String, dynamic> json) => MlsCommitOut(
     commit: json['commit'] as String,
     welcome: json['welcome'] as String?,
     epoch: (json['epoch'] as num).toInt(),
+    groupInfo: json['groupInfo'] as String?,
   );
 
   final String commit;
@@ -119,9 +121,23 @@ class MlsCommitOut {
 
   /// Epoch this commit establishes once merged.
   final int epoch;
+
+  /// GroupInfo for the epoch this commit **establishes**, produced by the
+  /// commit itself.
+  ///
+  /// Publish this rather than calling [VentaMls.exportGroupInfo]. An exported
+  /// GroupInfo can only describe the epoch the group is on *now*, and a commit
+  /// is deliberately not merged until the server accepts it — so every
+  /// published GroupInfo used to be one epoch stale, and a device recovering by
+  /// external commit landed behind the group it was rejoining.
+  final String? groupInfo;
 }
 
-enum MlsMessageKind { application, commit, proposal }
+/// `buffered` means the message is from an epoch this device has not reached
+/// yet. It is held rather than dropped — the wire copy decrypts exactly once —
+/// and [VentaMls.drainPendingMessages] returns it once the missing commits have
+/// been applied.
+enum MlsMessageKind { application, commit, proposal, buffered }
 
 class MlsProcessedMessage {
   const MlsProcessedMessage({
@@ -139,6 +155,7 @@ class MlsProcessedMessage {
         kind: switch (json['kind'] as String) {
           'application' => MlsMessageKind.application,
           'commit' => MlsMessageKind.commit,
+          'buffered' => MlsMessageKind.buffered,
           _ => MlsMessageKind.proposal,
         },
         plaintext: json['plaintext'] as String?,
@@ -229,4 +246,131 @@ class MlsRejoinOut {
 
   final MlsGroupInfo groupInfo;
   final String externalCommit;
+}
+
+/// An account's long-lived Ed25519 identity key (contract §H.2).
+///
+/// Not the device signing key. This one belongs to the *account*, is wrapped
+/// under the recovery key and travels in the backup envelope, and is what lets a
+/// peer verify offline that a device genuinely belongs to an account — with none
+/// of that account's devices online, and without trusting the server, which
+/// never holds the private half.
+class MlsAccountIdentity {
+  const MlsAccountIdentity({required this.publicKey, required this.privateKey});
+
+  factory MlsAccountIdentity.fromJson(Map<String, dynamic> json) =>
+      MlsAccountIdentity(
+        publicKey: json['publicKey'] as String,
+        privateKey: json['privateKey'] as String,
+      );
+
+  final String publicKey;
+  final String privateKey;
+}
+
+/// What opening a `.venta-keys` envelope produced (contract §D).
+class MlsBackupImportResult {
+  const MlsBackupImportResult({
+    required this.userId,
+    required this.deviceId,
+    required this.createdAt,
+    required this.appVersion,
+    required this.identity,
+    required this.keyHandle,
+    required this.signingPublicKey,
+    required this.signingPrivateKey,
+    required this.engineRestored,
+    required this.groupRegistry,
+    required this.messageCache,
+    required this.accountIdentityPublicKey,
+    required this.accountIdentityPrivateKey,
+  });
+
+  factory MlsBackupImportResult.fromJson(Map<String, dynamic> json) =>
+      MlsBackupImportResult(
+        userId: json['userId'] as String,
+        deviceId: json['deviceId'] as String,
+        createdAt: json['createdAt'] as String? ?? '',
+        appVersion: json['appVersion'] as String? ?? '',
+        identity: json['identity'] as String,
+        keyHandle: json['keyHandle'] as String,
+        signingPublicKey: json['signingPublicKey'] as String,
+        signingPrivateKey: json['signingPrivateKey'] as String,
+        engineRestored: json['engineRestored'] as bool? ?? false,
+        groupRegistry: Map<String, Object>.from(
+          (json['groupRegistry'] as Map?) ?? const {},
+        ),
+        messageCache: Map<String, String>.from(
+          (json['messageCache'] as Map?) ?? const {},
+        ),
+        accountIdentityPublicKey: json['accountIdentityPublicKey'] as String?,
+        accountIdentityPrivateKey: json['accountIdentityPrivateKey'] as String?,
+      );
+
+  final String userId;
+
+  /// The device the backup was taken on — **not** necessarily this one.
+  final String deviceId;
+  final String createdAt;
+  final String appVersion;
+
+  /// The BasicCredential identity the restored signing key carries.
+  final String identity;
+
+  /// Session handle for the restored signing key, immediately usable.
+  final String keyHandle;
+
+  /// The restored signing keypair. Handed back because this client keeps it in
+  /// the OS keychain rather than in the engine's store — a restore that only
+  /// loaded it into memory would work until the app was next killed, and then
+  /// look exactly like lost keys.
+  final String signingPublicKey;
+  final String signingPrivateKey;
+
+  /// False on a new device, where cloning ratchet state would be unsafe. When
+  /// false the caller owes a re-join per encrypted context — the registry came
+  /// across, but the groups it names did not.
+  final bool engineRestored;
+
+  final Map<String, Object> groupRegistry;
+  final Map<String, String> messageCache;
+
+  /// Present only when the envelope carried an account identity key. Absent for
+  /// blobs written before §H, and for accounts that never had one — which §I.2
+  /// says is the normal state until an upgraded client unlocks them.
+  final String? accountIdentityPublicKey;
+  final String? accountIdentityPrivateKey;
+}
+
+/// A message that arrived early and became readable once its commit was applied.
+///
+/// MLS decrypts a message from the wire exactly once, so an early arrival that
+/// was simply dropped is gone for good. `pending_messages` was declared,
+/// retained and cleared in both engines but never actually written to, so the
+/// promised buffer did not exist.
+class MlsReplayedMessage {
+  const MlsReplayedMessage({
+    required this.messageId,
+    required this.plaintext,
+    required this.senderIdentity,
+    required this.epoch,
+  });
+
+  factory MlsReplayedMessage.fromJson(Map<String, dynamic> json) =>
+      MlsReplayedMessage(
+        messageId: json['messageId'] as String?,
+        plaintext: json['plaintext'] as String,
+        senderIdentity: json['senderIdentity'] as String?,
+        epoch: (json['epoch'] as num).toInt(),
+      );
+
+  /// The id supplied when the message was first handed to
+  /// [VentaMls.processMessage], so the caller can match it back to the row it
+  /// rendered as undecryptable.
+  final String? messageId;
+
+  /// Decrypted bytes, base64.
+  final String plaintext;
+  final String? senderIdentity;
+  final int epoch;
 }

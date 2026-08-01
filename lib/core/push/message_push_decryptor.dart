@@ -67,6 +67,26 @@ class MessagePushDecryptor {
 
       final engine = VentaMls();
       final directory = await store.stateDirectory(userId);
+
+      // On Android this runs in a background *isolate*, not a background
+      // process, so `initStorage` here is the same process-global engine the app
+      // is using. Pointing it somewhere else now clears the loaded account's
+      // groups and signers - which it must, or two accounts' key material ends
+      // up in one store - and that would leave the foreground session holding a
+      // signing handle the engine no longer knows.
+      //
+      // A notification for an account that is not the loaded one is therefore
+      // shown as the server's placeholder rather than decrypted. Losing one
+      // notification body beats tearing down a live session to read it.
+      final loadedDirectory = await engine.currentStateDirectory();
+      if (loadedDirectory != null && loadedDirectory != directory.path) {
+        debugPrint(
+          'MessagePushDecryptor: ${payload.messageId} is for another account '
+          'than the one this process has loaded - leaving the engine alone',
+        );
+        return null;
+      }
+
       await engine.initStorage(directory.path);
 
       final processed = await engine.processMessage(

@@ -61,27 +61,98 @@ class DeviceApi {
 
   String get _base => client.url('/api/v1/identity/devices');
 
+  /// What this build understands, reported on every registration and launch.
+  ///
+  /// Contract §I.4. The server uses this rather than a version string to decide
+  /// whether an account may enter `VerifiedDevices`, and to compute the
+  /// certificate-coverage telemetry that gates flipping enforcement on. A
+  /// version string would be a proxy for the same thing that nobody can query
+  /// meaningfully across three clients on independent release trains.
+  static const capabilities = <String>[
+    'mls.device-cert.v1',
+    'mls.join-request.conversation.v1',
+    'mls.protection-level.v1',
+    'mls.backup.v1',
+  ];
+
   /// Idempotent: re-registering an id this account already has returns the
   /// existing row untouched. An id another *account* uses is not a collision -
   /// `clientDeviceId` is unique per user, not globally.
-  Future<void> register({
+  ///
+  /// Returns whether the server rotated this device's identity key. When it did,
+  /// it purged the device's key packages with it (contract §A) and the caller
+  /// owes an immediate replenish - the packages the server was handing out have
+  /// no private halves any more.
+  Future<bool> register({
     required String clientDeviceId,
     required String deviceName,
     required String deviceType,
     required String identityPublicKey,
   }) async {
-    await client.dio.post<void>(
+    final response = await client.dio.post<Map<String, dynamic>>(
       _base,
       data: {
         'clientDeviceId': clientDeviceId,
         'deviceName': deviceName,
         'deviceType': deviceType,
         'identityPublicKey': identityPublicKey,
+        'capabilities': capabilities,
       },
       // This *is* the recovery from an unknown device id - it must never be
       // routed back into it.
       options: Options(extra: {DeviceIdInterceptor.skipRecoveryKey: true}),
     );
+    return response.data?['identityRotated'] as bool? ?? false;
+  }
+
+  /// Throws away every key package the server holds for this device.
+  ///
+  /// Contract §A, and the fix for root cause R3. The replenish count is derived
+  /// purely from server rows, but the private init keys live only in the
+  /// client's local MLS store - so a device that wipes that store leaves ~100
+  /// unconsumed packages behind, the server answers `Count = 0`, nothing is
+  /// re-uploaded, and **every Welcome sealed to one of them is undecryptable by
+  /// the device it was addressed to**. Silently, and permanently.
+  ///
+  /// Must therefore run *before* re-registering and replenishing, on every path
+  /// that clears local MLS state and on every signing-key rotation. Idempotent.
+  Future<int> resetKeyPackages(String clientDeviceId) async {
+    final response = await client.dio.delete<Map<String, dynamic>>(
+      '$_base/client/$clientDeviceId/key-packages',
+    );
+    return response.data?['deletedCount'] as int? ?? 0;
+  }
+
+  /// Publishes this device's certificate (contract §H.2) alongside its key
+  /// packages, so peers can verify offline that it belongs to this account.
+  Future<void> uploadDeviceCertificate({
+    required String clientDeviceId,
+    required Map<String, Object?> certificate,
+  }) async {
+    await client.dio.put<void>(
+      '$_base/client/$clientDeviceId/certificate',
+      data: certificate,
+    );
+  }
+
+  /// The certificate for someone else's device, for the §H.4 check on an
+  /// unrecognised leaf. Null when that device has not published one - which §I.2
+  /// says is the ordinary state until it upgrades.
+  Future<Map<String, dynamic>?> fetchDeviceCertificate({
+    required String userId,
+    required String clientDeviceId,
+  }) async {
+    try {
+      final response = await client.dio.get<Map<String, dynamic>>(
+        '/api/v1/identity/users/${Uri.encodeComponent(userId)}'
+        '/devices/${Uri.encodeComponent(clientDeviceId)}/certificate',
+      );
+      final data = response.data;
+      return (data == null || data.isEmpty) ? null : data;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
   }
 
   /// How many key packages this device should generate and upload to get back

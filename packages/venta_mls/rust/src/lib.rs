@@ -36,12 +36,48 @@ struct Args {
     welcome_b64: Option<String>,
     group_info_b64: Option<String>,
     message_b64: Option<String>,
+    /// Server-side id, so a message buffered as early can be matched to the one
+    /// replayed later - and so the same message arriving twice is buffered once.
+    message_id: Option<String>,
     plaintext_b64: Option<String>,
     leaf_indices: Option<Vec<u32>>,
     dir: Option<String>,
     read_only: Option<bool>,
     encryption_key_b64: Option<String>,
     encrypted_b64: Option<String>,
+
+    // Backup envelope (§D)
+    passphrase: Option<String>,
+    user_id: Option<String>,
+    device_id: Option<String>,
+    app_version: Option<String>,
+    blob: Option<String>,
+    group_registry: Option<std::collections::HashMap<String, Value>>,
+    message_cache: Option<std::collections::HashMap<String, String>>,
+
+    // Account master key (§C.1, §C.1.1)
+    password: Option<String>,
+    recovery_code: Option<String>,
+    /// Whichever credential a wrapping is being made under - a password or a
+    /// recovery code. The two wrappings are the same shape.
+    secret: Option<String>,
+    encrypted_master_key: Option<Value>,
+
+    // Account identity, device certificates, proofs (§G/§H)
+    account_identity_public_key_b64: Option<String>,
+    account_identity_private_key_b64: Option<String>,
+    device_signature_key_b64: Option<String>,
+    certificate_b64: Option<String>,
+    issued_at: Option<i64>,
+    expires_at: Option<i64>,
+    master_key_b64: Option<String>,
+    challenge_b64: Option<String>,
+    signature_key_fingerprint: Option<String>,
+    proof_b64: Option<String>,
+    level: Option<String>,
+    version: Option<u64>,
+    updated_at: Option<String>,
+    assertion_b64: Option<String>,
 }
 
 impl Args {
@@ -169,6 +205,7 @@ fn dispatch(command: &str, args: Args) -> Result<Value, String> {
                 state,
                 &Args::need(args.group_id_b64, "groupIdB64")?,
                 &Args::need(args.message_b64, "messageB64")?,
+                args.message_id,
             )?;
             encode(out)
         }
@@ -229,6 +266,144 @@ fn dispatch(command: &str, args: Args) -> Result<Value, String> {
                 &Args::need(args.encryption_key_b64, "encryptionKeyB64")?,
             )?;
             Ok(Value::Null)
+        }
+        "drainPendingMessages" => encode(mls::drain_pending_messages(
+            state,
+            &Args::need(args.group_id_b64, "groupIdB64")?,
+        )?),
+        "currentStateDir" => Ok(match mls::current_state_dir(state) {
+            Some(dir) => json!(dir),
+            None => Value::Null,
+        }),
+
+        // --- Backup envelope (contract §D) ---
+        "exportBackup" => {
+            let blob = mls::export_backup(
+                state,
+                Args::need(args.passphrase, "passphrase")?,
+                Args::need(args.user_id, "userId")?,
+                Args::need(args.device_id, "deviceId")?,
+                args.app_version.unwrap_or_default(),
+                Args::need(args.key_handle, "keyHandle")?,
+                args.group_registry.unwrap_or_default(),
+                args.message_cache,
+                match (
+                    args.account_identity_public_key_b64.clone(),
+                    args.account_identity_private_key_b64.clone(),
+                ) {
+                    (Some(public), Some(private)) => Some((public, private)),
+                    _ => None,
+                },
+            )?;
+            Ok(json!(blob))
+        }
+        "importBackup" => {
+            let result = mls::import_backup(
+                state,
+                Args::need(args.blob, "blob")?,
+                Args::need(args.passphrase, "passphrase")?,
+                Args::need(args.user_id, "userId")?,
+                Args::need(args.device_id, "deviceId")?,
+            )?;
+            encode(result)
+        }
+
+        // --- Account master key (§C.1) ---
+        "setupMasterKey" => encode(mls::setup_master_key(
+            &Args::need(args.password, "password")?,
+            args.recovery_code.as_deref(),
+        )?),
+        "generateRecoveryCode" => Ok(json!(mls::generate_recovery_code())),
+        "normalizeRecoveryCode" => Ok(json!(mls::normalize_recovery_code(
+            &Args::need(args.recovery_code, "recoveryCode")?
+        )?)),
+        "wrapMasterKeyUnder" => encode(mls::wrap_master_key_under(
+            &Args::need(args.master_key_b64, "masterKeyB64")?,
+            &Args::need(args.secret, "secret")?,
+        )?),
+        "decryptMasterKey" => {
+            let envelope: mls::EncryptedMasterKey =
+                serde_json::from_value(args.encrypted_master_key.ok_or_else(|| {
+                    "MlsError: missing required argument 'encryptedMasterKey'".to_string()
+                })?)
+                .map_err(|e| format!("MlsError: bad master key envelope: {}", e))?;
+            let key = mls::decrypt_master_key(&envelope, &Args::need(args.password, "password")?)?;
+            Ok(json!(key))
+        }
+        "rewrapMasterKey" => encode(mls::rewrap_master_key(
+            &Args::need(args.master_key_b64, "masterKeyB64")?,
+            &Args::need(args.password, "password")?,
+        )?),
+        "randomBytes" => Ok(json!(mls::random_bytes_b64(
+            args.count.unwrap_or(32) as usize
+        ))),
+
+        // --- Account identity, device certificates, proofs (§G/§H) ---
+        "generateAccountIdentity" => encode(mls::generate_account_identity(state)?),
+        "issueDeviceCertificate" => {
+            let cert = mls::issue_device_certificate(
+                state,
+                &Args::need(args.account_identity_private_key_b64, "accountIdentityPrivateKeyB64")?,
+                &Args::need(args.device_id, "deviceId")?,
+                &Args::need(args.device_signature_key_b64, "deviceSignatureKeyB64")?,
+                args.issued_at.unwrap_or(0),
+                args.expires_at.unwrap_or(0),
+            )?;
+            Ok(json!(cert))
+        }
+        "verifyDeviceCertificate" => {
+            let valid = mls::verify_device_certificate(
+                state,
+                &Args::need(args.account_identity_public_key_b64, "accountIdentityPublicKeyB64")?,
+                &Args::need(args.device_id, "deviceId")?,
+                &Args::need(args.device_signature_key_b64, "deviceSignatureKeyB64")?,
+                args.issued_at.unwrap_or(0),
+                args.expires_at.unwrap_or(0),
+                &Args::need(args.certificate_b64, "certificateB64")?,
+            )?;
+            Ok(json!(valid))
+        }
+        "signAdmissionProof" => {
+            let proof = mls::sign_admission_proof(
+                &Args::need(args.master_key_b64, "masterKeyB64")?,
+                &Args::need(args.challenge_b64, "challengeB64")?,
+                &Args::need(args.device_id, "deviceId")?,
+                &Args::need(args.signature_key_fingerprint, "signatureKeyFingerprint")?,
+            )?;
+            Ok(json!(proof))
+        }
+        "verifyAdmissionProof" => {
+            let valid = mls::verify_admission_proof(
+                &Args::need(args.master_key_b64, "masterKeyB64")?,
+                &Args::need(args.challenge_b64, "challengeB64")?,
+                &Args::need(args.device_id, "deviceId")?,
+                &Args::need(args.signature_key_fingerprint, "signatureKeyFingerprint")?,
+                &Args::need(args.proof_b64, "proofB64")?,
+            )?;
+            Ok(json!(valid))
+        }
+        "signProtectionLevel" => {
+            let assertion = mls::sign_protection_level(
+                state,
+                &Args::need(args.account_identity_private_key_b64, "accountIdentityPrivateKeyB64")?,
+                &Args::need(args.user_id, "userId")?,
+                &Args::need(args.level, "level")?,
+                args.version.unwrap_or(0),
+                &Args::need(args.updated_at, "updatedAt")?,
+            )?;
+            Ok(json!(assertion))
+        }
+        "verifyProtectionLevel" => {
+            let valid = mls::verify_protection_level(
+                state,
+                &Args::need(args.account_identity_public_key_b64, "accountIdentityPublicKeyB64")?,
+                &Args::need(args.user_id, "userId")?,
+                &Args::need(args.level, "level")?,
+                args.version.unwrap_or(0),
+                &Args::need(args.updated_at, "updatedAt")?,
+                &Args::need(args.assertion_b64, "assertionB64")?,
+            )?;
+            Ok(json!(valid))
         }
         other => Err(format!("MlsError: unknown command '{}'", other)),
     })

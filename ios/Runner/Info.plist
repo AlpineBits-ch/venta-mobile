@@ -37,8 +37,18 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- true, not false: the app ships its own cryptography rather than only
+	     calling Apple's. venta_mls links OpenMLS (RFC 9420) for end-to-end
+	     message encryption, and WebRTC.framework carries BoringSSL for
+	     DTLS-SRTP. Neither is covered by the exemptions, which are for
+	     HTTPS/CryptoKit/Keychain, authentication-only use, or DRM.
+
+	     All of it is standard published cryptography - HPKE, X25519, Ed25519,
+	     AES-GCM, ChaCha20-Poly1305, HKDF - so this is a self-classified
+	     ECCN 5D992.c mass market item, not a CCATS case. See
+	     docs/export-compliance.md before changing this value. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
+	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>

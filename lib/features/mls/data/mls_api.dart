@@ -157,10 +157,18 @@ class MlsApi {
   }
 
   /// Marks Welcomes consumed - only after the join actually succeeded.
-  Future<AckWelcomesResultDto> ackWelcomes(List<String> welcomeIds) async {
+  ///
+  /// [deviceId] is required by contract §E6. The ack used to be scoped by user
+  /// alone, so one device could consume another's Welcome; the server now scopes
+  /// by `(UserId, DeviceId)` and answers 400 rather than silently acking nothing
+  /// when it can determine neither this field nor `X-Device-Id`.
+  Future<AckWelcomesResultDto> ackWelcomes(
+    List<String> welcomeIds, {
+    required String deviceId,
+  }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       client.url('$_base/conversations/welcomes/ack'),
-      data: {'welcomeIds': welcomeIds},
+      data: {'welcomeIds': welcomeIds, 'deviceId': deviceId},
     );
     return AckWelcomesResultDto.fromJson(response.data!);
   }
@@ -184,28 +192,36 @@ class MlsApi {
   // ---------------------------------------------------------------------------
   // Join requests
   //
-  // Channels only. A conversation's roster is fixed at creation and its members
-  // were all welcomed then, so there is nobody to admit later - the server
-  // exposes these routes on channels alone.
+  // Conversations as well as channels, per contract §B. The routes used to be
+  // channel-only on the theory that a conversation's roster is fixed at creation
+  // and everyone in it was welcomed then - but a group member is a *device*, and
+  // a device registered after the conversation existed was never welcomed to
+  // anything. It had no way in and nobody could give it one, which is root cause
+  // R2 of the "my friend texts me and I can't read it" report.
+  //
+  // The DTOs are identical either side; only the authorization differs
+  // (conversation membership versus ViewChannel), so this is the same
+  // `_contextBase` split as everywhere else.
   // ---------------------------------------------------------------------------
 
-  String _joinRequestBase(String channelId) =>
-      '$_base/channels/${Uri.encodeComponent(channelId)}/mls/join-requests';
+  String _joinRequestBase(String contextId, bool isChannel) =>
+      '${_contextBase(contextId, isChannel)}/join-requests';
 
-  /// Asks to be let into an encrypted channel.
+  /// Asks to be let into an encrypted context.
   ///
   /// [keyPackage] travels with the request so reviewers approve exact bytes.
   /// Letting the committer pull a key package separately would leave a window in
   /// which the server could substitute one, and the review would guarantee
   /// nothing.
   Future<MlsJoinRequestDto> requestAccess({
-    required String channelId,
+    required String contextId,
+    required bool isChannel,
     required String keyPackage,
     required String deviceId,
     required String signatureKeyFingerprint,
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
-      client.url(_joinRequestBase(channelId)),
+      client.url(_joinRequestBase(contextId, isChannel)),
       data: {
         'keyPackage': keyPackage,
         'deviceId': deviceId,
@@ -215,11 +231,14 @@ class MlsApi {
     return MlsJoinRequestDto.fromJson(response.data!);
   }
 
-  /// The review queue for a channel. Any member who can see the channel may read
-  /// it, because any member may vouch.
-  Future<List<MlsJoinRequestDto>> listJoinRequests(String channelId) async {
+  /// The review queue for a context. Any member who can see it may read the
+  /// queue, because any member may vouch.
+  Future<List<MlsJoinRequestDto>> listJoinRequests({
+    required String contextId,
+    required bool isChannel,
+  }) async {
     final response = await client.dio.get<List<dynamic>>(
-      client.url(_joinRequestBase(channelId)),
+      client.url(_joinRequestBase(contextId, isChannel)),
     );
     return (response.data ?? const [])
         .whereType<Map<String, dynamic>>()
@@ -230,32 +249,117 @@ class MlsApi {
   /// Vouches for a request. The response carries the key package to add only
   /// once this approval completed the threshold.
   Future<MlsJoinRequestApprovalResultDto> approveJoinRequest({
-    required String channelId,
+    required String contextId,
+    required bool isChannel,
     required String requestId,
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
-      client.url('${_joinRequestBase(channelId)}/$requestId/approve'),
+      client.url('${_joinRequestBase(contextId, isChannel)}/$requestId/approve'),
     );
     return MlsJoinRequestApprovalResultDto.fromJson(response.data!);
   }
 
   Future<void> denyJoinRequest({
-    required String channelId,
+    required String contextId,
+    required bool isChannel,
     required String requestId,
   }) async {
     await client.dio.post<void>(
-      client.url('${_joinRequestBase(channelId)}/$requestId/deny'),
+      client.url('${_joinRequestBase(contextId, isChannel)}/$requestId/deny'),
     );
   }
 
   /// Withdraws your own request.
   Future<void> cancelJoinRequest({
-    required String channelId,
+    required String contextId,
+    required bool isChannel,
     required String requestId,
   }) async {
     await client.dio.delete<void>(
-      client.url('${_joinRequestBase(channelId)}/$requestId'),
+      client.url('${_joinRequestBase(contextId, isChannel)}/$requestId'),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admission challenge and proof (contract §G.1)
+  //
+  // The server relays these and can verify neither: the proof is a MAC under a
+  // key derived from the account master key, which the server holds only in
+  // wrapped form. That is the whole reason `TrustedSignIn` admits a device
+  // automatically without becoming "trust the server" - a server that adds a
+  // device to your account still cannot get it into any group.
+  // ---------------------------------------------------------------------------
+
+  /// Posted by an **existing** device of the same account: 32 random bytes the
+  /// joining device must MAC.
+  Future<MlsAdmissionChallengeDto> issueChallenge({
+    required String contextId,
+    required bool isChannel,
+    required String requestId,
+    required String challenge,
+    int expiresInSeconds = 900,
+  }) async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      client.url(
+        '${_joinRequestBase(contextId, isChannel)}/$requestId/challenge',
+      ),
+      data: {'challenge': challenge, 'expiresInSeconds': expiresInSeconds},
+    );
+    return MlsAdmissionChallengeDto.fromJson(response.data!);
+  }
+
+  /// Read by the **joining** device. Null while nobody has issued one yet, which
+  /// is the normal state until one of the account's other devices comes online.
+  Future<MlsAdmissionChallengeDto?> fetchChallenge({
+    required String contextId,
+    required bool isChannel,
+    required String requestId,
+  }) async {
+    try {
+      final response = await client.dio.get<Map<String, dynamic>>(
+        client.url(
+          '${_joinRequestBase(contextId, isChannel)}/$requestId/challenge',
+        ),
+      );
+      final data = response.data;
+      if (data == null || data.isEmpty) return null;
+      return MlsAdmissionChallengeDto.fromJson(data);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  Future<void> submitProof({
+    required String contextId,
+    required bool isChannel,
+    required String requestId,
+    required String challengeId,
+    required String proof,
+  }) async {
+    await client.dio.post<void>(
+      client.url('${_joinRequestBase(contextId, isChannel)}/$requestId/proof'),
+      data: {'challengeId': challengeId, 'proof': proof},
+    );
+  }
+
+  /// Read by the **admitting** device once the joiner has answered.
+  Future<MlsAdmissionProofDto?> fetchProof({
+    required String contextId,
+    required bool isChannel,
+    required String requestId,
+  }) async {
+    try {
+      final response = await client.dio.get<Map<String, dynamic>>(
+        client.url('${_joinRequestBase(contextId, isChannel)}/$requestId/proof'),
+      );
+      final data = response.data;
+      if (data == null || data.isEmpty) return null;
+      return MlsAdmissionProofDto.fromJson(data);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
   }
 
   /// Both 409 shapes come back on the same status code and are told apart by

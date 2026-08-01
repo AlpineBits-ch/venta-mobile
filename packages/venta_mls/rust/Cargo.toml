@@ -20,6 +20,15 @@ openmls_rust_crypto = "0.5"
 openmls_basic_credential = { version = "0.5", features = ["test-utils"] }
 
 aes-gcm = "0.10"
+# Backup-envelope key derivation (contract §D). Same crate, same parameters as
+# Alpine's `src-tauri/Cargo.toml`: the two envelopes have to open on either
+# client, so the KDF is part of the wire format rather than an implementation
+# choice. Bump both together or neither, exactly like openmls above.
+argon2 = "0.5"
+# Admission proofs and device certificates (contract §G/§H). HKDF over the
+# account master key, so a derived key is never the master key itself.
+hkdf = "0.12"
+hmac = "0.12"
 base64 = "0.22"
 # Key-package fingerprints. Alpine had this in its desktop-only target block until
 # the join-request work moved it into the base dependencies for exactly this reason.
@@ -28,6 +37,12 @@ rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+# The persistence and account-isolation tests write real state files. Neither
+# "a second account does not inherit the first's storage" nor "key-package init
+# keys survive a save/load cycle" is observable without one.
+tempfile = "3"
 
 [profile.release]
 opt-level = "z"

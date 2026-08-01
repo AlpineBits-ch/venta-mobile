@@ -55,9 +55,19 @@ class MlsSessionManager {
         return;
       }
 
-      await mls.init(userId);
+      // A wipe means the private halves of every key package the server is still
+      // handing out are gone. Contract §A: reset the server's stock *before*
+      // anything re-uploads, or every Welcome sealed to one of them is
+      // undecryptable by the device it was addressed to - silently, forever.
+      if (await mls.init(userId)) await resetServerKeyPackages();
+
       if (await mls.unlock()) return;
 
+      // No identity in the keychain. Whether that is a first run or lost keys
+      // depends entirely on whether the engine restored groups, and
+      // `createIdentity` refuses the second case rather than minting over live
+      // group state - a device that did would believe it was unlocked while
+      // every message it sent was rejected and none it received could be read.
       final batch = await mls.createIdentity();
 
       // The device's published identity key *is* the MLS signing key from here
@@ -70,9 +80,34 @@ class MlsSessionManager {
       // field the server stores and never reads is not a trade worth making.
       await secureStorage.writeDeviceIdentityKey(batch.signingPublicKey);
       await deviceIdService.refreshIdentityPublicKey();
+
+      // A fresh signing keypair on an existing `clientDeviceId` is the other
+      // half of contract §A: the server's key packages name the *old* key, so
+      // they are dead and must go before the replenish that follows.
+      await resetServerKeyPackages();
+    } on MlsIdentityConflictException catch (e) {
+      // Deliberately not recovered from here. `MlsService.recoverWithFreshIdentity`
+      // is the user-initiated path, behind the "re-link this device" affordance,
+      // because taking it silently destroys every encrypted message this account
+      // holds on this handset.
+      debugPrint('MLS: $e - waiting for the user to restore a backup or re-link');
     } catch (e, stack) {
       debugPrint('MLS: identity setup failed: $e');
       debugPrintStack(stackTrace: stack);
+    }
+  }
+
+  /// Contract §A. Idempotent, and best-effort: a device that could not clear its
+  /// stale stock is no worse off than before this existed, and the next launch
+  /// tries again.
+  Future<void> resetServerKeyPackages() async {
+    final deviceId = deviceIdService.deviceIdOrNull;
+    if (deviceId == null) return;
+    try {
+      final deleted = await deviceApi.resetKeyPackages(deviceId);
+      debugPrint('MLS: cleared $deleted stale key packages for this device');
+    } catch (e) {
+      debugPrint('MLS: could not reset this device\'s key packages: $e');
     }
   }
 

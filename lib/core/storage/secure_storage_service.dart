@@ -8,7 +8,41 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// tokens in plain `localStorage`.
 class SecureStorageService {
   SecureStorageService({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage(
+        iOptions: _iosOptions,
+        aOptions: _androidOptions,
+      );
+
+  /// `first_unlock_this_device`, not the plugin's `unlocked` default.
+  ///
+  /// Two reasons, both of which bit before this was set. `whenUnlocked` items
+  /// are unreadable while the device is locked, and the two places that most
+  /// need the MLS identity - the notification service extension decrypting a
+  /// push, and a background launch after a reboot - both run exactly then. And
+  /// `ThisDevice` keeps the keys out of an iCloud Keychain sync, which would
+  /// otherwise put one device's MLS leaf on another and produce two devices
+  /// sharing a ratchet.
+  static const _iosOptions = IOSOptions(
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+  );
+
+  /// Android needs no options here, and that is a change in the plugin rather
+  /// than a decision.
+  ///
+  /// The audit called for `encryptedSharedPreferences: true` - the legacy
+  /// per-value scheme is the one that survives an auto-backup restore onto a
+  /// *different* handset, where the ciphertext comes back but the Keystore
+  /// material does not, so the keys read as corrupt and the identity is silently
+  /// re-minted over live group state. In `flutter_secure_storage` 10 that flag
+  /// is **deprecated and ignored**: everything is on Keystore-backed ciphers by
+  /// default and existing values migrate on first access. Passing it now only
+  /// earns a deprecation warning.
+  ///
+  /// The re-mint hazard is therefore closed on the other side instead, by
+  /// `MlsService.createIdentity` refusing to mint over restored groups - which
+  /// is the more robust half of the fix regardless, since it holds even when the
+  /// keychain fails for reasons the storage layer cannot prevent.
+  static const _androidOptions = AndroidOptions();
 
   final FlutterSecureStorage _storage;
 
@@ -98,6 +132,107 @@ class SecureStorageService {
 
   static String _mlsScope(String deviceId, String userId) =>
       'venta.mls.$deviceId.$userId';
+
+  // ---------------------------------------------------------------------------
+  // Account-scoped secrets (contract §C.1, §G, §H)
+  //
+  // Scoped by (device, account) for the same reasons the MLS identity is, plus
+  // one more: the master key is what admits a *new device* to this account's
+  // groups, so a second account reading the first's could admit devices to
+  // conversations it is not in.
+  // ---------------------------------------------------------------------------
+
+  /// The unwrapped account master key, base64.
+  ///
+  /// Cached here rather than re-derived because Argon2id at 64 MiB takes long
+  /// enough that prompting for the password on every device admission would make
+  /// the feature unusable in practice - which is how security features end up
+  /// switched off.
+  Future<String?> readMasterKey({
+    required String deviceId,
+    required String userId,
+  }) => _storage.read(key: '${_mlsScope(deviceId, userId)}.master');
+
+  Future<void> writeMasterKey({
+    required String deviceId,
+    required String userId,
+    required String masterKey,
+  }) => _storage.write(
+    key: '${_mlsScope(deviceId, userId)}.master',
+    value: masterKey,
+  );
+
+  Future<void> clearMasterKey({
+    required String deviceId,
+    required String userId,
+  }) => _storage.delete(key: '${_mlsScope(deviceId, userId)}.master');
+
+  /// The account identity keypair (§H.2), base64. Long-lived and per *account*,
+  /// unlike the MLS signing key which is per device.
+  Future<(String publicKey, String privateKey)?> readAccountIdentity({
+    required String deviceId,
+    required String userId,
+  }) async {
+    final scope = _mlsScope(deviceId, userId);
+    final publicKey = await _storage.read(key: '$scope.account.pub');
+    final privateKey = await _storage.read(key: '$scope.account.priv');
+    if (publicKey == null || privateKey == null) return null;
+    return (publicKey, privateKey);
+  }
+
+  Future<void> writeAccountIdentity({
+    required String deviceId,
+    required String userId,
+    required String publicKey,
+    required String privateKey,
+  }) async {
+    final scope = _mlsScope(deviceId, userId);
+    await _storage.write(key: '$scope.account.pub', value: publicKey);
+    await _storage.write(key: '$scope.account.priv', value: privateKey);
+  }
+
+  Future<void> clearAccountIdentity({
+    required String deviceId,
+    required String userId,
+  }) async {
+    final scope = _mlsScope(deviceId, userId);
+    await _storage.delete(key: '$scope.account.pub');
+    await _storage.delete(key: '$scope.account.priv');
+  }
+
+  /// The last protection-level assertion this device verified (§G.3).
+  ///
+  /// Persisted so a client that cannot reach the endpoint enforces the last
+  /// level it *saw signed*, rather than whatever the server says today. Without
+  /// this, taking the endpoint away would be a downgrade.
+  Future<String?> readProtectionLevel({
+    required String deviceId,
+    required String userId,
+  }) => _storage.read(key: '${_mlsScope(deviceId, userId)}.protection');
+
+  Future<void> writeProtectionLevel({
+    required String deviceId,
+    required String userId,
+    required String value,
+  }) => _storage.write(
+    key: '${_mlsScope(deviceId, userId)}.protection',
+    value: value,
+  );
+
+  /// Peers' account identity keys, TOFU-pinned on first contact (§H.2).
+  ///
+  /// Per-peer rather than per-account-of-ours: this is the safety number, and
+  /// the whole point is that a change in it is *noticed* rather than accepted.
+  Future<String?> readPinnedIdentityKey(String peerUserId) =>
+      _storage.read(key: 'venta.mls.pin.$peerUserId');
+
+  Future<void> writePinnedIdentityKey({
+    required String peerUserId,
+    required String identityPublicKey,
+  }) => _storage.write(
+    key: 'venta.mls.pin.$peerUserId',
+    value: identityPublicKey,
+  );
 
   Future<String?> readActiveCallId() => _storage.read(key: _activeCallIdKey);
 

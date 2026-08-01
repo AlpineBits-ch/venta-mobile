@@ -55,7 +55,7 @@ class DeviceRegistrationService {
     final deviceId = deviceIdService.deviceIdOrNull;
     if (deviceId == null) return;
     try {
-      await api.register(
+      identityRotated = await api.register(
         clientDeviceId: deviceId,
         deviceName: kDeviceName,
         deviceType: kDeviceType,
@@ -66,6 +66,15 @@ class DeviceRegistrationService {
       debugPrint('DeviceRegistrationService: registration failed: $e');
     }
   }
+
+  /// True when the last registration changed this device's published identity
+  /// key, and the server therefore purged its key packages (contract §A).
+  ///
+  /// The packages the server was handing out named the *old* key, so they were
+  /// dead - but nothing would have noticed, because the replenish count is
+  /// derived purely from server rows and a full table answers "generate 0". The
+  /// caller owes an immediate replenish; `MlsSessionManager.sync` reads this.
+  bool identityRotated = false;
 
   /// Unregisters this installation - the "sign out and forget this device"
   /// half of the sessions screen. The caller is expected to sign out straight

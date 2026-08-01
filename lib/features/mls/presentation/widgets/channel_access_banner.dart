@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/mls/mls_failure_log.dart';
 import '../../../../core/mls/mls_join_request_service.dart';
 import '../../../../core/mls/mls_service.dart';
 import '../../../../core/theme/status_colors_extension.dart';
@@ -11,20 +12,37 @@ import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../data/models/mls_dtos.dart';
 
-/// Shown at the top of an encrypted channel this device cannot read.
+/// Shown at the top of an encrypted context this device cannot read.
 ///
-/// Somebody who joins a guild after a channel was encrypted holds no group keys,
-/// and nobody can mint them a Welcome unprompted - the server has no keys either,
-/// so only a current member can produce an Add commit. Without a way to ask, the
-/// channel is simply a wall of unreadable messages with no explanation and no
-/// recourse.
+/// Two situations reach here, and they used to be indistinguishable to the user
+/// because both render as a wall of unreadable messages with no explanation:
 ///
-/// Alpine has the service for this but no UI on the requester's side; this is
-/// the other half of that loop.
+/// * **Never admitted.** Somebody who joined a guild after a channel was
+///   encrypted holds no group keys - and, far more commonly, a *device*
+///   registered after an encrypted DM already existed was never welcomed to it.
+///   A group member is a device, not a user, so a second handset is as much an
+///   outsider as a stranger. Nobody can mint them a Welcome unprompted, since
+///   the server holds no keys either; only a current member can produce an Add
+///   commit.
+/// * **Admitted but broken.** The keys were here and are not any more - a wiped
+///   store, a lost keychain entry, a device removed by someone else. Counted by
+///   [MlsFailureLog], which is the only reason this case is visible at all:
+///   every failure on the read path used to be swallowed.
+///
+/// Contract §B extends the join-request routes to conversations, which is what
+/// makes this useful outside guild channels.
 class ChannelAccessBanner extends StatefulWidget {
-  const ChannelAccessBanner({super.key, required this.channelId});
+  const ChannelAccessBanner({
+    super.key,
+    required this.contextId,
+    this.isChannel = true,
+  });
 
-  final String channelId;
+  final String contextId;
+
+  /// Picks the route pair. Conversations and channels differ only in
+  /// authorization server-side.
+  final bool isChannel;
 
   @override
   State<ChannelAccessBanner> createState() => _ChannelAccessBannerState();
@@ -32,6 +50,7 @@ class ChannelAccessBanner extends StatefulWidget {
 
 class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
   final _joinRequests = getIt<MlsJoinRequestService>();
+  final _failures = getIt<MlsFailureLog>();
 
   MlsJoinRequestDto? _pending;
   String? _fingerprint;
@@ -42,12 +61,26 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
   @override
   void initState() {
     super.initState();
+    _failures.addListener(_onFailuresChanged);
     unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _failures.removeListener(_onFailuresChanged);
+    super.dispose();
+  }
+
+  void _onFailuresChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
     try {
-      final requests = await _joinRequests.list(widget.channelId);
+      final requests = await _joinRequests.list(
+        widget.contextId,
+        isChannel: widget.isChannel,
+      );
       final myUserId = getIt<AuthRepository>().currentUserId;
       final myDeviceId = getIt<MlsService>().deviceIdService.deviceIdOrNull;
 
@@ -84,7 +117,17 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
       _error = null;
     });
     try {
-      final request = await _joinRequests.requestAccess(widget.channelId);
+      // External commit first. When the server still holds a GroupInfo for the
+      // live generation this device can walk back in on its own, with no
+      // approval and no round trip through another person - which is the whole
+      // point of the recovery path openmls gives us and which nothing has ever
+      // called.
+      if (await _tryRejoin()) return;
+
+      final request = await _joinRequests.requestAccess(
+        widget.contextId,
+        isChannel: widget.isChannel,
+      );
       final fingerprint = await _joinRequests.ownFingerprint();
       if (!mounted) return;
       setState(() {
@@ -101,13 +144,29 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
     }
   }
 
+  /// Best effort by design: an external commit only works when the group's
+  /// public GroupInfo is available, so a failure here is the normal path back
+  /// to asking, not an error worth showing.
+  Future<bool> _tryRejoin() async {
+    try {
+      return await _joinRequests.rejoin(
+        widget.contextId,
+        isChannel: widget.isChannel,
+      );
+    } catch (e) {
+      debugPrint('ChannelAccessBanner: external-commit rejoin failed: $e');
+      return false;
+    }
+  }
+
   Future<void> _withdraw() async {
     final pending = _pending;
     if (pending == null) return;
     setState(() => _busy = true);
     try {
       await _joinRequests.cancel(
-        channelId: widget.channelId,
+        contextId: widget.contextId,
+        isChannel: widget.isChannel,
         requestId: pending.id,
       );
       if (mounted) setState(() => _pending = null);
@@ -125,7 +184,9 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
     if (_loading) return const SizedBox.shrink();
 
     final pending = _pending;
-    final locked = !getIt<MlsService>().isUnlocked;
+    final mls = getIt<MlsService>();
+    final locked = !mls.isUnlocked;
+    final keysGone = mls.identityStatus.value == MlsIdentityStatus.keysMissing;
 
     return Container(
       width: double.infinity,
@@ -151,14 +212,12 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      pending == null
-                          ? 'You can\'t read this channel'
-                          : 'Waiting to be let in',
+                      _title(pending, keysGone),
                       style: theme.textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _describe(pending, locked),
+                      _describe(pending, locked, keysGone),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurface.withValues(
                           alpha: 0.65,
@@ -191,6 +250,21 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
             ),
           ],
 
+          // Whatever the engine actually said. Free-form on purpose: it is the
+          // one detail that makes a report about this actionable, and
+          // paraphrasing it would lose exactly that.
+          if (_failures.lastReason(widget.contextId) case final reason?) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              reason,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+              ),
+            ),
+          ],
+
           if (_error case final message?) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
@@ -209,7 +283,7 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
                     onPressed: _busy || locked ? null : _request,
                     child: _busy
                         ? const ButtonProgressIndicator()
-                        : const Text('Request access'),
+                        : Text(keysGone ? 'Re-link this device' : 'Request access'),
                   )
                 : TextButton(
                     onPressed: _busy ? null : _withdraw,
@@ -221,18 +295,31 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
     );
   }
 
-  String _describe(MlsJoinRequestDto? pending, bool locked) {
+  String _title(MlsJoinRequestDto? pending, bool keysGone) {
+    if (pending != null) return 'Waiting to be let in';
+    if (keysGone) return 'This device can\'t read this conversation';
+    return widget.isChannel
+        ? 'You can\'t read this channel'
+        : 'This device can\'t read this conversation';
+  }
+
+  String _describe(MlsJoinRequestDto? pending, bool locked, bool keysGone) {
     if (locked) {
       return 'Encryption keys aren\'t set up on this device yet, so it can\'t '
           'ask to join.';
     }
-    if (pending == null) {
-      return 'It\'s end-to-end encrypted and this device isn\'t in the group. '
-          'Ask the members to let you in - the server can\'t do it, because it '
-          'holds no keys.';
+    if (pending != null) {
+      return '${pending.approverUserIds.length} of ${pending.requiredApprovals} '
+          'members have approved. Read your fingerprint out to one of them so '
+          'they can check it before approving.';
     }
-    return '${pending.approverUserIds.length} of ${pending.requiredApprovals} '
-        'members have approved. Read your fingerprint out to one of them so '
-        'they can check it before approving.';
+    if (keysGone) {
+      return 'Its encryption keys are gone, so the messages here can\'t be '
+          'opened. Re-linking gets it back into the group - anything sent '
+          'before that stays unreadable on this device.';
+    }
+    return 'It\'s end-to-end encrypted and this device isn\'t in the group. '
+        'Ask to be let in - the server can\'t do it for you, because it holds '
+        'no keys.';
   }
 }

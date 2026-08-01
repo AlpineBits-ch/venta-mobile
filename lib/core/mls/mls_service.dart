@@ -6,7 +6,45 @@ import 'package:venta_mls/venta_mls.dart';
 
 import '../device/device_id_service.dart';
 import '../storage/secure_storage_service.dart';
+import 'mls_failure_log.dart';
 import 'mls_store.dart';
+
+/// Where this device's MLS identity stands, for the UI to branch on.
+enum MlsIdentityStatus {
+  /// [MlsService.init] has not run, or has not been asked to unlock yet.
+  unknown,
+
+  /// A signing key is loaded and the device can read and send.
+  unlocked,
+
+  /// No identity and no groups - a first run. [MlsService.createIdentity] is
+  /// the next step and needs no confirmation.
+  needsSetup,
+
+  /// The engine restored groups but the keychain holds no matching identity.
+  ///
+  /// Minting a fresh keypair here would leave the device holding groups it can
+  /// neither sign for nor decrypt, while every check that gates the composer
+  /// says it is unlocked. See [MlsService.createIdentity].
+  keysMissing,
+}
+
+/// Thrown when minting an identity would overwrite live group state.
+///
+/// The engine holds groups whose leaves name a signing key this device can no
+/// longer produce. The two honest answers are to restore a backup, or to accept
+/// the loss explicitly - never to mint quietly and let the user discover it when
+/// nobody can read their messages.
+class MlsIdentityConflictException implements Exception {
+  const MlsIdentityConflictException(this.groupCount);
+
+  final int groupCount;
+
+  @override
+  String toString() =>
+      'MlsIdentityConflictException: this device holds $groupCount MLS '
+      'group(s) but its signing key is gone';
+}
 
 /// This device's MLS identity and group state - the mobile counterpart of
 /// Alpine's `MlsService`.
@@ -20,12 +58,24 @@ class MlsService {
     required this.secureStorage,
     required this.deviceIdService,
     VentaMls? engine,
-  }) : _engine = engine ?? VentaMls();
+    MlsFailureLog? failures,
+  }) : _engine = engine ?? VentaMls(),
+       failures = failures ?? MlsFailureLog.shared;
 
   final MlsStore store;
   final SecureStorageService secureStorage;
   final DeviceIdService deviceIdService;
   final VentaMls _engine;
+
+  /// Counted decrypt/join failures, shared with the decryptor and the sync
+  /// service so one place decides whether a context is readable.
+  final MlsFailureLog failures;
+
+  /// Where the identity stands. Watched by the "this device can't read your
+  /// messages" affordance, which is the only way [MlsIdentityStatus.keysMissing]
+  /// ever reaches the user - nothing else about that state is visible.
+  final ValueNotifier<MlsIdentityStatus> identityStatus =
+      ValueNotifier<MlsIdentityStatus>(MlsIdentityStatus.unknown);
 
   /// The current session's signing key handle, or null while locked.
   ///
@@ -59,13 +109,22 @@ class MlsService {
   /// against them would fail forever. Wiping costs the encrypted history on this
   /// device and re-joins from fresh Welcomes; not wiping costs a client that
   /// never works again.
-  Future<void> init(String userId) async {
-    if (_userId == userId) return;
+  /// Returns true when local state had to be wiped.
+  ///
+  /// The caller **must** act on that: the server is still handing out key
+  /// packages whose private halves were just destroyed, so every Welcome sealed
+  /// to one is undecryptable by the device it was addressed to. See contract
+  /// §A - `DELETE api/v1/devices/client/{deviceId}/key-packages` has to run
+  /// before anything re-uploads. `MlsSessionManager.prepareIdentity` is the one
+  /// place that knows how to do that.
+  Future<bool> init(String userId) async {
+    if (_userId == userId) return false;
     // A different account than the one currently loaded - drop its state before
     // touching this one's, or the two share a registry.
     if (_userId != null) await reset();
 
     await store.init(userId);
+    var wiped = false;
     try {
       final dir = await store.stateDirectory(userId);
       await _engine.initStorage(dir.path);
@@ -79,8 +138,10 @@ class MlsService {
         debugPrint('MlsService: could not clear engine storage: $inner');
       }
       await store.clearRegistry();
+      wiped = true;
     }
     _userId = userId;
+    return wiped;
   }
 
   /// Restores the signing key from the keychain and opens the session.
@@ -98,7 +159,10 @@ class MlsService {
       deviceId: deviceIdService.deviceId,
       userId: userId,
     );
-    if (stored == null) return false;
+    if (stored == null) {
+      identityStatus.value = _statusForMissingIdentity();
+      return false;
+    }
 
     final (publicKey, privateKey, identity) = stored;
     if (identity != userId) {
@@ -107,6 +171,7 @@ class MlsService {
       // member of the group would reject - minting fresh is the only correct
       // answer, and returning false is what asks for that.
       debugPrint('MlsService: stored identity is for another account, ignoring');
+      identityStatus.value = _statusForMissingIdentity();
       return false;
     }
 
@@ -116,8 +181,20 @@ class MlsService {
       signingPrivateKeyB64: privateKey,
       identity: identity,
     );
+    identityStatus.value = MlsIdentityStatus.unlocked;
     return true;
   }
+
+  /// How many (context, generation) groups this device's registry lists.
+  ///
+  /// The registry rather than the engine because it is already in memory and
+  /// the two are kept in step - a group in the engine with no registry entry is
+  /// unaddressable anyway, so it cannot be the thing worth protecting.
+  int get heldGroupCount => store.groupCount;
+
+  MlsIdentityStatus _statusForMissingIdentity() => heldGroupCount > 0
+      ? MlsIdentityStatus.keysMissing
+      : MlsIdentityStatus.needsSetup;
 
   /// Mints this account's MLS identity on this device, plus its first key
   /// packages.
@@ -129,10 +206,33 @@ class MlsService {
   ///
   /// The returned batch's `signingPublicKey` is what device registration
   /// publishes as its `identityPublicKey`.
-  Future<MlsKeyPackageBatch> createIdentity({int keyPackageCount = 10}) async {
+  ///
+  /// **No key packages by default.** The ten this used to mint were never
+  /// uploaded and never freed: they sat in the engine's store, which is
+  /// re-serialized in full on every send, receive and commit, so they made every
+  /// later operation slower forever in exchange for nothing. The replenish path
+  /// mints exactly what the server asks for, moments later, and that is the only
+  /// caller whose packages anyone can ever consume.
+  ///
+  /// Throws [MlsIdentityConflictException] when the engine already holds groups.
+  /// A keychain miss on a device that is in groups is not a first run - it is
+  /// lost keys, and minting over them produces a device that believes it is
+  /// unlocked while every message it sends is rejected and none it receives can
+  /// be read. [force] is the explicit "I accept losing them" path, and belongs
+  /// behind a confirmation rather than in a launch sequence.
+  Future<MlsKeyPackageBatch> createIdentity({
+    int keyPackageCount = 0,
+    bool force = false,
+  }) async {
     final userId = _userId;
     if (userId == null) {
       throw StateError('MlsService.init(userId) must run before createIdentity()');
+    }
+
+    final held = heldGroupCount;
+    if (held > 0 && !force) {
+      identityStatus.value = MlsIdentityStatus.keysMissing;
+      throw MlsIdentityConflictException(held);
     }
 
     final batch = await _engine.generateKeyPackages(
@@ -147,7 +247,43 @@ class MlsService {
     );
     _signaturePublicKey = batch.signingPublicKey;
     keyHandle.value = batch.keyHandle;
+    identityStatus.value = MlsIdentityStatus.unlocked;
     return batch;
+  }
+
+  /// Adopts the session a backup import already opened inside the engine.
+  ///
+  /// `importBackup` loads the restored signing key itself and hands back a live
+  /// handle, so re-loading it here would leave two handles for one key. This
+  /// only brings the Dart-side view into line.
+  void adoptRestoredSession({
+    required String keyHandle,
+    required String signaturePublicKey,
+  }) {
+    _signaturePublicKey = signaturePublicKey;
+    this.keyHandle.value = keyHandle;
+    identityStatus.value = MlsIdentityStatus.unlocked;
+  }
+
+  /// Accepts the loss in [MlsIdentityStatus.keysMissing] and starts over.
+  ///
+  /// Wipes the engine, the group registry and the decrypted history, then mints
+  /// a fresh identity. Every encrypted message this account holds on this
+  /// handset becomes permanently unreadable, which is why it is a separate,
+  /// user-initiated call rather than a fallback inside [createIdentity].
+  ///
+  /// The caller still owes contract §A: the server's key-package stock for this
+  /// device is now private-key-less and has to be reset before re-uploading.
+  Future<MlsKeyPackageBatch> recoverWithFreshIdentity() async {
+    try {
+      await _engine.clearStorage();
+    } catch (e) {
+      debugPrint('MlsService: could not clear engine storage: $e');
+    }
+    await store.clearRegistry();
+    await store.clearMessageCache();
+    failures.clear();
+    return createIdentity(force: true);
   }
 
   /// Unloads this account's state so another can be loaded. Called on sign-out
@@ -157,6 +293,8 @@ class MlsService {
     await store.reset();
     _userId = null;
     _signaturePublicKey = null;
+    identityStatus.value = MlsIdentityStatus.unknown;
+    failures.clear();
   }
 
   /// Closes the session, leaving the persisted state alone.
@@ -167,6 +305,9 @@ class MlsService {
   Future<void> lock() async {
     final handle = keyHandle.value;
     keyHandle.value = null;
+    if (identityStatus.value == MlsIdentityStatus.unlocked) {
+      identityStatus.value = MlsIdentityStatus.unknown;
+    }
     if (handle == null) return;
     try {
       await _engine.unloadSigningKey(handle);
@@ -198,6 +339,8 @@ class MlsService {
       );
     }
     await store.reset();
+    failures.clear();
+    identityStatus.value = MlsIdentityStatus.unknown;
     _userId = null;
   }
 

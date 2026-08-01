@@ -83,6 +83,7 @@ _MlsCommitDto _$MlsCommitDtoFromJson(Map<String, dynamic> json) =>
       commit: json['commit'] as String,
       senderUserId: json['senderUserId'] as String,
       senderDeviceId: json['senderDeviceId'] as String,
+      isProposal: json['isProposal'] as bool? ?? false,
       createdAt: _$JsonConverterFromJson<String, DateTime>(
         json['createdAt'],
         const ApiDateTimeConverter().fromJson,
@@ -100,6 +101,7 @@ Map<String, dynamic> _$MlsCommitDtoToJson(_MlsCommitDto instance) =>
       'commit': instance.commit,
       'senderUserId': instance.senderUserId,
       'senderDeviceId': instance.senderDeviceId,
+      'isProposal': instance.isProposal,
       'createdAt': _$JsonConverterToJson<String, DateTime>(
         instance.createdAt,
         const ApiDateTimeConverter().toJson,
@@ -111,6 +113,7 @@ _PublishMlsCommitDto _$PublishMlsCommitDtoFromJson(Map<String, dynamic> json) =>
       epoch: (json['epoch'] as num).toInt(),
       commit: json['commit'] as String,
       senderDeviceId: json['senderDeviceId'] as String,
+      isProposal: json['isProposal'] as bool? ?? false,
       generation: (json['generation'] as num?)?.toInt(),
       groupInfo: json['groupInfo'] as String?,
       welcomes:
@@ -131,6 +134,7 @@ Map<String, dynamic> _$PublishMlsCommitDtoToJson(
   'epoch': instance.epoch,
   'commit': instance.commit,
   'senderDeviceId': instance.senderDeviceId,
+  'isProposal': instance.isProposal,
   'generation': instance.generation,
   'groupInfo': instance.groupInfo,
   'welcomes': instance.welcomes,
@@ -144,6 +148,8 @@ _MlsCommitPublishedDto _$MlsCommitPublishedDtoFromJson(
   conversationId: json['conversationId'] as String?,
   generation: (json['generation'] as num).toInt(),
   epoch: (json['epoch'] as num).toInt(),
+  isProposal: json['isProposal'] as bool? ?? false,
+  duplicate: json['duplicate'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$MlsCommitPublishedDtoToJson(
@@ -153,6 +159,8 @@ Map<String, dynamic> _$MlsCommitPublishedDtoToJson(
   'conversationId': instance.conversationId,
   'generation': instance.generation,
   'epoch': instance.epoch,
+  'isProposal': instance.isProposal,
+  'duplicate': instance.duplicate,
 };
 
 _MlsGenerationDto _$MlsGenerationDtoFromJson(Map<String, dynamic> json) =>
@@ -400,6 +408,8 @@ _MlsJoinRequestDto _$MlsJoinRequestDtoFromJson(Map<String, dynamic> json) =>
               ?.map((e) => e as String)
               .toList() ??
           const <String>[],
+      requiresManualApproval: json['requiresManualApproval'] as bool? ?? false,
+      requesterDeviceName: json['requesterDeviceName'] as String?,
     );
 
 Map<String, dynamic> _$MlsJoinRequestDtoToJson(_MlsJoinRequestDto instance) =>
@@ -424,6 +434,8 @@ Map<String, dynamic> _$MlsJoinRequestDtoToJson(_MlsJoinRequestDto instance) =>
       ),
       'requiredApprovals': instance.requiredApprovals,
       'approverUserIds': instance.approverUserIds,
+      'requiresManualApproval': instance.requiresManualApproval,
+      'requesterDeviceName': instance.requesterDeviceName,
     };
 
 const _$MlsJoinRequestStateEnumMap = {
@@ -469,4 +481,46 @@ Map<String, dynamic> _$GenerateKeyPackagesDtoToJson(
 ) => <String, dynamic>{
   'count': instance.count,
   'needsLastResort': instance.needsLastResort,
+};
+
+_MlsAdmissionChallengeDto _$MlsAdmissionChallengeDtoFromJson(
+  Map<String, dynamic> json,
+) => _MlsAdmissionChallengeDto(
+  id: json['id'] as String,
+  requestId: json['requestId'] as String,
+  challenge: json['challenge'] as String,
+  issuedByDeviceId: json['issuedByDeviceId'] as String?,
+  expiresAt: _$JsonConverterFromJson<String, DateTime>(
+    json['expiresAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
+);
+
+Map<String, dynamic> _$MlsAdmissionChallengeDtoToJson(
+  _MlsAdmissionChallengeDto instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'requestId': instance.requestId,
+  'challenge': instance.challenge,
+  'issuedByDeviceId': instance.issuedByDeviceId,
+  'expiresAt': _$JsonConverterToJson<String, DateTime>(
+    instance.expiresAt,
+    const ApiDateTimeConverter().toJson,
+  ),
+};
+
+_MlsAdmissionProofDto _$MlsAdmissionProofDtoFromJson(
+  Map<String, dynamic> json,
+) => _MlsAdmissionProofDto(
+  challengeId: json['challengeId'] as String,
+  requestId: json['requestId'] as String,
+  proof: json['proof'] as String,
+);
+
+Map<String, dynamic> _$MlsAdmissionProofDtoToJson(
+  _MlsAdmissionProofDto instance,
+) => <String, dynamic>{
+  'challengeId': instance.challengeId,
+  'requestId': instance.requestId,
+  'proof': instance.proof,
 };

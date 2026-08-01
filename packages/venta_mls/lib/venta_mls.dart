@@ -69,6 +69,315 @@ class VentaMls {
         'encryptionKeyB64': encryptionKeyB64,
       });
 
+  /// The directory this process's engine is currently pointed at, or null.
+  ///
+  /// [initStorage] *clears* when the directory changes - it has to, or two
+  /// accounts' key material ends up in one store - so a caller that might be
+  /// about to switch accounts needs to know whether it would be tearing down a
+  /// live session. The push path is the one that cares: on Android it shares a
+  /// process with the app.
+  Future<String?> currentStateDirectory() async =>
+      _ffi.invoke('currentStateDir') as String?;
+
+  // ---------------------------------------------------------------------------
+  // Backup envelope (contract §D)
+  // ---------------------------------------------------------------------------
+
+  /// Seals everything needed to restore this account onto a handset into one
+  /// `.venta-keys` envelope.
+  ///
+  /// Built Rust-side rather than in Dart because the signing keypair lives in
+  /// the engine's signer table and has deliberately never crossed the FFI
+  /// boundary in the clear after unlock - assembling the payload here would put
+  /// it back on the Dart heap for no reason. It is also what keeps the envelope
+  /// byte-identical to Alpine's, which is the whole point of §D.
+  ///
+  /// [messageCache] is opt-in and excluded from the cloud target by default: it
+  /// is the plaintext of every message this device has read, and the single most
+  /// sensitive thing in the file.
+  Future<String> exportBackup({
+    required String passphrase,
+    required String userId,
+    required String deviceId,
+    required String appVersion,
+    required String keyHandle,
+    required Map<String, Object?> groupRegistry,
+    Map<String, String>? messageCache,
+    String? accountIdentityPublicKeyB64,
+    String? accountIdentityPrivateKeyB64,
+  }) async =>
+      _ffi.invoke('exportBackup', {
+            'passphrase': passphrase,
+            'userId': userId,
+            'deviceId': deviceId,
+            'appVersion': appVersion,
+            'keyHandle': keyHandle,
+            'groupRegistry': groupRegistry,
+            'messageCache': messageCache,
+            'accountIdentityPublicKeyB64': accountIdentityPublicKeyB64,
+            'accountIdentityPrivateKeyB64': accountIdentityPrivateKeyB64,
+          })
+          as String;
+
+  /// Opens a `.venta-keys` envelope and applies what it is safe to apply.
+  ///
+  /// The engine's ratchet state comes across **only** when [deviceId] matches
+  /// the one the backup was taken on. Cloning it onto a second concurrently-live
+  /// device reuses ratchet generations, which openmls treats as a replay, voids
+  /// forward secrecy for that leaf, and leaves one of the two unable to send.
+  /// Enforced here rather than documented, per §D.
+  ///
+  /// Refuses outright when the envelope belongs to a different account.
+  Future<MlsBackupImportResult> importBackup({
+    required String blob,
+    required String passphrase,
+    required String userId,
+    required String deviceId,
+  }) async => MlsBackupImportResult.fromJson(
+    _ffi.invoke('importBackup', {
+          'blob': blob,
+          'passphrase': passphrase,
+          'userId': userId,
+          'deviceId': deviceId,
+        })
+        as Map<String, dynamic>,
+  );
+
+  // ---------------------------------------------------------------------------
+  // Account master key (§C.1)
+  // ---------------------------------------------------------------------------
+
+  /// Mints an account master key and wraps it **twice** — under [password] and
+  /// under a recovery code (contract §C.1.1).
+  ///
+  /// One wrapping is not enough. A password reset leaves the envelope sealed
+  /// under a password the user has, by definition of a reset, forgotten — so
+  /// every backup blob and the account identity key become permanently
+  /// unopenable, silently, at exactly the moment someone is trying to recover
+  /// their account. The recovery code is the only credential that survives that.
+  ///
+  /// The key is random; a secret only ever derives the *wrap* key, so a password
+  /// change re-wraps rather than re-keys and everything already sealed under the
+  /// master key stays readable. Argon2id at 64 MiB runs twice here — call it off
+  /// the UI isolate.
+  ///
+  /// [recoveryCode] lets a UI show a code and take confirmation before
+  /// committing to it; one is generated when it is omitted.
+  Future<Map<String, Object?>> setupMasterKey(
+    String password, {
+    String? recoveryCode,
+  }) async => Map<String, Object?>.from(
+    _ffi.invoke('setupMasterKey', {
+          'password': password,
+          'recoveryCode': recoveryCode,
+        })
+        as Map<String, dynamic>,
+  );
+
+  /// A ~158.5-bit recovery code: 32 characters over a **31-symbol** alphabet, in
+  /// eight groups of four.
+  ///
+  /// The alphabet is wire format, shared with the desktop client (contract
+  /// §C.1.2) — a code generated here has to open the wrapping there. Produced by
+  /// rejection sampling rather than masking, because padding the alphabet to a
+  /// power of two is exactly what broke cross-client recovery.
+  Future<String> generateRecoveryCode() async =>
+      _ffi.invoke('generateRecoveryCode') as String;
+
+  /// Folds a retyped code back to the form it was generated in.
+  ///
+  /// Case and grouping dashes are presentation, not secret material. Without
+  /// this a user who types their code in lower case derives a different key and
+  /// is told their correct code is wrong — at the one moment they have nothing
+  /// else to try.
+  ///
+  /// **Throws [MlsErrorKind.recoveryCodeInvalid] rather than passing anything
+  /// through.** A silent fallback to the raw input turns a recoverable typo into
+  /// unrecoverable data loss with no diagnostic: the KDF derives *a* key from
+  /// the typo, the AEAD fails, and all the user learns is "wrong code".
+  ///
+  /// Recovery codes only. A password is case-sensitive, may contain anything,
+  /// and must never come through here.
+  Future<String> normalizeRecoveryCode(String code) async =>
+      _ffi.invoke('normalizeRecoveryCode', {'recoveryCode': code}) as String;
+
+  /// Wraps an already-unwrapped master key under any secret — a new password
+  /// after a reset, or a recovery code being added to an account that never had
+  /// one.
+  Future<Map<String, Object?>> wrapMasterKeyUnder({
+    required String masterKeyB64,
+    required String secret,
+  }) async => Map<String, Object?>.from(
+    _ffi.invoke('wrapMasterKeyUnder', {
+          'masterKeyB64': masterKeyB64,
+          'secret': secret,
+        })
+        as Map<String, dynamic>,
+  );
+
+  /// Unwraps the master key, returning it base64. The Argon2 parameters come
+  /// from the envelope, not from this build, so a key wrapped under older ones
+  /// still opens.
+  Future<String> decryptMasterKey({
+    required Map<String, Object?> encryptedMasterKey,
+    required String password,
+  }) async =>
+      _ffi.invoke('decryptMasterKey', {
+            'encryptedMasterKey': encryptedMasterKey,
+            'password': password,
+          })
+          as String;
+
+  /// Re-wraps an unwrapped master key under a new password. Never mints a new
+  /// one: every backup blob and admission proof is bound to the existing key,
+  /// and replacing it would orphan all of them silently.
+  Future<Map<String, Object?>> rewrapMasterKey({
+    required String masterKeyB64,
+    required String password,
+  }) async => Map<String, Object?>.from(
+    _ffi.invoke('rewrapMasterKey', {
+          'masterKeyB64': masterKeyB64,
+          'password': password,
+        })
+        as Map<String, dynamic>,
+  );
+
+  /// Cryptographically strong random bytes, base64. The §G challenge has to be
+  /// unpredictable to the server, so `Random.secure()` in Dart would do — this
+  /// exists so the challenge and the proof are produced by the same code path.
+  Future<String> randomBytes([int count = 32]) async =>
+      _ffi.invoke('randomBytes', {'count': count}) as String;
+
+  // ---------------------------------------------------------------------------
+  // Account identity, device certificates and admission proofs (§G/§H)
+  // ---------------------------------------------------------------------------
+
+  /// Mints an account identity key. Once per account, ever.
+  ///
+  /// Distinct from the device signing key: this one is the *account's*, is
+  /// wrapped under the recovery key, and is what lets a peer verify offline that
+  /// a device belongs to an account with none of that account's devices online.
+  /// Rotating it invalidates every peer's pinning, so §H.5 makes it a ceremony.
+  Future<MlsAccountIdentity> generateAccountIdentity() async =>
+      MlsAccountIdentity.fromJson(
+        _ffi.invoke('generateAccountIdentity') as Map<String, dynamic>,
+      );
+
+  /// Signs a device certificate. The server cannot mint one of these - it never
+  /// holds the account identity private half - which is what stops an
+  /// external-commit rejoin from being a server-side backdoor into every group.
+  Future<String> issueDeviceCertificate({
+    required String accountIdentityPrivateKeyB64,
+    required String deviceId,
+    required String deviceSignatureKeyB64,
+    required DateTime issuedAt,
+    required DateTime expiresAt,
+  }) async =>
+      _ffi.invoke('issueDeviceCertificate', {
+            'accountIdentityPrivateKeyB64': accountIdentityPrivateKeyB64,
+            'deviceId': deviceId,
+            'deviceSignatureKeyB64': deviceSignatureKeyB64,
+            'issuedAt': issuedAt.toUtc().millisecondsSinceEpoch ~/ 1000,
+            'expiresAt': expiresAt.toUtc().millisecondsSinceEpoch ~/ 1000,
+          })
+          as String;
+
+  /// Verifies a device certificate against a **pinned** account identity key.
+  ///
+  /// False rather than throwing for a bad signature: §I.1 makes enforcement
+  /// three-state, so whether an unverifiable leaf is tolerated, flagged or
+  /// removed is the caller's decision, not this layer's.
+  Future<bool> verifyDeviceCertificate({
+    required String accountIdentityPublicKeyB64,
+    required String deviceId,
+    required String deviceSignatureKeyB64,
+    required DateTime issuedAt,
+    required DateTime expiresAt,
+    required String certificateB64,
+  }) async =>
+      _ffi.invoke('verifyDeviceCertificate', {
+            'accountIdentityPublicKeyB64': accountIdentityPublicKeyB64,
+            'deviceId': deviceId,
+            'deviceSignatureKeyB64': deviceSignatureKeyB64,
+            'issuedAt': issuedAt.toUtc().millisecondsSinceEpoch ~/ 1000,
+            'expiresAt': expiresAt.toUtc().millisecondsSinceEpoch ~/ 1000,
+            'certificateB64': certificateB64,
+          })
+          as bool;
+
+  /// Proves possession of the account master key for a device admission (§G.1).
+  ///
+  /// A MAC rather than a signature because both parties are devices of the same
+  /// account and both hold the master key. The server relays it and can verify
+  /// nothing, which is precisely what makes `TrustedSignIn` a security level
+  /// rather than "trust the server".
+  Future<String> signAdmissionProof({
+    required String masterKeyB64,
+    required String challengeB64,
+    required String deviceId,
+    required String signatureKeyFingerprint,
+  }) async =>
+      _ffi.invoke('signAdmissionProof', {
+            'masterKeyB64': masterKeyB64,
+            'challengeB64': challengeB64,
+            'deviceId': deviceId,
+            'signatureKeyFingerprint': signatureKeyFingerprint,
+          })
+          as String;
+
+  Future<bool> verifyAdmissionProof({
+    required String masterKeyB64,
+    required String challengeB64,
+    required String deviceId,
+    required String signatureKeyFingerprint,
+    required String proofB64,
+  }) async =>
+      _ffi.invoke('verifyAdmissionProof', {
+            'masterKeyB64': masterKeyB64,
+            'challengeB64': challengeB64,
+            'deviceId': deviceId,
+            'signatureKeyFingerprint': signatureKeyFingerprint,
+            'proofB64': proofB64,
+          })
+          as bool;
+
+  /// Signs a protection-level assertion (§G.3). The level must never be a plain
+  /// server-side boolean: a server that could flip one could then auto-admit its
+  /// own device, which defeats the strict tier entirely.
+  Future<String> signProtectionLevel({
+    required String accountIdentityPrivateKeyB64,
+    required String userId,
+    required String level,
+    required int version,
+    required String updatedAt,
+  }) async =>
+      _ffi.invoke('signProtectionLevel', {
+            'accountIdentityPrivateKeyB64': accountIdentityPrivateKeyB64,
+            'userId': userId,
+            'level': level,
+            'version': version,
+            'updatedAt': updatedAt,
+          })
+          as String;
+
+  Future<bool> verifyProtectionLevel({
+    required String accountIdentityPublicKeyB64,
+    required String userId,
+    required String level,
+    required int version,
+    required String updatedAt,
+    required String assertionB64,
+  }) async =>
+      _ffi.invoke('verifyProtectionLevel', {
+            'accountIdentityPublicKeyB64': accountIdentityPublicKeyB64,
+            'userId': userId,
+            'level': level,
+            'version': version,
+            'updatedAt': updatedAt,
+            'assertionB64': assertionB64,
+          })
+          as bool;
+
   // ---------------------------------------------------------------------------
   // Signing keys
   // ---------------------------------------------------------------------------
@@ -354,19 +663,45 @@ class VentaMls {
   ///
   /// Throws [MlsErrorKind.wrongEpoch] for a message from a future epoch: fetch
   /// the missing commits and retry rather than discarding it.
+  /// A message from an epoch this device has not reached comes back as
+  /// [MlsMessageKind.buffered] rather than throwing. It is held, not dropped -
+  /// the wire copy decrypts exactly once - and [drainPendingMessages] returns it
+  /// after the missing commits are applied. Pass [messageId] so the replayed
+  /// copy can be matched back to the row that rendered as undecryptable, and so
+  /// a socket delivery racing a REST page is buffered once rather than twice.
   Future<MlsProcessedMessage> processMessage({
     required String groupIdB64,
     required String messageB64,
+    String? messageId,
   }) async => _serialized(
     groupIdB64,
     () => MlsProcessedMessage.fromJson(
       _ffi.invoke('processMessage', {
             'groupIdB64': groupIdB64,
             'messageB64': messageB64,
+            'messageId': messageId,
           })
           as Map<String, dynamic>,
     ),
   );
+
+  /// Replays every buffered message the group has now caught up to. Call after
+  /// applying commits.
+  ///
+  /// Messages still ahead of the group stay buffered; ones the ratchet has moved
+  /// past are dropped, because retrying them forever would be a permanent
+  /// background failure that never resolves.
+  Future<List<MlsReplayedMessage>> drainPendingMessages(String groupIdB64) async =>
+      _serialized(
+        groupIdB64,
+        () =>
+            (_ffi.invoke('drainPendingMessages', {'groupIdB64': groupIdB64})
+                    as List<dynamic>)
+                .map(
+                  (e) => MlsReplayedMessage.fromJson(e as Map<String, dynamic>),
+                )
+                .toList(),
+      );
 
   // ---------------------------------------------------------------------------
   // Queries

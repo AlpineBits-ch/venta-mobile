@@ -6,6 +6,7 @@ import 'package:venta_mls/venta_mls.dart';
 import '../../features/mls/data/mls_api.dart';
 import '../../features/mls/data/models/mls_dtos.dart';
 import '../device/device_id_service.dart';
+import 'mls_failure_log.dart';
 import 'mls_service.dart';
 
 /// A context whose group membership or encryption state just changed under us.
@@ -23,11 +24,20 @@ class MlsContextChanged {
   final bool selfRemoved;
 }
 
+/// What one entry off the commit channel did to this device's group.
+///
+/// Only [advanced] is progress. The distinction exists because the commit
+/// channel carries Remove *proposals* too - it is the only fanout a group has -
+/// and processing one moves nothing, so treating it as progress makes the
+/// catch-up loop non-terminating.
+enum _ApplyOutcome { advanced, proposal, selfRemoved, ignored }
+
 /// A commit produced locally but not yet published.
 class StagedCommit {
   const StagedCommit({
     required this.commit,
     required this.epoch,
+    this.groupInfo,
     this.deviceWelcomes = const [],
     this.fulfilledJoinRequestIds = const [],
   });
@@ -36,6 +46,12 @@ class StagedCommit {
 
   /// Epoch this commit establishes once merged.
   final int epoch;
+
+  /// GroupInfo for the epoch this commit establishes, straight from the engine.
+  ///
+  /// Not exported separately: an exported one describes the epoch the group is
+  /// on *now*, and this commit is not merged yet, so it would be one behind.
+  final String? groupInfo;
 
   /// Welcomes for devices this commit adds. They travel with the commit so a
   /// device can never end up holding a leaf whose Welcome was lost on the way.
@@ -67,11 +83,13 @@ class MlsSyncService {
     required this.mls,
     required this.api,
     required this.deviceIdService,
-  });
+    MlsFailureLog? failures,
+  }) : failures = failures ?? MlsFailureLog.shared;
 
   final MlsService mls;
   final MlsApi api;
   final DeviceIdService deviceIdService;
+  final MlsFailureLog failures;
 
   final _contextChanged = StreamController<MlsContextChanged>.broadcast();
 
@@ -88,6 +106,28 @@ class MlsSyncService {
   /// Contexts that picked up a Remove proposal during catch-up and still owe a
   /// commit for it.
   final _pendingProposalContexts = <String>{};
+
+  /// Contexts holding a staged commit whose publish outcome is unknown, and the
+  /// epoch it claims.
+  ///
+  /// A publish that times out after the server committed used to be treated as
+  /// a rejection: the staged commit was discarded, and the next catch-up then
+  /// tried to `processMessage` this device's own commit, which fails and forks
+  /// it off the group permanently. Remembering it instead lets the next
+  /// catch-up settle the question - our commit is in the page, so merge it, or
+  /// somebody else's is, so drop ours and apply theirs.
+  final _unconfirmedCommits = <String, int>{};
+
+  /// Welcomes this session has already failed to join, and how often.
+  ///
+  /// A structurally broken Welcome is not going to become valid: retrying it on
+  /// every launch, every push and every state refresh is an unbounded loop
+  /// against a single-use key that can never work. Bounded per process rather
+  /// than persisted - a restart is cheap to allow, and the failure is surfaced
+  /// through [failures] either way.
+  final _welcomeAttempts = <String, int>{};
+
+  static const _maxWelcomeAttempts = 3;
 
   // ---------------------------------------------------------------------------
   // Welcomes
@@ -110,10 +150,14 @@ class MlsSyncService {
 
     final joined = <String>[];
     for (final welcome in welcomes) {
+      // Given up on for this process. Still deliberately not acked: the ack is
+      // what destroys the server's copy, and a restart or a fixed client should
+      // get another go at it.
+      if ((_welcomeAttempts[welcome.id] ?? 0) >= _maxWelcomeAttempts) continue;
       if (await _joinFromWelcome(welcome)) joined.add(welcome.id);
     }
 
-    if (joined.isNotEmpty) await api.ackWelcomes(joined);
+    if (joined.isNotEmpty) await api.ackWelcomes(joined, deviceId: deviceId);
   }
 
   /// Returns whether the join succeeded and the Welcome may be acknowledged.
@@ -137,6 +181,8 @@ class MlsSyncService {
       // The Welcome drops us in at its own epoch; anything committed since has
       // to be replayed before we can read current traffic.
       await syncContext(welcome.contextId, welcome.isChannel);
+      _welcomeAttempts.remove(welcome.id);
+      failures.recordSuccess(welcome.contextId);
       _contextChanged.add(
         MlsContextChanged(
           contextId: welcome.contextId,
@@ -146,7 +192,8 @@ class MlsSyncService {
       );
       return true;
     } catch (e) {
-      debugPrint('MLS: failed to join group from Welcome ${welcome.contextId}: $e');
+      _welcomeAttempts[welcome.id] = (_welcomeAttempts[welcome.id] ?? 0) + 1;
+      failures.recordJoinFailure(contextId: welcome.contextId, reason: e);
       return false;
     }
   }
@@ -201,38 +248,130 @@ class MlsSyncService {
       );
       if (commits.isEmpty) return;
 
+      final ownDeviceId = deviceIdService.deviceIdOrNull;
       var applied = 0;
       for (final commit in commits) {
-        // Strictly sequential. A gap means the page started above our epoch,
-        // which should be impossible - stopping is safer than applying out of
-        // order.
-        if (commit.epoch != epoch + applied + 1) break;
+        final expected = epoch + applied + 1;
 
-        final removed = await _applyCommit(
+        // A genuine gap. The page started above our epoch, which should be
+        // impossible - stopping is safer than applying out of order.
+        if (commit.epoch > expected) break;
+
+        // Our own commit, still staged because the publish response never came
+        // back. It is already in the group's history, so processing it would
+        // fail; merging is what this device owes.
+        if (commit.senderDeviceId == ownDeviceId &&
+            commit.epoch == expected &&
+            _unconfirmedCommits[contextId] == commit.epoch) {
+          if (!await _mergeOwnCommit(contextId, groupId, commit.epoch)) break;
+          applied++;
+          continue;
+        }
+
+        // Everything else our own device published is already merged - it is in
+        // the page because the server keeps it, not because we owe anything.
+        if (commit.senderDeviceId == ownDeviceId && commit.epoch < expected) {
+          continue;
+        }
+
+        final outcome = await _applyCommit(
           contextId: contextId,
           isChannel: isChannel,
           groupId: groupId,
-          commitB64: commit.commit,
+          commit: commit,
+          expectedEpoch: expected,
         );
-        applied++;
-        if (removed) return;
+
+        switch (outcome) {
+          case _ApplyOutcome.selfRemoved:
+            return;
+          case _ApplyOutcome.advanced:
+            applied++;
+          // A Remove proposal rides the *commit* channel because that is the
+          // only fanout a group has, but processing one does not move any
+          // client's MLS epoch. Counting it as progress is what made this loop
+          // spin forever: the next page returns the same proposal, `applied` is
+          // never zero, `while (true)` never exits - all while holding the
+          // per-context queue the drain that would resolve it needs.
+          case _ApplyOutcome.proposal:
+          case _ApplyOutcome.ignored:
+            break;
+        }
       }
 
+      // Only real commits count as progress. A page of nothing but proposals is
+      // a terminating page, not a reason to ask again.
       if (applied == 0) return;
     }
   }
 
-  /// Returns true when the commit removed *this* device from the group.
-  Future<bool> _applyCommit({
+  /// Applies a commit this device published but never got an answer for.
+  ///
+  /// Returns false when there was nothing staged after all, which means the
+  /// local state and the server's have diverged in a way this loop cannot
+  /// settle - stopping beats guessing.
+  Future<bool> _mergeOwnCommit(
+    String contextId,
+    String groupId,
+    int epoch,
+  ) async {
+    try {
+      final merged = await mls.mergePendingCommit(groupId);
+      _unconfirmedCommits.remove(contextId);
+      return merged >= epoch;
+    } catch (e) {
+      debugPrint('MLS: could not merge our own commit in $contextId: $e');
+      _unconfirmedCommits.remove(contextId);
+      return false;
+    }
+  }
+
+  Future<_ApplyOutcome> _applyCommit({
     required String contextId,
     required bool isChannel,
     required String groupId,
-    required String commitB64,
+    required MlsCommitDto commit,
+    required int expectedEpoch,
   }) async {
-    final processed = await mls.processMessage(
-      groupIdB64: groupId,
-      messageB64: commitB64,
-    );
+    // Somebody else won the epoch we still hold a commit for. Ours was never
+    // taken, so it must never be applied - drop it before theirs goes on.
+    if (commit.epoch == expectedEpoch &&
+        _unconfirmedCommits.remove(contextId) != null) {
+      await _discardStagedCommit(groupId);
+    }
+
+    // The server tells us which rows are proposals rather than us guessing from
+    // the payload; parsing MLS bytes to find out is not the transport layer's
+    // job, and getting it wrong is what made this loop non-terminating.
+    if (commit.isProposal) {
+      try {
+        await mls.processMessage(
+          groupIdB64: groupId,
+          messageB64: commit.commit,
+        );
+        _pendingProposalContexts.add(contextId);
+      } catch (e) {
+        // Already committed away by someone else, most likely. Not progress and
+        // not a reason to abandon the rest of the page.
+        debugPrint('MLS: could not queue a proposal for $contextId: $e');
+      }
+      return _ApplyOutcome.proposal;
+    }
+
+    final MlsProcessedMessage processed;
+    try {
+      processed = await mls.processMessage(
+        groupIdB64: groupId,
+        messageB64: commit.commit,
+      );
+    } catch (e) {
+      // Entries at or below where we already are: an already-applied commit, or
+      // a proposal that has since been committed away. Neither is progress and
+      // neither is a reason to abandon the rest of the page.
+      if (commit.epoch < expectedEpoch) return _ApplyOutcome.ignored;
+      failures.recordJoinFailure(contextId: contextId, reason: e);
+      rethrow;
+    }
 
     if (processed.kind == MlsMessageKind.proposal) {
       // A departing member's Remove-self proposal. MLS does not let anyone
@@ -244,10 +383,12 @@ class MlsSyncService {
       // per-context queue that publishing also needs. `syncContext` drains this
       // once it has let the queue go.
       _pendingProposalContexts.add(contextId);
-      return false;
+      return _ApplyOutcome.proposal;
     }
 
-    if (processed.kind != MlsMessageKind.commit) return false;
+    if (processed.kind != MlsMessageKind.commit) return _ApplyOutcome.ignored;
+
+    failures.recordSuccess(contextId);
 
     if (processed.selfRemoved) {
       // We are out. The group's keys are useless from here, and holding them
@@ -265,7 +406,7 @@ class MlsSyncService {
           selfRemoved: true,
         ),
       );
-      return true;
+      return _ApplyOutcome.selfRemoved;
     }
 
     if (processed.addedMembers.isNotEmpty ||
@@ -279,7 +420,7 @@ class MlsSyncService {
       );
     }
 
-    return false;
+    return _ApplyOutcome.advanced;
   }
 
   // ---------------------------------------------------------------------------
@@ -318,17 +459,27 @@ class MlsSyncService {
 
     final staged = await produce();
 
-    String? groupInfo;
-    try {
-      groupInfo = await mls.exportGroupInfo(groupId);
-    } catch (_) {
-      // A refreshed GroupInfo only helps devices that fall too far behind to
-      // replay. Losing it is a degraded recovery path, not a reason to abandon
-      // the commit.
+    // The commit's own GroupInfo, which describes the epoch it *establishes*.
+    //
+    // Exporting one instead was the bug: an export can only describe the epoch
+    // the group is on right now, and a commit is deliberately not merged until
+    // the server accepts it - so every published GroupInfo was one epoch stale,
+    // and a device recovering by external commit landed behind the group it was
+    // rejoining. Reordering export-versus-merge does not fix that; only the
+    // value openmls hands back with the commit does.
+    var groupInfo = staged.groupInfo;
+    if (groupInfo == null) {
+      try {
+        // Fallback for a commit shape that produces none. Stale by one epoch,
+        // which is a degraded recovery path rather than no recovery path.
+        groupInfo = await mls.exportGroupInfo(groupId);
+      } catch (_) {
+        // Losing it is not a reason to abandon the commit.
+      }
     }
 
     try {
-      await api.publishCommit(
+      final published = await api.publishCommit(
         contextId: contextId,
         isChannel: isChannel,
         dto: PublishMlsCommitDto(
@@ -341,12 +492,45 @@ class MlsSyncService {
           fulfilledJoinRequestIds: staged.fulfilledJoinRequestIds,
         ),
       );
+      // `duplicate` is a success, not a race: the server matched this exact
+      // commit on (senderDeviceId, generation, epoch, payload hash) and returned
+      // the row it already had. That is the whole point of contract §E4 - it is
+      // how a client recovers from a response that went missing rather than
+      // discarding a commit the group has already applied.
+      if (published.duplicate) {
+        debugPrint(
+          'MLS: the server already had our commit for $contextId at epoch '
+          '${staged.epoch} - merging rather than re-issuing',
+        );
+      }
+      _unconfirmedCommits.remove(contextId);
       await mls.mergePendingCommit(groupId);
       return true;
-    } catch (e) {
+    } on MlsEpochConflictException {
+      // A definite "no". Somebody else took this epoch, so our commit was never
+      // applied anywhere and must not be applied here - discard, catch up, and
+      // re-issue against whatever won.
+      _unconfirmedCommits.remove(contextId);
       await _discardStagedCommit(groupId);
-      if (e is! MlsEpochConflictException) rethrow;
       return false;
+    } catch (e) {
+      // Anything else - a timeout, a dropped connection, a 5xx - leaves it
+      // genuinely unknown whether the server took the commit. Discarding here
+      // is what strands a device for good: if it *was* taken, the commit comes
+      // back in the next catch-up page, this device tries to `processMessage`
+      // its own commit, fails, and is forked off the group with no way back.
+      //
+      // Keeping it staged is recoverable in both directions. The next
+      // `_syncContextInner` either finds our commit at the epoch we claimed and
+      // merges it, or finds somebody else's and drops ours first. Re-publishing
+      // is safe meanwhile: the server matches on (senderDeviceId, generation,
+      // epoch, payload hash) and returns the stored row (contract §E4).
+      _unconfirmedCommits[contextId] = staged.epoch;
+      debugPrint(
+        'MLS: publish outcome unknown for $contextId at epoch ${staged.epoch}, '
+        'keeping the commit staged until catch-up settles it: $e',
+      );
+      rethrow;
     }
   }
 
@@ -392,6 +576,7 @@ class MlsSyncService {
         return StagedCommit(
           commit: out.commit,
           epoch: out.epoch,
+          groupInfo: out.groupInfo,
           deviceWelcomes: invitees
               .map(
                 (t) => DeviceWelcomeDto(
@@ -430,7 +615,11 @@ class MlsSyncService {
           groupIdB64: groupId,
           leafIndices: leafIndices,
         );
-        return StagedCommit(commit: out.commit, epoch: out.epoch);
+        return StagedCommit(
+          commit: out.commit,
+          epoch: out.epoch,
+          groupInfo: out.groupInfo,
+        );
       },
     );
 
@@ -473,6 +662,10 @@ class MlsSyncService {
           commit: proposal.commit,
           senderDeviceId: deviceIdService.deviceId,
           generation: generation,
+          // Declared, not inferred. The server does not advance the group's
+          // epoch for a proposal, and its unique index is filtered on this flag
+          // so the proposal does not occupy the slot the real commit needs.
+          isProposal: true,
         ),
       );
     } catch (e) {
@@ -495,7 +688,11 @@ class MlsSyncService {
       produce: () async {
         final groupId = mls.activeGroupId(contextId)!;
         final out = await mls.commitPendingProposals(groupId);
-        return StagedCommit(commit: out.commit, epoch: out.epoch);
+        return StagedCommit(
+          commit: out.commit,
+          epoch: out.epoch,
+          groupInfo: out.groupInfo,
+        );
       },
     );
   }
@@ -567,10 +764,23 @@ class MlsSyncService {
   // ---------------------------------------------------------------------------
 
   /// Serialises [op] behind any in-flight work for the same context.
+  ///
+  /// The entry is removed once nothing is queued behind it. This map used to
+  /// grow for the lifetime of the process - one entry per context ever synced,
+  /// each holding a completed `Future` - which on an account with a few hundred
+  /// conversations is a leak that only ever gets worse.
   Future<T> _serialized<T>(String contextId, Future<T> Function() op) {
     final previous = _queues[contextId] ?? Future<void>.value();
     final task = previous.then((_) => op(), onError: (_, _) => op());
-    _queues[contextId] = task.then((_) {}, onError: (_, _) {});
+    final tail = task.then((_) {}, onError: (_, _) {});
+    _queues[contextId] = tail;
+    unawaited(
+      tail.whenComplete(() {
+        // Only if nothing else queued behind us in the meantime; otherwise the
+        // next caller would run concurrently with work already in flight.
+        if (identical(_queues[contextId], tail)) _queues.remove(contextId);
+      }),
+    );
     return task;
   }
 

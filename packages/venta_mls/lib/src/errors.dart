@@ -20,6 +20,15 @@ enum MlsErrorKind {
   /// No signing key loaded for the handle - the session is locked.
   keyNotFound,
 
+  /// The string offered as a recovery code is not one: wrong length, or a
+  /// character outside the alphabet.
+  ///
+  /// Distinct from "that code did not open the wrapping" on purpose. This one is
+  /// a typo the user can fix; the other means the code is wrong. Collapsing them
+  /// would leave someone re-typing a code that could never have worked with no
+  /// idea why.
+  recoveryCodeInvalid,
+
   /// Anything else, including a panic inside the engine.
   mlsError,
 }
@@ -47,6 +56,7 @@ class MlsException implements Exception {
     'ValidationError': MlsErrorKind.validationError,
     'GroupNotFound': MlsErrorKind.groupNotFound,
     'KeyNotFound': MlsErrorKind.keyNotFound,
+    'RecoveryCodeInvalid': MlsErrorKind.recoveryCodeInvalid,
     'MlsError': MlsErrorKind.mlsError,
   };
 

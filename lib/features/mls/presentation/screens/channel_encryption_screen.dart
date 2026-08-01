@@ -140,7 +140,7 @@ class _ChannelEncryptionScreenState extends State<ChannelEncryptionScreen> {
     });
     try {
       await _joinRequests.approve(
-        channelId: widget.channelId,
+        contextId: widget.channelId,
         request: request,
       );
       await _refreshRequests();
@@ -162,7 +162,7 @@ class _ChannelEncryptionScreenState extends State<ChannelEncryptionScreen> {
     setState(() => _actingOn = request.id);
     try {
       await _joinRequests.deny(
-        channelId: widget.channelId,
+        contextId: widget.channelId,
         requestId: request.id,
       );
       await _refreshRequests();

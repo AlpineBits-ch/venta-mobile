@@ -29,18 +29,28 @@ import '../../features/voice/data/voice_repository.dart';
 import '../../features/voice/webrtc/call_webrtc_service.dart';
 import '../../features/wiki/data/wiki_api.dart';
 import '../../features/wiki/data/wiki_repository.dart';
+import '../crypto/account_identity_service.dart';
+import '../crypto/master_key_api.dart';
+import '../crypto/master_key_service.dart';
 import '../device/device_api.dart';
 import '../device/device_id_service.dart';
 import '../device/device_registration_service.dart';
 import '../mls/channel_encryption_service.dart';
 import '../mls/conversation_encryption_service.dart';
 import '../mls/conversation_member_service.dart';
+import '../mls/device_admission_service.dart';
+import '../mls/leaf_verification_service.dart';
+import '../mls/mls_backup_api.dart';
+import '../mls/mls_backup_service.dart';
+import '../mls/mls_failure_log.dart';
 import '../mls/mls_join_request_service.dart';
+import '../mls/mls_policy_service.dart';
 import '../mls/mls_realtime_bridge.dart';
 import '../mls/mls_service.dart';
 import '../mls/mls_session_manager.dart';
 import '../mls/mls_store.dart';
 import '../mls/mls_sync_service.dart';
+import '../mls/protection_level_service.dart';
 import '../network/api_client.dart';
 import '../push/call_kit_service.dart';
 import '../push/push_notification_service.dart';
@@ -57,10 +67,15 @@ final getIt = GetIt.instance;
 /// `runApp`. Repositories/services are registered here as they're built;
 /// blocs stay owned by the widget tree and pull their dependencies from
 /// [getIt] inside `BlocProvider`'s `create:`.
-Future<void> configureDependencies() async {
+Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   getIt.registerLazySingleton<SecureStorageService>(
     () => SecureStorageService(),
   );
+  // Shared, so the decryptor, the sync service and the banner all read one
+  // answer to "can this device read this context". A `MlsFailureLog.shared`
+  // rather than a fresh instance because the FCM background isolate reaches the
+  // same code with no container to resolve from.
+  getIt.registerLazySingleton<MlsFailureLog>(() => MlsFailureLog.shared);
   getIt.registerLazySingleton<DeviceIdService>(
     () => DeviceIdService(secureStorage: getIt()),
   );
@@ -155,6 +170,9 @@ Future<void> configureDependencies() async {
       realtimeService: getIt(),
       mls: getIt(),
       sync: getIt(),
+      api: getIt(),
+      admission: getIt(),
+      authRepository: getIt(),
     ),
   );
   getIt.registerLazySingleton<ConversationEncryptionService>(
@@ -174,6 +192,65 @@ Future<void> configureDependencies() async {
       sync: getIt(),
       api: getIt(),
       deviceIdService: getIt(),
+    ),
+  );
+
+  // Contract §C/§G/§H. The master key is the root of all three: it authorises a
+  // new device of yours (§G), wraps the account identity key that lets peers
+  // verify a device with none of yours online (§H), and seals the backup
+  // envelope (§C).
+  getIt.registerLazySingleton<MasterKeyApi>(() => MasterKeyApi(client: getIt()));
+  getIt.registerLazySingleton<MasterKeyService>(
+    () => MasterKeyService(api: getIt(), secureStorage: getIt()),
+  );
+  getIt.registerLazySingleton<AccountIdentityService>(
+    () => AccountIdentityService(
+      api: getIt(),
+      masterKeys: getIt(),
+      secureStorage: getIt(),
+    ),
+  );
+  getIt.registerLazySingleton<MlsPolicyService>(
+    () => MlsPolicyService(client: getIt()),
+  );
+  getIt.registerLazySingleton<LeafVerificationService>(
+    () => LeafVerificationService(
+      identity: getIt(),
+      deviceApi: getIt(),
+      policy: getIt(),
+    ),
+  );
+  getIt.registerLazySingleton<ProtectionLevelService>(
+    () => ProtectionLevelService(
+      client: getIt(),
+      identity: getIt(),
+      masterKeyApi: getIt(),
+      masterKeys: getIt(),
+      secureStorage: getIt(),
+    ),
+  );
+  getIt.registerLazySingleton<DeviceAdmissionService>(
+    () => DeviceAdmissionService(
+      api: getIt(),
+      mls: getIt(),
+      joinRequests: getIt(),
+      masterKeys: getIt(),
+      protectionLevels: getIt(),
+      deviceIdService: getIt(),
+    ),
+  );
+  getIt.registerLazySingleton<MlsBackupApi>(
+    () => MlsBackupApi(client: getIt()),
+  );
+  getIt.registerLazySingleton<MlsBackupService>(
+    () => MlsBackupService(
+      mls: getIt(),
+      api: getIt(),
+      mlsApi: getIt(),
+      identity: getIt(),
+      secureStorage: getIt(),
+      deviceIdService: getIt(),
+      appVersion: appVersion,
     ),
   );
   getIt.registerLazySingleton<ChannelEncryptionService>(

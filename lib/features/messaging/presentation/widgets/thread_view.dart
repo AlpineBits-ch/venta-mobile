@@ -1101,13 +1101,16 @@ class _ThreadViewState extends State<ThreadView> {
       body: Column(
         children: [
           ?widget.banner,
-          // Channels only: a conversation's roster is fixed at creation and
-          // everyone in it was welcomed then, so there is nobody to admit later
-          // and the server exposes no join-request route for one.
-          if (_lockedOutOfEncryption && widget.guildId != null)
+          // Conversations too, since contract §B. A conversation's roster is
+          // fixed at creation, but its group members are *devices* - a handset
+          // registered after the DM existed was never welcomed to it, and until
+          // there was a join-request route for one it had no way in and nobody
+          // could give it one.
+          if (_lockedOutOfEncryption)
             ChannelAccessBanner(
               key: ValueKey(context.read<MessageThreadBloc>().repository.contextId),
-              channelId: context.read<MessageThreadBloc>().repository.contextId,
+              contextId: context.read<MessageThreadBloc>().repository.contextId,
+              isChannel: widget.guildId != null,
             ),
           Expanded(
             child: BlocBuilder<MessageThreadBloc, ThreadState>(
