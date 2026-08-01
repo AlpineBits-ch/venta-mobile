@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
+import '../routing/back_navigation.dart';
 
 /// An `AppBar` `leading` back arrow that falls back to [fallbackLocation]
 /// when there's nothing to pop.
@@ -23,8 +23,7 @@ class AppBackButton extends StatelessWidget {
     return IconButton(
       icon: const Icon(Icons.arrow_back),
       tooltip: 'Back',
-      onPressed: () =>
-          context.canPop() ? context.pop() : context.go(fallbackLocation),
+      onPressed: () => BackNavigation.goBack(context, fallbackLocation),
     );
   }
 }

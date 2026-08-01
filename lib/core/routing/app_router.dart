@@ -43,6 +43,7 @@ import '../session/session_cubit.dart';
 import '../session/session_state.dart';
 import '../theme/widget_styles.dart';
 import 'app_shell.dart';
+import 'back_navigation.dart';
 import 'route_paths.dart';
 import 'route_persistence.dart';
 
@@ -63,6 +64,20 @@ class GoRouterRefreshStream extends ChangeNotifier {
     _subscription.cancel();
     super.dispose();
   }
+}
+
+/// A [GoRoute] whose screen is built as an [appPage] rather than go_router's
+/// default `MaterialPage` - every route outside `AppShell` can be reached as
+/// the only entry on the stack, and its back button then depends on the
+/// transition [appPage] picks. See `BackNavigation`.
+GoRoute _route(
+  String path,
+  Widget Function(BuildContext context, GoRouterState state) build,
+) {
+  return GoRoute(
+    path: path,
+    pageBuilder: (context, state) => appPage(state, build(context, state)),
+  );
 }
 
 GoRouter buildAppRouter(SessionCubit sessionCubit) {
@@ -114,9 +129,9 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       };
     },
     routes: [
-      GoRoute(
-        path: RoutePaths.login,
-        builder: (context, state) => BlocProvider(
+      _route(
+        RoutePaths.login,
+        (context, state) => BlocProvider(
           create: (_) => AuthBloc(
             authRepository: getIt<AuthRepository>(),
             sessionCubit: sessionCubit,
@@ -125,9 +140,9 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
           child: const LoginScreen(),
         ),
       ),
-      GoRoute(
-        path: RoutePaths.register,
-        builder: (context, state) => BlocProvider(
+      _route(
+        RoutePaths.register,
+        (context, state) => BlocProvider(
           create: (_) => AuthBloc(
             authRepository: getIt<AuthRepository>(),
             sessionCubit: sessionCubit,
@@ -136,13 +151,13 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
           child: const RegisterScreen(),
         ),
       ),
-      GoRoute(
-        path: RoutePaths.serverSetup,
-        builder: (context, state) => const ServerSetupScreen(),
+      _route(
+        RoutePaths.serverSetup,
+        (context, state) => const ServerSetupScreen(),
       ),
-      GoRoute(
-        path: RoutePaths.forgotPassword,
-        builder: (context, state) => const ForgotPasswordScreen(),
+      _route(
+        RoutePaths.forgotPassword,
+        (context, state) => const ForgotPasswordScreen(),
       ),
       ShellRoute(
         builder: (context, state, child) =>
@@ -177,88 +192,88 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
           ),
         ],
       ),
-      GoRoute(
-        path: RoutePaths.conversation,
-        builder: (context, state) => ConversationScreen(
+      _route(
+        RoutePaths.conversation,
+        (context, state) => ConversationScreen(
           conversationId: state.pathParameters['conversationId']!,
         ),
       ),
-      GoRoute(
-        path: RoutePaths.serverChannel,
-        // Which screen a channel opens into depends on its type, and the type
-        // isn't always known at route time - a cold start into a persisted
-        // location has an empty guild cache. `ChannelHostScreen` waits for the
-        // channel before choosing, rather than defaulting to a message thread
-        // and putting a composer on a shopping list.
-        builder: (context, state) => ChannelHostScreen(
+      // Which screen a channel opens into depends on its type, and the type
+      // isn't always known at route time - a cold start into a persisted
+      // location has an empty guild cache. `ChannelHostScreen` waits for the
+      // channel before choosing, rather than defaulting to a message thread
+      // and putting a composer on a shopping list.
+      _route(
+        RoutePaths.serverChannel,
+        (context, state) => ChannelHostScreen(
           guildId: state.pathParameters['guildId']!,
           channelId: state.pathParameters['channelId']!,
         ),
       ),
-      GoRoute(
-        path: RoutePaths.serverChannelForumSettings,
-        builder: (context, state) => ForumSettingsScreen(
+      _route(
+        RoutePaths.serverChannelForumSettings,
+        (context, state) => ForumSettingsScreen(
           guildId: state.pathParameters['guildId']!,
           channelId: state.pathParameters['channelId']!,
         ),
       ),
-      GoRoute(
-        path: RoutePaths.serverChannelSettings,
-        builder: (context, state) => ChannelSettingsScreen(
+      _route(
+        RoutePaths.serverChannelSettings,
+        (context, state) => ChannelSettingsScreen(
           guildId: state.pathParameters['guildId']!,
           channelId: state.pathParameters['channelId']!,
         ),
       ),
-      GoRoute(
-        path: RoutePaths.serverMembers,
-        builder: (context, state) =>
+      _route(
+        RoutePaths.serverMembers,
+        (context, state) =>
             GuildMembersScreen(guildId: state.pathParameters['guildId']!),
       ),
-      GoRoute(
-        path: RoutePaths.serverChannelsRoles,
-        builder: (context, state) =>
+      _route(
+        RoutePaths.serverChannelsRoles,
+        (context, state) =>
             ChannelsAndRolesScreen(guildId: state.pathParameters['guildId']!),
       ),
-      GoRoute(
-        path: RoutePaths.serverEvents,
-        builder: (context, state) =>
+      _route(
+        RoutePaths.serverEvents,
+        (context, state) =>
             EventsScreen(guildId: state.pathParameters['guildId']!),
       ),
-      GoRoute(
-        path: RoutePaths.serverSettings,
-        builder: (context, state) =>
+      _route(
+        RoutePaths.serverSettings,
+        (context, state) =>
             GuildSettingsScreen(guildId: state.pathParameters['guildId']!),
       ),
-      GoRoute(
-        path: RoutePaths.serverWiki,
-        builder: (context, state) =>
+      _route(
+        RoutePaths.serverWiki,
+        (context, state) =>
             WikiHomeScreen(guildId: state.pathParameters['guildId']!),
       ),
       // Declared before serverWikiPage - see the comment on
       // RoutePaths.serverWikiNewPage for why literal `new` must be tried
       // before the `:pageId` wildcard.
-      GoRoute(
-        path: RoutePaths.serverWikiNewPage,
-        builder: (context, state) =>
+      _route(
+        RoutePaths.serverWikiNewPage,
+        (context, state) =>
             WikiEditorScreen(guildId: state.pathParameters['guildId']!),
       ),
-      GoRoute(
-        path: RoutePaths.serverWikiPageEdit,
-        builder: (context, state) => WikiEditorScreen(
+      _route(
+        RoutePaths.serverWikiPageEdit,
+        (context, state) => WikiEditorScreen(
           guildId: state.pathParameters['guildId']!,
           pageId: state.pathParameters['pageId']!,
         ),
       ),
-      GoRoute(
-        path: RoutePaths.serverWikiHistory,
-        builder: (context, state) => WikiHistoryScreen(
+      _route(
+        RoutePaths.serverWikiHistory,
+        (context, state) => WikiHistoryScreen(
           guildId: state.pathParameters['guildId']!,
           pageId: state.pathParameters['pageId']!,
         ),
       ),
-      GoRoute(
-        path: RoutePaths.serverWikiPage,
-        builder: (context, state) => WikiPageViewScreen(
+      _route(
+        RoutePaths.serverWikiPage,
+        (context, state) => WikiPageViewScreen(
           guildId: state.pathParameters['guildId']!,
           pageId: state.pathParameters['pageId']!,
         ),
@@ -266,16 +281,16 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       // Your own profile and the form that edits it each get their own cubit -
       // both stay in sync through `ProfileRepository.selfStream`, so pushing
       // the editor on top of the profile doesn't need shared bloc scope.
-      GoRoute(
-        path: RoutePaths.selfProfile,
-        builder: (context, state) => BlocProvider(
+      _route(
+        RoutePaths.selfProfile,
+        (context, state) => BlocProvider(
           create: (_) => SelfProfileCubit(repository: getIt()),
           child: const SelfProfileScreen(),
         ),
       ),
-      GoRoute(
-        path: RoutePaths.editProfile,
-        builder: (context, state) => BlocProvider(
+      _route(
+        RoutePaths.editProfile,
+        (context, state) => BlocProvider(
           create: (_) => SelfProfileCubit(repository: getIt()),
           child: const EditProfileScreen(),
         ),
@@ -287,40 +302,30 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         path: RoutePaths.legacyProfileSettings,
         redirect: (context, state) => RoutePaths.selfProfile,
       ),
-      GoRoute(
-        path: RoutePaths.settings,
-        builder: (context, state) => const SettingsScreen(),
+      _route(RoutePaths.settings, (context, state) => const SettingsScreen()),
+      _route(
+        RoutePaths.accountSettings,
+        (context, state) => const AccountSettingsScreen(),
       ),
-      GoRoute(
-        path: RoutePaths.accountSettings,
-        builder: (context, state) => const AccountSettingsScreen(),
+      // `enabled` comes from the caller's already-loaded account when there
+      // is one; a restored route has no caller and the screen looks it up.
+      _route(
+        RoutePaths.mfaSettings,
+        (context, state) => MfaSettingsScreen(enabled: state.extra as bool?),
       ),
-      GoRoute(
-        path: RoutePaths.mfaSettings,
-        // `enabled` comes from the caller's already-loaded account when there
-        // is one; a restored route has no caller and the screen looks it up.
-        builder: (context, state) =>
-            MfaSettingsScreen(enabled: state.extra as bool?),
+      _route(
+        RoutePaths.notificationSettings,
+        (context, state) => const NotificationSettingsScreen(),
       ),
-      GoRoute(
-        path: RoutePaths.notificationSettings,
-        builder: (context, state) => const NotificationSettingsScreen(),
+      _route(
+        RoutePaths.appearanceSettings,
+        (context, state) => const AppearanceSettingsScreen(),
       ),
-      GoRoute(
-        path: RoutePaths.appearanceSettings,
-        builder: (context, state) => const AppearanceSettingsScreen(),
-      ),
-      GoRoute(
-        path: RoutePaths.qrLogin,
-        builder: (context, state) => const QrLoginScreen(),
-      ),
-      GoRoute(
-        path: RoutePaths.devices,
-        builder: (context, state) => const DevicesScreen(),
-      ),
-      GoRoute(
-        path: RoutePaths.userProfile,
-        builder: (context, state) =>
+      _route(RoutePaths.qrLogin, (context, state) => const QrLoginScreen()),
+      _route(RoutePaths.devices, (context, state) => const DevicesScreen()),
+      _route(
+        RoutePaths.userProfile,
+        (context, state) =>
             UserProfileScreen(userId: state.pathParameters['userId']!),
       ),
     ],

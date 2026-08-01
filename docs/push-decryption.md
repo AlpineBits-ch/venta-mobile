@@ -163,10 +163,12 @@ extension is not a target yet.
 
 9. Register the App ID `gg.venta.mobile.NotificationService` with App Groups —
    the same `group.gg.venta.mobile`, not a second group — generate an App Store
-   profile named **Venta Mobile Notification Service App Store**, and put it in
+   profile named **Venta Notification**, and put it in
    `IOS_EXT_PROVISION_PROFILE_BASE64`. The workflow installs it and adds the
-   second `provisioningProfiles` entry automatically; with the secret unset it
-   skips both, so this file stays valid either side of the change.
+   second `provisioningProfiles` entry automatically. It decides whether the
+   secret is required by looking for the target in `project.pbxproj`, so the
+   workflow is valid either side of this change and a forgotten secret is
+   reported as a forgotten secret.
 
    The name is not cosmetic. Both targets sign manually, so each names its
    profile literally in `project.pbxproj`

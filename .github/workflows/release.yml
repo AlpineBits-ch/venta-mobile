@@ -151,12 +151,22 @@ jobs:
           install_profile "$PP_PATH" PROFILE_NAME
           check_specifier "$LAST_PROFILE_NAME"
 
-          if [ -n "${EXT_PROVISION_PROFILE_BASE64:-}" ]; then
+          # The extension is a second binary with its own bundle id, so the
+          # archive needs a second profile. Tie the requirement to whether the
+          # target actually exists rather than treating the secret as optional:
+          # unset-but-needed otherwise surfaces 40s into the archive as "No
+          # profile for team '***' matching ...", which says nothing about a
+          # missing secret.
+          if grep -q "gg.venta.mobile.NotificationService" ios/Runner.xcodeproj/project.pbxproj; then
+            if [ -z "${EXT_PROVISION_PROFILE_BASE64:-}" ]; then
+              echo "::error::project.pbxproj builds the NotificationService extension, but the IOS_EXT_PROVISION_PROFILE_BASE64 secret is unset. Generate an App Store profile for gg.venta.mobile.NotificationService and add it - see docs/push-decryption.md."
+              exit 1
+            fi
             echo -n "$EXT_PROVISION_PROFILE_BASE64" | base64 --decode -o "$EXT_PP_PATH"
             install_profile "$EXT_PP_PATH" EXT_PROFILE_NAME
             check_specifier "$LAST_PROFILE_NAME"
           else
-            echo "No extension profile secret set - skipping (expected until the NotificationService target exists)."
+            echo "No NotificationService target in project.pbxproj - skipping the extension profile."
           fi
 
       - name: Generate ExportOptions.plist

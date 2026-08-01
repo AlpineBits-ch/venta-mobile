@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/routing/back_navigation.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/widgets/avatar_image.dart';
 import '../../../../core/theme/hex_color.dart';
@@ -42,8 +43,7 @@ class SelfProfileScreen extends StatelessWidget {
         leading: _GlassButton(
           icon: Icons.close,
           tooltip: 'Close',
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go(RoutePaths.home),
+          onPressed: () => BackNavigation.goBack(context, RoutePaths.home),
         ),
         actions: [
           _GlassButton(

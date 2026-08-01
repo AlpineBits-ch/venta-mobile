@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/routing/back_navigation.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/session/session_cubit.dart';
 import '../../../../core/theme/widget_styles.dart';
@@ -189,8 +190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         leading: IconButton(
           icon: const Icon(Icons.close),
           tooltip: 'Close',
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go(RoutePaths.home),
+          onPressed: () => BackNavigation.goBack(context, RoutePaths.home),
         ),
         title: const Text('Settings'),
       ),
