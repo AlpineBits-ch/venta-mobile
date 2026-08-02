@@ -54,9 +54,7 @@ class RecoveryCodeNotStoredException implements Exception {
 /// network and licenses nothing. They used to be the same `null`.
 class RecoveryKeyStatus {
   const RecoveryKeyStatus.read(this.envelope) : reachable = true;
-  const RecoveryKeyStatus.unavailable()
-    : envelope = null,
-      reachable = false;
+  const RecoveryKeyStatus.unavailable() : envelope = null, reachable = false;
 
   /// The envelope, or null when the account genuinely has none.
   final RecoveryKeyStateDto? envelope;
@@ -128,8 +126,9 @@ class MasterKeyService {
   /// and cloud engine backup, and [MasterKeyStatus.historyLost] is a completed
   /// loss the user has to be *told* about rather than discovering when a restore
   /// fails.
-  final ValueNotifier<MasterKeyStatus> status =
-      ValueNotifier<MasterKeyStatus>(MasterKeyStatus.unknown);
+  final ValueNotifier<MasterKeyStatus> status = ValueNotifier<MasterKeyStatus>(
+    MasterKeyStatus.unknown,
+  );
 
   /// The master key for the signed-in account, or null when it has not been
   /// unlocked on this device yet.
@@ -209,11 +208,15 @@ class MasterKeyService {
   /// first is decisive:
   ///
   /// * `PUT backup/recovery-key` **refuses any write that establishes key
-  ///   material without a `publicVerifier`** (§L.8), and no engine on any of the
-  ///   three clients derives one. Going through that route for a first write is
-  ///   a guaranteed 400. The legacy `POST users/master` accepts it, and an
-  ///   account that has an envelope can then acquire the second wrapping through
-  ///   the additive same-version path, which does not demand a verifier.
+  ///   material without a `publicVerifier`** (§L.8). The engine has derived one
+  ///   per §L.11 since `ef0330d`, so that is no longer the blocker it was when
+  ///   this route was chosen - but the legacy `POST users/master` is still the
+  ///   right first write, because an account that has an envelope acquires the
+  ///   second wrapping through the additive same-version path, where Echo
+  ///   adopts the verifier the client sent. Echo never derives one itself; it
+  ///   stores the client's bytes, first writer wins. That is why the derivation
+  ///   is pinned against a cross-client fixture rather than only against
+  ///   itself - see `the_public_verifier_matches_the_cross_client_fixture`.
   /// * A recovery code minted here is a code nobody has seen. Leaving the
   ///   account at [MasterKeyStatus.needsRecoveryCode] routes it through the one
   ///   flow that shows it and takes confirmation before committing to it, so
@@ -359,10 +362,7 @@ class MasterKeyService {
     // reset.
     try {
       final rewrapped = EncryptedMasterKeyDto.fromEngine(
-        await _engine.wrapMasterKeyUnder(
-          masterKeyB64: key,
-          secret: password,
-        ),
+        await _engine.wrapMasterKeyUnder(masterKeyB64: key, secret: password),
       );
       await api.rewrapPassword(
         version: state.version,
@@ -377,7 +377,9 @@ class MasterKeyService {
     } catch (e) {
       // The key is unlocked either way; the user just has to use the code again
       // next time. Failing the unlock over this would be strictly worse.
-      debugPrint('MasterKeyService: could not re-wrap under the new password: $e');
+      debugPrint(
+        'MasterKeyService: could not re-wrap under the new password: $e',
+      );
     }
     return key;
   }
@@ -499,10 +501,7 @@ class MasterKeyService {
     if (state == null) return false;
 
     final rewrapped = EncryptedMasterKeyDto.fromEngine(
-      await _engine.wrapMasterKeyUnder(
-        masterKeyB64: key,
-        secret: newPassword,
-      ),
+      await _engine.wrapMasterKeyUnder(masterKeyB64: key, secret: newPassword),
     );
 
     await api.rewrapPassword(

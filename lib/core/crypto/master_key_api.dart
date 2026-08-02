@@ -61,7 +61,10 @@ class EncryptedMasterKeyDto {
     // through the same type; they are not the primary names here.
     argon2Iterations: _int(json, const ['iterations', 'argon2Iterations'], 3),
     argon2Memory: _int(json, const ['memoryKiB', 'argon2Memory'], 65536),
-    argon2Parallelism: _int(json, const ['parallelism', 'argon2Parallelism'], 1),
+    argon2Parallelism: _int(json, const [
+      'parallelism',
+      'argon2Parallelism',
+    ], 1),
     version: version,
     kdf: json['kdf'] as String? ?? 'argon2id',
     publicVerifier: json['publicVerifier'] as String?,
@@ -78,10 +81,17 @@ class EncryptedMasterKeyDto {
   /// Derived from the master key - never from the password - so the server can
   /// confirm that two wrappings seal the same bytes without ever holding them.
   ///
-  /// **Null from this client.** No engine on any of the three repos derives one
-  /// yet, and inventing a construction here unilaterally is how §C.1.2 happened.
-  /// It is carried through reads and writes so a value the server already stores
-  /// is echoed back unchanged rather than being dropped and re-established.
+  /// **Derived in the engine, never here** (§L.11: HKDF-SHA256 over the master
+  /// key, empty salt, `info = "venta.masterkey.verifier.v1"`, 32 bytes, padded
+  /// base64). Deriving it in Dart would put the master key in the host language
+  /// on a path §K.3 otherwise keeps inside the engine, and inventing a
+  /// construction unilaterally is how §C.1.2 happened.
+  ///
+  /// Still nullable, because envelopes written before `ef0330d` have none and
+  /// Echo stores whatever it was given. It is carried through reads as well as
+  /// writes so a value the server already holds is echoed back unchanged rather
+  /// than dropped and re-established under a different one - which a later
+  /// `rewrap-password` would refuse, at recovery time.
   final String? publicVerifier;
 
   /// Bumping this invalidates every backup blob sealed under the previous one -
@@ -117,7 +127,8 @@ class EncryptedMasterKeyDto {
     if (publicVerifier != null) 'publicVerifier': publicVerifier,
   };
 
-  bool get isUsable => cipherText.isNotEmpty && salt.isNotEmpty && iv.isNotEmpty;
+  bool get isUsable =>
+      cipherText.isNotEmpty && salt.isNotEmpty && iv.isNotEmpty;
 
   /// First of [names] that carries a number, else [fallback].
   ///
@@ -237,9 +248,7 @@ class MasterKeyApi {
   /// mints one on the next unlock.
   Future<RecoveryKeyStateDto?> fetchRecoveryKey() async {
     try {
-      final response = await client.dio.get<Map<String, dynamic>>(
-        _recoveryKey,
-      );
+      final response = await client.dio.get<Map<String, dynamic>>(_recoveryKey);
       final data = response.data;
       if (data == null || data.isEmpty) return null;
       return RecoveryKeyStateDto.fromJson(data);

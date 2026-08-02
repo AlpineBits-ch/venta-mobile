@@ -2236,6 +2236,41 @@ fn a_recovery_code_fixture_round_trips_through_this_engine() {
     );
 }
 
+/// The one assertion that would catch Alpine and this engine drifting apart on
+/// §L.11.
+///
+/// `the_public_verifier_matches_the_normative_derivation` recomputes the
+/// expected value with the same HKDF this crate uses, so it pins the *info
+/// string* and nothing else - swap SHA256 for SHA512 in both places and it
+/// still passes. This one is a hardcoded constant in a fixture both repos read,
+/// which is the only form that pins the construction itself.
+///
+/// It matters because Echo never derives a verifier: it stores whatever the
+/// client sends, first writer wins (`BackupController.cs` TOFU-accepts on the
+/// additive path). So a divergence is invisible on the way in and surfaces as a
+/// hard 400 on a later `rewrap-password` - at recovery time, to someone who has
+/// already lost their password.
+#[test]
+fn the_public_verifier_matches_the_cross_client_fixture() {
+    let fixture: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(golden_path("recovery-code.json"))
+            .expect("testdata/mls-golden/v1/recovery-code.json is checked in"),
+    )
+    .expect("the fixture is JSON");
+
+    // Through the same public call the app uses (`wrapMasterKeyUnder`), rather
+    // than the private derivation - so this also pins that the verifier
+    // actually reaches the envelope, which is the part Echo stores.
+    let wrapping = wrap_master_key_under(fixture["masterKey"].as_str().unwrap(), "any-secret")
+        .expect("the fixture master key must wrap");
+
+    assert_eq!(
+        wrapping.public_verifier.as_deref(),
+        fixture["publicVerifier"].as_str(),
+        "this engine's publicVerifier no longer matches the shared fixture - either \n         the derivation changed or the fixture did, and both break cross-client \n         recovery silently"
+    );
+}
+
 /// Consumes the desktop client's fixture, once it supplies one.
 ///
 /// Deliberately tolerant of the file being absent rather than red in CI while the
