@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'keychain_accessibility_migration.dart';
+
 /// Thin wrapper around [FlutterSecureStorage] (Keychain on iOS,
 /// EncryptedSharedPreferences/Keystore on Android) for auth tokens and the
 /// self-hosted server URL override.
@@ -11,15 +13,33 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// Intentional improvement over the desktop client, which keeps OAuth
 /// tokens in plain `localStorage`.
 class SecureStorageService {
-  SecureStorageService({FlutterSecureStorage? storage, FlutterSecureStorage? sharedStorage})
-    : _storage = storage ?? const FlutterSecureStorage(
-        iOptions: _iosOptions,
-        aOptions: _androidOptions,
-      ),
-      _sharedStorage = sharedStorage ?? const FlutterSecureStorage(
-        iOptions: _sharedIosOptions,
-        aOptions: _androidOptions,
-      );
+  SecureStorageService({
+    FlutterSecureStorage? storage,
+    FlutterSecureStorage? sharedStorage,
+    FlutterSecureStorage? legacyStorage,
+  }) : _storage = MigratingSecureStore(
+         current:
+             storage ??
+             const FlutterSecureStorage(
+               iOptions: _iosOptions,
+               aOptions: _androidOptions,
+             ),
+         // Every item written before the MLS hardening is under the plugin's
+         // default accessibility, and `kSecAttrAccessible` is part of the query
+         // but not of the item's primary key - so those items are invisible to
+         // a read and collide with a write. See [MigratingSecureStore].
+         legacy:
+             legacyStorage ??
+             const FlutterSecureStorage(
+               iOptions: _legacyIosOptions,
+               aOptions: _androidOptions,
+             ),
+       ),
+       _sharedStorage = sharedStorage ??
+           const FlutterSecureStorage(
+             iOptions: _sharedIosOptions,
+             aOptions: _androidOptions,
+           );
 
   /// `first_unlock_this_device`, not the plugin's `unlocked` default.
   ///
@@ -90,12 +110,18 @@ class SecureStorageService {
   /// signing key means "this device silently lost every group it was in".
   static const sharedKeychainGroup = '$_keychainTeamId.gg.venta.mobile.shared';
 
+  /// What every build before the MLS hardening wrote with - the plugin's own
+  /// default. Read-and-migrate only; nothing is ever written under it again.
+  static const _legacyIosOptions = IOSOptions(
+    accessibility: KeychainAccessibility.unlocked,
+  );
+
   static const _sharedIosOptions = IOSOptions(
     accessibility: KeychainAccessibility.first_unlock_this_device,
     groupId: sharedKeychainGroup,
   );
 
-  final FlutterSecureStorage _storage;
+  final MigratingSecureStore _storage;
   final FlutterSecureStorage _sharedStorage;
 
   static const _accessTokenKey = 'venta.auth.access_token';

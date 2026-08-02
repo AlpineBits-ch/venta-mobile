@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/device/device_id_service.dart';
+import '../../../core/diagnostics/secure_storage_fault.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import 'auth_api.dart';
 import 'models/server_configuration.dart';
@@ -68,20 +69,20 @@ class AuthRepository {
   Future<void> init() async {
     try {
       _baseUrl = await secureStorage.readServerUrl() ?? AppConfig.defaultApiUrl;
-    } catch (e) {
-      debugPrint('AuthRepository: could not read the server url: $e');
+    } catch (e, stack) {
+      reportSwallowed('AuthRepository.init/readServerUrl', e, stack);
       _baseUrl = AppConfig.defaultApiUrl;
     }
 
     final String? refreshToken;
     try {
       refreshToken = await secureStorage.readRefreshToken();
-    } catch (e) {
+    } catch (e, stack) {
       // Not treated as "no session", and nothing is cleared: a failed read is
       // indistinguishable from a sign-out only if you let it be, and acting on
       // that costs the user their login over a transient fault. Unauthenticated
       // for this launch; the next one tries again.
-      debugPrint('AuthRepository: could not read the stored session: $e');
+      reportSwallowed('AuthRepository.init/readRefreshToken', e, stack);
       return;
     }
     if (refreshToken == null) return;
@@ -89,8 +90,8 @@ class AuthRepository {
 
     try {
       _accessToken = await secureStorage.readAccessToken();
-    } catch (e) {
-      debugPrint('AuthRepository: could not read the access token: $e');
+    } catch (e, stack) {
+      reportSwallowed('AuthRepository.init/readAccessToken', e, stack);
     }
 
     try {
@@ -98,11 +99,11 @@ class AuthRepository {
     } catch (_) {
       try {
         await logout();
-      } catch (e) {
+      } catch (e, stack) {
         // `_clearSession` has already dropped the in-memory tokens; only the
         // keychain delete can still fail, and a stale ciphertext on disk is not
         // worth a blank launch.
-        debugPrint('AuthRepository: could not clear the stored session: $e');
+        reportSwallowed('AuthRepository.init/logout', e, stack);
       }
     }
   }
@@ -111,10 +112,29 @@ class AuthRepository {
     return api.getConfiguration(_resolveBaseUrl(domain));
   }
 
-  /// Accepts `username` or `user@server.com` - the latter points the client
-  /// at a self-hosted instance for the rest of the session. [mfaCode] is
-  /// omitted on the first attempt; a [MfaRequiredException] from [api]
-  /// signals the caller to prompt for one and retry with it set.
+  /// Signs in, and **does not fail because the keychain did**.
+  ///
+  /// Accepts `username` or `user@server.com` - the latter points the client at
+  /// a self-hosted instance for the rest of the session. [mfaCode] is omitted on
+  /// the first attempt; a [MfaRequiredException] from [api] signals the caller
+  /// to prompt for one and retry with it set.
+  ///
+  /// The grant itself is unguarded: a failure there is a real sign-in failure
+  /// and the caller has to see it. Everything after it is persistence, which is
+  /// a different fact with a different remedy.
+  ///
+  /// This is the bug that produced "Something went wrong - please try again."
+  /// for a login the server had already completed. `_applyTokens` and
+  /// `writeServerUrl` both write to the keychain, both were unguarded, and
+  /// `AuthBloc` had no branch for a `PlatformException` - so a handset whose
+  /// keychain was refusing got a generic failure for a sign-in that had
+  /// succeeded, with valid tokens already in memory and nothing wrong with the
+  /// account or the password.
+  ///
+  /// The session is live either way. What a failure costs is durability: the
+  /// tokens are not on disk, so the next cold start has nothing to restore and
+  /// the user signs in again. [sessionPersisted] says so, and the UI is expected
+  /// to tell them - degrading is fine, concealing it is not.
   Future<void> login(String input, String password, {String? mfaCode}) async {
     final (username, resolvedBaseUrl) = _splitLoginInput(input);
     final tokens = await api.passwordGrant(
@@ -126,7 +146,13 @@ class AuthRepository {
     );
     _baseUrl = resolvedBaseUrl;
     await _applyTokens(tokens.accessToken, tokens.refreshToken);
-    await secureStorage.writeServerUrl(_baseUrl);
+
+    try {
+      await secureStorage.writeServerUrl(_baseUrl);
+    } catch (e, stack) {
+      reportSwallowed('AuthRepository.login/writeServerUrl', e, stack);
+      _markSessionNotPersisted();
+    }
   }
 
   /// Uses whatever server the client is currently pointed at ([baseUrl]) -
@@ -218,14 +244,54 @@ class AuthRepository {
     _sessionExpiredController.add(null);
   }
 
+  /// Adopts a token pair in memory, then tries to persist it.
+  ///
+  /// **The in-memory half happens first and unconditionally**, because that is
+  /// what makes the session work right now; persistence only decides whether it
+  /// survives a restart. Doing them in the other order - or treating them as one
+  /// operation, which is what an unguarded `await` does - meant a keychain
+  /// refusal discarded a perfectly good session.
   Future<void> _applyTokens(String accessToken, String? refreshToken) async {
     _accessToken = accessToken;
     if (refreshToken != null) _refreshToken = refreshToken;
-    await secureStorage.writeTokens(
-      accessToken: accessToken,
-      refreshToken: _refreshToken!,
-    );
+
+    final storedRefresh = _refreshToken;
+    if (storedRefresh == null) {
+      // Was `_refreshToken!`. The server is *asked* for `offline_access` and has
+      // always answered with a refresh token, but "has always" is not a type,
+      // and a null here threw a bare `TypeError` on the login path that
+      // presented identically to the keychain fault - "Something went wrong".
+      // The access token still works for this session.
+      reportSwallowed(
+        'AuthRepository/_applyTokens',
+        StateError('the token response carried no refresh token'),
+        StackTrace.current,
+      );
+      _markSessionNotPersisted();
+      return;
+    }
+
+    try {
+      await secureStorage.writeTokens(
+        accessToken: accessToken,
+        refreshToken: storedRefresh,
+      );
+      _sessionPersisted.value = true;
+    } catch (e, stack) {
+      reportSwallowed('AuthRepository/_applyTokens/writeTokens', e, stack);
+      _markSessionNotPersisted();
+    }
   }
+
+  /// Whether the current session is on disk and will survive a cold start.
+  ///
+  /// False after a keychain write refused. Surfaced rather than hidden: the user
+  /// is signed in and everything works, right up until they relaunch and find
+  /// themselves at the login screen with no explanation.
+  ValueListenable<bool> get sessionPersisted => _sessionPersisted;
+  final ValueNotifier<bool> _sessionPersisted = ValueNotifier<bool>(true);
+
+  void _markSessionNotPersisted() => _sessionPersisted.value = false;
 
   Future<void> _clearSession() async {
     _accessToken = null;

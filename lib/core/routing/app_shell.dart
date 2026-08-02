@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/presentation/widgets/session_not_persisted_banner.dart';
 import '../../features/guilds/data/guild_repository.dart';
 import '../../features/guilds/data/models/guild_dto.dart';
 import '../../features/guilds/data/models/guild_template_dto.dart';
@@ -258,6 +259,7 @@ class _AppShellState extends State<AppShell> {
       body: Column(
         children: [
           const ConnectionStatusBanner(),
+          const SessionNotPersistedBanner(),
           const RecoveryCodeBanner(),
           Expanded(
             child: Stack(

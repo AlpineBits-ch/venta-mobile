@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
-
+import '../diagnostics/secure_storage_fault.dart';
 import '../storage/secure_storage_service.dart';
 
 /// What this installation calls itself everywhere the server records a device:
@@ -115,12 +114,16 @@ class DeviceIdService {
     try {
       final existing = await read();
       if (existing != null && existing.isNotEmpty) return existing;
-    } catch (e) {
+    } catch (e, stack) {
       // Deliberately *not* followed by a write. A read that failed is no
       // evidence that nothing is stored, and writing on that assumption is how a
       // transient keychain fault becomes a permanent identity change - this id
       // names the installation's MLS leaf.
-      debugPrint('DeviceIdService: the keychain refused a read: $e');
+      //
+      // Reported, not just logged: this is the guard that absorbed the fault
+      // behind the login failure, and it did so silently. The server saw a
+      // device id it had never been told about and no one saw why.
+      reportSwallowed('DeviceIdService/read', e, stack);
       _ephemeral = true;
       return create();
     }
@@ -128,8 +131,8 @@ class DeviceIdService {
     final generated = create();
     try {
       await write(generated);
-    } catch (e) {
-      debugPrint('DeviceIdService: the keychain refused a write: $e');
+    } catch (e, stack) {
+      reportSwallowed('DeviceIdService/write', e, stack);
       _ephemeral = true;
     }
     return generated;

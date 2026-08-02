@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/diagnostics/secure_storage_fault.dart';
 import '../../../core/di/injector.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/session/session_cubit.dart';
@@ -203,11 +205,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           pendingVerificationEmail: '',
         ),
       );
-    } catch (e) {
+    } catch (e, stack) {
       emit(
         state.copyWith(
           status: AuthStatus.failure,
-          errorMessage: _describeError(e),
+          errorMessage: _describeError(e, stack),
         ),
       );
     }
@@ -243,11 +245,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           pendingVerificationEmail: event.email,
         ),
       );
-    } catch (e) {
+    } catch (e, stack) {
       emit(
         state.copyWith(
           status: AuthStatus.failure,
-          errorMessage: _describeError(e),
+          errorMessage: _describeError(e, stack),
         ),
       );
     }
@@ -342,7 +344,35 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  String _describeError(Object error) {
+  /// Turns whatever was thrown into something a person can act on, and reports
+  /// it.
+  ///
+  /// **The reporting is half the point.** A caught exception is never sent to
+  /// Sentry, so every path through here was invisible: the user saw "Something
+  /// went wrong - please try again.", Sentry saw nothing at all, and a keychain
+  /// refusing a write *after* a login the server had already completed was
+  /// indistinguishable from a wrong password.
+  String _describeError(Object error, [StackTrace? stackTrace]) {
+    reportSwallowed('AuthBloc', error, stackTrace);
+
+    // Checked before `DioException`, because this is the class of failure that
+    // has nothing to do with the network or the credentials and was being
+    // reported as though it did. The `OSStatus` is named because it is the
+    // whole diagnosis - a -34018 and a -25308 have different causes and
+    // different remedies.
+    final fault = SecureStorageFault.from(error);
+    if (fault != null) {
+      final status = fault.osStatus == null ? '' : ' ${fault.osStatus}';
+      return 'Your device refused to save the sign-in '
+          '(${fault.statusName}$status). You may be able to continue, but you '
+          'will have to sign in again next time you open the app.';
+    }
+
+    if (error is MissingPluginException) {
+      return 'A part of the app did not load correctly. Please reinstall and '
+          'try again.';
+    }
+
     if (error is DioException) {
       final data = error.response?.data;
       if (data is Map && data['error_description'] is String) {
