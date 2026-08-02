@@ -25,9 +25,19 @@ class ConversationApi {
     String? mlsGroupId,
     int? mlsEpoch,
     String? mlsGroupInfo,
+    bool allowPartialDeviceCoverage = false,
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       client.url('/api/v1/messaging/conversations'),
+      // The server validates reachability per *device* and refuses outright
+      // when a member device has no key package left, unless this says the
+      // human was shown the list and accepted it (contract §E7). Sending it
+      // unconditionally would be exactly the silent partial coverage the check
+      // exists to prevent, so it comes from a decision and never from a
+      // default.
+      queryParameters: allowPartialDeviceCoverage
+          ? const {'allowPartialDeviceCoverage': 'true'}
+          : null,
       data: {
         'name': name,
         'members': memberUserIds.map((id) => {'userId': id}).toList(),

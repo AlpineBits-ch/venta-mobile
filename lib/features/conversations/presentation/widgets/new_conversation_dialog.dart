@@ -12,6 +12,7 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../friends/data/models/relationship_model.dart';
 import '../../../friends/data/relationship_repository.dart';
+import '../../../mls/data/models/mls_dtos.dart';
 import '../../data/conversation_api.dart';
 import '../../data/conversation_repository.dart';
 import '../../data/models/conversation_dto.dart';
@@ -111,6 +112,7 @@ class _NewConversationDialogState extends State<_NewConversationDialog> {
               ownUserId: _myUserId,
               memberUserIds: _selectedIds.toList(),
               name: _groupName,
+              onPartialCoverage: _confirmPartialCoverage,
             );
       } else if (_selectedIds.length == 1) {
         conversation = await getIt<ConversationRepository>()
@@ -124,20 +126,10 @@ class _NewConversationDialogState extends State<_NewConversationDialog> {
       if (!mounted) return;
       Navigator.of(context).pop();
       context.push(RoutePaths.conversationPath(conversation.id));
-    } on UnreachableMembersException catch (e) {
-      if (!mounted) return;
-      setState(() => _creating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.deviceNames.isEmpty
-                ? 'Some of them have no device set up for encryption yet, so '
-                      'they could not be added.'
-                : 'These devices have no encryption keys available: '
-                      '${e.deviceNames.join(', ')}',
-          ),
-        ),
-      );
+    } on UnreachableMembersException {
+      // The human was shown the devices and said no. That is an answer, not an
+      // error, so the dialog simply stays open on their selection.
+      if (mounted) setState(() => _creating = false);
     } catch (_) {
       if (mounted) {
         setState(() => _creating = false);
@@ -146,6 +138,62 @@ class _NewConversationDialogState extends State<_NewConversationDialog> {
         );
       }
     }
+  }
+
+  /// Offers the choice the old code never gave: create anyway, or go back.
+  ///
+  /// It used to refuse outright, and only when a participant had **no**
+  /// reachable device at all - a participant with a working laptop and a dry
+  /// phone sailed through and the phone was dropped from the group silently and
+  /// permanently. Nothing retro-adds a device to an existing MLS group, so
+  /// "later" never comes on its own.
+  ///
+  /// Blocking until a human decides is what Alpine's new-conversation dialog
+  /// does, and the accepted answer is what puts
+  /// `?allowPartialDeviceCoverage=true` on the create.
+  Future<bool> _confirmPartialCoverage(
+    List<UnreachableDeviceDto> devices,
+  ) async {
+    if (!mounted) return false;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Some devices cannot be included'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'These devices have no encryption keys available, so they will '
+              'not be able to read this conversation - including anything sent '
+              'before they are let back in.',
+            ),
+            const SizedBox(height: AppSpacing.s),
+            for (final device in devices)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text('• ${device.deviceName ?? device.deviceId}'),
+              ),
+            const SizedBox(height: AppSpacing.s),
+            const Text(
+              'Waiting until they are online again is usually the better '
+              'option.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Create anyway'),
+          ),
+        ],
+      ),
+    );
+    return accepted ?? false;
   }
 
   String? get _groupName => _groupNameController.text.trim().isEmpty
