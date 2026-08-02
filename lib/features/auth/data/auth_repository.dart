@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import '../../../core/config/app_config.dart';
 import '../../../core/device/device_id_service.dart';
 import '../../../core/storage/secure_storage_service.dart';
@@ -50,16 +52,58 @@ class AuthRepository {
   /// Loads any persisted session and, if a refresh token exists, validates
   /// it against the server immediately - there's no persisted expiry, so a
   /// forced refresh on cold start is the simplest reliable check.
+  ///
+  /// **Never throws.** This runs before the first frame, so anything that
+  /// escapes means `runApp` is not reached and the user gets a blank screen
+  /// naming nothing. Three things here can fail independently and each has to
+  /// degrade rather than propagate:
+  ///
+  /// * the keychain reads - on iOS a refusal arrives as a `PlatformException`,
+  ///   and an unreadable keychain is "signed out for this launch", not "no app";
+  /// * the forced refresh - already handled, and the reason this exists;
+  /// * **the [logout] inside that handler**, which was itself unguarded. It
+  ///   writes to the keychain, so whatever makes the reads throw makes this
+  ///   throw too - and it sat in the catch for the failure a server change is
+  ///   most likely to cause, turning a refused refresh into a dead app.
   Future<void> init() async {
-    _baseUrl = await secureStorage.readServerUrl() ?? AppConfig.defaultApiUrl;
-    final refreshToken = await secureStorage.readRefreshToken();
+    try {
+      _baseUrl = await secureStorage.readServerUrl() ?? AppConfig.defaultApiUrl;
+    } catch (e) {
+      debugPrint('AuthRepository: could not read the server url: $e');
+      _baseUrl = AppConfig.defaultApiUrl;
+    }
+
+    final String? refreshToken;
+    try {
+      refreshToken = await secureStorage.readRefreshToken();
+    } catch (e) {
+      // Not treated as "no session", and nothing is cleared: a failed read is
+      // indistinguishable from a sign-out only if you let it be, and acting on
+      // that costs the user their login over a transient fault. Unauthenticated
+      // for this launch; the next one tries again.
+      debugPrint('AuthRepository: could not read the stored session: $e');
+      return;
+    }
     if (refreshToken == null) return;
     _refreshToken = refreshToken;
-    _accessToken = await secureStorage.readAccessToken();
+
+    try {
+      _accessToken = await secureStorage.readAccessToken();
+    } catch (e) {
+      debugPrint('AuthRepository: could not read the access token: $e');
+    }
+
     try {
       await ensureValidToken(forceRefresh: true);
     } catch (_) {
-      await logout();
+      try {
+        await logout();
+      } catch (e) {
+        // `_clearSession` has already dropped the in-memory tokens; only the
+        // keychain delete can still fail, and a stale ciphertext on disk is not
+        // worth a blank launch.
+        debugPrint('AuthRepository: could not clear the stored session: $e');
+      }
     }
   }
 

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import '../storage/secure_storage_service.dart';
 
 /// What this installation calls itself everywhere the server records a device:
@@ -69,6 +71,29 @@ class DeviceIdService {
     if (stored != null && stored.isNotEmpty) _identityPublicKey = stored;
   }
 
+  /// True when the ids below live only for this process, because the keychain
+  /// could not be reached.
+  ///
+  /// Exposed so a diagnostics surface can say "this installation is not
+  /// remembering its device id" rather than leaving somebody to infer it from a
+  /// sessions list that grows a row per launch.
+  bool get isEphemeral => _ephemeral;
+  bool _ephemeral = false;
+
+  /// Never throws.
+  ///
+  /// This runs before the first frame, and it is the likeliest iOS-only failure
+  /// on that path: `flutter_secure_storage` surfaces a keychain refusal as a
+  /// `PlatformException`, and the ways to earn one on iOS - an access group the
+  /// signed entitlements do not grant, an item stored under a different
+  /// `kSecAttrAccessible`, a read before first unlock after a reboot - have no
+  /// Android equivalent at all. Letting one propagate meant `runApp` was never
+  /// reached and the user got a blank screen naming nothing.
+  ///
+  /// A process-lifetime id is a poor substitute - the server sees a new device
+  /// every launch, and MLS state scoped by device id will not be found - but it
+  /// is a running app that can report its own fault, which is strictly more than
+  /// the alternative.
   Future<void> init() async {
     _deviceId ??= await _loadOrCreate(
       read: secureStorage.readDeviceId,
@@ -87,10 +112,26 @@ class DeviceIdService {
     required Future<void> Function(String) write,
     required String Function() create,
   }) async {
-    final existing = await read();
-    if (existing != null && existing.isNotEmpty) return existing;
+    try {
+      final existing = await read();
+      if (existing != null && existing.isNotEmpty) return existing;
+    } catch (e) {
+      // Deliberately *not* followed by a write. A read that failed is no
+      // evidence that nothing is stored, and writing on that assumption is how a
+      // transient keychain fault becomes a permanent identity change - this id
+      // names the installation's MLS leaf.
+      debugPrint('DeviceIdService: the keychain refused a read: $e');
+      _ephemeral = true;
+      return create();
+    }
+
     final generated = create();
-    await write(generated);
+    try {
+      await write(generated);
+    } catch (e) {
+      debugPrint('DeviceIdService: the keychain refused a write: $e');
+      _ephemeral = true;
+    }
     return generated;
   }
 
