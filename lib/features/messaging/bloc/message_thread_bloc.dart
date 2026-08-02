@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/bloc/safe_emit.dart';
 import '../../../core/sound/sound_service.dart';
 import '../data/message_api.dart';
 import '../data/message_content_codec.dart';
@@ -409,7 +410,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     try {
       final page = await repository.fetchPage();
       final sorted = _sortNewestFirst(page);
-      emit(
+      emit.ifOpen(
         state.copyWith(
           messages: sorted,
           isLoadingInitial: false,
@@ -418,7 +419,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       );
       unawaited(_markRead());
     } catch (_) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           isLoadingInitial: false,
           error: 'Could not load messages.',
@@ -432,11 +433,11 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     Emitter<ThreadState> emit,
   ) async {
     if (state.isLoadingMore || !state.hasMoreOlder) return;
-    emit(state.copyWith(isLoadingMore: true));
+    emit.ifOpen(state.copyWith(isLoadingMore: true));
     try {
       final page = await repository.fetchPage(offset: state.messages.length);
       final merged = _sortNewestFirst([...state.messages, ...page]);
-      emit(
+      emit.ifOpen(
         state.copyWith(
           messages: merged,
           isLoadingMore: false,
@@ -444,7 +445,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         ),
       );
     } catch (_) {
-      emit(state.copyWith(isLoadingMore: false));
+      emit.ifOpen(state.copyWith(isLoadingMore: false));
     }
   }
 
@@ -467,7 +468,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       mentionsEveryone: event.mentionsEveryone,
       mentionsHere: event.mentionsHere,
     );
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: [optimistic, ...state.messages],
         pendingSendIds: {...state.pendingSendIds, tempId},
@@ -484,7 +485,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         mentionsEveryone: event.mentionsEveryone,
         mentionsHere: event.mentionsHere,
       );
-      emit(
+      emit.ifOpen(
         state.copyWith(
           messages: [
             for (final m in state.messages)
@@ -497,7 +498,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       // Retrying identical blocked content would just fail again, so drop
       // the optimistic bubble entirely rather than leaving a permanently
       // "failed, tap to retry" message sitting in the thread.
-      emit(
+      emit.ifOpen(
         state.copyWith(
           messages: [
             for (final m in state.messages)
@@ -508,7 +509,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         ),
       );
     } catch (_) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           pendingSendIds: {...state.pendingSendIds}..remove(tempId),
           failedSendIds: {...state.failedSendIds, tempId},
@@ -538,7 +539,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           ),
     );
 
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: _withReactions(
           event.messageId,
@@ -576,7 +577,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       }
     } catch (_) {
       // Roll back to the pre-toggle state.
-      emit(
+      emit.ifOpen(
         state.copyWith(
           messages: _withReactions(
             event.messageId,
@@ -614,7 +615,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     if (previous == null) return;
     final wasPinned = previous.isPinned;
 
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: _updateMessage(
           event.messageId,
@@ -636,7 +637,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         await repository.pinMessage(event.messageId);
       }
     } catch (_) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           messages: _updateMessage(event.messageId, (_) => previous),
         ),
@@ -648,7 +649,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     _MessagePinnedRemote event,
     Emitter<ThreadState> emit,
   ) {
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: _updateMessage(
           event.messageId,
@@ -666,7 +667,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     _MessageUnpinnedRemote event,
     Emitter<ThreadState> emit,
   ) {
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: _updateMessage(
           event.messageId,
@@ -697,7 +698,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         .firstOrNull;
     if (previous == null) return;
 
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: [
           for (final m in state.messages)
@@ -718,7 +719,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         // the wrong group.
         mlsGeneration: previous.mlsGeneration,
       );
-      emit(
+      emit.ifOpen(
         state.copyWith(
           messages: [
             for (final m in state.messages)
@@ -727,7 +728,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         ),
       );
     } catch (_) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           messages: [
             for (final m in state.messages)
@@ -746,7 +747,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     if (index == -1) return;
     final removed = state.messages[index];
 
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: [
           for (final m in state.messages)
@@ -760,7 +761,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     } catch (_) {
       final restored = [...state.messages];
       restored.insert(index.clamp(0, restored.length), removed);
-      emit(state.copyWith(messages: restored));
+      emit.ifOpen(state.copyWith(messages: restored));
     }
   }
 
@@ -768,7 +769,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     _ReactionAddedRemote event,
     Emitter<ThreadState> emit,
   ) {
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: _withReactions(event.messageId, (reactions) {
           if (reactions.any(
@@ -797,7 +798,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     _ReactionRemovedRemote event,
     Emitter<ThreadState> emit,
   ) {
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: _withReactions(
           event.messageId,
@@ -856,7 +857,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       isBotCommandPlaceholder: true,
       authorIdType: MessageAuthorType.bot,
     );
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: [placeholder, ...state.messages],
         pendingSendIds: {...state.pendingSendIds, event.tempId},
@@ -891,7 +892,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     for (final queue in _pendingBotTempIdsByBot.values) {
       queue.remove(tempId);
     }
-    emit(
+    emit.ifOpen(
       state.copyWith(
         pendingSendIds: {...state.pendingSendIds}..remove(tempId),
         failedSendIds: {...state.failedSendIds, tempId},
@@ -908,7 +909,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     if (botQueue != null && botQueue.isNotEmpty) {
       final tempId = botQueue.removeAt(0);
       _botTimeoutTimers.remove(tempId)?.cancel();
-      emit(
+      emit.ifOpen(
         state.copyWith(
           messages: [
             event.message,
@@ -921,7 +922,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       return;
     }
 
-    emit(state.copyWith(messages: [event.message, ...state.messages]));
+    emit.ifOpen(state.copyWith(messages: [event.message, ...state.messages]));
     if (event.message.authorId != myUserId) {
       unawaited(soundService.playNewMessage());
       unawaited(_markRead());
@@ -932,7 +933,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     _MessageUpdatedRemote event,
     Emitter<ThreadState> emit,
   ) {
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: [
           for (final m in state.messages)
@@ -957,7 +958,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     _MessageDeletedRemote event,
     Emitter<ThreadState> emit,
   ) {
-    emit(
+    emit.ifOpen(
       state.copyWith(
         messages: state.messages.where((m) => m.id != event.messageId).toList(),
       ),
@@ -971,11 +972,13 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       const Duration(seconds: 5),
       () => add(_TypingExpired(event.userId)),
     );
-    emit(state.copyWith(typingUserIds: {...state.typingUserIds, event.userId}));
+    emit.ifOpen(
+      state.copyWith(typingUserIds: {...state.typingUserIds, event.userId}),
+    );
   }
 
   void _onTypingExpired(_TypingExpired event, Emitter<ThreadState> emit) {
-    emit(
+    emit.ifOpen(
       state.copyWith(
         typingUserIds: {...state.typingUserIds}..remove(event.userId),
       ),

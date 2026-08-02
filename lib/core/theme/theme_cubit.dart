@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 
+import '../bloc/safe_emit.dart';
+
 /// Persists the user's light/dark/system preference across launches.
-class ThemeCubit extends HydratedCubit<ThemeMode> {
+class ThemeCubit extends HydratedCubit<ThemeMode> with SafeEmit<ThemeMode> {
   ThemeCubit() : super(ThemeMode.system);
 
-  void setThemeMode(ThemeMode mode) => emit(mode);
+  void setThemeMode(ThemeMode mode) => emitIfOpen(mode);
 
   @override
   ThemeMode? fromJson(Map<String, dynamic> json) {

@@ -5,8 +5,9 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/diagnostics/secure_storage_fault.dart';
+import '../../../core/bloc/safe_emit.dart';
 import '../../../core/di/injector.dart';
+import '../../../core/diagnostics/secure_storage_fault.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/session/session_cubit.dart';
 import '../data/auth_api.dart';
@@ -148,7 +149,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LoginSubmitted>(_onLoginSubmitted);
     on<LoginCancelled>((_, emit) {
       _pending = null;
-      emit(const AuthState());
+      emit.ifOpen(const AuthState());
     });
     on<RegisterSubmitted>(_onRegisterSubmitted);
     on<VerificationCodeSubmitted>(_onVerificationCodeSubmitted);
@@ -169,7 +170,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     LoginSubmitted event,
     Emitter<AuthState> emit,
   ) async {
-    emit(state.copyWith(status: AuthStatus.loading));
+    emit.ifOpen(state.copyWith(status: AuthStatus.loading));
     try {
       await authRepository.login(
         event.input,
@@ -184,11 +185,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // holds one. It is passed, used and never stored - the same reasoning as
       // `_pending` below.
       unawaited(startAuthenticatedServices(password: event.password));
-      emit(state.copyWith(status: AuthStatus.success));
+      emit.ifOpen(state.copyWith(status: AuthStatus.success));
     } on MfaRequiredException {
-      emit(state.copyWith(status: AuthStatus.mfaRequired, errorMessage: null));
+      emit.ifOpen(
+        state.copyWith(status: AuthStatus.mfaRequired, errorMessage: null),
+      );
     } on MfaInvalidException {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           status: AuthStatus.mfaRequired,
           errorMessage: 'Invalid code - try again.',
@@ -199,14 +202,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // `AuthRepository.login`) - neither is an email address, so signing in
       // can't know where the code was sent. The form asks for it.
       _pending = (login: event.input, email: '', password: event.password);
-      emit(
+      emit.ifOpen(
         state.copyWith(
           status: AuthStatus.emailVerificationRequired,
           pendingVerificationEmail: '',
         ),
       );
     } catch (e, stack) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           status: AuthStatus.failure,
           errorMessage: _describeError(e, stack),
@@ -219,7 +222,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     RegisterSubmitted event,
     Emitter<AuthState> emit,
   ) async {
-    emit(state.copyWith(status: AuthStatus.loading));
+    emit.ifOpen(state.copyWith(status: AuthStatus.loading));
     try {
       await authRepository.register(
         email: event.email,
@@ -230,7 +233,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
       unawaited(startAuthenticatedServices(password: event.password));
-      emit(state.copyWith(status: AuthStatus.success));
+      emit.ifOpen(state.copyWith(status: AuthStatus.success));
     } on EmailNotVerifiedException {
       // The account is created; only the sign-in that follows it was refused.
       // Registration always knows the address, so this always gets a code.
@@ -239,14 +242,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         email: event.email,
         password: event.password,
       );
-      emit(
+      emit.ifOpen(
         state.copyWith(
           status: AuthStatus.emailVerificationRequired,
           pendingVerificationEmail: event.email,
         ),
       );
     } catch (e, stack) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           status: AuthStatus.failure,
           errorMessage: _describeError(e, stack),
@@ -268,11 +271,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         : pending.email;
     if (email.isEmpty) return;
     _pending = (login: pending.login, email: email, password: pending.password);
-    emit(state.copyWith(status: AuthStatus.loading));
+    emit.ifOpen(state.copyWith(status: AuthStatus.loading));
     try {
       await authRepository.verifyEmail(email: email, code: event.code.trim());
     } catch (e) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           status: AuthStatus.emailVerificationRequired,
           errorMessage: e is DioException && e.response?.statusCode == 400
@@ -289,14 +292,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       unawaited(realtimeService.start());
       unawaited(startAuthenticatedServices(password: pending.password));
       _pending = null;
-      emit(state.copyWith(status: AuthStatus.success));
+      emit.ifOpen(state.copyWith(status: AuthStatus.success));
     } catch (_) {
       // The address is confirmed either way - don't strand them on the code
       // form re-entering a code that has already been spent. A whole new
       // state rather than `copyWith`, to clear the pending email and put the
       // credentials form back.
       _pending = null;
-      emit(
+      emit.ifOpen(
         const AuthState(
           status: AuthStatus.failure,
           errorMessage: 'Email verified - please sign in.',
@@ -315,7 +318,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         ? event.email!.trim()
         : pending.email;
     if (email.isEmpty) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           status: AuthStatus.emailVerificationRequired,
           errorMessage: 'Enter the email address you signed up with first.',
@@ -326,14 +329,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     _pending = (login: pending.login, email: email, password: pending.password);
     try {
       await authRepository.resendVerificationCode(email);
-      emit(
+      emit.ifOpen(
         state.copyWith(
           status: AuthStatus.emailVerificationRequired,
           infoMessage: 'A new code is on its way to $email.',
         ),
       );
     } catch (e) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           status: AuthStatus.emailVerificationRequired,
           errorMessage: e is DioException && e.response?.statusCode == 400

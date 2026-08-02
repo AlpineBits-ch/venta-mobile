@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/bloc/safe_emit.dart';
 import '../data/models/relationship_model.dart';
 import '../data/relationship_repository.dart';
 
@@ -128,7 +129,7 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
     try {
       await repository.fetch();
     } catch (_) {
-      emit(state.copyWith(status: FriendsStatus.error));
+      emit.ifOpen(state.copyWith(status: FriendsStatus.error));
     }
   }
 
@@ -140,7 +141,7 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
     for (final relationship in event.relationships) {
       (byStatus[relationship.status] ??= []).add(relationship);
     }
-    emit(
+    emit.ifOpen(
       state.copyWith(
         status: FriendsStatus.loaded,
         friends: byStatus[RelationshipStatus.friends] ?? const [],
@@ -161,7 +162,7 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
     try {
       await repository.addFriend(event.username);
     } catch (_) {
-      emit(
+      emit.ifOpen(
         state.copyWith(
           actionError: 'Could not find or add "${event.username}".',
         ),
@@ -176,7 +177,9 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
     try {
       await repository.accept(event.relationshipId);
     } catch (_) {
-      emit(state.copyWith(actionError: 'Could not accept that request.'));
+      emit.ifOpen(
+        state.copyWith(actionError: 'Could not accept that request.'),
+      );
     }
   }
 
@@ -187,7 +190,9 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
     try {
       await repository.reject(event.relationshipId);
     } catch (_) {
-      emit(state.copyWith(actionError: 'Could not reject that request.'));
+      emit.ifOpen(
+        state.copyWith(actionError: 'Could not reject that request.'),
+      );
     }
   }
 
@@ -198,7 +203,7 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
     try {
       await repository.revoke(event.relationshipId);
     } catch (_) {
-      emit(state.copyWith(actionError: 'Could not remove that friend.'));
+      emit.ifOpen(state.copyWith(actionError: 'Could not remove that friend.'));
     }
   }
 

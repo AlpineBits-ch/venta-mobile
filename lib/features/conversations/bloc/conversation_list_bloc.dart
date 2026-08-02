@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/bloc/safe_emit.dart';
 import '../data/conversation_repository.dart';
 import '../data/models/conversation_dto.dart';
 
@@ -71,7 +72,7 @@ class ConversationListBloc
     try {
       await repository.fetch();
     } catch (_) {
-      emit(state.copyWith(status: ConversationListStatus.error));
+      emit.ifOpen(state.copyWith(status: ConversationListStatus.error));
     }
   }
 
@@ -79,7 +80,7 @@ class ConversationListBloc
     _ConversationsUpdated event,
     Emitter<ConversationListState> emit,
   ) {
-    emit(
+    emit.ifOpen(
       state.copyWith(
         status: ConversationListStatus.loaded,
         conversations: event.conversations,

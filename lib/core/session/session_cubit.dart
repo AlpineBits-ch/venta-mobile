@@ -3,11 +3,12 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../features/auth/data/auth_repository.dart';
+import '../bloc/safe_emit.dart';
 import '../di/injector.dart';
 import '../routing/route_persistence.dart';
 import 'session_state.dart';
 
-class SessionCubit extends Cubit<SessionState> {
+class SessionCubit extends Cubit<SessionState> with SafeEmit<SessionState> {
   SessionCubit({required this.authRepository})
     : super(const SessionState.unknown()) {
     _sessionExpiredSub = authRepository.sessionExpired.listen((_) {
@@ -15,7 +16,7 @@ class SessionCubit extends Cubit<SessionState> {
       // signed-in caches are worthless from here on and actively harmful if
       // the next sign-in is a different account.
       resetSessionScopedCaches();
-      emit(const SessionState.unauthenticated());
+      emitIfOpen(const SessionState.unauthenticated());
     });
   }
 
@@ -25,7 +26,7 @@ class SessionCubit extends Cubit<SessionState> {
   /// Call once, after [AuthRepository.init] has resolved any persisted
   /// session, to move off the initial `unknown` state.
   void restore() {
-    emit(
+    emitIfOpen(
       authRepository.isAuthenticated
           ? SessionState.authenticated(
               userId: authRepository.currentUserId ?? '',
@@ -39,7 +40,7 @@ class SessionCubit extends Cubit<SessionState> {
   /// from a previous account has to be gone by the time they read it.
   void signedIn(String userId) {
     resetSessionScopedCaches();
-    emit(SessionState.authenticated(userId: userId));
+    emitIfOpen(SessionState.authenticated(userId: userId));
   }
 
   /// Deregisters this handset's push tokens before dropping the session -
@@ -59,7 +60,7 @@ class SessionCubit extends Cubit<SessionState> {
     }
     await authRepository.logout();
     RoutePersistence.clear();
-    emit(const SessionState.unauthenticated());
+    emitIfOpen(const SessionState.unauthenticated());
   }
 
   @override

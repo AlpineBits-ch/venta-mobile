@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
 
+import '../../../core/bloc/safe_emit.dart';
 import '../../../core/sound/sound_service.dart';
 import '../../../core/webrtc/track_kind.dart';
 import '../../auth/data/auth_repository.dart';
@@ -161,7 +162,8 @@ class GuildVoiceState extends Equatable {
 /// channel does not force any particular screen; unlike 1:1 calling, guild
 /// voice deliberately keeps the user free to browse other text channels
 /// while connected (mirrors Alpine's persistent `voice-status-bar`).
-class GuildVoiceCubit extends Cubit<GuildVoiceState> {
+class GuildVoiceCubit extends Cubit<GuildVoiceState>
+    with SafeEmit<GuildVoiceState> {
   GuildVoiceCubit({
     required this.repository,
     required this.authRepository,
@@ -207,7 +209,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       if (state.channelId == channelId) return;
       await leave();
     }
-    emit(
+    emitIfOpen(
       state.copyWith(
         phase: GuildVoicePhase.connecting,
         guildId: guildId,
@@ -220,7 +222,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       final voiceState = await repository.join(guildId, channelId);
       await _connect(guildId, channelId, voiceState);
     } catch (_) {
-      emit(
+      emitIfOpen(
         GuildVoiceState(
           rosters: state.rosters,
           errorMessage: 'Could not join voice channel.',
@@ -243,7 +245,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
     rosters[channelId] = (rosters[channelId] ?? const [])
         .where((p) => p.userId != _myUserId)
         .toList();
-    emit(GuildVoiceState(rosters: rosters));
+    emitIfOpen(GuildVoiceState(rosters: rosters));
     await webRtc?.disconnect();
     try {
       await repository.leave(guildId, channelId);
@@ -263,7 +265,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
         _myUserId,
         (p) => p.copyWith(isMuted: isMuted),
       );
-    emit(state.copyWith(isMuted: isMuted));
+    emitIfOpen(state.copyWith(isMuted: isMuted));
     if (channelId != null) {
       await repository.invokeMuteChanged(
         channelId: channelId,
@@ -284,7 +286,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
         (p) => p.copyWith(isDeafened: isDeafened),
       );
     }
-    emit(state.copyWith(isDeafened: isDeafened));
+    emitIfOpen(state.copyWith(isDeafened: isDeafened));
     if (channelId != null) {
       await repository.invokeDeafenChanged(
         channelId: channelId,
@@ -296,7 +298,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
   Future<void> toggleSpeaker() async {
     if (state.phase != GuildVoicePhase.active) return;
     final isSpeakerOn = !state.isSpeakerOn;
-    emit(state.copyWith(isSpeakerOn: isSpeakerOn));
+    emitIfOpen(state.copyWith(isSpeakerOn: isSpeakerOn));
     await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
   }
 
@@ -405,7 +407,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
   }
 
   void _bumpVideoRevision() =>
-      emit(state.copyWith(videoRevision: state.videoRevision + 1));
+      emitIfOpen(state.copyWith(videoRevision: state.videoRevision + 1));
 
   /// Track getters for the UI - read imperatively (see [GuildVoiceState.videoRevision]
   /// doc comment for why `MediaStreamTrack`s can't live in cubit state itself).
@@ -436,7 +438,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       for (final p in voiceState.participants)
         if (p.userId != _myUserId) _toParticipantState(p),
     ];
-    emit(
+    emitIfOpen(
       state.copyWith(
         phase: GuildVoicePhase.active,
         rosters: rosters,
@@ -465,7 +467,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
         }
       }
     } catch (_) {
-      emit(state.copyWith(errorMessage: 'Could not connect audio.'));
+      emitIfOpen(state.copyWith(errorMessage: 'Could not connect audio.'));
     }
   }
 
@@ -623,7 +625,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
         rosters[channelId] = (rosters[channelId] ?? const [])
             .where((p) => p.userId != _myUserId)
             .toList();
-        emit(
+        emitIfOpen(
           GuildVoiceState(
             rosters: rosters,
             errorMessage: 'You joined this channel from another device.',
@@ -674,7 +676,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState> {
       state.rosters,
     );
     rosters[channelId] = list;
-    emit(state.copyWith(rosters: rosters));
+    emitIfOpen(state.copyWith(rosters: rosters));
   }
 
   void _startHeartbeat() {

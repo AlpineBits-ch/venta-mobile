@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/bloc/safe_emit.dart';
 import '../../friends/data/models/relationship_model.dart';
 import '../../friends/data/relationship_repository.dart';
 import '../data/models/profile_dto.dart';
@@ -57,7 +58,8 @@ class UserProfileState extends Equatable {
 /// Loads another user's profile plus the caller's relationship to them (so
 /// the screen can render Add Friend / Pending / Accept-Reject / Friends
 /// appropriately) - the read-only counterpart to `SelfProfileCubit`.
-class UserProfileCubit extends Cubit<UserProfileState> {
+class UserProfileCubit extends Cubit<UserProfileState>
+    with SafeEmit<UserProfileState> {
   UserProfileCubit({
     required this.userId,
     required this.profileRepository,
@@ -78,7 +80,7 @@ class UserProfileCubit extends Cubit<UserProfileState> {
     try {
       final profile = await profileRepository.getByUserId(userId);
       await relationshipRepository.fetch();
-      emit(
+      emitIfOpen(
         state.copyWith(
           status: UserProfileStatus.loaded,
           profile: profile,
@@ -86,24 +88,24 @@ class UserProfileCubit extends Cubit<UserProfileState> {
         ),
       );
     } catch (_) {
-      emit(state.copyWith(status: UserProfileStatus.error));
+      emitIfOpen(state.copyWith(status: UserProfileStatus.error));
     }
   }
 
   Future<void> sendFriendRequest() async {
     final profile = state.profile;
     if (profile == null) return;
-    emit(state.copyWith(isActionInProgress: true));
+    emitIfOpen(state.copyWith(isActionInProgress: true));
     try {
       await relationshipRepository.addFriend(profile.userName);
-      emit(
+      emitIfOpen(
         state.copyWith(
           isActionInProgress: false,
           relationship: _cachedRelationship,
         ),
       );
     } catch (_) {
-      emit(
+      emitIfOpen(
         state.copyWith(
           isActionInProgress: false,
           errorMessage: 'Could not send a friend request.',
@@ -115,17 +117,17 @@ class UserProfileCubit extends Cubit<UserProfileState> {
   Future<void> acceptRequest() async {
     final relationship = state.relationship;
     if (relationship == null) return;
-    emit(state.copyWith(isActionInProgress: true));
+    emitIfOpen(state.copyWith(isActionInProgress: true));
     try {
       await relationshipRepository.accept(relationship.id);
-      emit(
+      emitIfOpen(
         state.copyWith(
           isActionInProgress: false,
           relationship: _cachedRelationship,
         ),
       );
     } catch (_) {
-      emit(
+      emitIfOpen(
         state.copyWith(
           isActionInProgress: false,
           errorMessage: 'Could not accept that request.',
@@ -139,21 +141,21 @@ class UserProfileCubit extends Cubit<UserProfileState> {
   Future<void> rejectOrRevokeRequest() async {
     final relationship = state.relationship;
     if (relationship == null) return;
-    emit(state.copyWith(isActionInProgress: true));
+    emitIfOpen(state.copyWith(isActionInProgress: true));
     try {
       if (relationship.status == RelationshipStatus.pendingIncoming) {
         await relationshipRepository.reject(relationship.id);
       } else {
         await relationshipRepository.revoke(relationship.id);
       }
-      emit(
+      emitIfOpen(
         state.copyWith(
           isActionInProgress: false,
           relationship: _cachedRelationship,
         ),
       );
     } catch (_) {
-      emit(
+      emitIfOpen(
         state.copyWith(
           isActionInProgress: false,
           errorMessage: 'Could not update that request.',

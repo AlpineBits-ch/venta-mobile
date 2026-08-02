@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
 
+import '../../../core/bloc/safe_emit.dart';
 import '../../../core/realtime/realtime_transport.dart';
 import '../../../core/sound/sound_service.dart';
 import '../../../core/webrtc/track_kind.dart';
@@ -162,7 +163,7 @@ class CallState extends Equatable {
 /// the domain/UI-state counterpart to Alpine desktop's `CallSessionService`.
 /// `CallWebRtcService` (a fresh instance per call) owns the actual WebRTC
 /// plumbing; this cubit just tells it which participants to subscribe to.
-class CallCubit extends Cubit<CallState> {
+class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   CallCubit({
     required this.repository,
     required this.authRepository,
@@ -203,7 +204,7 @@ class CallCubit extends Cubit<CallState> {
     required List<String> participantUserIds,
   }) async {
     if (state.phase != CallPhase.idle) return;
-    emit(state.copyWith(phase: CallPhase.connecting));
+    emitIfOpen(state.copyWith(phase: CallPhase.connecting));
     try {
       final call = await repository.createCall(
         conversationId: conversationId,
@@ -214,26 +215,26 @@ class CallCubit extends Cubit<CallState> {
       await _connect(call);
     } catch (_) {
       _stopOutgoingRingback();
-      emit(const CallState(errorMessage: 'Could not start the call.'));
+      emitIfOpen(const CallState(errorMessage: 'Could not start the call.'));
     }
   }
 
   Future<void> acceptIncomingCall() async {
     final call = state.call;
     if (state.phase != CallPhase.incoming || call == null) return;
-    emit(state.copyWith(phase: CallPhase.connecting));
+    emitIfOpen(state.copyWith(phase: CallPhase.connecting));
     try {
       final accepted = await repository.acceptCall(call.id);
       await _connect(accepted);
     } catch (_) {
-      emit(const CallState(errorMessage: 'Could not join the call.'));
+      emitIfOpen(const CallState(errorMessage: 'Could not join the call.'));
     }
   }
 
   Future<void> declineIncomingCall() async {
     final call = state.call;
     if (state.phase != CallPhase.incoming || call == null) return;
-    emit(const CallState());
+    emitIfOpen(const CallState());
     try {
       await repository.declineCall(call.id);
     } catch (_) {
@@ -249,12 +250,12 @@ class CallCubit extends Cubit<CallState> {
   /// of this or [acceptIncomingCall] applies based on current state.
   Future<void> acceptIncomingCallById(String callId) async {
     if (state.phase != CallPhase.idle) return;
-    emit(state.copyWith(phase: CallPhase.connecting));
+    emitIfOpen(state.copyWith(phase: CallPhase.connecting));
     try {
       final accepted = await repository.acceptCall(callId);
       await _connect(accepted);
     } catch (_) {
-      emit(const CallState(errorMessage: 'Could not join the call.'));
+      emitIfOpen(const CallState(errorMessage: 'Could not join the call.'));
     }
   }
 
@@ -296,7 +297,7 @@ class CallCubit extends Cubit<CallState> {
     _stopOutgoingRingback();
     final webRtc = _webRtc;
     _webRtc = null;
-    emit(const CallState());
+    emitIfOpen(const CallState());
     await webRtc?.disconnect();
     try {
       await repository.leaveCall(call.id);
@@ -308,7 +309,7 @@ class CallCubit extends Cubit<CallState> {
   Future<void> toggleMute() async {
     if (state.phase != CallPhase.active) return;
     final isMuted = !state.isMuted;
-    emit(state.copyWith(isMuted: isMuted));
+    emitIfOpen(state.copyWith(isMuted: isMuted));
     _webRtc?.setMuted(isMuted);
     final callId = state.call?.id;
     if (callId != null) {
@@ -319,14 +320,14 @@ class CallCubit extends Cubit<CallState> {
   void toggleDeafen() {
     if (state.phase != CallPhase.active) return;
     final isDeafened = !state.isDeafened;
-    emit(state.copyWith(isDeafened: isDeafened));
+    emitIfOpen(state.copyWith(isDeafened: isDeafened));
     _webRtc?.setDeafened(isDeafened);
   }
 
   Future<void> toggleSpeaker() async {
     if (state.phase != CallPhase.active) return;
     final isSpeakerOn = !state.isSpeakerOn;
-    emit(state.copyWith(isSpeakerOn: isSpeakerOn));
+    emitIfOpen(state.copyWith(isSpeakerOn: isSpeakerOn));
     await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
   }
 
@@ -355,7 +356,7 @@ class CallCubit extends Cubit<CallState> {
     } catch (_) {
       return; // Capture failed (denied permission, no camera, etc.) - bail.
     }
-    emit(
+    emitIfOpen(
       state.copyWith(
         participants: [
           for (final p in state.participants)
@@ -391,7 +392,7 @@ class CallCubit extends Cubit<CallState> {
       } catch (_) {
         // Best-effort - fall through to update local state regardless.
       }
-      emit(
+      emitIfOpen(
         state.copyWith(
           participants: [
             for (final p in state.participants)
@@ -415,7 +416,7 @@ class CallCubit extends Cubit<CallState> {
         return; // Permission denied/cancelled the system picker - bail.
       }
       _myShareId = shareId;
-      emit(
+      emitIfOpen(
         state.copyWith(
           participants: [
             for (final p in state.participants)
@@ -433,7 +434,7 @@ class CallCubit extends Cubit<CallState> {
   }
 
   void _bumpVideoRevision() =>
-      emit(state.copyWith(videoRevision: state.videoRevision + 1));
+      emitIfOpen(state.copyWith(videoRevision: state.videoRevision + 1));
 
   /// Track getters for the UI - read imperatively, see [CallState.videoRevision]
   /// doc comment for why `MediaStreamTrack`s can't live in cubit state itself.
@@ -450,7 +451,7 @@ class CallCubit extends Cubit<CallState> {
     final participants = call.participants
         .map((p) => CallParticipantState(userId: p.userId))
         .toList();
-    emit(
+    emitIfOpen(
       state.copyWith(
         phase: CallPhase.active,
         call: call,
@@ -481,7 +482,7 @@ class CallCubit extends Cubit<CallState> {
         }
       }
     } catch (_) {
-      emit(state.copyWith(errorMessage: 'Could not connect audio.'));
+      emitIfOpen(state.copyWith(errorMessage: 'Could not connect audio.'));
     }
   }
 
@@ -509,7 +510,7 @@ class CallCubit extends Cubit<CallState> {
         fresh.status == 'Rejected' ||
         !fresh.participants.any((p) => p.userId == _myUserId)) {
       _webRtc = null;
-      emit(const CallState());
+      emitIfOpen(const CallState());
       unawaited(webRtc.disconnect());
       return;
     }
@@ -542,7 +543,7 @@ class CallCubit extends Cubit<CallState> {
       }
     }
 
-    emit(
+    emitIfOpen(
       state.copyWith(
         call: fresh,
         participants: [...remaining, ...newParticipants],
@@ -555,7 +556,7 @@ class CallCubit extends Cubit<CallState> {
       case IncomingCallReceived(:final call):
         final isForMe = call.participants.any((p) => p.userId == _myUserId);
         if (state.phase == CallPhase.idle && isForMe) {
-          emit(CallState(phase: CallPhase.incoming, call: call));
+          emitIfOpen(CallState(phase: CallPhase.incoming, call: call));
         }
 
       case CallParticipantJoined(
@@ -566,7 +567,7 @@ class CallCubit extends Cubit<CallState> {
         if (userId == _myUserId || state.phase != CallPhase.active) return;
         _stopOutgoingRingback();
         if (!state.participants.any((p) => p.userId == userId)) {
-          emit(
+          emitIfOpen(
             state.copyWith(
               participants: [
                 ...state.participants,
@@ -585,7 +586,7 @@ class CallCubit extends Cubit<CallState> {
         );
 
       case CallParticipantLeft(:final userId):
-        emit(
+        emitIfOpen(
           state.copyWith(
             participants: state.participants
                 .where((p) => p.userId != userId)
@@ -597,7 +598,7 @@ class CallCubit extends Cubit<CallState> {
       case CallLifecycleParticipantLeft(:final userId):
         // Roster-level counterpart to CallParticipantLeft above - handled
         // identically (idempotent either way, whichever actually fires).
-        emit(
+        emitIfOpen(
           state.copyWith(
             participants: state.participants
                 .where((p) => p.userId != userId)
@@ -607,7 +608,7 @@ class CallCubit extends Cubit<CallState> {
         _webRtc?.unsubscribeParticipant(userId);
 
       case CallMuteChanged(:final userId, :final isMuted):
-        emit(
+        emitIfOpen(
           state.copyWith(
             participants: [
               for (final p in state.participants)
@@ -617,7 +618,7 @@ class CallCubit extends Cubit<CallState> {
         );
 
       case CallSpeakingChanged(:final userId, :final isSpeaking):
-        emit(
+        emitIfOpen(
           state.copyWith(
             participants: [
               for (final p in state.participants)
@@ -628,7 +629,7 @@ class CallCubit extends Cubit<CallState> {
 
       case CallCameraChanged(:final userId, :final isCameraOn):
         if (userId == _myUserId) return;
-        emit(
+        emitIfOpen(
           state.copyWith(
             participants: [
               for (final p in state.participants)
@@ -654,7 +655,7 @@ class CallCubit extends Cubit<CallState> {
             kind: trackKind,
           ),
         );
-        emit(
+        emitIfOpen(
           state.copyWith(
             participants: [
               for (final p in state.participants)
@@ -677,7 +678,7 @@ class CallCubit extends Cubit<CallState> {
             : null;
         if (trackKind == null) return;
         _webRtc?.unsubscribeTrack(userId: userId, kind: trackKind);
-        emit(
+        emitIfOpen(
           state.copyWith(
             participants: [
               for (final p in state.participants)
@@ -693,7 +694,7 @@ class CallCubit extends Cubit<CallState> {
         );
 
       case CallScreenShareStarted(:final userId):
-        emit(
+        emitIfOpen(
           state.copyWith(
             participants: [
               for (final p in state.participants)
@@ -710,7 +711,7 @@ class CallCubit extends Cubit<CallState> {
         // Another device resolved the ring (accepted, or this device's own
         // decline raced a takeover) - dismiss silently, no "ended" messaging.
         if (state.phase == CallPhase.incoming && state.call?.id == callId) {
-          emit(const CallState());
+          emitIfOpen(const CallState());
         } else if (state.call?.id == callId) {
           _stopOutgoingRingback();
         }
@@ -720,7 +721,7 @@ class CallCubit extends Cubit<CallState> {
           _stopOutgoingRingback();
           final webRtc = _webRtc;
           _webRtc = null;
-          emit(
+          emitIfOpen(
             const CallState(
               disconnectNotice: 'You joined this call on another device.',
             ),
@@ -730,7 +731,7 @@ class CallCubit extends Cubit<CallState> {
 
       case CallAlone(:final callId, :final deadline):
         if (state.call?.id == callId && state.phase == CallPhase.active) {
-          emit(state.copyWith(aloneDeadline: deadline));
+          emitIfOpen(state.copyWith(aloneDeadline: deadline));
         }
 
       case CallEndedRemotely(:final callId, :final reason):
@@ -738,7 +739,7 @@ class CallCubit extends Cubit<CallState> {
           _stopOutgoingRingback();
           final webRtc = _webRtc;
           _webRtc = null;
-          emit(CallState(disconnectNotice: _endedNoticeFor(reason)));
+          emitIfOpen(CallState(disconnectNotice: _endedNoticeFor(reason)));
           unawaited(webRtc?.disconnect());
         }
     }
