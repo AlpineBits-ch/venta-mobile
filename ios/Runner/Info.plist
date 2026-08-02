@@ -37,31 +37,45 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<!-- ITSAppUsesNonExemptEncryption is deliberately absent, which means "ask
-	     me in App Store Connect" rather than making a claim here.
+	<!-- Declared here so App Store Connect stops asking the export-compliance
+	     questionnaire on every single upload. Read docs/export-compliance.md
+	     before touching this.
 
-	     It cannot be false: the app ships its own cryptography rather than only
+	     True, not false: the app ships its own cryptography rather than only
 	     calling Apple's. venta_mls links OpenMLS (RFC 9420) for end-to-end
 	     message encryption, and WebRTC.framework carries BoringSSL for
 	     DTLS-SRTP. Neither is covered by the exemptions, which are for
 	     HTTPS/CryptoKit/Keychain, authentication-only use, or DRM. It said
-	     false until 2026-08-01, which is why no build was ever asked.
+	     false until 2026-08-01, which is why no build was ever asked - that
+	     was a false declaration, not a clever trick.
 
-	     It cannot be true on its own either - altool then demands a matching
-	     ITSEncryptionExportComplianceCode and rejects the upload with
+	     No ITSEncryptionExportComplianceCode accompanies it, and that is
+	     correct rather than an omission. Apple's reference table
+	     (developer.apple.com/help/app-store-connect/reference/
+	     export-compliance-documentation-for-encryption) maps our case -
+	     "industry standard algorithm, not provided within the Apple operating
+	     system" - to exactly one document: the French encryption declaration.
+	     Its own footnote limits that to apps "distributing on the App Store in
+	     France". CCATS is required only for *proprietary* algorithms; every
+	     primitive here is published - HPKE, X25519, Ed25519, AES-GCM,
+	     ChaCha20-Poly1305, HKDF - so this is a self-classified ECCN 5D992.c
+	     mass market item and CCATS does not apply. No France, no document, no
+	     code to match, so a bare true is complete.
+
+	     **This is load-bearing on App Store availability.** A true with no code
+	     was tried on 2026-08-01 and altool rejected it:
 
 	       Invalid Export Compliance Code ... key value [] ... (90592)
 
-	     and that code only exists after a declaration in App Store Connect,
-	     which needs an uploaded build. Absent breaks the loop: the build
-	     uploads, App Store Connect marks it Missing Compliance, you answer the
-	     questionnaire once, and the code it returns can then be pinned here
-	     alongside a true.
-
-	     All of the crypto is standard published algorithms - HPKE, X25519,
-	     Ed25519, AES-GCM, ChaCha20-Poly1305, HKDF - so this is a
-	     self-classified ECCN 5D992.c mass market item. Read
-	     docs/export-compliance.md before touching either key. -->
+	     The most likely reason is that availability still included France (the
+	     default is every territory), which makes the declaration mandatory and
+	     the code with it. So: if France is ever added back under Pricing and
+	     Availability, this key stops being sufficient - either file the French
+	     declaration and pin the returned code here alongside it, or remove the
+	     key entirely and go back to answering the questionnaire per build.
+	     Do not "fix" a 90592 by flipping this to false. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>

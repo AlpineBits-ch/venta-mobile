@@ -41,12 +41,35 @@ application and in the wrong place.
 
 ## 1. Info.plist — done
 
-`ios/Runner/Info.plist` carries **no** `ITSAppUsesNonExemptEncryption` key,
-which means "ask me in App Store Connect". It said `false` until 2026-08-01,
-which is why no build was ever asked the questionnaire.
+`ios/Runner/Info.plist` carries `ITSAppUsesNonExemptEncryption` = **`true`**,
+with **no** `ITSEncryptionExportComplianceCode`. That combination stops App
+Store Connect asking the questionnaire on every upload.
 
-**Do not simply flip it to `true`.** That was tried and it breaks the upload —
-altool then requires a matching `ITSEncryptionExportComplianceCode`:
+It said `false` until 2026-08-01 — a false declaration, not a clever trick —
+then was omitted entirely for 1.0.55/1.0.56, which is why every one of those
+uploads had to be answered by hand.
+
+**Why no compliance code is needed.** Apple's reference table maps our case to
+exactly one document:
+
+| Encryption | Document |
+|---|---|
+| Only Apple OS crypto | none |
+| **Industry standard algorithm, not provided by the Apple OS** | **French encryption declaration¹** |
+| Proprietary algorithms | CCATS **and** French declaration¹ |
+
+> ¹ French encryption declaration form is only required if you're distributing
+> your app on the App Store in France.
+
+Every primitive here is published — HPKE, X25519, Ed25519, AES-GCM,
+ChaCha20-Poly1305, HKDF — so we are row two, not row three, and CCATS does not
+apply. Row two's only document is France-gated, and Venta is not distributed in
+France. No document, therefore no code, therefore a bare `true` is complete.
+
+Source: <https://developer.apple.com/help/app-store-connect/reference/export-compliance-documentation-for-encryption>
+
+**This is load-bearing on App Store availability.** A bare `true` was tried on
+2026-08-01 and altool rejected it:
 
 ```
 [altool] Invalid Export Compliance Code. The export compliance key value []
@@ -54,12 +77,13 @@ in the app's Info.plist doesn't match the key value of the app's export
 compliance documentation. (90592)
 ```
 
-The code only exists once there is an approved declaration in App Store
-Connect, and that needs an uploaded build — so `true` with no code is a
-deadlock. Omitting the key breaks it: the build uploads, ASC flags it
-**Missing Compliance**, you answer the questionnaire (step 3), and the code it
-returns can then be pinned as `ITSEncryptionExportComplianceCode` next to a
-`true` if you want to stop being asked per build.
+The likeliest cause is that availability still included France — the default is
+every territory — which makes the declaration mandatory and the code with it.
+
+**So if France is ever added under Pricing and Availability**, this key stops
+being sufficient. Then either file the French declaration and pin the returned
+code beside the `true`, or drop the key and go back to answering per build.
+Never resolve a 90592 by flipping this to `false`.
 
 ## 2. Annual self-classification report
 
