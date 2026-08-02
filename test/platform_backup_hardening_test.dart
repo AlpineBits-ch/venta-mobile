@@ -138,11 +138,40 @@ void main() {
         contains('keychainAccessGroup = "$accessGroup"'),
         reason: 'the extension and the app would use different keychain groups',
       );
-      expect(swift, contains('kSecAttrAccessGroup: accessGroup'));
+      expect(swift, contains('kSecAttrAccessGroup: keychainAccessGroup'));
       expect(swift, contains('"venta.mls.statekey.\\(userId)"'));
       // Must match AppleOptions.defaultAccountName; a mismatch here is a
       // keychain miss, which reads as "no key" and unseals nothing loudly.
       expect(swift, contains('"flutter_secure_storage_service"'));
+    });
+
+    test('the lookup does not pin an accessibility class', () {
+      final swift = decryptor.readAsStringSync();
+      // `kSecAttrAccessible` is in every query flutter_secure_storage builds
+      // but is *not* part of a generic-password item's primary key. Those two
+      // facts together stranded the app's own items when the class changed
+      // (see MigratingSecureStore), and `_sharedStorage` is deliberately not
+      // wrapped in that migration - so the only thing keeping the extension
+      // immune is that it never names an accessibility class at all. Naming
+      // one here would reintroduce the bug on the one process that has no way
+      // to report it.
+      // The colon matters: the symbol is named in a comment explaining exactly
+      // this, and only a dictionary key puts it into the query.
+      expect(swift, isNot(contains('kSecAttrAccessible:')));
+      expect(swift, isNot(contains('kSecAttrAccessible]')));
+    });
+
+    test('a key in the wrong group is found and named, not missed', () {
+      final swift = decryptor.readAsStringSync();
+      // The group carries a hardcoded team prefix, because
+      // `$(AppIdentifierPrefix)` in the entitlements is substituted at build
+      // time and cannot be read back at runtime. Nothing checks that guess, and
+      // getting it wrong is indistinguishable from having no key. So a miss
+      // retries without the group - which spans only this extension's own group
+      // and `.shared`, never the app's private one - and reports where the item
+      // actually was.
+      expect(swift, contains('query.removeValue(forKey: kSecAttrAccessGroup)'));
+      expect(swift, contains('.stateKeyInAnotherGroup'));
     });
   });
 

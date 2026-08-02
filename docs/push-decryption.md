@@ -219,6 +219,37 @@ fails, the device loses its encrypted history — so it falls back from `rename`
 a recursive copy, and a failure leaves the app usable and re-joining from
 Welcomes.
 
+### Finding out why a notification showed the placeholder
+
+Every failure path in the extension returns "no text", and the caller's only
+response either way is the server's placeholder — so a keychain refusal, a group
+this device was never admitted to, and a ratchet that has moved past the message
+were one indistinguishable outcome, in a process that runs when the app does
+not, with no console attached and no Sentry SDK.
+
+`sentry-cocoa` is a CocoaPod on the `Runner` target and there is no
+NotificationService target in the `Podfile`; adding one is a `project.pbxproj`
+change of exactly the kind this document already records as expensive. So the
+extension writes a reason code to `nse-diagnostics.json` in the App Group
+container (`NseDiagnostics`), and the app drains it to Sentry on launch and on
+resume (`NseDiagnosticsReporter`, wired in `app.dart` beside
+`reloadMessageCache`, which is already making the same trip).
+
+The file is **unsealed on purpose, and therefore carries nothing**: a reason
+code, an `OSStatus`, and ids that were already in the push in the clear. The
+whole class of failure being diagnosed is "the state key was unavailable", and a
+log sealed under that key would be silent in exactly the case it exists for.
+
+Some outcomes are *correct*. `noGroupForGeneration` on a device that was never
+admitted, and `noCiphertext` when the server sent `truncated: 1`, mean the
+placeholder is the honest answer — they are tagged `nse_expected: true` rather
+than dropped, because a run of them on a conversation the app *can* read is how
+a dropped Welcome shows up.
+
+Successes are not written. The app already knows a notification it decrypted
+went well, and a breadcrumb per delivered message would be the file's whole
+budget.
+
 ## The plaintext cache has two writers
 
 This is the part that can lose data rather than merely disappoint.

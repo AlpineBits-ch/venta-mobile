@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'core/di/injector.dart';
 import 'core/mls/mls_session_manager.dart';
 import 'core/mls/mls_store.dart';
+import 'core/push/nse_diagnostics_reporter.dart';
 import 'core/push/push_notification_service.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/back_navigation.dart';
@@ -66,9 +67,21 @@ class _AppState extends State<App> {
         // opened from a notification would otherwise show "cannot decrypt" for
         // the exact message the user tapped.
         unawaited(getIt<MlsStore>().reloadMessageCache());
+        // The same trip to the same container, for the same reason: the
+        // extension ran while this isolate did not, and what it recorded is the
+        // only account of why a notification showed the placeholder.
+        unawaited(_nseDiagnostics.drain());
       },
     );
+
+    // On launch too, not only on resume. A push that arrives while the app is
+    // fully killed - which is most of them - is handled by an extension this
+    // process never sees start or finish, so a cold start is the first moment
+    // anything can report what it found.
+    unawaited(_nseDiagnostics.drain());
   }
+
+  final _nseDiagnostics = NseDiagnosticsReporter();
 
   /// The launch URI, held only until the stream replays it.
   ///

@@ -100,17 +100,44 @@ class NotificationService: UNNotificationServiceExtension {
 
   // MARK: - Decryption
 
+  /// The real text, or nil to leave the server's placeholder in place.
+  ///
+  /// Every nil here is also *recorded*. "Falls back to the placeholder" was one
+  /// outcome covering a dozen causes - a keychain refusal, a group this device
+  /// was never admitted to, a ratchet that has moved on - in a process with no
+  /// console and no debugger, which is why the cause of a real report could not
+  /// be narrowed down from the symptom. See `NseDiagnostics`.
   private func decryptBody(_ info: [AnyHashable: Any]) -> String? {
+    let messageId = string(info, "messageId")
+    let contextId = string(info, "contextId")
+
+    func record(_ outcome: NseOutcome, _ detail: String? = nil) {
+      NseDiagnostics.record(
+        outcome,
+        appGroupIdentifier: Self.appGroupIdentifier,
+        messageId: messageId,
+        contextId: contextId,
+        detail: detail)
+    }
+
     // A plaintext message already has its real body in the alert; there is
     // nothing here to improve.
-    guard string(info, "encrypted") == "1" else { return nil }
+    guard string(info, "encrypted") == "1" else {
+      record(.notEncrypted)
+      return nil
+    }
 
-    guard let messageId = string(info, "messageId"),
-      let contextId = string(info, "contextId"),
+    // The server always sends all three on an encrypted push
+    // (`MessagePushService.BuildData`), so a miss is a contract break rather
+    // than a device problem, and wants to be visible as one.
+    guard let messageId, let contextId,
       let userId = string(info, "recipientUserId")
-    else { return nil }
+    else {
+      record(.noCiphertext, "the push is missing messageId, contextId or recipientUserId")
+      return nil
+    }
 
-    return MlsNotificationDecryptor.decrypt(
+    let result = MlsNotificationDecryptor.decrypt(
       ciphertextB64: string(info, "ciphertext"),
       messageId: messageId,
       contextId: contextId,
@@ -118,6 +145,11 @@ class NotificationService: UNNotificationServiceExtension {
       authorId: string(info, "authorId"),
       generation: string(info, "mlsGeneration").flatMap(Int.init),
       appGroupIdentifier: Self.appGroupIdentifier)
+
+    if let warning = result.warning { record(warning.outcome, warning.detail) }
+    record(result.outcome, result.detail)
+
+    return result.text
   }
 
   // MARK: - Avatar

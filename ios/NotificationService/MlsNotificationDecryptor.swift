@@ -29,7 +29,37 @@ import Security
 /// which is where the app reads history from anyway.
 enum MlsNotificationDecryptor {
 
-  /// Plaintext for `messageId`, or nil when this device cannot produce it.
+  /// What one decrypt attempt produced, and - when it produced nothing - why.
+  ///
+  /// The reason is the point. Every path below used to `return nil`, so a
+  /// keychain refusal, a device that was never admitted to the group, and a
+  /// ratchet that has moved on were one outcome, on the one code path that
+  /// cannot be attached to a debugger. See [NseOutcome].
+  struct DecryptResult {
+    let text: String?
+    let outcome: NseOutcome
+
+    /// Free-form, for the cases where the code alone is not the whole answer -
+    /// an `OSStatus`, the group an item was really found in, the engine's own
+    /// error string. Never message content.
+    let detail: String?
+
+    /// Something worth reporting that did **not** stop the decrypt. There is
+    /// exactly one today - the state key turning up in an access group other
+    /// than the one asked for - and it has to survive a success, because the
+    /// whole point is that it works while being wrong.
+    var warning: (outcome: NseOutcome, detail: String?)?
+
+    static func ok(_ text: String, _ outcome: NseOutcome) -> DecryptResult {
+      DecryptResult(text: text, outcome: outcome, detail: nil)
+    }
+
+    static func failed(_ outcome: NseOutcome, _ detail: String? = nil) -> DecryptResult {
+      DecryptResult(text: nil, outcome: outcome, detail: detail)
+    }
+  }
+
+  /// Plaintext for `messageId`, or the reason this device cannot produce it.
   static func decrypt(
     ciphertextB64: String?,
     messageId: String,
@@ -38,11 +68,11 @@ enum MlsNotificationDecryptor {
     authorId: String?,
     generation: Int?,
     appGroupIdentifier: String
-  ) -> String? {
+  ) -> DecryptResult {
     guard
       let container = FileManager.default.containerURL(
         forSecurityApplicationGroupIdentifier: appGroupIdentifier)
-    else { return nil }
+    else { return .failed(.noAppGroupContainer, appGroupIdentifier) }
 
     let stateDirectory =
       container
@@ -54,7 +84,19 @@ enum MlsNotificationDecryptor {
     // Fetched once and threaded through, because every file below needs it and a
     // keychain that answers on one call and not the next would otherwise have
     // this process reading a sealed cache and writing an unsealed one.
-    let stateKey = Self.stateKey(userId: userId, accessGroup: Self.keychainAccessGroup)
+    let lookup = Self.stateKey(userId: userId)
+    let stateKey = lookup.key
+    // Carried onto whatever this call returns, success or failure. The one
+    // warning that exists means "this worked, and it should not have".
+    let warning: (outcome: NseOutcome, detail: String?)? =
+      stateKey != nil && lookup.outcome != nil
+      ? (lookup.outcome!, lookup.detail) : nil
+
+    func finish(_ result: DecryptResult) -> DecryptResult {
+      var out = result
+      out.warning = warning
+      return out
+    }
 
     // A nil read is "there is something here and this process cannot have it".
     // Not an empty file: carrying on would mean writing over the plaintext of
@@ -62,13 +104,22 @@ enum MlsNotificationDecryptor {
     // produced a second time. The server's placeholder text is the correct
     // outcome.
     //
+    // Reported as the *keychain* failure when that is what it was. A sealed file
+    // is only unreadable here because the key is missing, and "the keychain said
+    // -34018" is an answer where "a file would not open" is a symptom.
+    //
     // The registry comes first because the cache key needs the generation out of
     // it, which `MessagePushDecryptor` also resolves before it looks anything up.
     guard
       let registry = read(
         stateDirectory.appendingPathComponent("mls_group_registry.json"), stateKey: stateKey),
       let cacheFile = read(cacheURL, stateKey: stateKey)
-    else { return nil }
+    else {
+      return finish(
+        stateKey == nil
+          ? .failed(lookup.outcome ?? .stateKeyUnavailable, lookup.detail)
+          : .failed(.sealedFileUnreadable, nil))
+    }
 
     let resolvedGeneration = generation ?? (registry.values["\(contextId)#active"] as? Int)
     let key = cacheKey(contextId: contextId, generation: resolvedGeneration, messageId: messageId)
@@ -83,42 +134,60 @@ enum MlsNotificationDecryptor {
     // reads it: the entries are already on devices, and each one is plaintext
     // MLS will not hand over again.
     if let cached = cache[key] ?? cache[messageId], let text = decodeBase64Text(cached) {
-      return text
+      return finish(.ok(text, .servedFromCache))
     }
 
-    guard let ciphertextB64, !ciphertextB64.isEmpty else { return nil }
+    guard let ciphertextB64, !ciphertextB64.isEmpty else { return finish(.failed(.noCiphertext)) }
 
-    guard let resolvedGeneration,
-      let groupId = registry.values["\(contextId)#\(resolvedGeneration)"] as? String
-    else { return nil }
+    guard let resolvedGeneration else { return finish(.failed(.noGeneration)) }
+
+    guard let groupId = registry.values["\(contextId)#\(resolvedGeneration)"] as? String else {
+      // The ordinary reading is that this device was never admitted to the
+      // group, which makes the placeholder the correct outcome for this
+      // message - and makes a run of these the signal that a Welcome was never
+      // processed.
+      return finish(.failed(.noGroupForGeneration, "generation \(resolvedGeneration)"))
+    }
 
     // `stateKeyB64` is omitted rather than sent as null when there is no key, so
     // the engine's own "sealed but no key was supplied" error is what fires
     // against a sealed `mls_state.json` - see `init_storage`.
     var storageArgs: [String: Any] = ["dir": stateDirectory.path, "readOnly": true]
     if let stateKey { storageArgs["stateKeyB64"] = stateKey }
-    guard call("initStorage", storageArgs) != nil else { return nil }
+    guard call("initStorage", storageArgs) != nil else {
+      return finish(.failed(.initStorageFailed, lastEngineError))
+    }
 
     guard
       let processed = call(
         "processMessage", ["groupIdB64": groupId, "messageB64": ciphertextB64])
-        as? [String: Any],
-      processed["kind"] as? String == "application",
-      let plaintextB64 = processed["plaintext"] as? String
-    else { return nil }
+        as? [String: Any]
+    else { return finish(.failed(.processMessageFailed, lastEngineError)) }
 
-    guard
-      senderIsWhoTheServerSaid(
-        processed: processed, groupId: groupId, authorId: authorId, messageId: messageId)
-    else { return nil }
+    guard processed["kind"] as? String == "application",
+      let plaintextB64 = processed["plaintext"] as? String
+    else {
+      return finish(.failed(.notApplicationMessage, processed["kind"] as? String))
+    }
+
+    let attribution = senderIsWhoTheServerSaid(
+      processed: processed, groupId: groupId, authorId: authorId, messageId: messageId)
+    if let attribution { return finish(.failed(attribution)) }
+
+    guard let text = decodeBase64Text(plaintextB64) else {
+      return finish(.failed(.undecodablePlaintext))
+    }
 
     // MLS reads a message off the wire exactly once, and the app never sees this
     // one arrive. Without this write the conversation the user is about to open
     // shows "cannot decrypt" for the very message they just read in the tray.
+    //
+    // After the attribution check, not before: a message this extension refuses
+    // to show must not be cached as though the app had read it.
     cache[key] = plaintextB64
     writeStringMap(cache, to: cacheURL, stateKey: stateKey)
 
-    return decodeBase64Text(plaintextB64)
+    return finish(.ok(text, .decrypted))
   }
 
   /// Both that the sender is in the group's roster - a compromised server can
@@ -127,20 +196,28 @@ enum MlsNotificationDecryptor {
   /// is specific to notifications: this is the one place the app puts "X said
   /// this" on a lock screen, where nobody will open the conversation and notice
   /// it was someone else.
+  ///
+  /// Returns nil when the attribution holds, or the outcome that refused it.
   private static func senderIsWhoTheServerSaid(
     processed: [String: Any], groupId: String, authorId: String?, messageId: String
-  ) -> Bool {
-    guard let sender = processed["senderIdentity"] as? String else { return true }
+  ) -> NseOutcome? {
+    // **Fail closed.** This used to return "fine" for a message openmls could
+    // not name a sender for, which is the one case where there is nothing at all
+    // to check the server's claim against - and the server is what supplied the
+    // claim. `MessagePushDecryptor._senderIsWhoTheServerSaid` on the Dart side
+    // has always refused it; the lock screen is the half that was permissive.
+    guard let sender = processed["senderIdentity"] as? String else { return .senderUnnamed }
 
     if let authorId, sender != authorId {
       NSLog("[venta] %@ was sealed by %@ but attributed to %@", messageId, sender, authorId)
-      return false
+      return .senderMismatch
     }
 
     guard let members = call("getMembers", ["groupIdB64": groupId]) as? [[String: Any]] else {
-      return false
+      return .senderNotInRoster
     }
     return members.contains { ($0["identity"] as? String) == sender }
+      ? nil : .senderNotInRoster
   }
 
   // MARK: - Keys
@@ -187,23 +264,42 @@ enum MlsNotificationDecryptor {
 
   // MARK: - Engine
 
+  /// The engine's own message from the last failed [call].
+  ///
+  /// Kept because it is the difference between "processMessage failed" - which
+  /// is every decrypt problem there is - and the actual sentence openmls
+  /// produced, which names the epoch, the deserialization fault or the missing
+  /// group. There is no console to read it off in production.
+  private(set) static var lastEngineError: String?
+
   /// One engine command. Returns the decoded `ok` value, or nil on any error -
   /// the caller's only recourse either way is the server's placeholder text.
   private static func call(_ command: String, _ args: [String: Any]) -> Any? {
     guard let argsData = try? JSONSerialization.data(withJSONObject: args),
       let argsJson = String(data: argsData, encoding: .utf8)
-    else { return nil }
+    else {
+      lastEngineError = "\(command): arguments could not be encoded"
+      return nil
+    }
 
-    guard let raw = venta_mls_call(command, argsJson) else { return nil }
+    guard let raw = venta_mls_call(command, argsJson) else {
+      lastEngineError = "\(command): the engine returned nothing"
+      return nil
+    }
     defer { venta_mls_free(raw) }
 
     let response = String(cString: raw)
     guard let data = response.data(using: .utf8),
       let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { return nil }
+    else {
+      lastEngineError = "\(command): the engine's reply did not parse"
+      return nil
+    }
 
     if let error = decoded["error"] {
-      NSLog("[venta] MLS %@ failed: %@", command, String(describing: error))
+      let message = String(describing: error)
+      NSLog("[venta] MLS %@ failed: %@", command, message)
+      lastEngineError = "\(command): \(message)"
       return nil
     }
     // NSNull for commands whose result is void; the caller casts and gets nil,
@@ -235,34 +331,103 @@ enum MlsNotificationDecryptor {
     "venta.mls.statekey.\(userId)"
   }
 
-  /// The key the state files are sealed under, base64, or nil when the keychain
-  /// will not give it up.
+  /// The key the state files are sealed under, base64, plus what to report when
+  /// there isn't one.
   ///
   /// Nothing here creates the item. An extension that minted its own key would
   /// seal the message cache under something the app can never open, which is the
   /// same permanent loss as writing plaintext over it.
-  private static func stateKey(userId: String, accessGroup: String) -> String? {
-    let query: [CFString: Any] = [
+  struct KeyLookup {
+    let key: String?
+
+    /// Nil when the key was where it was supposed to be. Otherwise the thing to
+    /// report - which is not the same as the thing that failed: a key found in
+    /// the wrong group still decrypts, and still has to be said out loud.
+    let outcome: NseOutcome?
+    let detail: String?
+  }
+
+  private static func stateKey(userId: String) -> KeyLookup {
+    let account = stateKeyAccount(userId)
+
+    var query: [CFString: Any] = [
       kSecClass: kSecClassGenericPassword,
-      kSecAttrAccount: stateKeyAccount(userId),
+      kSecAttrAccount: account,
       kSecAttrService: keychainService,
-      kSecAttrAccessGroup: accessGroup,
+      kSecAttrAccessGroup: keychainAccessGroup,
       kSecAttrSynchronizable: false,
       kSecReturnData: true,
       kSecMatchLimit: kSecMatchLimitOne,
     ]
 
+    // `kSecAttrAccessible` is deliberately **not** in this query. It is part of
+    // every query `flutter_secure_storage` builds but is not part of a
+    // generic-password item's primary key, which is what stranded the app's own
+    // items when the accessibility class changed (see `MigratingSecureStore`).
+    // Omitting it here means this lookup matches the item whichever class it was
+    // written under, before or after any Dart-side migration.
     var item: CFTypeRef?
-    let status = SecItemCopyMatching(query as CFDictionary, &item)
-    guard status == errSecSuccess, let data = item as? Data,
-      let key = String(data: data, encoding: .utf8), !key.isEmpty
-    else {
-      if status != errSecItemNotFound {
-        NSLog("[venta] the MLS state key is not readable here: OSStatus %d", status)
-      }
-      return nil
+    var status = SecItemCopyMatching(query as CFDictionary, &item)
+
+    if status == errSecSuccess, let key = Self.string(item), !key.isEmpty {
+      return KeyLookup(key: key, outcome: nil, detail: nil)
     }
-    return key
+
+    // Not in the group this extension asks for. The group string is built from a
+    // hardcoded team prefix - `$(AppIdentifierPrefix)` in the entitlements is a
+    // *build-time* substitution, so the runtime value has to be spelled out and
+    // cannot be checked by the compiler. Dropping `kSecAttrAccessGroup` searches
+    // every group this process is entitled to, which is only its own and
+    // `.shared` (see `NotificationService.entitlements` - the app's private
+    // group is not among them, so this cannot reach the signing key or the auth
+    // tokens).
+    //
+    // Finding it this way is both the answer and the fix: the notification gets
+    // decrypted, and the breadcrumb names the group it was really in, which is
+    // the one fact nobody can obtain from a shipped build otherwise.
+    if status == errSecItemNotFound {
+      query.removeValue(forKey: kSecAttrAccessGroup)
+      query[kSecReturnAttributes] = true
+      item = nil
+      status = SecItemCopyMatching(query as CFDictionary, &item)
+
+      if status == errSecSuccess, let found = item as? [CFString: Any],
+        let data = found[kSecValueData] as? Data,
+        let key = String(data: data, encoding: .utf8), !key.isEmpty
+      {
+        let group = found[kSecAttrAccessGroup] as? String ?? "unknown"
+        NSLog(
+          "[venta] the MLS state key is in %@, not %@", group, keychainAccessGroup)
+        return KeyLookup(
+          key: key,
+          outcome: .stateKeyInAnotherGroup,
+          detail: "found in \(group), expected \(keychainAccessGroup)")
+      }
+    }
+
+    NSLog("[venta] the MLS state key is not readable here: OSStatus %d", status)
+    return KeyLookup(
+      key: nil,
+      outcome: .stateKeyUnavailable,
+      detail: "OSStatus \(status) (\(Self.statusName(status)))")
+  }
+
+  private static func string(_ item: CFTypeRef?) -> String? {
+    guard let data = item as? Data else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+
+  /// So a breadcrumb is greppable against Apple's docs rather than being a bare
+  /// negative number. Mirrors `SecureStorageFault.statusName` on the Dart side.
+  private static func statusName(_ status: OSStatus) -> String {
+    switch status {
+    case errSecItemNotFound: return "errSecItemNotFound"
+    case errSecInteractionNotAllowed: return "errSecInteractionNotAllowed"
+    case errSecMissingEntitlement: return "errSecMissingEntitlement"
+    case errSecAuthFailed: return "errSecAuthFailed"
+    case errSecParam: return "errSecParam"
+    default: return "unmapped"
+    }
   }
 
   // MARK: - Files
