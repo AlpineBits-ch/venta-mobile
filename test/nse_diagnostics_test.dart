@@ -115,4 +115,55 @@ void main() {
     expect(reported, isEmpty);
     expect(await file().exists(), isFalse);
   });
+
+  test('an empty registry is not filed as an exclusion from one group', () async {
+    // The field reports were all `noGroupForGeneration`, which reads as "this
+    // device is not in that group" and was often "this device has no MLS state
+    // whatsoever" - a registry that was never written, a user id resolving to a
+    // directory the app never populated, or an install where MLS never
+    // initialised. One outcome for both left the difference unanswerable from a
+    // shipped build, which is the ambiguity that cost a release cycle on the
+    // keychain issue.
+    await write([
+      {'outcome': 'registryAbsent', 'detail': 'entries 0, for this context 0'},
+      {'outcome': 'registryEmpty', 'detail': 'entries 0, for this context 0'},
+    ]);
+
+    await reporter.drain();
+
+    final byOutcome = {
+      for (final (_, _, tags) in reported) tags!['nse_outcome']: tags,
+    };
+    expect(byOutcome.keys, containsAll(['registryAbsent', 'registryEmpty']));
+    // Not "expected". The placeholder is the right text either way, but holding
+    // no MLS state at all is a larger fault than being outside one group, and
+    // marking it expected is how it stayed hidden.
+    expect(byOutcome['registryAbsent']!['nse_expected'], 'false');
+    expect(byOutcome['registryEmpty']!['nse_expected'], 'false');
+    expect(
+      byOutcome['registryAbsent']!['nse_detail'],
+      'entries 0, for this context 0',
+      reason: 'the census is the number that settles which fault this is',
+    );
+  });
+
+  test('the Swift and Dart outcome codes are the same set', () async {
+    // They are bare strings on the wire between two targets in two languages. A
+    // case added on one side and forgotten on the other reports as `unknown`
+    // from a build that cannot be re-run, so the drift is caught here instead.
+    final swift = File('ios/NotificationService/NseDiagnostics.swift');
+    expect(
+      await swift.exists(),
+      isTrue,
+      reason: 'run from the package root, where the ios/ tree is',
+    );
+
+    final cases = RegExp(r'^\s*case\s+(\w+)\s*$', multiLine: true)
+        .allMatches(await swift.readAsString())
+        .map((m) => m.group(1)!)
+        .toSet();
+
+    expect(cases, isNotEmpty);
+    expect(cases, NseDiagnosticsReporter.knownOutcomes);
+  });
 }

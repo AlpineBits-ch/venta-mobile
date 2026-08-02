@@ -4188,7 +4188,20 @@ mixin _$MlsJoinRequestDto {
  String get id; String get contextId; String? get channelId; String? get conversationId; int get generation; String get requesterUserId;/// Admission is per device, not per user - each device holds its own leaf,
 /// so a user's second device needs its own request.
  String get requesterDeviceId;/// SHA-256 of the key package that would be added.
- String get keyPackageHash;/// The requester's long-lived identity fingerprint, for out-of-band
+ String get keyPackageHash;/// The exact key-package bytes, present only on requests belonging to the
+/// **reading** account (contract §L.3 and `MlsJoinRequestService.cs:217`).
+///
+/// Null for a peer's request, which is correct and not a failure: a peer has
+/// no use for the bytes until the approval threshold is met, and
+/// [MlsJoinRequestApprovalResultDto.keyPackage] is where they arrive then.
+///
+/// Omitting this field is what made own-device admission unreachable. The
+/// §G ceremony ends with *this* device minting an Add commit over these
+/// bytes; with nowhere to put them the bridge passed an empty string into
+/// `inspectKeyPackage`, which cannot parse and never could, so every
+/// automatic admission failed at the last step with the proof already
+/// verified.
+ String? get keyPackage;/// The requester's long-lived identity fingerprint, for out-of-band
 /// comparison. Stable across all their key packages, which is what makes it
 /// readable aloud - a key-package hash changes on every request.
  String get signatureKeyFingerprint;@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState get state; DateTime? get createdAt; DateTime? get expiresAt; int get requiredApprovals;/// Who has already vouched. Lets a reviewer see they have approved, and see
@@ -4216,16 +4229,16 @@ $MlsJoinRequestDtoCopyWith<MlsJoinRequestDto> get copyWith => _$MlsJoinRequestDt
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsJoinRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requesterUserId, requesterUserId) || other.requesterUserId == requesterUserId)&&(identical(other.requesterDeviceId, requesterDeviceId) || other.requesterDeviceId == requesterDeviceId)&&(identical(other.keyPackageHash, keyPackageHash) || other.keyPackageHash == keyPackageHash)&&(identical(other.signatureKeyFingerprint, signatureKeyFingerprint) || other.signatureKeyFingerprint == signatureKeyFingerprint)&&(identical(other.state, state) || other.state == state)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.requiredApprovals, requiredApprovals) || other.requiredApprovals == requiredApprovals)&&const DeepCollectionEquality().equals(other.approverUserIds, approverUserIds)&&(identical(other.requiresManualApproval, requiresManualApproval) || other.requiresManualApproval == requiresManualApproval)&&(identical(other.requesterDeviceName, requesterDeviceName) || other.requesterDeviceName == requesterDeviceName));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsJoinRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requesterUserId, requesterUserId) || other.requesterUserId == requesterUserId)&&(identical(other.requesterDeviceId, requesterDeviceId) || other.requesterDeviceId == requesterDeviceId)&&(identical(other.keyPackageHash, keyPackageHash) || other.keyPackageHash == keyPackageHash)&&(identical(other.keyPackage, keyPackage) || other.keyPackage == keyPackage)&&(identical(other.signatureKeyFingerprint, signatureKeyFingerprint) || other.signatureKeyFingerprint == signatureKeyFingerprint)&&(identical(other.state, state) || other.state == state)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.requiredApprovals, requiredApprovals) || other.requiredApprovals == requiredApprovals)&&const DeepCollectionEquality().equals(other.approverUserIds, approverUserIds)&&(identical(other.requiresManualApproval, requiresManualApproval) || other.requiresManualApproval == requiresManualApproval)&&(identical(other.requesterDeviceName, requesterDeviceName) || other.requesterDeviceName == requesterDeviceName));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,contextId,channelId,conversationId,generation,requesterUserId,requesterDeviceId,keyPackageHash,signatureKeyFingerprint,state,createdAt,expiresAt,requiredApprovals,const DeepCollectionEquality().hash(approverUserIds),requiresManualApproval,requesterDeviceName);
+int get hashCode => Object.hash(runtimeType,id,contextId,channelId,conversationId,generation,requesterUserId,requesterDeviceId,keyPackageHash,keyPackage,signatureKeyFingerprint,state,createdAt,expiresAt,requiredApprovals,const DeepCollectionEquality().hash(approverUserIds),requiresManualApproval,requesterDeviceName);
 
 @override
 String toString() {
-  return 'MlsJoinRequestDto(id: $id, contextId: $contextId, channelId: $channelId, conversationId: $conversationId, generation: $generation, requesterUserId: $requesterUserId, requesterDeviceId: $requesterDeviceId, keyPackageHash: $keyPackageHash, signatureKeyFingerprint: $signatureKeyFingerprint, state: $state, createdAt: $createdAt, expiresAt: $expiresAt, requiredApprovals: $requiredApprovals, approverUserIds: $approverUserIds, requiresManualApproval: $requiresManualApproval, requesterDeviceName: $requesterDeviceName)';
+  return 'MlsJoinRequestDto(id: $id, contextId: $contextId, channelId: $channelId, conversationId: $conversationId, generation: $generation, requesterUserId: $requesterUserId, requesterDeviceId: $requesterDeviceId, keyPackageHash: $keyPackageHash, keyPackage: $keyPackage, signatureKeyFingerprint: $signatureKeyFingerprint, state: $state, createdAt: $createdAt, expiresAt: $expiresAt, requiredApprovals: $requiredApprovals, approverUserIds: $approverUserIds, requiresManualApproval: $requiresManualApproval, requesterDeviceName: $requesterDeviceName)';
 }
 
 
@@ -4236,7 +4249,7 @@ abstract mixin class $MlsJoinRequestDtoCopyWith<$Res>  {
   factory $MlsJoinRequestDtoCopyWith(MlsJoinRequestDto value, $Res Function(MlsJoinRequestDto) _then) = _$MlsJoinRequestDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String contextId, String? channelId, String? conversationId, int generation, String requesterUserId, String requesterDeviceId, String keyPackageHash, String signatureKeyFingerprint,@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState state, DateTime? createdAt, DateTime? expiresAt, int requiredApprovals, List<String> approverUserIds, bool requiresManualApproval, String? requesterDeviceName
+ String id, String contextId, String? channelId, String? conversationId, int generation, String requesterUserId, String requesterDeviceId, String keyPackageHash, String? keyPackage, String signatureKeyFingerprint,@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState state, DateTime? createdAt, DateTime? expiresAt, int requiredApprovals, List<String> approverUserIds, bool requiresManualApproval, String? requesterDeviceName
 });
 
 
@@ -4253,7 +4266,7 @@ class _$MlsJoinRequestDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsJoinRequestDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? contextId = null,Object? channelId = freezed,Object? conversationId = freezed,Object? generation = null,Object? requesterUserId = null,Object? requesterDeviceId = null,Object? keyPackageHash = null,Object? signatureKeyFingerprint = null,Object? state = null,Object? createdAt = freezed,Object? expiresAt = freezed,Object? requiredApprovals = null,Object? approverUserIds = null,Object? requiresManualApproval = null,Object? requesterDeviceName = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? contextId = null,Object? channelId = freezed,Object? conversationId = freezed,Object? generation = null,Object? requesterUserId = null,Object? requesterDeviceId = null,Object? keyPackageHash = null,Object? keyPackage = freezed,Object? signatureKeyFingerprint = null,Object? state = null,Object? createdAt = freezed,Object? expiresAt = freezed,Object? requiredApprovals = null,Object? approverUserIds = null,Object? requiresManualApproval = null,Object? requesterDeviceName = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
@@ -4263,7 +4276,8 @@ as String?,generation: null == generation ? _self.generation : generation // ign
 as int,requesterUserId: null == requesterUserId ? _self.requesterUserId : requesterUserId // ignore: cast_nullable_to_non_nullable
 as String,requesterDeviceId: null == requesterDeviceId ? _self.requesterDeviceId : requesterDeviceId // ignore: cast_nullable_to_non_nullable
 as String,keyPackageHash: null == keyPackageHash ? _self.keyPackageHash : keyPackageHash // ignore: cast_nullable_to_non_nullable
-as String,signatureKeyFingerprint: null == signatureKeyFingerprint ? _self.signatureKeyFingerprint : signatureKeyFingerprint // ignore: cast_nullable_to_non_nullable
+as String,keyPackage: freezed == keyPackage ? _self.keyPackage : keyPackage // ignore: cast_nullable_to_non_nullable
+as String?,signatureKeyFingerprint: null == signatureKeyFingerprint ? _self.signatureKeyFingerprint : signatureKeyFingerprint // ignore: cast_nullable_to_non_nullable
 as String,state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as MlsJoinRequestState,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
@@ -4353,10 +4367,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds,  bool requiresManualApproval,  String? requesterDeviceName)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String? keyPackage,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds,  bool requiresManualApproval,  String? requesterDeviceName)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _MlsJoinRequestDto() when $default != null:
-return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds,_that.requiresManualApproval,_that.requesterDeviceName);case _:
+return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.keyPackage,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds,_that.requiresManualApproval,_that.requesterDeviceName);case _:
   return orElse();
 
 }
@@ -4374,10 +4388,10 @@ return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds,  bool requiresManualApproval,  String? requesterDeviceName)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String? keyPackage,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds,  bool requiresManualApproval,  String? requesterDeviceName)  $default,) {final _that = this;
 switch (_that) {
 case _MlsJoinRequestDto():
-return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds,_that.requiresManualApproval,_that.requesterDeviceName);}
+return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.keyPackage,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds,_that.requiresManualApproval,_that.requesterDeviceName);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -4391,10 +4405,10 @@ return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds,  bool requiresManualApproval,  String? requesterDeviceName)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String contextId,  String? channelId,  String? conversationId,  int generation,  String requesterUserId,  String requesterDeviceId,  String keyPackageHash,  String? keyPackage,  String signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending)  MlsJoinRequestState state,  DateTime? createdAt,  DateTime? expiresAt,  int requiredApprovals,  List<String> approverUserIds,  bool requiresManualApproval,  String? requesterDeviceName)?  $default,) {final _that = this;
 switch (_that) {
 case _MlsJoinRequestDto() when $default != null:
-return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds,_that.requiresManualApproval,_that.requesterDeviceName);case _:
+return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_that.generation,_that.requesterUserId,_that.requesterDeviceId,_that.keyPackageHash,_that.keyPackage,_that.signatureKeyFingerprint,_that.state,_that.createdAt,_that.expiresAt,_that.requiredApprovals,_that.approverUserIds,_that.requiresManualApproval,_that.requesterDeviceName);case _:
   return null;
 
 }
@@ -4406,7 +4420,7 @@ return $default(_that.id,_that.contextId,_that.channelId,_that.conversationId,_t
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _MlsJoinRequestDto implements MlsJoinRequestDto {
-  const _MlsJoinRequestDto({required this.id, required this.contextId, this.channelId, this.conversationId, required this.generation, required this.requesterUserId, required this.requesterDeviceId, required this.keyPackageHash, required this.signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending) required this.state, this.createdAt, this.expiresAt, this.requiredApprovals = 0, final  List<String> approverUserIds = const <String>[], this.requiresManualApproval = false, this.requesterDeviceName}): _approverUserIds = approverUserIds;
+  const _MlsJoinRequestDto({required this.id, required this.contextId, this.channelId, this.conversationId, required this.generation, required this.requesterUserId, required this.requesterDeviceId, required this.keyPackageHash, this.keyPackage, required this.signatureKeyFingerprint, @JsonKey(unknownEnumValue: MlsJoinRequestState.pending) required this.state, this.createdAt, this.expiresAt, this.requiredApprovals = 0, final  List<String> approverUserIds = const <String>[], this.requiresManualApproval = false, this.requesterDeviceName}): _approverUserIds = approverUserIds;
   factory _MlsJoinRequestDto.fromJson(Map<String, dynamic> json) => _$MlsJoinRequestDtoFromJson(json);
 
 @override final  String id;
@@ -4420,6 +4434,20 @@ class _MlsJoinRequestDto implements MlsJoinRequestDto {
 @override final  String requesterDeviceId;
 /// SHA-256 of the key package that would be added.
 @override final  String keyPackageHash;
+/// The exact key-package bytes, present only on requests belonging to the
+/// **reading** account (contract §L.3 and `MlsJoinRequestService.cs:217`).
+///
+/// Null for a peer's request, which is correct and not a failure: a peer has
+/// no use for the bytes until the approval threshold is met, and
+/// [MlsJoinRequestApprovalResultDto.keyPackage] is where they arrive then.
+///
+/// Omitting this field is what made own-device admission unreachable. The
+/// §G ceremony ends with *this* device minting an Add commit over these
+/// bytes; with nowhere to put them the bridge passed an empty string into
+/// `inspectKeyPackage`, which cannot parse and never could, so every
+/// automatic admission failed at the last step with the proof already
+/// verified.
+@override final  String? keyPackage;
 /// The requester's long-lived identity fingerprint, for out-of-band
 /// comparison. Stable across all their key packages, which is what makes it
 /// readable aloud - a key-package hash changes on every request.
@@ -4466,16 +4494,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsJoinRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requesterUserId, requesterUserId) || other.requesterUserId == requesterUserId)&&(identical(other.requesterDeviceId, requesterDeviceId) || other.requesterDeviceId == requesterDeviceId)&&(identical(other.keyPackageHash, keyPackageHash) || other.keyPackageHash == keyPackageHash)&&(identical(other.signatureKeyFingerprint, signatureKeyFingerprint) || other.signatureKeyFingerprint == signatureKeyFingerprint)&&(identical(other.state, state) || other.state == state)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.requiredApprovals, requiredApprovals) || other.requiredApprovals == requiredApprovals)&&const DeepCollectionEquality().equals(other._approverUserIds, _approverUserIds)&&(identical(other.requiresManualApproval, requiresManualApproval) || other.requiresManualApproval == requiresManualApproval)&&(identical(other.requesterDeviceName, requesterDeviceName) || other.requesterDeviceName == requesterDeviceName));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsJoinRequestDto&&(identical(other.id, id) || other.id == id)&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.requesterUserId, requesterUserId) || other.requesterUserId == requesterUserId)&&(identical(other.requesterDeviceId, requesterDeviceId) || other.requesterDeviceId == requesterDeviceId)&&(identical(other.keyPackageHash, keyPackageHash) || other.keyPackageHash == keyPackageHash)&&(identical(other.keyPackage, keyPackage) || other.keyPackage == keyPackage)&&(identical(other.signatureKeyFingerprint, signatureKeyFingerprint) || other.signatureKeyFingerprint == signatureKeyFingerprint)&&(identical(other.state, state) || other.state == state)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.requiredApprovals, requiredApprovals) || other.requiredApprovals == requiredApprovals)&&const DeepCollectionEquality().equals(other._approverUserIds, _approverUserIds)&&(identical(other.requiresManualApproval, requiresManualApproval) || other.requiresManualApproval == requiresManualApproval)&&(identical(other.requesterDeviceName, requesterDeviceName) || other.requesterDeviceName == requesterDeviceName));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,contextId,channelId,conversationId,generation,requesterUserId,requesterDeviceId,keyPackageHash,signatureKeyFingerprint,state,createdAt,expiresAt,requiredApprovals,const DeepCollectionEquality().hash(_approverUserIds),requiresManualApproval,requesterDeviceName);
+int get hashCode => Object.hash(runtimeType,id,contextId,channelId,conversationId,generation,requesterUserId,requesterDeviceId,keyPackageHash,keyPackage,signatureKeyFingerprint,state,createdAt,expiresAt,requiredApprovals,const DeepCollectionEquality().hash(_approverUserIds),requiresManualApproval,requesterDeviceName);
 
 @override
 String toString() {
-  return 'MlsJoinRequestDto(id: $id, contextId: $contextId, channelId: $channelId, conversationId: $conversationId, generation: $generation, requesterUserId: $requesterUserId, requesterDeviceId: $requesterDeviceId, keyPackageHash: $keyPackageHash, signatureKeyFingerprint: $signatureKeyFingerprint, state: $state, createdAt: $createdAt, expiresAt: $expiresAt, requiredApprovals: $requiredApprovals, approverUserIds: $approverUserIds, requiresManualApproval: $requiresManualApproval, requesterDeviceName: $requesterDeviceName)';
+  return 'MlsJoinRequestDto(id: $id, contextId: $contextId, channelId: $channelId, conversationId: $conversationId, generation: $generation, requesterUserId: $requesterUserId, requesterDeviceId: $requesterDeviceId, keyPackageHash: $keyPackageHash, keyPackage: $keyPackage, signatureKeyFingerprint: $signatureKeyFingerprint, state: $state, createdAt: $createdAt, expiresAt: $expiresAt, requiredApprovals: $requiredApprovals, approverUserIds: $approverUserIds, requiresManualApproval: $requiresManualApproval, requesterDeviceName: $requesterDeviceName)';
 }
 
 
@@ -4486,7 +4514,7 @@ abstract mixin class _$MlsJoinRequestDtoCopyWith<$Res> implements $MlsJoinReques
   factory _$MlsJoinRequestDtoCopyWith(_MlsJoinRequestDto value, $Res Function(_MlsJoinRequestDto) _then) = __$MlsJoinRequestDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String contextId, String? channelId, String? conversationId, int generation, String requesterUserId, String requesterDeviceId, String keyPackageHash, String signatureKeyFingerprint,@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState state, DateTime? createdAt, DateTime? expiresAt, int requiredApprovals, List<String> approverUserIds, bool requiresManualApproval, String? requesterDeviceName
+ String id, String contextId, String? channelId, String? conversationId, int generation, String requesterUserId, String requesterDeviceId, String keyPackageHash, String? keyPackage, String signatureKeyFingerprint,@JsonKey(unknownEnumValue: MlsJoinRequestState.pending) MlsJoinRequestState state, DateTime? createdAt, DateTime? expiresAt, int requiredApprovals, List<String> approverUserIds, bool requiresManualApproval, String? requesterDeviceName
 });
 
 
@@ -4503,7 +4531,7 @@ class __$MlsJoinRequestDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsJoinRequestDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? contextId = null,Object? channelId = freezed,Object? conversationId = freezed,Object? generation = null,Object? requesterUserId = null,Object? requesterDeviceId = null,Object? keyPackageHash = null,Object? signatureKeyFingerprint = null,Object? state = null,Object? createdAt = freezed,Object? expiresAt = freezed,Object? requiredApprovals = null,Object? approverUserIds = null,Object? requiresManualApproval = null,Object? requesterDeviceName = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? contextId = null,Object? channelId = freezed,Object? conversationId = freezed,Object? generation = null,Object? requesterUserId = null,Object? requesterDeviceId = null,Object? keyPackageHash = null,Object? keyPackage = freezed,Object? signatureKeyFingerprint = null,Object? state = null,Object? createdAt = freezed,Object? expiresAt = freezed,Object? requiredApprovals = null,Object? approverUserIds = null,Object? requiresManualApproval = null,Object? requesterDeviceName = freezed,}) {
   return _then(_MlsJoinRequestDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
@@ -4513,7 +4541,8 @@ as String?,generation: null == generation ? _self.generation : generation // ign
 as int,requesterUserId: null == requesterUserId ? _self.requesterUserId : requesterUserId // ignore: cast_nullable_to_non_nullable
 as String,requesterDeviceId: null == requesterDeviceId ? _self.requesterDeviceId : requesterDeviceId // ignore: cast_nullable_to_non_nullable
 as String,keyPackageHash: null == keyPackageHash ? _self.keyPackageHash : keyPackageHash // ignore: cast_nullable_to_non_nullable
-as String,signatureKeyFingerprint: null == signatureKeyFingerprint ? _self.signatureKeyFingerprint : signatureKeyFingerprint // ignore: cast_nullable_to_non_nullable
+as String,keyPackage: freezed == keyPackage ? _self.keyPackage : keyPackage // ignore: cast_nullable_to_non_nullable
+as String?,signatureKeyFingerprint: null == signatureKeyFingerprint ? _self.signatureKeyFingerprint : signatureKeyFingerprint // ignore: cast_nullable_to_non_nullable
 as String,state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as MlsJoinRequestState,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable

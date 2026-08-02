@@ -20,6 +20,30 @@ class JoinRequestVerificationException implements Exception {
   String toString() => 'JoinRequestVerificationException: $message';
 }
 
+/// One context the launch sweep may ask to be admitted to.
+///
+/// [serverSaysEncrypted] comes off the conversation list the caller already
+/// holds, so the sweep needs no per-context request to decide. It is only ever
+/// used to decide whether to *ask*: the other direction is answered by the local
+/// floor (`MlsService.hasEverHeldGroup`), so a server calling an encrypted
+/// context plaintext cannot quietly drop it from the candidate set.
+///
+/// Alpine's equivalent carries a third field, because its `shouldProbe` reads a
+/// health entry whose reason can be `removed`. Mobile answers the same question
+/// from `MlsService.wasRemovedHere`, so it is deliberately **not** a candidate
+/// field: it is per-installation state written by the §E9 push and it has to
+/// survive a relaunch, which a value handed in by a caller does not.
+///
+/// `MlsFailureLog` is deliberately not its home either. It counts decrypt and
+/// join failures with no cause attached, so nothing in it separates "removed on
+/// purpose" from "behind on commits", and it resets on restart - fatal for a
+/// signal the *launch* sweep is the only reader of.
+typedef MlsAdmissionCandidate = ({
+  String contextId,
+  bool isChannel,
+  bool serverSaysEncrypted,
+});
+
 /// Getting into, and letting people into, an encrypted context.
 ///
 /// The server cannot admit anyone — it holds no group keys, so only a current
@@ -93,40 +117,106 @@ class MlsJoinRequestService {
     );
   }
 
+  /// Most contexts one launch will actually probe.
+  ///
+  /// A device that has just lost its keys is locked out of *everything*, so an
+  /// uncapped sweep turns one bad launch into a burst of key-package mints and
+  /// join requests - exactly the shape the server's rate limits exist to refuse,
+  /// and arriving all at once helps nobody. The rest are deferred to the next
+  /// launch, which is minutes away for a phone.
+  static const maxContextsPerSweep = 10;
+
   /// Submits a join request for every encrypted context this device holds no
-  /// group for. Contract §B's discovery step.
+  /// group for. Contract §B's discovery step, run at launch.
+  ///
+  /// **Why this exists rather than leaving it to the banner.** Without it,
+  /// exclusion is discovered one conversation at a time, by the user opening
+  /// each one and reading a notice - which is no use at all to somebody who does
+  /// not know which conversations they are missing from, and no use whatsoever
+  /// for the ones they never open. A device stranded by a bug stays stranded
+  /// until it is noticed. That is not self-healing; this is. Alpine runs the
+  /// same sweep from `runMlsLaunch`, which is the only reason a desktop that had
+  /// been left out ever managed to ask.
   ///
   /// Client-driven rather than push-driven on purpose: the server has no way to
   /// know a device is missing a group, because it never learns which devices
   /// hold a leaf. Idempotent server-side - resubmitting an open request returns
   /// the existing one - so this is safe to run on every launch.
   ///
+  /// **Cheap when nothing is wrong.** [_shouldProbe] decides every candidate
+  /// from local state alone, so a healthy device completes the whole sweep
+  /// without a single request. It used to call `getState` per context before it
+  /// could tell, which made the common case cost one round trip per
+  /// conversation.
+  ///
   /// Returns the contexts a request was raised for. Failures are per context and
   /// non-fatal: one conversation refusing must not stop the rest.
   Future<List<String>> requestAccessWhereMissing(
-    Iterable<({String contextId, bool isChannel})> contexts,
+    Iterable<MlsAdmissionCandidate> candidates,
   ) async {
+    // No signing key loaded means no key package to offer and nothing to join
+    // with. Asking would fail on every candidate and leave a wall of failures
+    // behind it.
     if (!mls.isUnlocked) return const [];
 
     final requested = <String>[];
-    for (final context in contexts) {
-      if (mls.activeGroupId(context.contextId) != null) continue;
-      try {
-        final state = await api.getState(
-          contextId: context.contextId,
-          isChannel: context.isChannel,
-        );
-        if (!state.encrypted) continue;
+    var probed = 0;
 
-        await requestAccess(context.contextId, isChannel: context.isChannel);
-        requested.add(context.contextId);
+    for (final candidate in candidates) {
+      if (!_shouldProbe(candidate)) continue;
+      if (probed >= maxContextsPerSweep) {
+        debugPrint(
+          'MLS: deferring the rest of the admission sweep after '
+          '$maxContextsPerSweep contexts',
+        );
+        break;
+      }
+      probed++;
+
+      // Sequential on purpose, for the same reason as the cap: these are
+      // recovery requests from a device that is already locked out, and firing
+      // them in parallel is the burst the limits are there to stop.
+      try {
+        await requestAccess(candidate.contextId, isChannel: candidate.isChannel);
+        requested.add(candidate.contextId);
       } catch (e) {
         debugPrint(
-          'MLS: could not ask for access to ${context.contextId}: $e',
+          'MLS: could not ask for access to ${candidate.contextId}: $e',
         );
       }
     }
     return requested;
+  }
+
+  /// Whether a candidate is worth a network round trip. Every check is local.
+  ///
+  /// Returns false for the three cases where asking would be wrong rather than
+  /// merely wasteful.
+  bool _shouldProbe(MlsAdmissionCandidate candidate) {
+    // Already in the group. The overwhelmingly common answer, and it costs
+    // nothing to reach.
+    if (mls.activeGroupId(candidate.contextId) != null) return false;
+
+    // Somebody removed this device on purpose (§E9). Checked before the floor
+    // below rather than after, because a removed device *has* held a group here
+    // - the floor is satisfied and would keep it a candidate forever.
+    //
+    // A sweep that asked to be let back in on every launch would turn one
+    // deliberate removal into a recurring approval prompt for the person who
+    // performed it: spam, and a way to wear down by repetition a decision that
+    // was made once, which is the outcome §E9 exists to prevent. There is
+    // deliberately no override. The way back from a removal the user has changed
+    // their mind about is the manual re-link affordance, which costs a human
+    // pressing a button rather than a loop that runs on its own.
+    if (mls.wasRemovedHere(candidate.contextId)) return false;
+
+
+    // Nothing to join. The local floor outranks the wire: a context this device
+    // has ever held a group for stays a candidate even when the server now calls
+    // it plaintext, because that claim is the one thing the floor exists to
+    // disbelieve.
+    return candidate.serverSaysEncrypted ||
+        mls.hasEverHeldGroup(candidate.contextId);
   }
 
   /// Rejoins a context by **external commit**, using the GroupInfo the server

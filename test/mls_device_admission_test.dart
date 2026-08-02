@@ -304,6 +304,42 @@ void main() {
     });
   });
 
+  test('a request with no key package admits nothing, and says so', () async {
+    // The bridge used to pass `''` here, because the DTO had no field to carry
+    // the bytes. That reached `inspectKeyPackage`, which cannot parse an empty
+    // string, so a perfectly good proof failed four layers away with an error
+    // about key package deserialization. Reported as its own outcome instead:
+    // nothing is wrong with the proof, there is simply nothing to commit.
+    proofVerifiesAs(true);
+
+    final outcome = await service.tryAdmit(
+      contextId: _context,
+      isChannel: false,
+      request: _request(),
+      userId: 'user_me',
+      keyPackage: null,
+    );
+
+    expect(outcome, AdmissionOutcome.keyPackageMissing);
+    verifyNever(
+      () => joinRequests.admit(
+        contextId: any(named: 'contextId'),
+        request: any(named: 'request'),
+        keyPackage: any(named: 'keyPackage'),
+        isChannel: any(named: 'isChannel'),
+      ),
+    );
+    // Not even a round trip: there is no proof worth fetching for a call that
+    // could not act on it.
+    verifyNever(
+      () => api.fetchChallenge(
+        contextId: any(named: 'contextId'),
+        isChannel: any(named: 'isChannel'),
+        requestId: any(named: 'requestId'),
+      ),
+    );
+  });
+
   test('a device with no master key defers rather than guessing', () async {
     // It can verify nothing, so it must not decide anything. Another device of
     // the account handles it, or a human does.

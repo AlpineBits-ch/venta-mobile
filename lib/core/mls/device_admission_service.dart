@@ -30,6 +30,17 @@ enum AdmissionOutcome {
   /// This device cannot decide - it has no master key unlocked, so it can verify
   /// nothing. Another device of the account has to handle it.
   cannotVerify,
+
+  /// The request arrived without the bytes to add.
+  ///
+  /// Distinct from every other outcome because nothing is wrong with the *proof*
+  /// - the ceremony may have completed perfectly and there is still nothing to
+  /// commit. It means the read that produced the request did not include the key
+  /// package, which for one of our own devices should not happen: the server
+  /// returns it precisely for the calling account. Reported rather than passed
+  /// on as an empty string, which is what used to happen and turned a missing
+  /// field into an unparseable key package four layers away.
+  keyPackageMissing,
 }
 
 /// Both halves of contract §G's device admission.
@@ -176,10 +187,18 @@ class DeviceAdmissionService {
     required bool isChannel,
     required MlsJoinRequestDto request,
     required String userId,
-    required String keyPackage,
+    required String? keyPackage,
   }) async {
     final deviceId = deviceIdService.deviceIdOrNull;
     if (deviceId == null) return AdmissionOutcome.cannotVerify;
+
+    // Checked before anything is fetched. There is no point issuing round trips
+    // for a proof this call could not act on even if it verified, and answering
+    // `rejected` after a good proof because a *field* was absent would blame the
+    // joining device for the server's omission.
+    if (keyPackage == null || keyPackage.isEmpty) {
+      return AdmissionOutcome.keyPackageMissing;
+    }
 
     final masterKey = await masterKeys.peek(userId: userId, deviceId: deviceId);
     if (masterKey == null) return AdmissionOutcome.cannotVerify;

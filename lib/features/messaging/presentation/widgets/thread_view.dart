@@ -20,6 +20,7 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/mls/mls_sync_service.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../mls/presentation/widgets/channel_access_banner.dart';
+import '../../../mls/presentation/widgets/mls_join_request_review.dart';
 import '../../../mls/presentation/widgets/encrypted_badge.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/channel_dto.dart';
@@ -1109,6 +1110,21 @@ class _ThreadViewState extends State<ThreadView> {
           if (_lockedOutOfEncryption)
             ChannelAccessBanner(
               key: ValueKey(context.read<MessageThreadBloc>().repository.contextId),
+              contextId: context.read<MessageThreadBloc>().repository.contextId,
+              isChannel: widget.guildId != null,
+            ),
+          // The other side of the same coin, and the reason a real report said
+          // "neither mobile or anything else shows a prompt": a request against
+          // a *conversation* had nowhere to be reviewed at all, because the only
+          // queue in the app lived behind guild channel settings. Shown whenever
+          // the context is encrypted, including to a device that is itself
+          // locked out - it will say it cannot act rather than pretending the
+          // request is not there.
+          if (_serverEncrypted || _isEncrypted)
+            MlsJoinRequestReview(
+              key: ValueKey(
+                'review-${context.read<MessageThreadBloc>().repository.contextId}',
+              ),
               contextId: context.read<MessageThreadBloc>().repository.contextId,
               isChannel: widget.guildId != null,
             ),

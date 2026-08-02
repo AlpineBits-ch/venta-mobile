@@ -150,6 +150,21 @@ class MlsStore {
 
   static String _activeKey(String contextId) => '$contextId#active';
 
+  /// Marks a context this device was deliberately evicted from (§E9).
+  ///
+  /// Shares the registry map, and therefore its file, its atomic write and its
+  /// sealing, because the one property this signal must have is surviving a
+  /// relaunch: the sweep it suppresses runs *at launch*, so anything that reset
+  /// on restart would suppress nothing at all.
+  ///
+  /// The value is a **bool**, not a group id and not a generation, so it cannot
+  /// be mistaken for either: [groupCount] counts `String` values, and
+  /// [hasEverHeldGroup] requires one, so a marker can neither inflate the group
+  /// count nor satisfy the encryption floor on its own.
+  static const _removedSuffix = '#removed';
+
+  static String _removedKey(String contextId) => '$contextId$_removedSuffix';
+
   /// Cache key.
   ///
   /// Keyed on the context and generation as well as the id, because `messageId`
@@ -340,8 +355,18 @@ class MlsStore {
   /// identical from the keychain's side.
   int get groupCount => _registry.values.whereType<String>().length;
 
-  /// The raw registry, for the backup envelope's `groupRegistry` field.
-  Map<String, Object> get snapshot => Map<String, Object>.unmodifiable(_registry);
+  /// The registry, for the backup envelope's `groupRegistry` field.
+  ///
+  /// Removal markers are stripped. They are a statement about **this
+  /// installation** - "somebody deliberately evicted this handset" - and not
+  /// about the account's group memberships, which is all the envelope is for.
+  /// Carrying one into a backup would land it on a restored device per §D and
+  /// suppress the admission sweep there, for a removal that device was never
+  /// the subject of. The restore path's whole job is to go and ask.
+  Map<String, Object> get snapshot => Map<String, Object>.unmodifiable({
+    for (final entry in _registry.entries)
+      if (!entry.key.endsWith(_removedSuffix)) entry.key: entry.value,
+  });
 
   /// The decrypted history, for the backup envelope's `messageCache` field.
   Map<String, String> get messageCacheSnapshot =>
@@ -394,6 +419,60 @@ class MlsStore {
     return groupId(contextId, generation);
   }
 
+  /// Whether this device has held a group for the context in **any**
+  /// generation, live or long terminated.
+  ///
+  /// Mobile's equivalent of Alpine's encryption floor, and it exists for the
+  /// same reason: "this context is plaintext" is the one claim from the server a
+  /// locked-out device must not take at face value, because it is precisely what
+  /// a hostile server would say to stop that device asking to be let back in. A
+  /// context this handset has ever encrypted therefore stays a candidate for
+  /// admission whatever the state endpoint now reports.
+  ///
+  /// Derived from the registry rather than from a flag of its own, because
+  /// [clearActiveGeneration] deliberately keeps the per-generation mappings - the
+  /// messages from that era are still in the history and still need those keys -
+  /// so the evidence is already on disk.
+  bool hasEverHeldGroup(String contextId) {
+    final prefix = '$contextId#';
+    return _registry.entries.any(
+      (e) => e.key.startsWith(prefix) && e.value is String,
+    );
+  }
+
+  /// Whether this device was deliberately evicted from the context (§E9).
+  ///
+  /// Read by the launch sweep, which must not ask to be let back in to
+  /// something somebody removed it from on purpose: that turns one removal into
+  /// an approval prompt on every launch for the person who performed it, which
+  /// is both spam and a way to wear a decision down by repetition.
+  bool wasRemovedHere(String contextId) =>
+      _registry[_removedKey(contextId)] == true;
+
+  /// Records that `conversation.MlsDeviceRemoved` named **this** device.
+  ///
+  /// Per context, because a removal from one conversation says nothing about
+  /// any other, and the server sends one push per affected context precisely so
+  /// this can be recorded that way.
+  Future<void> recordRemovedHere(String contextId) {
+    if (wasRemovedHere(contextId)) return Future<void>.value();
+    _registry[_removedKey(contextId)] = true;
+    return _saveRegistry();
+  }
+
+  /// Registering a group clears any removal marker for that context, and is the
+  /// **only** thing that does.
+  ///
+  /// This is what lets a device that was removed and later legitimately re-added
+  /// sweep for that context again. Without it the suppression would be
+  /// permanent, and a re-added handset dropped from a later generation would
+  /// never ask a second time.
+  ///
+  /// It cannot be used to defeat the suppression, because getting here already
+  /// requires being back in the group: every caller reaches this after a Welcome
+  /// a current member minted, an external commit, or creating the generation.
+  /// A device that is merely *asking* never arrives here - and one that is
+  /// already in has nothing to ask for, so there is no prompt left to wear down.
   Future<void> registerGroup({
     required String contextId,
     required int generation,
@@ -401,6 +480,7 @@ class MlsStore {
   }) {
     _registry[_groupKey(contextId, generation)] = mlsGroupId;
     _registry[_activeKey(contextId)] = generation;
+    _registry.remove(_removedKey(contextId));
     return _saveRegistry();
   }
 

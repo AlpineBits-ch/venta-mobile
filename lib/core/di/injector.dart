@@ -164,6 +164,8 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       deviceIdService: getIt(),
       authRepository: getIt(),
       secureStorage: getIt(),
+      joinRequests: getIt(),
+      conversations: getIt(),
     ),
   );
   getIt.registerLazySingleton<MlsRealtimeBridge>(

@@ -3,11 +3,14 @@ import 'package:mocktail/mocktail.dart';
 import 'package:venta_mls/venta_mls.dart';
 import 'package:venta_mobile/core/device/device_api.dart';
 import 'package:venta_mobile/core/device/device_id_service.dart';
+import 'package:venta_mobile/core/mls/mls_join_request_service.dart';
 import 'package:venta_mobile/core/mls/mls_service.dart';
 import 'package:venta_mobile/core/mls/mls_session_manager.dart';
 import 'package:venta_mobile/core/mls/mls_sync_service.dart';
 import 'package:venta_mobile/core/storage/secure_storage_service.dart';
 import 'package:venta_mobile/features/auth/data/auth_repository.dart';
+import 'package:venta_mobile/features/conversations/data/conversation_repository.dart';
+import 'package:venta_mobile/features/conversations/data/models/conversation_dto.dart';
 import 'package:venta_mobile/features/mls/data/models/mls_dtos.dart';
 
 /// What these cover: key package supply, which fails silently and asymmetrically.
@@ -33,33 +36,62 @@ class _MockAuth extends Mock implements AuthRepository {}
 
 class _MockStorage extends Mock implements SecureStorageService {}
 
+class _MockJoinRequests extends Mock implements MlsJoinRequestService {}
+
+class _MockConversations extends Mock implements ConversationRepository {}
+
 const _device = 'device-a';
 
 KeyPackageResult _package(String id) =>
     KeyPackageResult(keyPackage: 'kp-$id', initPrivateKey: 'init-$id');
 
+ConversationDto _conversation(String id, {required bool encrypted}) =>
+    ConversationDto(
+      id: id,
+      members: const [],
+      encryptionState: encrypted
+          ? ConversationEncryption.encrypted
+          : ConversationEncryption.plain,
+    );
+
 void main() {
   late _MockMls mls;
   late _MockDeviceApi deviceApi;
   late _MockDeviceId deviceIds;
+  late _MockSync sync;
+  late _MockJoinRequests joinRequests;
+  late _MockConversations conversations;
   late MlsSessionManager manager;
 
   setUpAll(() {
     registerFallbackValue(const <KeyPackageUpload>[]);
+    registerFallbackValue(const <MlsAdmissionCandidate>[]);
   });
 
   setUp(() {
     mls = _MockMls();
     deviceApi = _MockDeviceApi();
     deviceIds = _MockDeviceId();
+    sync = _MockSync();
+    joinRequests = _MockJoinRequests();
+    conversations = _MockConversations();
     manager = MlsSessionManager(
       mls: mls,
-      sync_: _MockSync(),
+      sync_: sync,
       deviceApi: deviceApi,
       deviceIdService: deviceIds,
       authRepository: _MockAuth(),
       secureStorage: _MockStorage(),
+      joinRequests: joinRequests,
+      conversations: conversations,
     );
+
+    when(() => sync.processPendingWelcomes()).thenAnswer((_) async {});
+    when(() => conversations.cached).thenReturn(const []);
+    when(() => conversations.fetch()).thenAnswer((_) async => const []);
+    when(
+      () => joinRequests.requestAccessWhereMissing(any()),
+    ).thenAnswer((_) async => const []);
 
     when(() => deviceIds.deviceIdOrNull).thenReturn(_device);
     when(() => mls.isUnlocked).thenReturn(true);
@@ -162,6 +194,96 @@ void main() {
       await manager.replenishIfStale();
 
       verify(() => deviceApi.keyPackagesToGenerate(_device)).called(1);
+    });
+  });
+
+  /// Contract §B's discovery sweep, and the control-flow bug Alpine shipped.
+  ///
+  /// `requestAccessWhereMissing` had no caller on this client at all, so a
+  /// handset locked out of an encrypted conversation never asked to be let back
+  /// in unless its owner happened to open that conversation and read a banner -
+  /// which is no use for the conversations they do not know they are missing
+  /// from, and none at all for the ones they never open.
+  group('launch sequence', () {
+    setUp(() {
+      when(() => deviceApi.keyPackagesToGenerate(_device))
+          .thenAnswer((_) async => const GenerateKeyPackagesDto());
+    });
+
+    test('asks to be admitted to what this device holds no group for', () async {
+      when(() => conversations.cached).thenReturn([
+        _conversation('conv_a', encrypted: true),
+        _conversation('conv_b', encrypted: false),
+      ]);
+
+      await manager.sync();
+
+      final candidates = verify(
+        () => joinRequests.requestAccessWhereMissing(captureAny()),
+      ).captured.single as Iterable<MlsAdmissionCandidate>;
+
+      expect(candidates.map((c) => c.contextId), ['conv_a', 'conv_b']);
+      expect(
+        candidates.map((c) => c.serverSaysEncrypted),
+        [true, false],
+        reason:
+            'the list is generous because filtering it is free; the sweep '
+            'decides locally which of these to probe',
+      );
+      expect(candidates.every((c) => !c.isChannel), isTrue);
+    });
+
+    test('a failed replenish does not skip the steps after it', () async {
+      // Alpine's bug, verbatim: one `try` wrapped replenish, the master-key
+      // check and Welcome processing, so a single failed key-package upload
+      // silently cancelled the other two - permanently, because nothing else
+      // processes pending Welcomes. The device sat outside a group it had been
+      // properly invited to and nothing said so.
+      when(() => deviceApi.keyPackagesToGenerate(_device))
+          .thenThrow(Exception('upload refused'));
+
+      await manager.sync();
+
+      verify(() => sync.processPendingWelcomes()).called(1);
+      verify(() => joinRequests.requestAccessWhereMissing(any())).called(1);
+    });
+
+    test('a failed Welcome pass does not skip the sweep', () async {
+      when(() => sync.processPendingWelcomes()).thenThrow(Exception('offline'));
+
+      await manager.sync();
+
+      verify(() => joinRequests.requestAccessWhereMissing(any())).called(1);
+    });
+
+    test('a failed sweep is survivable, not fatal to launch', () async {
+      when(
+        () => joinRequests.requestAccessWhereMissing(any()),
+      ).thenThrow(Exception('rate limited'));
+
+      // Must not throw. A failure to *discover* an exclusion must not undo the
+      // steps that already fixed one.
+      await manager.sync();
+    });
+
+    test('fetches the conversation list when nothing is cached yet', () async {
+      // The conversations this device is locked out of are exactly the ones its
+      // owner has not opened, so an empty cache is the case that matters most.
+      when(() => conversations.fetch()).thenAnswer(
+        (_) async => [_conversation('conv_a', encrypted: true)],
+      );
+
+      await manager.sync();
+
+      verify(() => conversations.fetch()).called(1);
+    });
+
+    test('does nothing at all while the session is locked', () async {
+      when(() => mls.isUnlocked).thenReturn(false);
+
+      await manager.sync();
+
+      verifyNever(() => joinRequests.requestAccessWhereMissing(any()));
     });
   });
 }

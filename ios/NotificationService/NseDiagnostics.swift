@@ -50,14 +50,42 @@ enum NseOutcome: String {
   /// when it does not fit in the 4KB FCM budget.
   case noCiphertext
 
-  /// Neither the push nor the registry named a generation for this context.
+  /// Neither the push nor the registry named a generation for this context,
+  /// **and the registry does hold entries**. Carries the same census as
+  /// `noGroupForGeneration`.
   case noGeneration
 
-  /// This device's registry has no MLS group for that (context, generation).
-  /// The ordinary reading is that it was never admitted to the group - which
-  /// makes the placeholder correct, and makes a *run* of these the signal that
-  /// a Welcome was never processed.
+  /// This device's registry has no MLS group for that (context, generation),
+  /// **and the registry does hold other entries**. The ordinary reading is that
+  /// it was never admitted to that group - which makes the placeholder correct,
+  /// and makes a *run* of these the signal that a Welcome was never processed.
+  ///
+  /// Carries a census of the registry (`entries N, for this context M`). That
+  /// one number is what separates this reading from the two below, and nothing
+  /// in a shipped build could tell them apart before it was added.
   case noGroupForGeneration
+
+  /// `mls_group_registry.json` does not exist.
+  ///
+  /// Not an exclusion from one group: nothing was ever recorded, so there is
+  /// nothing this device could have been excluded *from*. It means the account
+  /// directory was never written, the user id in the push resolves to a
+  /// directory the app never populated, or MLS was never initialised on this
+  /// handset. All three used to arrive as `noGroupForGeneration` and be read as
+  /// its opposite.
+  ///
+  /// `MlsNotificationDecryptor.read` still answers `[:]` for a missing file, and
+  /// must: absence has to stay distinct from sealed-and-unopenable, whose
+  /// contents are irreplaceable and must never be written over. This case is
+  /// decided by a separate existence check rather than by weakening that one.
+  case registryAbsent
+
+  /// `mls_group_registry.json` exists and holds no entries at all.
+  ///
+  /// Same reading as `registryAbsent` - this device is in no groups whatsoever,
+  /// rather than out of one - and kept apart from it because a file that was
+  /// written empty and a file that was never written are different bugs.
+  case registryEmpty
 
   /// The engine would not open the state directory.
   case initStorageFailed

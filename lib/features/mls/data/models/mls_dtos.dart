@@ -345,6 +345,21 @@ sealed class MlsJoinRequestDto with _$MlsJoinRequestDto {
     /// SHA-256 of the key package that would be added.
     required String keyPackageHash,
 
+    /// The exact key-package bytes, present only on requests belonging to the
+    /// **reading** account (contract §L.3 and `MlsJoinRequestService.cs:217`).
+    ///
+    /// Null for a peer's request, which is correct and not a failure: a peer has
+    /// no use for the bytes until the approval threshold is met, and
+    /// [MlsJoinRequestApprovalResultDto.keyPackage] is where they arrive then.
+    ///
+    /// Omitting this field is what made own-device admission unreachable. The
+    /// §G ceremony ends with *this* device minting an Add commit over these
+    /// bytes; with nowhere to put them the bridge passed an empty string into
+    /// `inspectKeyPackage`, which cannot parse and never could, so every
+    /// automatic admission failed at the last step with the proof already
+    /// verified.
+    String? keyPackage,
+
     /// The requester's long-lived identity fingerprint, for out-of-band
     /// comparison. Stable across all their key packages, which is what makes it
     /// readable aloud - a key-package hash changes on every request.

@@ -110,9 +110,15 @@ enum MlsNotificationDecryptor {
     //
     // The registry comes first because the cache key needs the generation out of
     // it, which `MessagePushDecryptor` also resolves before it looks anything up.
+    let registryURL = stateDirectory.appendingPathComponent("mls_group_registry.json")
+    // Asked before the read, because `read` deliberately answers `[:]` for a
+    // file that is not there - absence must never be confused with "sealed and
+    // unopenable", and that is the right call. It does mean the two are
+    // indistinguishable afterwards, so the question is asked here instead.
+    let registryExists = FileManager.default.fileExists(atPath: registryURL.path)
+
     guard
-      let registry = read(
-        stateDirectory.appendingPathComponent("mls_group_registry.json"), stateKey: stateKey),
+      let registry = read(registryURL, stateKey: stateKey),
       let cacheFile = read(cacheURL, stateKey: stateKey)
     else {
       return finish(
@@ -139,14 +145,43 @@ enum MlsNotificationDecryptor {
 
     guard let ciphertextB64, !ciphertextB64.isEmpty else { return finish(.failed(.noCiphertext)) }
 
-    guard let resolvedGeneration else { return finish(.failed(.noGeneration)) }
+    // How much MLS state this device has at all, alongside how much of it is
+    // about *this* context.
+    //
+    // Both numbers exist because the two questions the field reports could not
+    // answer are "this device is not in that one group" and "this device has no
+    // MLS state whatsoever" - a registry that was never written, a user id in the
+    // push that resolves to a directory the app never populated, or an install
+    // that never initialised MLS. Every one of those arrived as
+    // `noGroupForGeneration`, which reads as the first and is often the second,
+    // and telling them apart from a shipped build was impossible.
+    let registryEntries = registry.values.count
+    let contextEntries = registry.values.keys.filter { $0.hasPrefix("\(contextId)#") }.count
+    let census = "entries \(registryEntries), for this context \(contextEntries)"
+
+    /// The honest outcome for "the registry did not have what we needed".
+    ///
+    /// A missing or empty registry is not an exclusion from one group and must
+    /// not be counted as one: nothing was ever recorded, so there is nothing this
+    /// device could have been excluded *from*.
+    func missingFromRegistry(_ whenPopulated: NseOutcome, _ detail: String) -> DecryptResult {
+      if !registryExists { return .failed(.registryAbsent, detail) }
+      if registryEntries == 0 { return .failed(.registryEmpty, detail) }
+      return .failed(whenPopulated, detail)
+    }
+
+    guard let resolvedGeneration else {
+      return finish(missingFromRegistry(.noGeneration, census))
+    }
 
     guard let groupId = registry.values["\(contextId)#\(resolvedGeneration)"] as? String else {
-      // The ordinary reading is that this device was never admitted to the
-      // group, which makes the placeholder the correct outcome for this
-      // message - and makes a run of these the signal that a Welcome was never
-      // processed.
-      return finish(.failed(.noGroupForGeneration, "generation \(resolvedGeneration)"))
+      // With a populated registry the ordinary reading is that this device was
+      // never admitted to the group, which makes the placeholder the correct
+      // outcome for this message - and makes a run of these the signal that a
+      // Welcome was never processed.
+      return finish(
+        missingFromRegistry(
+          .noGroupForGeneration, "generation \(resolvedGeneration), \(census)"))
     }
 
     // `stateKeyB64` is omitted rather than sent as null when there is no key, so

@@ -45,6 +45,35 @@ class NseDiagnosticsReporter {
   /// Must match the file `NseDiagnostics.record` writes.
   static const fileName = 'nse-diagnostics.json';
 
+  /// Every outcome `NseOutcome` can write, mirrored here so the two sides can
+  /// be asserted equal.
+  ///
+  /// The extension is a separate target in another language and its codes
+  /// arrive as bare strings, so a case added on one side and forgotten on the
+  /// other produces reports tagged `unknown` from a build nobody can re-run.
+  /// `nse_diagnostics_test.dart` reads the Swift source and compares.
+  static const knownOutcomes = {
+    'decrypted',
+    'servedFromCache',
+    'notEncrypted',
+    'noAppGroupContainer',
+    'stateKeyUnavailable',
+    'stateKeyInAnotherGroup',
+    'sealedFileUnreadable',
+    'noCiphertext',
+    'noGeneration',
+    'noGroupForGeneration',
+    'registryAbsent',
+    'registryEmpty',
+    'initStorageFailed',
+    'processMessageFailed',
+    'notApplicationMessage',
+    'senderUnnamed',
+    'senderMismatch',
+    'senderNotInRoster',
+    'undecodablePlaintext',
+  };
+
   /// Outcomes where the placeholder is the *correct* answer and nothing is
   /// broken: this device was never admitted to the group the message belongs
   /// to, or the ciphertext did not fit in the 4KB FCM budget and the server
@@ -54,6 +83,14 @@ class NseDiagnosticsReporter {
   /// user can read in the app means a Welcome was never processed, which is a
   /// real bug wearing an expected outcome's clothes - but at a level that does
   /// not drown the ones that are always wrong.
+  ///
+  /// `registryAbsent` and `registryEmpty` are deliberately **not** here, even
+  /// though the placeholder is equally correct for them. They say this device
+  /// holds no MLS state at all rather than that it is outside one group, which
+  /// is a different and larger fault: a directory the app never populated, a
+  /// user id in the push that resolves somewhere else, or an install where MLS
+  /// never initialised. Filing them as expected is precisely what hid them
+  /// inside `noGroupForGeneration`.
   static const _expected = {'noGroupForGeneration', 'noCiphertext'};
 
   /// Reads, reports and clears. Safe to call on every resume: the file is

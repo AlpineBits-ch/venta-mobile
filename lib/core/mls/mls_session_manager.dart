@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/conversations/data/conversation_repository.dart';
+import '../../features/conversations/data/models/conversation_dto.dart';
 import '../device/device_api.dart';
 import '../device/device_id_service.dart';
 import '../storage/secure_storage_service.dart';
+import 'mls_join_request_service.dart';
 import 'mls_service.dart';
 import 'mls_sync_service.dart';
 
@@ -33,6 +36,8 @@ class MlsSessionManager {
     required this.deviceIdService,
     required this.authRepository,
     required this.secureStorage,
+    required this.joinRequests,
+    required this.conversations,
   });
 
   final MlsService mls;
@@ -41,6 +46,8 @@ class MlsSessionManager {
   final DeviceIdService deviceIdService;
   final AuthRepository authRepository;
   final SecureStorageService secureStorage;
+  final MlsJoinRequestService joinRequests;
+  final ConversationRepository conversations;
 
   /// Mints or unlocks this installation's MLS identity.
   ///
@@ -111,13 +118,17 @@ class MlsSessionManager {
     }
   }
 
-  /// Tops the server's key package supply back up and joins anything this
-  /// device was invited to while it was away.
+  /// Tops the server's key package supply back up, joins anything this device
+  /// was invited to while it was away, and asks to be let into whatever is left.
   ///
-  /// Both halves are best-effort and independent: failing to replenish means
-  /// this device eventually cannot be added to new groups, failing to join means
-  /// some contexts are unreadable. Neither is worth blocking launch over, and
-  /// both retry on the next start.
+  /// All three are best-effort and **independent**, each in its own `try`:
+  /// failing to replenish means this device eventually cannot be added to new
+  /// groups, failing to join means some contexts are unreadable, failing to
+  /// sweep means an exclusion goes undiscovered. None is worth blocking launch
+  /// over and none may take another down. Alpine shipped exactly that bug - one
+  /// `try` around all three - and a single failed key-package upload silently
+  /// skipped Welcome processing forever, which is how a desktop sat outside a
+  /// group it had been properly invited to.
   Future<void> sync() async {
     if (!mls.isUnlocked) return;
 
@@ -131,6 +142,56 @@ class MlsSessionManager {
       await sync_.processPendingWelcomes();
     } catch (e) {
       debugPrint('MLS: failed to process pending Welcomes at launch: $e');
+    }
+
+    try {
+      await sweepForAdmission();
+    } catch (e) {
+      debugPrint('MLS: the admission sweep did not complete: $e');
+    }
+  }
+
+  /// Contract §B discovery at launch, for conversations.
+  ///
+  /// **Last, and after the two steps above have settled.** It decides what to
+  /// ask for from the group state they leave behind, and asking to be admitted
+  /// to something a Welcome was about to fix is a request nobody needs to
+  /// review.
+  ///
+  /// **Conversations only, deliberately.** §B writes the discovery step in terms
+  /// of the conversation list; channels already carry an explicit ask affordance
+  /// in `ChannelAccessBanner`, and enumerating every channel of every guild at
+  /// launch is a different order of magnitude of work for a case the user is
+  /// already given a button for.
+  ///
+  /// The candidate list is generous because filtering it is free - every
+  /// exclusion `requestAccessWhereMissing` makes is a local registry read - and
+  /// the sweep caps how many contexts it will actually probe.
+  Future<void> sweepForAdmission() async {
+    // The cached list when there is one. A launch that has not loaded Home yet
+    // has an empty cache, and fetching is one request against a sweep that
+    // otherwise makes none - worth it, because the conversations this device is
+    // locked out of are exactly the ones the user has not opened.
+    final candidates = conversations.cached.isNotEmpty
+        ? conversations.cached
+        : await conversations.fetch();
+
+    final requested = await joinRequests.requestAccessWhereMissing(
+      candidates.map(
+        (c) => (
+          contextId: c.id,
+          isChannel: false,
+          serverSaysEncrypted:
+              c.encryptionState == ConversationEncryption.encrypted,
+        ),
+      ),
+    );
+
+    if (requested.isNotEmpty) {
+      debugPrint(
+        'MLS: asked to be admitted to ${requested.length} '
+        'conversation(s) this device holds no group for',
+      );
     }
   }
 

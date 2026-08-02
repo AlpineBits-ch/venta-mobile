@@ -392,6 +392,17 @@ class MlsService {
 
   String? activeGroupId(String contextId) => store.activeGroupId(contextId);
 
+  /// See [MlsStore.hasEverHeldGroup] - the local floor under the server's claim
+  /// that a context is not encrypted.
+  bool hasEverHeldGroup(String contextId) => store.hasEverHeldGroup(contextId);
+
+  /// See [MlsStore.wasRemovedHere] - whether somebody deliberately evicted this
+  /// device from the context (§E9).
+  bool wasRemovedHere(String contextId) => store.wasRemovedHere(contextId);
+
+  Future<void> recordRemovedHere(String contextId) =>
+      store.recordRemovedHere(contextId);
+
   Future<void> registerGroup({
     required String contextId,
     required int generation,

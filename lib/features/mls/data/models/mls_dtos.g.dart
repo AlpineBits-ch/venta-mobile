@@ -388,6 +388,7 @@ _MlsJoinRequestDto _$MlsJoinRequestDtoFromJson(Map<String, dynamic> json) =>
       requesterUserId: json['requesterUserId'] as String,
       requesterDeviceId: json['requesterDeviceId'] as String,
       keyPackageHash: json['keyPackageHash'] as String,
+      keyPackage: json['keyPackage'] as String?,
       signatureKeyFingerprint: json['signatureKeyFingerprint'] as String,
       state: $enumDecode(
         _$MlsJoinRequestStateEnumMap,
@@ -422,6 +423,7 @@ Map<String, dynamic> _$MlsJoinRequestDtoToJson(_MlsJoinRequestDto instance) =>
       'requesterUserId': instance.requesterUserId,
       'requesterDeviceId': instance.requesterDeviceId,
       'keyPackageHash': instance.keyPackageHash,
+      'keyPackage': instance.keyPackage,
       'signatureKeyFingerprint': instance.signatureKeyFingerprint,
       'state': _$MlsJoinRequestStateEnumMap[instance.state]!,
       'createdAt': _$JsonConverterToJson<String, DateTime>(
