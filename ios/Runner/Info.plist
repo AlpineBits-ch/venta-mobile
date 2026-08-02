@@ -37,45 +37,47 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<!-- Declared here so App Store Connect stops asking the export-compliance
-	     questionnaire on every single upload. Read docs/export-compliance.md
-	     before touching this.
+	<!-- ITSAppUsesNonExemptEncryption is deliberately ABSENT. That means "ask me
+	     in App Store Connect", and answering the questionnaire per build is
+	     currently the price of shipping. Read docs/export-compliance.md before
+	     touching this.
 
-	     True, not false: the app ships its own cryptography rather than only
-	     calling Apple's. venta_mls links OpenMLS (RFC 9420) for end-to-end
+	     It cannot be false. The app ships its own cryptography rather than only
+	     calling Apple's: venta_mls links OpenMLS (RFC 9420) for end-to-end
 	     message encryption, and WebRTC.framework carries BoringSSL for
 	     DTLS-SRTP. Neither is covered by the exemptions, which are for
 	     HTTPS/CryptoKit/Keychain, authentication-only use, or DRM. It said
-	     false until 2026-08-01, which is why no build was ever asked - that
-	     was a false declaration, not a clever trick.
+	     false until 2026-08-01 - a false declaration, which is why no build was
+	     ever asked.
 
-	     No ITSEncryptionExportComplianceCode accompanies it, and that is
-	     correct rather than an omission. Apple's reference table
+	     It cannot be a bare true either. **Tried twice, failed twice**, on
+	     2026-08-01 and again on 2026-08-02 in v1.0.57:
+
+	       [altool] Invalid Export Compliance Code. The export compliance key
+	       value [] in the app's Info.plist doesn't match the key value of the
+	       app's export compliance documentation. (90592)
+
+	     The empty [] is the missing ITSEncryptionExportComplianceCode. altool
+	     requires a matching code whenever this key is true, and it does not
+	     care that Apple's own documentation table says our case needs no
+	     document. That table
 	     (developer.apple.com/help/app-store-connect/reference/
-	     export-compliance-documentation-for-encryption) maps our case -
-	     "industry standard algorithm, not provided within the Apple operating
-	     system" - to exactly one document: the French encryption declaration.
-	     Its own footnote limits that to apps "distributing on the App Store in
-	     France". CCATS is required only for *proprietary* algorithms; every
-	     primitive here is published - HPKE, X25519, Ed25519, AES-GCM,
-	     ChaCha20-Poly1305, HKDF - so this is a self-classified ECCN 5D992.c
-	     mass market item and CCATS does not apply. No France, no document, no
-	     code to match, so a bare true is complete.
+	     export-compliance-documentation-for-encryption) maps us to "industry
+	     standard algorithm, not provided within the Apple operating system",
+	     whose only document is the French declaration, itself footnoted as
+	     required only when distributing in France. We do not. CCATS covers only
+	     *proprietary* algorithms and every primitive here is published - HPKE,
+	     X25519, Ed25519, AES-GCM, ChaCha20-Poly1305, HKDF - a self-classified
+	     ECCN 5D992.c mass market item. By that reading a bare true should work.
+	     It does not. Believe altool, not the table.
 
-	     **This is load-bearing on App Store availability.** A true with no code
-	     was tried on 2026-08-01 and altool rejected it:
+	     So the only way to stop the per-build questionnaire is to obtain a real
+	     code: upload documentation under App Information -> App Encryption
+	     Documentation ("Hochladen"), wait for Apple to approve it, then pin the
+	     returned value here as ITSEncryptionExportComplianceCode NEXT TO a
+	     true. Both keys or neither.
 
-	       Invalid Export Compliance Code ... key value [] ... (90592)
-
-	     The most likely reason is that availability still included France (the
-	     default is every territory), which makes the declaration mandatory and
-	     the code with it. So: if France is ever added back under Pricing and
-	     Availability, this key stops being sufficient - either file the French
-	     declaration and pin the returned code here alongside it, or remove the
-	     key entirely and go back to answering the questionnaire per build.
-	     Do not "fix" a 90592 by flipping this to false. -->
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<true/>
+	     Never resolve a 90592 by flipping this to false. -->
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>

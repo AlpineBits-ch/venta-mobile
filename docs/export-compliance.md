@@ -41,16 +41,27 @@ application and in the wrong place.
 
 ## 1. Info.plist — done
 
-`ios/Runner/Info.plist` carries `ITSAppUsesNonExemptEncryption` = **`true`**,
-with **no** `ITSEncryptionExportComplianceCode`. That combination stops App
-Store Connect asking the questionnaire on every upload.
+`ios/Runner/Info.plist` carries **no** `ITSAppUsesNonExemptEncryption` key,
+which means "ask me in App Store Connect". Answering the questionnaire on every
+upload is, for now, the price of shipping.
 
-It said `false` until 2026-08-01 — a false declaration, not a clever trick —
-then was omitted entirely for 1.0.55/1.0.56, which is why every one of those
-uploads had to be answered by hand.
+It said `false` until 2026-08-01 — a false declaration, not a clever trick.
 
-**Why no compliance code is needed.** Apple's reference table maps our case to
-exactly one document:
+**A bare `true` does not work. Tried twice, failed twice** — 2026-08-01, and
+again on 2026-08-02 in v1.0.57:
+
+```
+[altool] Invalid Export Compliance Code. The export compliance key value []
+in the app's Info.plist doesn't match the key value of the app's export
+compliance documentation. (90592)
+```
+
+The empty `[]` is the absent `ITSEncryptionExportComplianceCode`. **altool
+requires a matching code whenever the key is `true`**, and it does not care
+that Apple's own documentation says our case needs no document.
+
+That contradiction is worth recording, because the documentation reads as
+though a bare `true` should be fine:
 
 | Encryption | Document |
 |---|---|
@@ -63,22 +74,32 @@ exactly one document:
 
 Every primitive here is published — HPKE, X25519, Ed25519, AES-GCM,
 ChaCha20-Poly1305, HKDF — so we are row two, not row three, and CCATS does not
-apply. Row two's only document is France-gated, and Venta is not distributed in
-France. No document, therefore no code, therefore a bare `true` is complete.
+apply. Row two's only document is France-gated and Venta is not distributed in
+France, so on paper: no document, no code, bare `true` complete.
 
 Source: <https://developer.apple.com/help/app-store-connect/reference/export-compliance-documentation-for-encryption>
 
-**This is load-bearing on App Store availability.** A bare `true` was tried on
-2026-08-01 and altool rejected it:
+**altool disagrees, and altool is the one that gates the upload.** Believe the
+error, not the table.
 
-```
-[altool] Invalid Export Compliance Code. The export compliance key value []
-in the app's Info.plist doesn't match the key value of the app's export
-compliance documentation. (90592)
-```
+## The only route to stopping the questionnaire
 
-The likeliest cause is that availability still included France — the default is
-every territory — which makes the declaration mandatory and the code with it.
+There is no plist-only fix. The code has to be real:
+
+1. App Store Connect → the app → **App Information** → **App Encryption
+   Documentation** → **Upload**.
+2. Wait for Apple to approve it. A code appears on that page.
+3. Pin **both** keys in `Info.plist` — `ITSAppUsesNonExemptEncryption` = `true`
+   **and** `ITSEncryptionExportComplianceCode` = the code. Both or neither.
+
+Until step 2 produces a code, omitting the key and answering per build is the
+only configuration that uploads. That is where we are.
+
+Worth trying first, since it costs nothing: check **Pricing and Availability**
+and confirm France really is excluded. The default is every territory. If France
+is in fact included, the French declaration is genuinely required, which would
+also explain why altool insists on a code — and excluding France may be enough
+to make the requirement go away.
 
 **So if France is ever added under Pricing and Availability**, this key stops
 being sufficient. Then either file the French declaration and pin the returned
