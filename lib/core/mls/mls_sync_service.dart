@@ -24,6 +24,25 @@ class MlsContextChanged {
   final bool selfRemoved;
 }
 
+/// A message that arrived ahead of the commit that made it readable, and has
+/// now been read.
+class MlsMessageReplayed {
+  const MlsMessageReplayed({
+    required this.contextId,
+    required this.messageId,
+    required this.plaintextB64,
+    required this.senderIdentity,
+  });
+
+  final String contextId;
+  final String messageId;
+  final String plaintextB64;
+
+  /// The credential openmls authenticated. Null only if the engine could not
+  /// name one, which callers must treat as "do not attribute this".
+  final String? senderIdentity;
+}
+
 /// What one entry off the commit channel did to this device's group.
 ///
 /// Only [advanced] is progress. The distinction exists because the commit
@@ -95,6 +114,12 @@ class MlsSyncService {
 
   /// Emits whenever a context's group changed - membership, or being removed.
   Stream<MlsContextChanged> get contextChanged => _contextChanged.stream;
+
+  final _replayed = StreamController<MlsMessageReplayed>.broadcast();
+
+  /// Messages that arrived before the commit that made them readable and have
+  /// now been replayed. See [_drainBuffered].
+  Stream<MlsMessageReplayed> get replayedMessages => _replayed.stream;
 
   /// One in-flight operation per context.
   ///
@@ -209,7 +234,13 @@ class MlsSyncService {
   /// offline across more commits than one page holds still converges rather than
   /// silently stopping partway.
   Future<void> syncContext(String contextId, bool isChannel) async {
-    await _serialized(contextId, () => _syncContextInner(contextId, isChannel));
+    await _serialized(contextId, () async {
+      await _syncContextInner(contextId, isChannel);
+      // Inside the queue: draining takes the same per-group lock the engine
+      // serialises on, and doing it here means a message that arrived early is
+      // readable by the time anything downstream looks at the context.
+      await _drainBuffered(contextId);
+    });
 
     // Outside the queue, because committing publishes and publishing takes the
     // same queue this just released.
@@ -303,6 +334,61 @@ class MlsSyncService {
       // a terminating page, not a reason to ask again.
       if (applied == 0) return;
     }
+  }
+
+  /// Replays messages the engine buffered because they were ahead of us.
+  ///
+  /// `drainPendingMessages` existed, was tested, and **had no caller at all**.
+  /// So a message that arrived before the commit that makes it readable was
+  /// buffered correctly and then never looked at again: the row stayed
+  /// "can't be decrypted" forever, and - worse - the arrival was counted as a
+  /// decrypt failure. Three of those flip [MlsFailureLog.cannotRead], which puts
+  /// "Re-link this device" on screen; taking that offer destroys every encrypted
+  /// message on the handset. A device that was merely a few seconds behind was
+  /// being advised to wipe itself.
+  ///
+  /// Best-effort: nothing here is worth failing a catch-up over, and the next
+  /// sync tries again for anything still buffered.
+  Future<void> _drainBuffered(String contextId) async {
+    final generation = mls.knownGeneration(contextId);
+    if (generation == null) return;
+    final groupId = mls.groupId(contextId, generation);
+    if (groupId == null) return;
+
+    final List<MlsReplayedMessage> replayed;
+    try {
+      replayed = await mls.drainPendingMessages(groupId);
+    } catch (e) {
+      debugPrint('MLS: could not replay buffered messages for $contextId: $e');
+      return;
+    }
+    if (replayed.isEmpty) return;
+
+    for (final message in replayed) {
+      final messageId = message.messageId;
+      if (messageId == null) continue;
+
+      // Cached before it is announced. MLS hands the plaintext over exactly
+      // once, and this was that once.
+      mls.cacheMessage(
+        contextId: contextId,
+        generation: generation,
+        messageId: messageId,
+        plaintextB64: message.plaintext,
+      );
+      _replayed.add(
+        MlsMessageReplayed(
+          contextId: contextId,
+          messageId: messageId,
+          plaintextB64: message.plaintext,
+          senderIdentity: message.senderIdentity,
+        ),
+      );
+    }
+
+    // Reading anything at all is proof this device is still in the group, so
+    // the streak that was about to recommend a re-link is cleared.
+    failures.recordSuccess(contextId);
   }
 
   /// Applies a commit this device published but never got an answer for.

@@ -158,12 +158,24 @@ class _MessageReceived extends ThreadEvent {
 }
 
 class _MessageUpdatedRemote extends ThreadEvent {
-  const _MessageUpdatedRemote({required this.messageId, required this.content});
+  const _MessageUpdatedRemote({
+    required this.messageId,
+    required this.content,
+    this.isUndecryptable = false,
+    this.isUnverifiedPlaintext = false,
+  });
   final String messageId;
   final String content;
+  final bool isUndecryptable;
+  final bool isUnverifiedPlaintext;
 
   @override
-  List<Object?> get props => [messageId, content];
+  List<Object?> get props => [
+    messageId,
+    content,
+    isUndecryptable,
+    isUnverifiedPlaintext,
+  ];
 }
 
 class _MessageDeletedRemote extends ThreadEvent {
@@ -339,6 +351,8 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
             _MessageUpdatedRemote(
               messageId: event.messageId,
               content: event.content,
+              isUndecryptable: event.isUndecryptable,
+              isUnverifiedPlaintext: event.isUnverifiedPlaintext,
             ),
           );
         case RemoteMessageDeleted():
@@ -699,6 +713,10 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       final updated = await repository.editMessage(
         event.messageId,
         event.newText,
+        // The row keeps the generation it was first sealed under, so the edit
+        // has to be sealed under the same one or every reader resolves it to
+        // the wrong group.
+        mlsGeneration: previous.mlsGeneration,
       );
       emit(
         state.copyWith(
@@ -919,7 +937,15 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         messages: [
           for (final m in state.messages)
             if (m.id == event.messageId)
-              m.copyWith(content: event.content)
+              m.copyWith(
+                content: event.content,
+                // Carried across, not dropped. An edit this device could not
+                // open leaves the row showing "can't be decrypted" rather than
+                // the text it used to hold, which is now stale, or the bytes the
+                // server sent, which is the injection.
+                isUndecryptable: event.isUndecryptable,
+                isUnverifiedPlaintext: event.isUnverifiedPlaintext,
+              )
             else
               m,
         ],

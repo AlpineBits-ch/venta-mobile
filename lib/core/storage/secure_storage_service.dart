@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Thin wrapper around [FlutterSecureStorage] (Keychain on iOS,
@@ -7,9 +11,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// Intentional improvement over the desktop client, which keeps OAuth
 /// tokens in plain `localStorage`.
 class SecureStorageService {
-  SecureStorageService({FlutterSecureStorage? storage})
+  SecureStorageService({FlutterSecureStorage? storage, FlutterSecureStorage? sharedStorage})
     : _storage = storage ?? const FlutterSecureStorage(
         iOptions: _iosOptions,
+        aOptions: _androidOptions,
+      ),
+      _sharedStorage = sharedStorage ?? const FlutterSecureStorage(
+        iOptions: _sharedIosOptions,
         aOptions: _androidOptions,
       );
 
@@ -26,25 +34,69 @@ class SecureStorageService {
     accessibility: KeychainAccessibility.first_unlock_this_device,
   );
 
-  /// Android needs no options here, and that is a change in the plugin rather
-  /// than a decision.
+  /// `resetOnError: false`, against the plugin's default of **true**.
   ///
-  /// The audit called for `encryptedSharedPreferences: true` - the legacy
-  /// per-value scheme is the one that survives an auto-backup restore onto a
-  /// *different* handset, where the ciphertext comes back but the Keystore
-  /// material does not, so the keys read as corrupt and the identity is silently
-  /// re-minted over live group state. In `flutter_secure_storage` 10 that flag
-  /// is **deprecated and ignored**: everything is on Keystore-backed ciphers by
-  /// default and existing values migrate on first access. Passing it now only
-  /// earns a deprecation warning.
+  /// The default means: if a read throws - a Keystore fault, a
+  /// `KeyStoreException` after an OS update, an app whose signing key changed -
+  /// the plugin **deletes every value it holds** and reports success. On this
+  /// app those values are the account master key, the MLS signing key and the
+  /// account identity key. Deleting them is not a recoverable error state; it is
+  /// every encrypted conversation on the handset gone, every backup blob
+  /// unopenable, and the account's cryptographic identity lost, in response to a
+  /// transient fault.
   ///
-  /// The re-mint hazard is therefore closed on the other side instead, by
-  /// `MlsService.createIdentity` refusing to mint over restored groups - which
-  /// is the more robust half of the fix regardless, since it holds even when the
-  /// keychain fails for reasons the storage layer cannot prevent.
-  static const _androidOptions = AndroidOptions();
+  /// Failing the read is strictly better: `MlsService` already distinguishes
+  /// "no identity" from "identity missing but groups present" and refuses to
+  /// mint over the second, and a user who retries after a reboot gets their keys
+  /// back.
+  ///
+  /// The audit also called for `encryptedSharedPreferences: true`. In
+  /// `flutter_secure_storage` 10 that flag is **deprecated and ignored**:
+  /// everything is on Keystore-backed ciphers by default and existing values
+  /// migrate on first access, so passing it now only earns a deprecation
+  /// warning.
+  static const _androidOptions = AndroidOptions(resetOnError: false);
+
+  /// The Apple Developer team id, which is also the `$(AppIdentifierPrefix)` the
+  /// entitlements files expand at build time.
+  ///
+  /// Must match `DEVELOPMENT_TEAM` in `ios/Runner.xcodeproj/project.pbxproj`.
+  /// Named rather than inlined because it is the one part of
+  /// [sharedKeychainGroup] that is a property of *who signs the build* rather
+  /// than of this app, and a fork or an enterprise re-sign has to change it.
+  /// Getting it wrong is invisible: `kSecAttrAccessGroup` simply stops matching,
+  /// every write returns `errSecMissingEntitlement`, and the state files quietly
+  /// go unsealed.
+  static const _keychainTeamId = 'S33LPKH83B';
+
+  /// The keychain access group the notification-service extension can also
+  /// reach. Declared as `$(AppIdentifierPrefix)gg.venta.mobile.shared` under
+  /// `keychain-access-groups` in all three entitlements files.
+  ///
+  /// **Team-prefixed on purpose.** The entitlement is written with the
+  /// `$(AppIdentifierPrefix)` variable, but that is a build-time substitution:
+  /// at runtime the access group is the expanded string, and querying for the
+  /// bare `gg.venta.mobile.shared` matches nothing. This constant read exactly
+  /// that way once, and the resulting `errSecMissingEntitlement` was swallowed
+  /// by [readOrCreateMlsStateKey] into a null key - so sealing was a silent
+  /// no-op on iOS while the Android half worked.
+  ///
+  /// Must match `MlsNotificationDecryptor.keychainAccessGroup` in Swift.
+  ///
+  /// Used for **one** value - the MLS state-file key - and never for anything
+  /// that already exists. Moving existing items into an access group rewrites
+  /// their `kSecAttrAccessGroup`, and an entry the app can no longer find is
+  /// indistinguishable from an entry that was never there, which for the MLS
+  /// signing key means "this device silently lost every group it was in".
+  static const sharedKeychainGroup = '$_keychainTeamId.gg.venta.mobile.shared';
+
+  static const _sharedIosOptions = IOSOptions(
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+    groupId: sharedKeychainGroup,
+  );
 
   final FlutterSecureStorage _storage;
+  final FlutterSecureStorage _sharedStorage;
 
   static const _accessTokenKey = 'venta.auth.access_token';
   static const _refreshTokenKey = 'venta.auth.refresh_token';
@@ -218,6 +270,61 @@ class SecureStorageService {
     key: '${_mlsScope(deviceId, userId)}.protection',
     value: value,
   );
+
+  /// The AES-256 key the MLS state files on disk are sealed under, base64.
+  ///
+  /// Generated on first use and never leaves the keychain. That is the whole
+  /// mechanism: `mls_state.json` holds every epoch secret and every leaf HPKE
+  /// private key, and `mls_message_cache.json` holds the plaintext of every
+  /// message this device has decrypted, but a device backup carries the *files*
+  /// and not Keystore/Keychain material - so a restore onto another handset gets
+  /// two blobs it cannot open.
+  ///
+  /// Scoped by account rather than by device, matching the state directory. It
+  /// lives in [sharedKeychainGroup] because the iOS notification-service
+  /// extension is a separate process that has to read the message cache to
+  /// decrypt a push, and the App Group *container* is exactly the thing that is
+  /// backed up.
+  ///
+  /// Returns null when the keychain refused - a misprovisioned build without the
+  /// access-group entitlement is the realistic case. Callers must treat that as
+  /// "cannot seal", never as "seal under nothing".
+  Future<String?> readOrCreateMlsStateKey(String userId) async {
+    final key = 'venta.mls.statekey.$userId';
+    try {
+      final existing = await _sharedStorage.read(key: key);
+      if (existing != null) return existing;
+
+      final random = Random.secure();
+      final fresh = base64Encode(
+        List<int>.generate(32, (_) => random.nextInt(256)),
+      );
+      await _sharedStorage.write(key: key, value: fresh);
+      // Read back rather than trusting the write: a keychain that silently
+      // dropped it would leave the next launch unable to open a file this one
+      // sealed, which is the same shape of loss as having no key at all.
+      final confirmed = await _sharedStorage.read(key: key);
+      if (confirmed == null) {
+        debugPrint(
+          'SecureStorageService: the keychain accepted the MLS state key and '
+          'did not store it - the state files will stay unsealed',
+        );
+        return null;
+      }
+      return confirmed;
+    } catch (e) {
+      debugPrint('SecureStorageService: no MLS state key available: $e');
+      return null;
+    }
+  }
+
+  Future<void> clearMlsStateKey(String userId) async {
+    try {
+      await _sharedStorage.delete(key: 'venta.mls.statekey.$userId');
+    } catch (e) {
+      debugPrint('SecureStorageService: could not clear the MLS state key: $e');
+    }
+  }
 
   /// Peers' account identity keys, TOFU-pinned on first contact (§H.2).
   ///

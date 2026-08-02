@@ -86,8 +86,22 @@ void main() {
     decryptor = MessageDecryptor(mls, failures: failures);
 
     when(() => mls.isUnlocked).thenReturn(true);
-    when(() => mls.cachedMessage(any())).thenReturn(null);
-    when(() => mls.cacheMessage(any(), any())).thenReturn(null);
+    when(() => mls.isEncrypted(any())).thenReturn(true);
+    when(
+      () => mls.cachedMessage(
+        contextId: any(named: 'contextId'),
+        generation: any(named: 'generation'),
+        messageId: any(named: 'messageId'),
+      ),
+    ).thenReturn(null);
+    when(
+      () => mls.cacheMessage(
+        contextId: any(named: 'contextId'),
+        generation: any(named: 'generation'),
+        messageId: any(named: 'messageId'),
+        plaintextB64: any(named: 'plaintextB64'),
+      ),
+    ).thenReturn(null);
     when(() => mls.knownGeneration(_context)).thenReturn(2);
     when(() => mls.groupId(_context, any())).thenReturn(_group);
     when(
@@ -109,6 +123,7 @@ void main() {
         () => mls.processMessage(
           groupIdB64: any(named: 'groupIdB64'),
           messageB64: any(named: 'messageB64'),
+          messageId: any(named: 'messageId'),
         ),
       ).thenAnswer((invocation) async {
         captured.add(invocation.namedArguments[#messageB64] as String);
@@ -170,6 +185,7 @@ void main() {
         () => mls.processMessage(
           groupIdB64: any(named: 'groupIdB64'),
           messageB64: any(named: 'messageB64'),
+          messageId: any(named: 'messageId'),
         ),
       );
       expect(failures.decryptFailures(_context), 1);
@@ -177,6 +193,10 @@ void main() {
   });
 
   test('plaintext messages are passed straight through', () async {
+    // A context that is not encrypted. In one that *is*, a message the server
+    // marks `Plain` is flagged instead - see the "cleartext in an encrypted
+    // thread" group.
+    when(() => mls.isEncrypted(_context)).thenReturn(false);
     const plain = MessageDto(
       id: 'msg_1',
       content: 'aGk=',
@@ -191,24 +211,38 @@ void main() {
       () => mls.processMessage(
         groupIdB64: any(named: 'groupIdB64'),
         messageB64: any(named: 'messageB64'),
+          messageId: any(named: 'messageId'),
       ),
     );
   });
 
   test('decrypts and caches, so the next read never touches the ratchet', () async {
     when(
-      () => mls.processMessage(groupIdB64: _group, messageB64: _mlsCiphertext),
+      () => mls.processMessage(groupIdB64: _group, messageB64: _mlsCiphertext, messageId: any(named: 'messageId')),
     ).thenAnswer((_) async => _decrypted(helloB64));
 
     final result = await decryptor.decrypt(_encrypted());
 
     expect(result.content, helloB64);
     expect(result.isUndecryptable, isFalse);
-    verify(() => mls.cacheMessage('msg_1', helloB64)).called(1);
+    verify(
+      () => mls.cacheMessage(
+        contextId: _context,
+        generation: 2,
+        messageId: 'msg_1',
+        plaintextB64: helloB64,
+      ),
+    ).called(1);
   });
 
   test('serves a cached plaintext without decrypting again', () async {
-    when(() => mls.cachedMessage('msg_1')).thenReturn(helloB64);
+    when(
+      () => mls.cachedMessage(
+        contextId: _context,
+        generation: 2,
+        messageId: 'msg_1',
+      ),
+    ).thenReturn(helloB64);
 
     final result = await decryptor.decrypt(_encrypted());
 
@@ -217,6 +251,7 @@ void main() {
       () => mls.processMessage(
         groupIdB64: any(named: 'groupIdB64'),
         messageB64: any(named: 'messageB64'),
+          messageId: any(named: 'messageId'),
       ),
     );
   });
@@ -229,6 +264,7 @@ void main() {
       () => mls.processMessage(
         groupIdB64: 'b2xkZ3JvdXA=',
         messageB64: any(named: 'messageB64'),
+          messageId: any(named: 'messageId'),
       ),
     ).thenAnswer((_) async => _decrypted(helloB64));
 
@@ -263,6 +299,7 @@ void main() {
       () => mls.processMessage(
         groupIdB64: any(named: 'groupIdB64'),
         messageB64: any(named: 'messageB64'),
+          messageId: any(named: 'messageId'),
       ),
     ).thenThrow(const MlsException(MlsErrorKind.wrongEpoch, 'too old'));
 
@@ -277,6 +314,7 @@ void main() {
         () => mls.processMessage(
           groupIdB64: any(named: 'groupIdB64'),
           messageB64: any(named: 'messageB64'),
+          messageId: any(named: 'messageId'),
         ),
       ).thenThrow(const MlsException(MlsErrorKind.wrongEpoch, 'too old'));
 
@@ -299,6 +337,7 @@ void main() {
         () => mls.processMessage(
           groupIdB64: any(named: 'groupIdB64'),
           messageB64: any(named: 'messageB64'),
+          messageId: any(named: 'messageId'),
         ),
       ).thenAnswer((_) async {
         if (fail) throw const MlsException(MlsErrorKind.wrongEpoch, 'too old');
@@ -327,6 +366,7 @@ void main() {
         () => mls.processMessage(
           groupIdB64: any(named: 'groupIdB64'),
           messageB64: any(named: 'messageB64'),
+          messageId: any(named: 'messageId'),
         ),
       ).thenAnswer((_) async => _decrypted(helloB64));
       when(
@@ -339,9 +379,166 @@ void main() {
       final result = await decryptor.decrypt(_encrypted());
 
       expect(result.isUndecryptable, isTrue);
-      verifyNever(() => mls.cacheMessage(any(), any()));
+      verifyNever(
+        () => mls.cacheMessage(
+          contextId: any(named: 'contextId'),
+          generation: any(named: 'generation'),
+          messageId: any(named: 'messageId'),
+          plaintextB64: any(named: 'plaintextB64'),
+        ),
+      );
       expect(failures.cannotRead(_context), isFalse);
     });
+  });
+
+  // C9. `authorId` is a plain field on a wire shape the server composes;
+  // `senderIdentity` is the credential openmls authenticated against a leaf in
+  // the ratchet tree. Nothing compared them, so a server could take any member's
+  // ciphertext and attribute it to anybody. The check already existed in
+  // `MessagePushDecryptor` and had never been applied in-app.
+  group('who the message says it is from', () {
+    void decryptsAs(String? senderIdentity) => when(
+      () => mls.processMessage(
+        groupIdB64: any(named: 'groupIdB64'),
+        messageB64: any(named: 'messageB64'),
+        messageId: any(named: 'messageId'),
+      ),
+    ).thenAnswer(
+      (_) async => MlsProcessedMessage(
+        kind: MlsMessageKind.application,
+        plaintext: helloB64,
+        selfRemoved: false,
+        addedMembers: const [],
+        removedLeafIndices: const [],
+        senderIdentity: senderIdentity,
+        epoch: null,
+      ),
+    );
+
+    test('refuses a message attributed to someone who did not seal it', () async {
+      decryptsAs('user_mallory');
+
+      // `_encrypted` says `authorId: 'user_other'`.
+      final result = await decryptor.decrypt(_encrypted());
+
+      expect(
+        result.isUndecryptable,
+        isTrue,
+        reason: 'the keys worked, but the server named the wrong author - '
+            'showing the text would put words in somebody\'s mouth',
+      );
+      expect(result.content, isNot(helloB64));
+      verifyNever(
+        () => mls.cacheMessage(
+          contextId: any(named: 'contextId'),
+          generation: any(named: 'generation'),
+          messageId: any(named: 'messageId'),
+          plaintextB64: any(named: 'plaintextB64'),
+        ),
+      );
+      expect(
+        failures.cannotRead(_context),
+        isFalse,
+        reason: 'a rejection is not an inability to read, and counting it '
+            'would eventually advise a re-link, which destroys history',
+      );
+    });
+
+    test('shows the authenticated sender, not the server\'s authorId', () async {
+      decryptsAs('user_other');
+
+      final result = await decryptor.decrypt(_encrypted());
+
+      expect(result.content, helloB64);
+      expect(
+        result.authorId,
+        'user_other',
+        reason: 'the avatar, the name and the "is this me" test all read this '
+            'field, so it has to be the credential and not the envelope',
+      );
+    });
+
+    test('refuses a message whose sender the engine could not name', () async {
+      decryptsAs(null);
+
+      final result = await decryptor.decrypt(_encrypted());
+
+      expect(
+        result.isUndecryptable,
+        isTrue,
+        reason: '"we could not tell who sent this" must never render as '
+            '"sent by whoever the server said"',
+      );
+    });
+  });
+
+  // The other half of C9: encryption state is a server field too, so flipping it
+  // to `Plain` used to put server-chosen text into an E2EE thread with no
+  // decrypt, no check and no indicator.
+  group('cleartext in an encrypted thread', () {
+    MessageDto plain({MessageType type = MessageType.message}) => MessageDto(
+      id: 'msg_plain',
+      content: base64Encode(utf8.encode('transfer the money')),
+      conversationId: _context,
+      authorId: 'user_other',
+      type: type,
+    );
+
+    test('is flagged when this device holds a live group for the context', () async {
+      when(() => mls.isEncrypted(_context)).thenReturn(true);
+
+      final result = await decryptor.decrypt(plain());
+
+      expect(result.isUnverifiedPlaintext, isTrue);
+    });
+
+    test('is left alone in a context that is not encrypted', () async {
+      when(() => mls.isEncrypted(_context)).thenReturn(false);
+
+      final result = await decryptor.decrypt(plain());
+
+      expect(result.isUnverifiedPlaintext, isFalse);
+    });
+
+    test('exempts system messages, which the server genuinely cannot seal', () async {
+      when(() => mls.isEncrypted(_context)).thenReturn(true);
+
+      final result = await decryptor.decrypt(plain(type: MessageType.system));
+
+      expect(result.isUnverifiedPlaintext, isFalse);
+    });
+  });
+
+  // An early message is held by the engine and replayed once the missing commits
+  // land. It is neither a success nor a failure, and counting it as a failure
+  // three times puts "Re-link this device" on screen - which destroys history,
+  // for a device that was a few seconds behind.
+  test('a buffered message is not counted as a decrypt failure', () async {
+    when(
+      () => mls.processMessage(
+        groupIdB64: any(named: 'groupIdB64'),
+        messageB64: any(named: 'messageB64'),
+        messageId: any(named: 'messageId'),
+      ),
+    ).thenAnswer(
+      (_) async => const MlsProcessedMessage(
+        kind: MlsMessageKind.buffered,
+        plaintext: null,
+        selfRemoved: false,
+        addedMembers: [],
+        removedLeafIndices: [],
+        senderIdentity: null,
+        epoch: 7,
+      ),
+    );
+
+    for (var i = 0; i < MlsFailureLog.unreadableThreshold + 1; i++) {
+      final result = await decryptor.decrypt(_encrypted(id: 'msg_$i'));
+      expect(result.isUndecryptable, isTrue);
+    }
+
+    expect(failures.decryptFailures(_context), 0);
+    expect(failures.cannotRead(_context), isFalse);
   });
 
   test('flags everything while the session is locked', () async {

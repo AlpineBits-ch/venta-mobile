@@ -23,9 +23,23 @@ class RemoteMessageReceived extends MessageRepositoryEvent {
 }
 
 class RemoteMessageUpdated extends MessageRepositoryEvent {
-  const RemoteMessageUpdated({required this.messageId, required this.content});
+  const RemoteMessageUpdated({
+    required this.messageId,
+    required this.content,
+    this.isUndecryptable = false,
+    this.isUnverifiedPlaintext = false,
+  });
   final String messageId;
   final String content;
+
+  /// The edit arrived as ciphertext this device could not open. The old text is
+  /// stale and the new text is unknown, so the row has to say so rather than
+  /// keep showing either.
+  final bool isUndecryptable;
+
+  /// The edit arrived as cleartext in a context this device holds a live MLS
+  /// group for - see [MessageDto.isUnverifiedPlaintext].
+  final bool isUnverifiedPlaintext;
 }
 
 class RemoteMessageDeleted extends MessageRepositoryEvent {
@@ -107,6 +121,21 @@ class MessageRepository {
     _realtimeSub = realtimeService.events
         .where((e) => e.name.startsWith(prefix))
         .listen(_handleRealtimeEvent);
+
+    // Messages that arrived ahead of the commit that made them readable. They
+    // rendered as "can't be decrypted" at the time; this is what turns those
+    // rows back into text once the catch-up lands, rather than leaving them
+    // unreadable forever.
+    _replaySub = mlsSync.replayedMessages
+        .where((e) => e.contextId == _contextId)
+        .listen(
+          (e) => _eventsController.add(
+            RemoteMessageUpdated(
+              messageId: e.messageId,
+              content: e.plaintextB64,
+            ),
+          ),
+        );
   }
 
   final MessageApi api;
@@ -117,6 +146,7 @@ class MessageRepository {
   final RealtimeService _realtimeService;
   final MessageDecryptor _decryptor;
   late final StreamSubscription<RealtimeEvent> _realtimeSub;
+  late final StreamSubscription<MlsMessageReplayed> _replaySub;
 
   /// Whether this thread is end-to-end encrypted as far as this device knows.
   /// Read by the composer and the header badge.
@@ -185,11 +215,13 @@ class MessageRepository {
             ),
         );
       case 'conversation.MessageUpdated' || 'guild.MessageUpdated':
-        _eventsController.add(
-          RemoteMessageUpdated(
-            messageId: payload['messageId'] as String,
-            content: payload['content'] as String,
-          ),
+        // Never emitted verbatim. `content` here is whatever the server chose
+        // to broadcast, and rendering it straight into an end-to-end encrypted
+        // thread - with no decrypt, no encryption-state check and no indicator -
+        // let the server rewrite any message in any conversation to any text.
+        _emitUpdated(
+          payload['messageId'] as String,
+          payload['content'] as String,
         );
       case 'conversation.MessageDeleted' || 'guild.MessageDeleted':
         _eventsController.add(
@@ -266,6 +298,40 @@ class MessageRepository {
         debugPrint('MessageRepository: failed to decrypt ${message.id}: $e');
         _eventsController.add(
           RemoteMessageReceived(message.copyWith(isUndecryptable: true)),
+        );
+      }
+    });
+  }
+
+  /// An edit, put through the same treatment as an arrival.
+  ///
+  /// Chained behind the decrypt queue for the same reason arrivals are: an edit
+  /// that decrypts faster than the message it edits would apply to a row that is
+  /// not there yet.
+  void _emitUpdated(String messageId, String wireContent) {
+    _decryptChain = _decryptChain.then((_) async {
+      try {
+        final result = await _decryptor.decryptEdit(
+          contextId: _contextId,
+          messageId: messageId,
+          wireContent: wireContent,
+        );
+        _eventsController.add(
+          RemoteMessageUpdated(
+            messageId: messageId,
+            content: result.content,
+            isUndecryptable: result.isUndecryptable,
+            isUnverifiedPlaintext: result.isUnverifiedPlaintext,
+          ),
+        );
+      } catch (e) {
+        debugPrint('MessageRepository: failed to decrypt edit of $messageId: $e');
+        _eventsController.add(
+          RemoteMessageUpdated(
+            messageId: messageId,
+            content: wireContent,
+            isUndecryptable: true,
+          ),
         );
       }
     });
@@ -368,7 +434,12 @@ class MessageRepository {
       // Keep the plaintext for display. The server stores ciphertext and MLS
       // ratchets forward only, so this is the one moment we can cache it -
       // after this, our own message is as unreadable to us as anyone else's.
-      mls.cacheMessage(confirmed.id, plaintextB64);
+      mls.cacheMessage(
+        contextId: _contextId,
+        generation: generation,
+        messageId: confirmed.id,
+        plaintextB64: plaintextB64,
+      );
       return confirmed.copyWith(content: plaintextB64);
     }
 
@@ -435,8 +506,56 @@ class MessageRepository {
     return _decryptor.decryptAll(results);
   }
 
-  Future<MessageDto> editMessage(String messageId, String plaintextContent) =>
-      api.update(messageId: messageId, content: plaintextContent);
+  /// Edits a message, sealing the new text when the thread is encrypted.
+  ///
+  /// This used to post the replacement in **cleartext** regardless. The server
+  /// keeps the row's `EncryptionState`, so the edit was stored as an encrypted
+  /// message whose content was readable plaintext - every other member's client
+  /// would try to decrypt it and fail, and the server got the new text of any
+  /// message in any E2EE conversation for free.
+  ///
+  /// [mlsGeneration] is the generation the *original* message was sealed under.
+  /// The row keeps its own `mlsGeneration`, so sealing under whatever is live
+  /// now would produce ciphertext every reader resolves to the wrong group after
+  /// encryption has been toggled. Falling back to the live generation is only
+  /// for callers that do not have the original to hand.
+  Future<MessageDto> editMessage(
+    String messageId,
+    String plaintextContent, {
+    int? mlsGeneration,
+  }) async {
+    final generation = mlsGeneration ?? mls.knownGeneration(_contextId);
+    final groupId = generation == null
+        ? null
+        : mls.groupId(_contextId, generation);
+
+    if (!isEncrypted || groupId == null) {
+      // Genuinely a cleartext thread, or an edit of cleartext history from
+      // before encryption was switched on.
+      return api.update(messageId: messageId, content: plaintextContent);
+    }
+
+    final plaintextB64 = base64Encode(utf8.encode(plaintextContent));
+    final sealed = await mls.encrypt(
+      groupIdB64: groupId,
+      plaintextB64: plaintextB64,
+    );
+    final confirmed = await api.update(
+      messageId: messageId,
+      content: sealed.ciphertext,
+    );
+
+    // Overwrites the pre-edit plaintext. MLS reads a message off the wire once,
+    // and this device is the one that just produced the new text, so if it is
+    // not written here it is gone.
+    mls.cacheMessage(
+      contextId: _contextId,
+      generation: generation,
+      messageId: messageId,
+      plaintextB64: plaintextB64,
+    );
+    return confirmed.copyWith(content: plaintextB64);
+  }
 
   Future<void> deleteMessage(String messageId) => api.delete(messageId);
 
@@ -497,6 +616,7 @@ class MessageRepository {
 
   void dispose() {
     _realtimeSub.cancel();
+    _replaySub.cancel();
     _eventsController.close();
   }
 }

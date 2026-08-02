@@ -307,6 +307,166 @@ void main() {
       expect(service.warning.value, contains('lowered'));
     });
 
+    // H6 / §L.6. "Every client enforces the last validly-signed level it has
+    // seen" is unimplementable without a version floor, and there was none - so
+    // a genuinely-signed *older* assertion verified perfectly and lowered the
+    // stored level. The server keeps every assertion it has ever been given.
+    group('the version floor', () {
+      void remembered(String json) => when(
+        () => storage.readProtectionLevel(
+          deviceId: any(named: 'deviceId'),
+          userId: any(named: 'userId'),
+        ),
+      ).thenAnswer((_) async => json);
+
+      void serves(Map<String, dynamic> body) =>
+          when(() => dio.get<Map<String, dynamic>>(any()))
+              .thenAnswer((_) async => _ok(body));
+
+      void signatureIs(bool valid) => when(
+        () => engine.verifyProtectionLevel(
+          accountIdentityPublicKeyB64: any(named: 'accountIdentityPublicKeyB64'),
+          userId: any(named: 'userId'),
+          level: any(named: 'level'),
+          version: any(named: 'version'),
+          updatedAt: any(named: 'updatedAt'),
+          assertionB64: any(named: 'assertionB64'),
+        ),
+      ).thenAnswer((_) async => valid);
+
+      test('refuses a genuinely signed but older assertion', () async {
+        remembered(
+          '{"level":"VerifiedDevices","version":7,"updatedAt":"2026-07-01T00:00:00Z"}',
+        );
+        // The assertion the account signed before it upgraded. Replayed, it
+        // verifies - that is the whole attack.
+        serves({
+          'level': 'TrustedSignIn',
+          'version': 3,
+          'updatedAt': '2026-06-01T00:00:00Z',
+          'signedAssertion': 'genuinely-signed-but-old',
+        });
+        signatureIs(true);
+
+        final resolved = await service.refresh(
+          userId: 'user_a',
+          deviceId: 'device-a',
+        );
+
+        expect(resolved.version, 7);
+        expect(service.effectiveLevel, ProtectionLevel.verifiedDevices);
+        expect(service.warning.value, contains('older one'));
+        verifyNever(
+          () => storage.writeProtectionLevel(
+            deviceId: any(named: 'deviceId'),
+            userId: any(named: 'userId'),
+            value: any(named: 'value'),
+          ),
+        );
+      });
+
+      test('accepts a signed assertion at or above the floor', () async {
+        remembered(
+          '{"level":"VerifiedDevices","version":7,"updatedAt":"2026-07-01T00:00:00Z"}',
+        );
+        serves({
+          'level': 'TrustedSignIn',
+          'version': 8,
+          'updatedAt': '2026-08-01T00:00:00Z',
+          'signedAssertion': 'sig',
+        });
+        signatureIs(true);
+
+        final resolved = await service.refresh(
+          userId: 'user_a',
+          deviceId: 'device-a',
+        );
+
+        expect(resolved.version, 8);
+        expect(service.effectiveLevel, ProtectionLevel.trustedSignIn);
+        expect(
+          service.warning.value,
+          contains('lowered'),
+          reason: 'a legitimate downgrade is permitted and still announced',
+        );
+      });
+
+      test('a 200 with no assertion does not become TrustedSignIn', () async {
+        // The concrete hole: `body == null` left `reachable` true, so the
+        // fallback was built with `verified: true` on the relaxed tier. `200 {}`
+        // was a complete downgrade.
+        serves(<String, dynamic>{});
+
+        final resolved = await service.refresh(
+          userId: 'user_a',
+          deviceId: 'device-a',
+        );
+
+        expect(resolved.verified, isFalse);
+        expect(service.effectiveLevel, ProtectionLevel.verifiedDevices);
+      });
+
+      test('a 404 does not erase a level this device has already seen signed', () async {
+        remembered(
+          '{"level":"VerifiedDevices","version":7,"updatedAt":"2026-07-01T00:00:00Z"}',
+        );
+        when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(_status(404));
+
+        await service.refresh(userId: 'user_a', deviceId: 'device-a');
+
+        expect(
+          service.effectiveLevel,
+          ProtectionLevel.verifiedDevices,
+          reason: '"this account has no level" contradicts something this '
+              'device verified, so the floor wins',
+        );
+        expect(service.warning.value, contains('older one'));
+      });
+
+      test('setting a level signs above the floor, not above nothing', () async {
+        remembered(
+          '{"level":"TrustedSignIn","version":9,"updatedAt":"2026-07-01T00:00:00Z"}',
+        );
+        when(
+          () => storage.readAccountIdentity(
+            deviceId: any(named: 'deviceId'),
+            userId: any(named: 'userId'),
+          ),
+        ).thenAnswer((_) async => ('account-pub', 'account-priv'));
+        when(
+          () => engine.signProtectionLevel(
+            accountIdentityPrivateKeyB64: any(named: 'accountIdentityPrivateKeyB64'),
+            userId: any(named: 'userId'),
+            level: any(named: 'level'),
+            version: any(named: 'version'),
+            updatedAt: any(named: 'updatedAt'),
+          ),
+        ).thenAnswer((_) async => 'sig');
+        when(() => dio.put<void>(any(), data: any(named: 'data'))).thenAnswer(
+          (_) async => Response<void>(
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/'),
+          ),
+        );
+
+        await service.setLevel(
+          userId: 'user_a',
+          deviceId: 'device-a',
+          level: ProtectionLevel.verifiedDevices,
+        );
+
+        final sent = verify(
+          () => dio.put<void>(any(), data: captureAny(named: 'data')),
+        ).captured.single as Map<String, dynamic>;
+        expect(
+          sent['version'],
+          10,
+          reason: 'a device that has not refreshed this session would otherwise '
+              'sign version 1, which its own floor then refuses',
+        );
+      });
+    });
+
     test('cannot be set without an account identity key to sign with', () async {
       // §I.2: an account with no identity key cannot enter VerifiedDevices, and
       // the UI has to explain that rather than failing opaquely.

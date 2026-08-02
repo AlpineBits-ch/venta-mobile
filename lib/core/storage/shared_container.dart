@@ -48,6 +48,27 @@ class SharedContainer {
     }
   }
 
+  /// Marks [path] as not-for-backup and pins its file protection class.
+  ///
+  /// iOS only, and a no-op everywhere else: Android's equivalent is declarative
+  /// (`allowBackup="false"` plus `res/xml/data_extraction_rules.xml`) and applies
+  /// to the whole app rather than to one directory.
+  ///
+  /// Best-effort by design. The caller is about to use the directory either way,
+  /// and refusing to run because the backup flag would not take would trade a
+  /// weaker guarantee for no app at all.
+  static Future<void> protect(String path) async {
+    if (!Platform.isIOS) return;
+    try {
+      final applied = await _channel.invokeMethod<bool>('protect', path);
+      if (applied != true) {
+        debugPrint('SharedContainer: $path is still being backed up');
+      }
+    } catch (e) {
+      debugPrint('SharedContainer: could not protect $path: $e');
+    }
+  }
+
   @visibleForTesting
   static void resetForTest() => _lookup = null;
 }

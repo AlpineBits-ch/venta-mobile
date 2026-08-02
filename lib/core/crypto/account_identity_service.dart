@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:venta_mls/venta_mls.dart';
 
@@ -198,6 +200,7 @@ class AccountIdentityService {
   /// this signing key is on that device, and only that device knows it. Other
   /// devices self-issue when they upgrade (§I.2).
   Future<DeviceCertificate?> issueForThisDevice({
+    required String userId,
     required String deviceId,
     required String deviceSignatureKey,
   }) async {
@@ -208,6 +211,7 @@ class AccountIdentityService {
     final expiresAt = issuedAt.add(certificateLifetime);
     final certificate = await _engine.issueDeviceCertificate(
       accountIdentityPrivateKeyB64: privateKey,
+      userId: userId,
       deviceId: deviceId,
       deviceSignatureKeyB64: deviceSignatureKey,
       issuedAt: issuedAt,
@@ -223,19 +227,42 @@ class AccountIdentityService {
   }
 
   /// Checks a certificate against the account identity key **pinned** for
-  /// [ownerUserId], TOFU-style.
+  /// [ownerUserId], TOFU-style, and against the leaf it is supposed to vouch
+  /// for.
   ///
   /// Pinned, not fetched-and-trusted: verifying against whatever key the server
   /// hands back would let it substitute its own and vouch for a leaf it
   /// injected, which is precisely the attack §H.4 exists to stop. A key that
   /// differs from the pin is reported as [CertificateVerdict.identityChanged] so
   /// the caller can raise a safety-number warning instead of quietly accepting.
+  ///
+  /// [leafDeviceId] and [leafSignatureKey] are the values taken from the leaf
+  /// under examination, and they are **required**. This used to verify the
+  /// certificate against the certificate's own self-reported fields, which asks
+  /// "did somebody sign this?" and not "does this vouch for the leaf in front of
+  /// me". Certificates are public, so a server replaying any genuine certificate
+  /// for the account against a leaf it had injected passed - at full
+  /// enforcement, at 100% coverage. See §L.2.
   Future<CertificateVerdict> verify({
     required String ownerUserId,
     required DeviceCertificate? certificate,
+    required String leafDeviceId,
+    required String leafSignatureKey,
   }) async {
     if (certificate == null || certificate.certificate.isEmpty) {
       return CertificateVerdict.missing;
+    }
+
+    // The binding, before anything expensive. A certificate that names another
+    // device, or another signing key, says nothing about this leaf however
+    // valid its signature is.
+    if (certificate.deviceId != leafDeviceId ||
+        !_sameKey(certificate.deviceSignatureKey, leafSignatureKey)) {
+      debugPrint(
+        'AccountIdentityService: a certificate for '
+        '${certificate.deviceId} was presented for leaf $leafDeviceId',
+      );
+      return CertificateVerdict.wrongLeaf;
     }
 
     final pinned = await secureStorage.readPinnedIdentityKey(ownerUserId);
@@ -259,10 +286,14 @@ class AccountIdentityService {
 
     if (certificate.isExpired) return CertificateVerdict.expired;
 
+    // Verified against the values from the **leaf**, not the certificate's own
+    // copies of them. They are equal by the check above, and passing the leaf's
+    // is what keeps that check load-bearing rather than decorative.
     final valid = await _engine.verifyDeviceCertificate(
       accountIdentityPublicKeyB64: identityKey,
-      deviceId: certificate.deviceId,
-      deviceSignatureKeyB64: certificate.deviceSignatureKey,
+      userId: ownerUserId,
+      deviceId: leafDeviceId,
+      deviceSignatureKeyB64: leafSignatureKey,
       issuedAt: certificate.issuedAt,
       expiresAt: certificate.expiresAt,
       certificateB64: certificate.certificate,
@@ -274,6 +305,27 @@ class AccountIdentityService {
     // or someone is forging. Both need a human, and neither may be auto-accepted.
     if (pinned != null) return CertificateVerdict.identityChanged;
     return CertificateVerdict.invalid;
+  }
+
+  /// Two base64 strings naming the same key.
+  ///
+  /// Compared as decoded bytes rather than as strings: base64 is not canonical
+  /// (padding, whitespace, and the URL-safe alphabet all round-trip to the same
+  /// key), and a comparison that a differently-encoded copy of the *right* key
+  /// fails is a comparison that gets relaxed the first time it misfires.
+  static bool _sameKey(String a, String b) {
+    if (a == b) return a.isNotEmpty;
+    try {
+      final left = base64Decode(base64.normalize(a));
+      final right = base64Decode(base64.normalize(b));
+      if (left.isEmpty || left.length != right.length) return false;
+      for (var i = 0; i < left.length; i++) {
+        if (left[i] != right[i]) return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// On sign-out and account switch.
@@ -306,6 +358,15 @@ enum CertificateVerdict {
 
   /// Present but does not verify, and we had no previous pin to compare against.
   invalid,
+
+  /// Present, genuine, and **about a different leaf**.
+  ///
+  /// Certificates are public: a server can fetch a real one for the account and
+  /// present it alongside a leaf it injected. Nothing about the signature is
+  /// wrong, which is exactly why this is its own verdict - it is always an
+  /// attack, never a rollout artefact, and it must not be filed under
+  /// "certificate missing" and tolerated during `Observe`.
+  wrongLeaf,
 
   /// Present, does not verify against the **pinned** key. Either an identity-key
   /// rotation or forgery - a human decides which.

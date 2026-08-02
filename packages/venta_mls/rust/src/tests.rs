@@ -10,6 +10,14 @@
 use crate::mls::*;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 
+/// The AES-256 key every test seals `mls_state.json` under.
+///
+/// Not `None`: every shipping caller supplies one, so the tests exercise the
+/// sealed path rather than a mode only they use. A fixed value is fine here -
+/// what is under test is that the file is unreadable without the key, not that
+/// the key is unpredictable.
+const TEST_STATE_KEY: &str = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+
 /// A device: its own engine state, its own signing key handle, its own storage.
 ///
 /// The storage is not incidental. `save_to_disk` now **errors** when no state
@@ -30,7 +38,7 @@ impl Device {
     fn new(identity: &str, key_package_count: u32) -> (Self, Vec<String>) {
         let dir = tempfile::tempdir().expect("temp dir");
         let mut state = MlsState::default();
-        init_storage(&mut state, &dir.path().to_string_lossy(), false)
+        init_storage(&mut state, &dir.path().to_string_lossy(), false, Some(TEST_STATE_KEY))
             .expect("storage must be initialised before anything can persist");
         let batch = generate_key_packages(&mut state, identity.to_owned(), key_package_count)
             .expect("key package generation");
@@ -249,7 +257,7 @@ fn state_survives_a_restart() {
 
     let signing = {
         let mut alice = MlsState::default();
-        init_storage(&mut alice, &dir_str, false).expect("init storage");
+        init_storage(&mut alice, &dir_str, false, Some(TEST_STATE_KEY)).expect("init storage");
         let batch = generate_key_packages(&mut alice, "alice".to_owned(), 1).unwrap();
         create_group(&mut alice, &gid, &batch.key_handle).unwrap();
         (batch.signing_public_key, batch.signing_private_key)
@@ -257,7 +265,7 @@ fn state_survives_a_restart() {
 
     // Cold start: a brand-new engine pointed at the same directory.
     let mut restarted = MlsState::default();
-    let restored = init_storage(&mut restarted, &dir_str, false).expect("re-init storage");
+    let restored = init_storage(&mut restarted, &dir_str, false, Some(TEST_STATE_KEY)).expect("re-init storage");
     assert!(restored, "state should have been restored from disk");
 
     let handle = load_signing_key(&mut restarted, &signing.0, &signing.1, "alice".to_owned())
@@ -279,14 +287,14 @@ fn re_initialising_the_same_directory_leaves_live_state_alone() {
 
     let gid = group_id();
     let mut alice = MlsState::default();
-    init_storage(&mut alice, &dir_str, false).expect("init storage");
+    init_storage(&mut alice, &dir_str, false, Some(TEST_STATE_KEY)).expect("init storage");
     let batch = generate_key_packages(&mut alice, "alice".to_owned(), 1).unwrap();
     create_group(&mut alice, &gid, &batch.key_handle).unwrap();
 
     // What Android's FCM background isolate does on every push: it shares the
     // process (and therefore this state) with the running app, so a second init
     // must be a no-op rather than a reload that clobbers unsaved work.
-    init_storage(&mut alice, &dir_str, false).expect("re-init the same directory");
+    init_storage(&mut alice, &dir_str, false, Some(TEST_STATE_KEY)).expect("re-init the same directory");
 
     let info = get_group_info(&alice, &gid).expect("the group is still there exactly once");
     assert_eq!(info.group_id, gid);
@@ -304,7 +312,7 @@ fn read_only_storage_never_writes_back() {
     let gid = group_id();
     let signing = {
         let mut alice = MlsState::default();
-        init_storage(&mut alice, &dir_str, false).expect("init storage");
+        init_storage(&mut alice, &dir_str, false, Some(TEST_STATE_KEY)).expect("init storage");
         let batch = generate_key_packages(&mut alice, "alice".to_owned(), 1).unwrap();
         create_group(&mut alice, &gid, &batch.key_handle).unwrap();
         (batch.signing_public_key, batch.signing_private_key)
@@ -317,7 +325,7 @@ fn read_only_storage_never_writes_back() {
     // app's state to read one message and must not persist anything, or it will
     // eventually write a stale copy over whatever the app has committed since.
     let mut extension = MlsState::default();
-    init_storage(&mut extension, &dir_str, true).expect("read-only init");
+    init_storage(&mut extension, &dir_str, true, Some(TEST_STATE_KEY)).expect("read-only init");
     let handle = load_signing_key(&mut extension, &signing.0, &signing.1, "alice".to_owned()).unwrap();
     send_message(&mut extension, &gid, &handle, &B64.encode("ratchets forward")).expect("encrypt");
 
@@ -325,6 +333,250 @@ fn read_only_storage_never_writes_back() {
     assert_eq!(before, after, "a read-only engine must leave the state file untouched");
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ---------------------------------------------------------------------------
+// The state file at rest (C8)
+//
+// `mls_state.json` is every epoch secret, every leaf HPKE private key and every
+// init private key this device holds. It used to be plain JSON in a directory
+// Android's auto-backup includes by default, so a restore onto an attacker's
+// handset handed over live group keys with no keychain access and no unlock.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_state_file_holds_no_readable_key_material() {
+    let dir = std::env::temp_dir().join(format!("venta_mls_sealed_{}", std::process::id()));
+    let dir_str = dir.to_string_lossy().into_owned();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let gid = group_id();
+    let mut alice = MlsState::default();
+    init_storage(&mut alice, &dir_str, false, Some(TEST_STATE_KEY)).unwrap();
+    let batch = generate_key_packages(&mut alice, "alice".to_owned(), 2).unwrap();
+    create_group(&mut alice, &gid, &batch.key_handle).unwrap();
+    send_message(&mut alice, &gid, &batch.key_handle, &B64.encode("secret")).unwrap();
+
+    let raw = std::fs::read(dir.join("mls_state.json")).expect("state was written");
+    assert!(
+        raw.starts_with(b"VENTAMLS1"),
+        "a sealed state file must be recognisable as one"
+    );
+
+    // The old file was `{"version":1,"group_ids":[...],"storage":{...}}` with
+    // every private key base64 in plain sight. Nothing structural may survive.
+    let as_text = String::from_utf8_lossy(&raw);
+    for marker in ["storage", "group_ids", "version", &gid] {
+        assert!(
+            !as_text.contains(marker),
+            "'{}' is readable in the state file - it is not actually sealed",
+            marker
+        );
+    }
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(&raw).is_err(),
+        "the state file must not parse as JSON any more"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_sealed_state_file_is_useless_without_its_key() {
+    let dir = std::env::temp_dir().join(format!("venta_mls_wrongkey_{}", std::process::id()));
+    let dir_str = dir.to_string_lossy().into_owned();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let gid = group_id();
+    {
+        let mut alice = MlsState::default();
+        init_storage(&mut alice, &dir_str, false, Some(TEST_STATE_KEY)).unwrap();
+        let batch = generate_key_packages(&mut alice, "alice".to_owned(), 1).unwrap();
+        create_group(&mut alice, &gid, &batch.key_handle).unwrap();
+    }
+
+    // Restoring the *files* onto another handset is exactly this: the directory
+    // comes back, the Keystore/Keychain entry does not.
+    let mut without_key = MlsState::default();
+    assert!(
+        init_storage(&mut without_key, &dir_str, false, None).is_err(),
+        "a sealed state file must not load with no key at all"
+    );
+
+    let mut wrong_key = MlsState::default();
+    let other = B64.encode([7u8; 32]);
+    assert!(
+        init_storage(&mut wrong_key, &dir_str, false, Some(&other)).is_err(),
+        "a sealed state file must not load under a different device's key"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_legacy_plaintext_state_file_is_sealed_on_first_load() {
+    let dir = std::env::temp_dir().join(format!("venta_mls_legacy_{}", std::process::id()));
+    let dir_str = dir.to_string_lossy().into_owned();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // Every install in the field has one of these. Refusing to read it would
+    // cost the user every encrypted conversation on the handset.
+    //
+    // Built sealed and then unsealed by hand, because the engine can no longer
+    // be talked into producing a plaintext state file - which is the whole of
+    // the fix this fixture now has to work around.
+    let gid = group_id();
+    {
+        let mut alice = MlsState::default();
+        init_storage(&mut alice, &dir_str, false, Some(TEST_STATE_KEY)).unwrap();
+        let batch = generate_key_packages(&mut alice, "alice".to_owned(), 1).unwrap();
+        create_group(&mut alice, &gid, &batch.key_handle).unwrap();
+    }
+    unseal_state_file_for_test(&dir.join("mls_state.json"), TEST_STATE_KEY).unwrap();
+    let legacy = std::fs::read(dir.join("mls_state.json")).unwrap();
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(&legacy).is_ok(),
+        "the fixture must actually be the old plaintext shape"
+    );
+
+    let mut upgraded = MlsState::default();
+    assert!(init_storage(&mut upgraded, &dir_str, false, Some(TEST_STATE_KEY)).unwrap());
+    assert!(
+        get_group_info(&upgraded, &gid).is_ok(),
+        "the migration must not cost the groups it is protecting"
+    );
+
+    // Sealed in place on that same load, not on the next save: the plaintext
+    // copy is the thing a device backup would have carried away, so it must not
+    // survive the first launch that can replace it.
+    let after = std::fs::read(dir.join("mls_state.json")).unwrap();
+    assert!(after.starts_with(b"VENTAMLS1"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `write_state_file` had `None => json.to_vec()`: no key meant the init keys,
+/// the leaf HPKE private keys and every epoch secret went to disk as cleartext
+/// JSON, from inside the function that exists to encrypt them, reporting
+/// success. On iOS that branch was one missing entitlement away at all times.
+///
+/// The refusal has to be at `init_storage` as well as at the write, because a
+/// failure at the first invite instead of at startup is a failure nobody reads
+/// as "the keychain is not answering".
+#[test]
+fn a_state_file_is_never_written_unsealed() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    let mut engine = MlsState::default();
+    let refused = init_storage(&mut engine, &dir_str, false, None)
+        .expect_err("a writable engine with no state key must not start");
+    // Dart's `MlsService.looksSealedWithoutKey` branches on this substring, and
+    // the branch it picks is "leave the files alone" rather than "wipe every
+    // group on this handset".
+    assert!(
+        refused.contains("state key"),
+        "the refusal must be recognisable as a key problem, got: {refused}"
+    );
+
+    assert!(
+        !dir.path().join("mls_state.json").exists(),
+        "the refusal must not have left a state file behind"
+    );
+}
+
+/// The other half: the extension's read-only path genuinely has no key and must
+/// keep working, or closing the write branch takes push decryption with it.
+#[test]
+fn a_read_only_engine_still_opens_a_legacy_file_without_a_key() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    let gid = group_id();
+    {
+        let mut alice = MlsState::default();
+        init_storage(&mut alice, &dir_str, false, Some(TEST_STATE_KEY)).unwrap();
+        let batch = generate_key_packages(&mut alice, "alice".to_owned(), 1).unwrap();
+        create_group(&mut alice, &gid, &batch.key_handle).unwrap();
+    }
+    unseal_state_file_for_test(&dir.path().join("mls_state.json"), TEST_STATE_KEY).unwrap();
+
+    let mut extension = MlsState::default();
+    assert!(
+        init_storage(&mut extension, &dir_str, true, None).expect("read-only init with no key"),
+        "the legacy file must still load"
+    );
+    assert!(get_group_info(&extension, &gid).is_ok());
+
+    // And read-only must not have taken the upgrade path either: it has no key
+    // to seal with, and writing at all from the extension would clobber whatever
+    // the app committed in the meantime.
+    let after = std::fs::read(dir.path().join("mls_state.json")).unwrap();
+    assert!(
+        !after.starts_with(b"VENTAMLS1"),
+        "a read-only engine must not have rewritten the file"
+    );
+}
+
+/// A failed rename used to leave `mls_state.json.tmp` on disk holding exactly
+/// the same private keys as the file it failed to become - under a name nothing
+/// reads, so nothing ever notices it or cleans it up.
+#[test]
+fn a_failed_write_leaves_no_temp_copy_of_the_keys() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    let mut engine = MlsState::default();
+    init_storage(&mut engine, &dir_str, false, Some(TEST_STATE_KEY)).unwrap();
+    let batch = generate_key_packages(&mut engine, "alice".to_owned(), 1).unwrap();
+
+    // A non-empty directory cannot be replaced by a file, on any platform these
+    // run on, which is the cheapest way to make the rename and only the rename
+    // fail.
+    let state = dir.path().join("mls_state.json");
+    std::fs::remove_file(&state).unwrap();
+    std::fs::create_dir(&state).unwrap();
+    std::fs::write(state.join("occupied"), b"x").unwrap();
+
+    assert!(
+        create_group(&mut engine, &group_id(), &batch.key_handle).is_err(),
+        "a save that could not land must not report success"
+    );
+    assert!(
+        !dir.path().join("mls_state.json.tmp").exists(),
+        "the temp file holds the same leaf private keys the real one does"
+    );
+}
+
+/// H9: the two ratchet literals were transposed on both clients, with comments
+/// asserting the reverse order.
+///
+/// `SenderRatchetConfiguration::new(out_of_order_tolerance, maximum_forward_distance)`
+/// - checked against `openmls-0.8.1/src/tree/sender_ratchet.rs:40`, default
+/// `(5, 1000)`. `new(500, 10)` therefore retained 500 spent message secrets per
+/// sender per epoch and rejected anything more than 10 generations ahead.
+#[test]
+fn the_ratchet_keeps_few_secrets_and_tolerates_a_long_gap() {
+    let config = ratchet_config();
+
+    assert_eq!(
+        config.out_of_order_tolerance(),
+        10,
+        "spent decryption secrets are live key material; 500 of them per sender \
+         per epoch is ~100x the library default and degrades intra-epoch forward secrecy"
+    );
+    assert_eq!(
+        config.maximum_forward_distance(),
+        500,
+        "10 means the eleventh message read ahead of the app in one epoch is \
+         permanently rejected - a lock screen of notifications reaches that with \
+         no attacker involved"
+    );
+    assert!(
+        config.maximum_forward_distance() > config.out_of_order_tolerance(),
+        "skipping ahead must be cheaper than remembering the past, or the two \
+         are the wrong way round again"
+    );
 }
 
 
@@ -347,13 +599,13 @@ fn a_second_account_does_not_inherit_the_first_accounts_state() {
     let gid_a = B64.encode([1u8; 16]);
     let mut engine = MlsState::default();
 
-    init_storage(&mut engine, &dir_a, false).expect("account A storage");
+    init_storage(&mut engine, &dir_a, false, Some(TEST_STATE_KEY)).expect("account A storage");
     let batch_a = generate_key_packages(&mut engine, "alice".to_owned(), 1).unwrap();
     create_group(&mut engine, &gid_a, &batch_a.key_handle).unwrap();
     assert!(get_group_info(&engine, &gid_a).is_ok());
 
     // Same process, same engine - exactly what an account switch looks like.
-    init_storage(&mut engine, &dir_b, false).expect("account B storage");
+    init_storage(&mut engine, &dir_b, false, Some(TEST_STATE_KEY)).expect("account B storage");
 
     assert!(
         get_group_info(&engine, &gid_a).is_err(),
@@ -371,7 +623,7 @@ fn a_second_account_does_not_inherit_the_first_accounts_state() {
     );
 
     // And A's file is intact - switching back finds its history, not a wipe.
-    init_storage(&mut engine, &dir_a, false).expect("back to account A");
+    init_storage(&mut engine, &dir_a, false, Some(TEST_STATE_KEY)).expect("back to account A");
     assert!(
         get_group_info(&engine, &gid_a).is_ok(),
         "account A's own state must survive a round trip through account B"
@@ -395,7 +647,7 @@ fn key_package_init_keys_survive_a_restart_and_still_open_a_welcome() {
     // Bob mints a package and persists it, then goes away.
     let (bob_signing, bob_package) = {
         let mut bob = MlsState::default();
-        init_storage(&mut bob, &dir, false).expect("bob storage");
+        init_storage(&mut bob, &dir, false, Some(TEST_STATE_KEY)).expect("bob storage");
         let batch = generate_key_packages(&mut bob, "bob".to_owned(), 1).unwrap();
         (
             (batch.signing_public_key, batch.signing_private_key),
@@ -411,7 +663,7 @@ fn key_package_init_keys_survive_a_restart_and_still_open_a_welcome() {
     // Bob comes back on a cold start - a brand new engine reading the file.
     let mut bob = MlsState::default();
     assert!(
-        init_storage(&mut bob, &dir, false).expect("restore bob"),
+        init_storage(&mut bob, &dir, false, Some(TEST_STATE_KEY)).expect("restore bob"),
         "state should have been restored, not started fresh"
     );
     let handle = load_signing_key(&mut bob, &bob_signing.0, &bob_signing.1, "bob".to_owned())
@@ -429,7 +681,7 @@ fn a_backup_round_trips_on_the_same_device() {
 
     let gid = group_id();
     let mut engine = MlsState::default();
-    init_storage(&mut engine, &dir, false).unwrap();
+    init_storage(&mut engine, &dir, false, Some(TEST_STATE_KEY)).unwrap();
     let batch = generate_key_packages(&mut engine, "alice".to_owned(), 1).unwrap();
     create_group(&mut engine, &gid, &batch.key_handle).unwrap();
 
@@ -457,7 +709,7 @@ fn a_backup_round_trips_on_the_same_device() {
     // A fresh install, same device id - the reinstall journey (§H.3 row 1).
     let restore_dir = root.path().join("restored").to_string_lossy().into_owned();
     let mut restored = MlsState::default();
-    init_storage(&mut restored, &restore_dir, false).unwrap();
+    init_storage(&mut restored, &restore_dir, false, Some(TEST_STATE_KEY)).unwrap();
 
     let result = import_backup(
         &mut restored,
@@ -491,7 +743,7 @@ fn a_backup_restored_on_a_different_device_skips_the_engine() {
 
     let gid = group_id();
     let mut engine = MlsState::default();
-    init_storage(&mut engine, &dir, false).unwrap();
+    init_storage(&mut engine, &dir, false, Some(TEST_STATE_KEY)).unwrap();
     let batch = generate_key_packages(&mut engine, "alice".to_owned(), 1).unwrap();
     create_group(&mut engine, &gid, &batch.key_handle).unwrap();
 
@@ -510,7 +762,7 @@ fn a_backup_restored_on_a_different_device_skips_the_engine() {
 
     let new_dir = root.path().join("new-handset").to_string_lossy().into_owned();
     let mut new_device = MlsState::default();
-    init_storage(&mut new_device, &new_dir, false).unwrap();
+    init_storage(&mut new_device, &new_dir, false, Some(TEST_STATE_KEY)).unwrap();
 
     let result = import_backup(
         &mut new_device,
@@ -540,7 +792,7 @@ fn a_backup_for_another_account_is_refused() {
     let root = tempfile::tempdir().expect("temp dir");
     let dir = root.path().join("d").to_string_lossy().into_owned();
     let mut engine = MlsState::default();
-    init_storage(&mut engine, &dir, false).unwrap();
+    init_storage(&mut engine, &dir, false, Some(TEST_STATE_KEY)).unwrap();
     let batch = generate_key_packages(&mut engine, "alice".to_owned(), 0).unwrap();
 
     let blob = export_backup(
@@ -572,7 +824,7 @@ fn a_backup_will_not_open_with_the_wrong_passphrase() {
     let root = tempfile::tempdir().expect("temp dir");
     let dir = root.path().join("d").to_string_lossy().into_owned();
     let mut engine = MlsState::default();
-    init_storage(&mut engine, &dir, false).unwrap();
+    init_storage(&mut engine, &dir, false, Some(TEST_STATE_KEY)).unwrap();
     let batch = generate_key_packages(&mut engine, "alice".to_owned(), 0).unwrap();
 
     let blob = export_backup(
@@ -598,29 +850,48 @@ fn a_backup_will_not_open_with_the_wrong_passphrase() {
     .is_err());
 }
 
+/// Wall clock, so certificates in these tests sit inside their own validity
+/// window rather than in 1970. The window is now checked inside
+/// `verify_device_certificate` (§L.9), which the fixed 1000/2000 the earlier
+/// version of this test used would fail on every run.
+fn now_seconds() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+}
+
+const DEVICE_KEY_A: &str = "ZGV2aWNlLXNpZ25pbmcta2V5";
+const DEVICE_KEY_B: &str = "b3RoZXItc2lnbmluZy1rZXk=";
+
 #[test]
 fn a_device_certificate_verifies_only_against_the_issuing_account_key() {
     let engine = MlsState::default();
     let account = generate_account_identity(&engine).unwrap();
     let impostor = generate_account_identity(&engine).unwrap();
 
+    let issued = now_seconds() - 60;
+    let expires = issued + 86_400;
+
     let cert = issue_device_certificate(
         &engine,
         &account.private_key,
+        "user_1",
         "device_1",
-        "ZGV2aWNlLXNpZ25pbmcta2V5",
-        1_000,
-        2_000,
+        DEVICE_KEY_A,
+        issued,
+        expires,
     )
     .unwrap();
 
     assert!(verify_device_certificate(
         &engine,
         &account.public_key,
+        "user_1",
         "device_1",
-        "ZGV2aWNlLXNpZ25pbmcta2V5",
-        1_000,
-        2_000,
+        DEVICE_KEY_A,
+        issued,
+        expires,
         &cert,
     )
     .unwrap());
@@ -631,41 +902,49 @@ fn a_device_certificate_verifies_only_against_the_issuing_account_key() {
         !verify_device_certificate(
             &engine,
             &impostor.public_key,
+            "user_1",
             "device_1",
-            "ZGV2aWNlLXNpZ25pbmcta2V5",
-            1_000,
-            2_000,
+            DEVICE_KEY_A,
+            issued,
+            expires,
             &cert,
         )
         .unwrap(),
         "a certificate must not verify against an account key that did not issue it"
     );
 
-    // Every field is bound. Moving the certificate to another device, another
-    // signing key, or another validity window must all fail.
-    let variations: [(&str, &str, i64, i64); 4] = [
-        ("device_2", "ZGV2aWNlLXNpZ25pbmcta2V5", 1_000, 2_000),
-        ("device_1", "b3RoZXIta2V5", 1_000, 2_000),
-        ("device_1", "ZGV2aWNlLXNpZ25pbmcta2V5", 1_001, 2_000),
-        ("device_1", "ZGV2aWNlLXNpZ25pbmcta2V5", 1_000, 2_001),
+    // Every field is bound. Moving the certificate to another account, another
+    // device, another signing key, or another validity window must all fail.
+    //
+    // The `user_2` row is §L.2: `ClientDeviceId` is unique only *per user*, so
+    // without the account in the payload a certificate for user 1's device 7 is
+    // a structurally valid certificate for user 2's device 7.
+    let variations: [(&str, &str, &str, i64, i64); 5] = [
+        ("user_2", "device_1", DEVICE_KEY_A, issued, expires),
+        ("user_1", "device_2", DEVICE_KEY_A, issued, expires),
+        ("user_1", "device_1", DEVICE_KEY_B, issued, expires),
+        ("user_1", "device_1", DEVICE_KEY_A, issued + 1, expires),
+        ("user_1", "device_1", DEVICE_KEY_A, issued, expires + 1),
     ];
-    for (device, key, issued, expires) in variations {
+    for (user, device, key, iat, exp) in variations {
         assert!(
             !verify_device_certificate(
                 &engine,
                 &account.public_key,
+                user,
                 device,
                 key,
-                issued,
-                expires,
+                iat,
+                exp,
                 &cert,
             )
             .unwrap(),
-            "certificate must not transfer to {} / {} / {} / {}",
+            "certificate must not transfer to {} / {} / {} / {} / {}",
+            user,
             device,
             key,
-            issued,
-            expires
+            iat,
+            exp
         );
     }
 
@@ -674,13 +953,84 @@ fn a_device_certificate_verifies_only_against_the_issuing_account_key() {
     assert!(!verify_device_certificate(
         &engine,
         &account.public_key,
+        "user_1",
         "device_1",
-        "ZGV2aWNlLXNpZ25pbmcta2V5",
-        1_000,
-        2_000,
+        DEVICE_KEY_A,
+        issued,
+        expires,
         "",
     )
     .unwrap());
+}
+
+/// §L.9: `verify_device_certificate` never looked at the window it was handed.
+///
+/// The Dart caller checked `isExpired` separately, so the hole was reachable
+/// only by a caller that forgot - but this is the only function that sees the
+/// signed bytes, and a 180-day certificate that verifies forever is not a
+/// 180-day certificate.
+#[test]
+fn a_device_certificate_outside_its_own_window_is_refused() {
+    let engine = MlsState::default();
+    let account = generate_account_identity(&engine).unwrap();
+    let now = now_seconds();
+
+    let expired_issued = now - 200_000;
+    let expired_expires = now - 100;
+    let expired = issue_device_certificate(
+        &engine,
+        &account.private_key,
+        "user_1",
+        "device_1",
+        DEVICE_KEY_A,
+        expired_issued,
+        expired_expires,
+    )
+    .unwrap();
+    assert!(
+        !verify_device_certificate(
+            &engine,
+            &account.public_key,
+            "user_1",
+            "device_1",
+            DEVICE_KEY_A,
+            expired_issued,
+            expired_expires,
+            &expired,
+        )
+        .unwrap(),
+        "an expired certificate must not verify, however good its signature"
+    );
+
+    // Pre-dated well past any plausible clock drift. Accepting one would let a
+    // device that holds the identity key today mint a certificate that only
+    // becomes usable after it has been removed.
+    let future_issued = now + 86_400;
+    let future_expires = future_issued + 86_400;
+    let future = issue_device_certificate(
+        &engine,
+        &account.private_key,
+        "user_1",
+        "device_1",
+        DEVICE_KEY_A,
+        future_issued,
+        future_expires,
+    )
+    .unwrap();
+    assert!(
+        !verify_device_certificate(
+            &engine,
+            &account.public_key,
+            "user_1",
+            "device_1",
+            DEVICE_KEY_A,
+            future_issued,
+            future_expires,
+            &future,
+        )
+        .unwrap(),
+        "a certificate issued in the future must not verify yet"
+    );
 }
 
 /// Section G.6's headline: a proof the server made up, without the master key,
@@ -859,7 +1209,7 @@ fn this_engine_consumes_alpines_golden_key_package_welcome_commit_and_message() 
     .unwrap();
 
     let mut engine = MlsState::default();
-    init_storage(&mut engine, &dir.to_string_lossy(), false).expect("restore bob's store");
+    init_storage(&mut engine, &dir.to_string_lossy(), false, Some(TEST_STATE_KEY)).expect("restore bob's store");
 
     // The key package must validate on this engine before anything else - that
     // is the check an approver makes before vouching for a device.
@@ -929,7 +1279,7 @@ fn generate_golden_fixture() {
     // Bob is persisted so his provider store - and therefore the private half of
     // his key package - can be shipped in the fixture.
     let mut bob = MlsState::default();
-    init_storage(&mut bob, &bob_dir.to_string_lossy(), false).unwrap();
+    init_storage(&mut bob, &bob_dir.to_string_lossy(), false, Some(TEST_STATE_KEY)).unwrap();
     let bob_batch = generate_key_packages(&mut bob, "bob".to_owned(), 1).unwrap();
     let bob_package = bob_batch.key_packages[0].key_package.clone();
 
@@ -1044,7 +1394,7 @@ fn a_read_only_engine_still_works_and_still_writes_nothing() {
     let gid = group_id();
     let signing = {
         let mut app = MlsState::default();
-        init_storage(&mut app, &dir, false).unwrap();
+        init_storage(&mut app, &dir, false, Some(TEST_STATE_KEY)).unwrap();
         let batch = generate_key_packages(&mut app, "alice".to_owned(), 1).unwrap();
         create_group(&mut app, &gid, &batch.key_handle).unwrap();
         (batch.signing_public_key, batch.signing_private_key)
@@ -1054,7 +1404,7 @@ fn a_read_only_engine_still_works_and_still_writes_nothing() {
     let before = std::fs::read(&state_file).expect("state was written");
 
     let mut extension = MlsState::default();
-    init_storage(&mut extension, &dir, true).expect("read-only init");
+    init_storage(&mut extension, &dir, true, Some(TEST_STATE_KEY)).expect("read-only init");
     let handle =
         load_signing_key(&mut extension, &signing.0, &signing.1, "alice".to_owned()).unwrap();
     send_message(&mut extension, &gid, &handle, &B64.encode("ratchets forward"))
@@ -1257,7 +1607,7 @@ fn declared_kdf_parameters_are_the_ones_actually_used() {
     let root = tempfile::tempdir().expect("temp dir");
     let dir = root.path().join("d").to_string_lossy().into_owned();
     let mut engine = MlsState::default();
-    init_storage(&mut engine, &dir, false).unwrap();
+    init_storage(&mut engine, &dir, false, Some(TEST_STATE_KEY)).unwrap();
     let batch = generate_key_packages(&mut engine, "alice".to_owned(), 0).unwrap();
 
     let blob = export_backup(
@@ -1327,6 +1677,77 @@ fn declared_kdf_parameters_are_the_ones_actually_used() {
             err
         );
     }
+}
+
+/// §L.9: the header is self-describing *and* attacker-controlled, so it needs a
+/// ceiling.
+///
+/// `m` is a u32 of kibibytes - 4 TiB, allocated eagerly, on the one code path a
+/// user reaches when they have already lost their device. This is a denial of
+/// service only (weak parameters do not make a stolen blob crackable; the AEAD
+/// still fails closed), which is exactly why it must not be a *clamp*: deriving
+/// with parameters other than the ones declared reports "wrong passphrase" for
+/// what is actually a rejected header.
+#[test]
+fn declared_kdf_parameters_are_refused_when_absurd() {
+    let root = tempfile::tempdir().expect("temp dir");
+    let dir = root.path().join("d").to_string_lossy().into_owned();
+    let mut engine = MlsState::default();
+    init_storage(&mut engine, &dir, false, Some(TEST_STATE_KEY)).unwrap();
+    let batch = generate_key_packages(&mut engine, "alice".to_owned(), 0).unwrap();
+
+    let blob = export_backup(
+        &engine,
+        "passphrase".to_owned(),
+        "user_1".to_owned(),
+        "device_1".to_owned(),
+        "1.0.0".to_owned(),
+        batch.key_handle,
+        std::collections::HashMap::new(),
+        None,
+        None,
+    )
+    .unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&blob).unwrap();
+
+    // 4 TiB of memory, 4 billion passes, 4 billion lanes.
+    let absurd: [(&str, serde_json::Value); 3] = [
+        ("m", serde_json::json!(u32::MAX)),
+        ("t", serde_json::json!(u32::MAX)),
+        ("p", serde_json::json!(u32::MAX)),
+    ];
+
+    for (field, value) in absurd {
+        let mut edited = envelope.clone();
+        edited["kdf"][field] = value;
+        let err = import_backup(
+            &mut engine,
+            serde_json::to_string(&edited).unwrap(),
+            "passphrase".to_owned(),
+            "user_1".to_owned(),
+            "device_1".to_owned(),
+        )
+        .expect_err(&format!("kdf.{} = u32::MAX must be refused, not attempted", field));
+
+        assert!(
+            err.contains("refusing declared Argon2 parameters"),
+            "kdf.{} must be rejected by the ceiling, and say so: {}",
+            field,
+            err
+        );
+    }
+
+    // The ceilings are above what either client writes, so an ordinary blob is
+    // untouched by them - checked here so a future tightening cannot lock the
+    // real format out without failing.
+    import_backup(
+        &mut engine,
+        blob,
+        "passphrase".to_owned(),
+        "user_1".to_owned(),
+        "device_1".to_owned(),
+    )
+    .expect("the parameters this client actually writes must stay acceptable");
 }
 
 /// The same property for `ApplicationUser.EncryptedMasterKey`, which is one row

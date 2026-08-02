@@ -156,6 +156,92 @@ void main() {
 
       expect(service.status.value, MasterKeyStatus.ready);
     });
+
+    // H3. "The account has no envelope" and "I could not ask" arrived as the
+    // same null, and `unlock` read the second as the first.
+    test('a failed read is not reported as an account with no envelope', () async {
+      when(() => api.fetchRecoveryKey())
+          .thenAnswer((_) async => _state(password: _wrapping('p')));
+      await service.readStatus();
+      expect(service.status.value, MasterKeyStatus.needsRecoveryCode);
+
+      when(() => api.fetchRecoveryKey()).thenThrow(
+        DioException(requestOptions: RequestOptions(path: '/')),
+      );
+
+      final read = await service.readStatus();
+
+      expect(read.reachable, isFalse);
+      expect(read.envelope, isNull);
+      expect(
+        service.status.value,
+        MasterKeyStatus.needsRecoveryCode,
+        reason: 'whatever was last known is closer to the truth than '
+            '"not set up"',
+      );
+    });
+  });
+
+  // H3, the consequence. `unlock` branched on a null envelope and called
+  // `setUp`, which mints a **fresh random master key** and writes it over the
+  // account's real one - orphaning every backup blob, every admission proof and
+  // the account identity key, silently, and reporting success. Any timeout did
+  // it.
+  group('unlock never mints over a real master key', () {
+    test('a transport failure fails the unlock instead of minting', () async {
+      when(() => api.fetchRecoveryKey()).thenThrow(
+        DioException(requestOptions: RequestOptions(path: '/')),
+      );
+
+      final key = await service.unlock(
+        userId: _userId,
+        deviceId: _deviceId,
+        password: 'hunter2',
+      );
+
+      expect(key, isNull, reason: 'retrying costs one attempt; minting is final');
+      verifyNever(
+        () => engine.setupMasterKey(any(), recoveryCode: any(named: 'recoveryCode')),
+      );
+      verifyNever(
+        () => api.putRecoveryKey(
+          version: any(named: 'version'),
+          passwordWrapping: any(named: 'passwordWrapping'),
+          recoveryCodeWrapping: any(named: 'recoveryCodeWrapping'),
+        ),
+      );
+      verifyNever(
+        () => storage.writeMasterKey(
+          deviceId: any(named: 'deviceId'),
+          userId: any(named: 'userId'),
+          masterKey: any(named: 'masterKey'),
+        ),
+      );
+    });
+
+    test('an account that genuinely has none is still set up', () async {
+      // The §I.2 path this branch exists for has to keep working, or the fix
+      // above is just a regression.
+      when(() => api.fetchRecoveryKey()).thenAnswer((_) async => null);
+      when(
+        () => engine.setupMasterKey(any(), recoveryCode: any(named: 'recoveryCode')),
+      ).thenAnswer(
+        (_) async => {
+          'passwordWrapping': _wrapping('p').toJson(),
+          'recoveryCodeWrapping': _wrapping('r').toJson(),
+          'recoveryCode': 'ABCD-EFGH-2345-6789',
+          'masterKey': _masterKey,
+        },
+      );
+
+      final key = await service.unlock(
+        userId: _userId,
+        deviceId: _deviceId,
+        password: 'hunter2',
+      );
+
+      expect(key, _masterKey);
+    });
   });
 
   group('setup', () {

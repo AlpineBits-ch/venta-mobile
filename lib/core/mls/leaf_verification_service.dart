@@ -68,44 +68,121 @@ class LeafVerificationService {
   /// date in a plan.
   int uncertifiedLeavesSeen = 0;
 
+  /// Devices that have presented a valid certificate at least once, per
+  /// account.
+  ///
+  /// §L.5: **absence after presence is an attack, not a pending upgrade.** The
+  /// three-state rollout exists because no device in the field has a certificate
+  /// yet; it must not also excuse a device that had one yesterday and does not
+  /// today, which is what a server suppressing the certificate of a leaf it
+  /// wants to substitute looks like.
+  ///
+  /// Session-scoped rather than persisted, which is a real limitation: a
+  /// suppression that outlasts a restart is not caught. Persisting it needs a
+  /// store this service does not own, and a wrong entry here proposes removing
+  /// somebody's device - so the cautious version ships first.
+  final Set<String> _hasEverCertified = {};
+
+  /// Leaves whose credential identity was not already known in the group.
+  ///
+  /// §L.5 again: `Observe` suppresses *removal*, never *detection*. An unknown
+  /// identity turning up in a group is the external-commit injection signature
+  /// and has to reach the user at every phase.
+  final Set<String> unknownIdentitiesSeen = {};
+
+  /// [leafDeviceId] and [leafSignatureKey] come from the **leaf**, not from the
+  /// certificate. `check` used to take both and read neither, verifying the
+  /// certificate against its own self-reported fields; certificates are public,
+  /// so replaying a genuine one against an injected leaf passed at full
+  /// enforcement (§L.2).
+  ///
+  /// [knownIdentities] is the set of credential identities the caller already
+  /// expects in this group - the conversation's members. A leaf outside it is
+  /// surfaced regardless of phase.
   Future<LeafVerdict> check({
     required String ownerUserId,
-    required String deviceId,
-    required String deviceSignatureKey,
+    required String leafDeviceId,
+    required String leafSignatureKey,
+    Set<String> knownIdentities = const {},
   }) async {
     final phase = await policy.resolve();
+    final everCertified = _hasEverCertified.contains(
+      _seen(ownerUserId, leafDeviceId),
+    );
+
+    final unknownIdentity =
+        knownIdentities.isNotEmpty && !knownIdentities.contains(ownerUserId);
+    if (unknownIdentity) unknownIdentitiesSeen.add(ownerUserId);
 
     DeviceCertificate? certificate;
     try {
       final raw = await deviceApi.fetchDeviceCertificate(
         userId: ownerUserId,
-        clientDeviceId: deviceId,
+        clientDeviceId: leafDeviceId,
       );
       if (raw != null) certificate = DeviceCertificate.fromJson(raw);
     } catch (e) {
       // A certificate we could not fetch is not a certificate that failed.
       // Treating a flaky network as forgery would remove leaves over a timeout.
-      debugPrint('MLS: could not fetch $deviceId\'s certificate: $e');
+      debugPrint('MLS: could not fetch $leafDeviceId\'s certificate: $e');
     }
 
     final verdict = await identity.verify(
       ownerUserId: ownerUserId,
       certificate: certificate,
+      leafDeviceId: leafDeviceId,
+      leafSignatureKey: leafSignatureKey,
     );
 
     switch (verdict) {
       case CertificateVerdict.valid:
-        return const LeafVerdict(
+        _hasEverCertified.add(_seen(ownerUserId, leafDeviceId));
+        return LeafVerdict(
           action: LeafAction.allow,
           verdict: CertificateVerdict.valid,
+          warning: unknownIdentity
+              ? '$ownerUserId joined this conversation from a device nobody '
+                    'here added. Their certificate checks out, but check with '
+                    'them that it was them.'
+              : null,
+        );
+
+      // Genuine certificate, wrong leaf. Not a rollout artefact and not
+      // recoverable by waiting: somebody presented a real certificate for a
+      // device other than the one in front of us, which only happens on purpose.
+      case CertificateVerdict.wrongLeaf:
+        return LeafVerdict(
+          action: phase == CertificateEnforcement.enforce
+              ? LeafAction.propose
+              : LeafAction.flag,
+          verdict: verdict,
+          warning:
+              'A device in this conversation presented $ownerUserId\'s '
+              'certificate for a different device. Treat this conversation as '
+              'compromised until it is removed.',
         );
 
       // Absent. The ordinary state of every device that has not upgraded yet, so
-      // the phase decides.
+      // the phase decides - unless this device has certified before, in which
+      // case its certificate going missing is suppression, not a long tail.
       case CertificateVerdict.missing:
       case CertificateVerdict.unknownIssuer:
       case CertificateVerdict.expired:
         uncertifiedLeavesSeen++;
+
+        if (everCertified) {
+          return LeafVerdict(
+            action: phase == CertificateEnforcement.enforce
+                ? LeafAction.propose
+                : LeafAction.flag,
+            verdict: verdict,
+            warning:
+                'A device on $ownerUserId\'s account has stopped presenting '
+                'the certificate it used to. Treat this conversation as '
+                'compromised until it is removed.',
+          );
+        }
+
         return LeafVerdict(
           action: switch (phase) {
             CertificateEnforcement.observe => LeafAction.allow,
@@ -113,7 +190,13 @@ class LeafVerificationService {
             CertificateEnforcement.enforce => LeafAction.propose,
           },
           verdict: verdict,
-          warning: phase == CertificateEnforcement.observe
+          // §L.5: `Observe` suppresses removal, never detection. An identity
+          // that was not already in the group is surfaced at every phase, even
+          // though a missing certificate on a known member is not.
+          warning: unknownIdentity
+              ? '$ownerUserId joined this conversation from a device nobody '
+                    'here added, and it has not proved it belongs to them.'
+              : phase == CertificateEnforcement.observe
               ? null
               : 'A device on $ownerUserId\'s account has not proved it belongs '
                     'to them. It can read this conversation.',
@@ -150,4 +233,11 @@ class LeafVerificationService {
         );
     }
   }
+
+  static String _seen(String userId, String deviceId) => '$userId#$deviceId';
+
+  /// Seeds [_hasEverCertified] from a previous session's record.
+  @visibleForTesting
+  void rememberCertified({required String userId, required String deviceId}) =>
+      _hasEverCertified.add(_seen(userId, deviceId));
 }

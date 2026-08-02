@@ -16,5 +16,30 @@
 	<array>
 		<string>group.gg.venta.mobile</string>
 	</array>
+	<!-- The one keychain item both targets need: the key the MLS state files on
+	     disk are sealed under. The App Group above shares the *container*, which
+	     is exactly the thing a device backup carries; the key deliberately does
+	     not live there.
+
+	     $(AppIdentifierPrefix) expands to the team id at build time, so the
+	     runtime access group is "S33LPKH83B.gg.venta.mobile.shared" - which is
+	     what SecureStorageService.sharedKeychainGroup must spell out in full.
+	     Unlike App Groups this is not a developer-portal capability: profiles
+	     carry a "<team>.*" wildcard by default, so no profile has to be
+	     regenerated for it.
+
+	     **The app's own group is listed first, and that ordering is load-bearing.**
+	     The first entry becomes the default access group for every keychain write
+	     that does not name one, so declaring only ".shared" would quietly move
+	     the MLS signing key, the account master key, the account identity key and
+	     the auth tokens into the group the notification-service extension can
+	     read - none of which it has any business seeing. Only
+	     SecureStorageService.sharedKeychainGroup names ".shared", and it names it
+	     for exactly one item. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)gg.venta.mobile</string>
+		<string>$(AppIdentifierPrefix)gg.venta.mobile.shared</string>
+	</array>
 </dict>
 </plist>

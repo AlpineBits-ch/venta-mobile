@@ -127,8 +127,23 @@ class MlsService {
     var wiped = false;
     try {
       final dir = await store.stateDirectory(userId);
-      await _engine.initStorage(dir.path);
+      await _engine.initStorage(dir.path, stateKeyB64: store.stateKeyB64);
     } catch (e) {
+      // A sealed state file that this device cannot open is **not** corruption.
+      // The keychain is unavailable this launch - a Keystore fault, a
+      // misprovisioned access group - and the key may well be back on the next
+      // one. Wiping here would destroy every group on the handset to work around
+      // something transient, and the wipe is irreversible where the fault is not.
+      if (looksSealedWithoutKey(e)) {
+        debugPrint(
+          'MlsService: the MLS state file is sealed and its key is not '
+          'available - leaving it alone. Encryption is unavailable this launch.',
+        );
+        identityStatus.value = MlsIdentityStatus.keysMissing;
+        _userId = userId;
+        return false;
+      }
+
       debugPrint(
         'MlsService: engine state corrupt, wiping and starting fresh: $e',
       );
@@ -142,6 +157,21 @@ class MlsService {
     }
     _userId = userId;
     return wiped;
+  }
+
+  /// Whether an `initStorage` failure is "the file is sealed and the key is not
+  /// here" rather than "the file is broken".
+  ///
+  /// Substring-matching English prose to decide whether to wipe every group on
+  /// the handset is not what this should be - the engine ought to return a code.
+  /// It is not that today, so the substrings are pinned by a test against the
+  /// literals in `packages/venta_mls/rust/src/mls.rs`, which is the only thing
+  /// standing between a reworded error message and an irreversible wipe. Exposed
+  /// for that test.
+  @visibleForTesting
+  static bool looksSealedWithoutKey(Object error) {
+    final message = error.toString();
+    return message.contains('sealed') || message.contains('state key');
   }
 
   /// Restores the signing key from the keychain and opens the session.
@@ -368,10 +398,33 @@ class MlsService {
   Future<void> clearActiveGeneration(String contextId) =>
       store.clearActiveGeneration(contextId);
 
-  String? cachedMessage(String messageId) => store.cachedMessage(messageId);
+  /// Plaintext already read for a message, or null.
+  ///
+  /// Keyed on the context and generation as well as the id: `messageId` is the
+  /// **server's** value, and on the id alone a server that reuses one it has
+  /// seen elsewhere gets this device to render another thread's plaintext here,
+  /// without decrypting anything at all.
+  String? cachedMessage({
+    required String contextId,
+    required int? generation,
+    required String messageId,
+  }) => store.cachedMessage(
+    contextId: contextId,
+    generation: generation,
+    messageId: messageId,
+  );
 
-  void cacheMessage(String messageId, String plaintextB64) =>
-      store.cacheMessage(messageId, plaintextB64);
+  void cacheMessage({
+    required String contextId,
+    required int? generation,
+    required String messageId,
+    required String plaintextB64,
+  }) => store.cacheMessage(
+    contextId: contextId,
+    generation: generation,
+    messageId: messageId,
+    plaintextB64: plaintextB64,
+  );
 
   /// Whether this context is encrypted as far as this device knows.
   bool isEncrypted(String contextId) => activeGroupId(contextId) != null;
@@ -446,10 +499,29 @@ class MlsService {
     plaintextB64: plaintextB64,
   );
 
+  /// [messageId] is forwarded so a message that arrives before the commit that
+  /// makes it readable can be matched back to its row when
+  /// [drainPendingMessages] replays it, and so the same message arriving twice
+  /// is buffered once.
   Future<MlsProcessedMessage> processMessage({
     required String groupIdB64,
     required String messageB64,
-  }) => _engine.processMessage(groupIdB64: groupIdB64, messageB64: messageB64);
+    String? messageId,
+  }) => _engine.processMessage(
+    groupIdB64: groupIdB64,
+    messageB64: messageB64,
+    messageId: messageId,
+  );
+
+  /// Replays every buffered early message the group has now caught up to.
+  ///
+  /// Had no caller at all until the security review: messages from a future
+  /// epoch were buffered correctly and then never looked at again, so they were
+  /// counted as decrypt failures instead - and three of those flip
+  /// [MlsFailureLog.cannotRead], which puts "Re-link this device" on screen. The
+  /// advice was wrong and the action destroys history.
+  Future<List<MlsReplayedMessage>> drainPendingMessages(String groupIdB64) =>
+      _engine.drainPendingMessages(groupIdB64);
 
   Future<MlsGroupInfo> getGroupInfo(String groupIdB64) =>
       _engine.getGroupInfo(groupIdB64);

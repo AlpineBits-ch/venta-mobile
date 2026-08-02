@@ -43,6 +43,12 @@ struct Args {
     leaf_indices: Option<Vec<u32>>,
     dir: Option<String>,
     read_only: Option<bool>,
+    /// AES-256 key, base64, that `mls_state.json` is sealed under. Held in the
+    /// OS keychain by the host, which is what keeps a device backup of the state
+    /// file from being usable.
+    state_key_b64: Option<String>,
+    /// Output of `sealHostBlob`, for `openHostBlob`.
+    sealed_b64: Option<String>,
     encryption_key_b64: Option<String>,
     encrypted_b64: Option<String>,
 
@@ -245,6 +251,7 @@ fn dispatch(command: &str, args: Args) -> Result<Value, String> {
                 state,
                 &Args::need(args.dir, "dir")?,
                 args.read_only.unwrap_or(false),
+                args.state_key_b64.as_deref(),
             )?;
             Ok(json!(restored))
         }
@@ -252,6 +259,17 @@ fn dispatch(command: &str, args: Args) -> Result<Value, String> {
             mls::clear_storage(state)?;
             Ok(Value::Null)
         }
+        // The host's own two files - the group registry and the plaintext
+        // message cache - sealed under the same key as `mls_state.json` so there
+        // is one AEAD implementation rather than one per language.
+        "sealHostBlob" => Ok(json!(mls::seal_host_blob(
+            &Args::need(args.plaintext_b64, "plaintextB64")?,
+            &Args::need(args.state_key_b64, "stateKeyB64")?,
+        )?)),
+        "openHostBlob" => Ok(json!(mls::open_host_blob(
+            &Args::need(args.sealed_b64, "sealedB64")?,
+            &Args::need(args.state_key_b64, "stateKeyB64")?,
+        )?)),
         "exportState" => {
             let blob = mls::export_state(
                 state,
@@ -344,6 +362,7 @@ fn dispatch(command: &str, args: Args) -> Result<Value, String> {
             let cert = mls::issue_device_certificate(
                 state,
                 &Args::need(args.account_identity_private_key_b64, "accountIdentityPrivateKeyB64")?,
+                &Args::need(args.user_id, "userId")?,
                 &Args::need(args.device_id, "deviceId")?,
                 &Args::need(args.device_signature_key_b64, "deviceSignatureKeyB64")?,
                 args.issued_at.unwrap_or(0),
@@ -355,6 +374,7 @@ fn dispatch(command: &str, args: Args) -> Result<Value, String> {
             let valid = mls::verify_device_certificate(
                 state,
                 &Args::need(args.account_identity_public_key_b64, "accountIdentityPublicKeyB64")?,
+                &Args::need(args.user_id, "userId")?,
                 &Args::need(args.device_id, "deviceId")?,
                 &Args::need(args.device_signature_key_b64, "deviceSignatureKeyB64")?,
                 args.issued_at.unwrap_or(0),

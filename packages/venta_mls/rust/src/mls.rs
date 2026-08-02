@@ -168,6 +168,23 @@ pub struct MlsState {
     pending_messages: HashMap<Vec<u8>, Vec<BufferedMessage>>,
     state_path: Option<PathBuf>,
 
+    /// AES-256 key the state file is sealed under, from the OS keychain.
+    ///
+    /// `mls_state.json` is every epoch secret, every leaf HPKE private key and
+    /// every init private key this device holds. It used to be plain JSON in a
+    /// directory Android's auto-backup includes by default, so a restore onto
+    /// another handset handed over live group keys with no keychain access and no
+    /// unlock. Sealing it under a key that lives in Keystore/Keychain - which
+    /// backups do not carry - is what makes the file worthless off the device it
+    /// was written on.
+    ///
+    /// `None` is only legitimate alongside [`MlsState::read_only`] - the iOS
+    /// notification-service extension opening a legacy plaintext file it will
+    /// never write back. Everywhere else [`init_storage`] refuses outright,
+    /// because there is no unsealed way to save and pretending otherwise is how
+    /// the private keys ended up on disk in cleartext.
+    state_key: Option<Vec<u8>>,
+
     /// Loaded, but with nowhere to save.
     ///
     /// What an iOS notification-service extension needs: it is a *separate
@@ -224,23 +241,111 @@ impl MlsState {
             );
         };
         let json = serde_json::to_vec(&self.to_persisted()).map_err(|e| e.to_string())?;
-        let tmp = path.with_extension("json.tmp");
+        write_state_file(path, &json, self.state_key.as_deref())
+    }
+}
+
+/// Marks a sealed `mls_state.json`. Present so a file written before the state
+/// file was encrypted still loads and is upgraded in place, and so a sealed file
+/// read without a key fails loudly rather than as "not JSON".
+const STATE_FILE_MAGIC: &[u8] = b"VENTAMLS1";
+
+/// Seals `json` under `state_key`, then writes it atomically.
+///
+/// **There is no unsealed branch, and adding one back is the bug.** This used to
+/// fall back to `json.to_vec()` when no key was supplied - inside the one
+/// function whose whole job is to encrypt the thing - so a device whose keychain
+/// would not answer wrote every init key, every leaf HPKE private key and every
+/// epoch secret to disk in cleartext, in the directory a backup carries off the
+/// handset, and reported success. Refusing is the point: a caller with no key
+/// has nowhere safe to put this, and "encryption is unavailable this launch" is
+/// a recoverable state where "encryption happened, in cleartext" is not.
+///
+/// Reading a legacy plaintext file is still supported and still upgrades it in
+/// place - see [`init_storage`]. Only *producing* one is impossible.
+///
+/// Shared by [`MlsState::save_to_disk`] and that in-place upgrade, so the two
+/// cannot produce different formats.
+fn write_state_file(path: &std::path::Path, json: &[u8], state_key: Option<&[u8]>) -> Result<(), String> {
+    let key = state_key.ok_or_else(|| {
+        "MlsError: refusing to write mls_state.json without a state key - it holds this device's \
+         leaf private keys and every epoch secret, and unsealed on disk is exactly how a device \
+         backup carries them off the handset"
+            .to_string()
+    })?;
+    let mut bytes = STATE_FILE_MAGIC.to_vec();
+    bytes.extend_from_slice(&encrypt_blob(json, key)?);
+
+    let tmp = path.with_extension("json.tmp");
+    let written = (|| -> Result<(), String> {
         {
             let mut file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
-            std::io::Write::write_all(&mut file, &json).map_err(|e| e.to_string())?;
+            std::io::Write::write_all(&mut file, &bytes).map_err(|e| e.to_string())?;
             file.sync_all().map_err(|e| e.to_string())?;
         }
-        std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
-        Ok(())
+        std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    })();
+
+    if let Err(e) = written {
+        // The temp file holds the same private keys the real one does, under a
+        // name nothing reads and nothing else ever cleans up. Leaving it behind
+        // on a failed write is a second copy of the state file that no longer
+        // has anyone watching it.
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
     }
+
+    // `sync_all` above orders the file's *bytes* before the rename. It says
+    // nothing about the directory entry the rename creates, which can still be
+    // lost to a power cut - leaving either the previous state file or no file at
+    // all, from a call that returned success. Unix only: there is no portable
+    // equivalent on Windows, which is where these tests run and no phone does.
+    #[cfg(unix)]
+    if let Some(parent) = path.parent() {
+        if let Ok(dir) = std::fs::File::open(parent) {
+            let _ = dir.sync_all();
+        }
+    }
+
+    Ok(())
+}
+
+/// Rewrites a sealed state file in the plaintext shape an install from before
+/// the sealing has on disk.
+///
+/// A fixture, and only a fixture. [`write_state_file`] can no longer produce one,
+/// but every install in the field still has one and reading it has to keep
+/// working, so the tests need some way to make the thing they are asserting
+/// about. `#[cfg(test)]` so it cannot become a way back to the branch that was
+/// just removed.
+#[cfg(test)]
+pub(crate) fn unseal_state_file_for_test(
+    path: &std::path::Path,
+    key_b64: &str,
+) -> Result<(), String> {
+    let raw = std::fs::read(path).map_err(|e| e.to_string())?;
+    if !raw.starts_with(STATE_FILE_MAGIC) {
+        return Err("MlsError: the fixture is not sealed to begin with".to_string());
+    }
+    let key = decode_state_key(key_b64)?;
+    let json = decrypt_blob(&raw[STATE_FILE_MAGIC.len()..], &key)?;
+    std::fs::write(path, json).map_err(|e| e.to_string())
 }
 
 /// How many early messages one group may hold before the oldest is dropped.
 ///
 /// Unbounded would let a peer that keeps sending from a future epoch grow this
-/// without limit, and the buffer is persisted, so it would grow the state file
-/// too. The oldest goes first: by the time we catch up it is the one most likely
-/// to be past the ratchet's reach anyway.
+/// without limit - in memory, which on a phone is the scarcer resource. The
+/// oldest goes first: by the time we catch up it is the one most likely to be
+/// past the ratchet's reach anyway.
+///
+/// **The buffer is deliberately not persisted.** [`PersistedMlsState`] has no
+/// field for it and gains none: the bytes are ciphertext the server still holds,
+/// so a process that dies with a full buffer refetches rather than loses, while
+/// writing them out would put unread ciphertext in the state file for no gain.
+/// An earlier version of this comment claimed the opposite, which is worth
+/// stating plainly because "the buffer survives a restart" is exactly the sort of
+/// thing a caller would build on.
 const MAX_BUFFERED_PER_GROUP: usize = 256;
 
 /// A message that arrived before the commit that makes it readable.
@@ -303,6 +408,59 @@ fn decrypt_blob(data: &[u8], key_bytes: &[u8]) -> Result<Vec<u8>, String> {
     cipher
         .decrypt(Nonce::from_slice(nonce_bytes), ciphertext)
         .map_err(|e| e.to_string())
+}
+
+/// Marks a sealed *host-side* file - the group registry and the plaintext
+/// message cache, which live in Dart and Swift rather than in the engine.
+///
+/// Distinct from [`STATE_FILE_MAGIC`] so a file handed to the wrong reader fails
+/// obviously rather than as a decryption error.
+const HOST_BLOB_MAGIC: &[u8] = b"VENTABOX1";
+
+/// Seals arbitrary host bytes under the device's state key.
+///
+/// Exists because the two most sensitive files on the device are **not** the
+/// engine's. `mls_message_cache.json` is the plaintext of every message ever
+/// decrypted here, and it is written by Dart on Android and by the Swift
+/// notification-service extension on iOS. Rather than three implementations of
+/// AES-256-GCM - two of them written for this - both hosts call through to the
+/// primitive the backup envelope already uses.
+pub fn seal_host_blob(plaintext_b64: &str, key_b64: &str) -> Result<String, String> {
+    let plaintext = B64.decode(plaintext_b64).map_err(|e| e.to_string())?;
+    let key = decode_state_key(key_b64)?;
+    let mut out = HOST_BLOB_MAGIC.to_vec();
+    out.extend_from_slice(&encrypt_blob(&plaintext, &key)?);
+    Ok(B64.encode(&out))
+}
+
+/// Opens [`seal_host_blob`].
+///
+/// Errors rather than returning the input on a mismatch. A caller that fell back
+/// to the raw bytes would hand JSON parsing a blob of ciphertext, conclude the
+/// cache was corrupt, and start again with an empty one - which is the plaintext
+/// of every message on the device, deleted, because MLS only lets each one be
+/// read off the wire once.
+pub fn open_host_blob(sealed_b64: &str, key_b64: &str) -> Result<String, String> {
+    let sealed = B64.decode(sealed_b64).map_err(|e| e.to_string())?;
+    if !sealed.starts_with(HOST_BLOB_MAGIC) {
+        return Err("MlsError: not a sealed host blob".to_string());
+    }
+    let key = decode_state_key(key_b64)?;
+    let plaintext = decrypt_blob(&sealed[HOST_BLOB_MAGIC.len()..], &key)?;
+    Ok(B64.encode(&plaintext))
+}
+
+fn decode_state_key(key_b64: &str) -> Result<Vec<u8>, String> {
+    let key = B64
+        .decode(key_b64)
+        .map_err(|e| format!("MlsError: state key is not base64: {}", e))?;
+    if key.len() != 32 {
+        return Err(format!(
+            "MlsError: state key must be 32 bytes, got {}",
+            key.len()
+        ));
+    }
+    Ok(key)
 }
 
 // ---------------------------------------------------------------------------
@@ -378,21 +536,43 @@ fn build_group_info(group: &MlsGroup) -> MlsGroupInfo {
     }
 }
 
+/// `SenderRatchetConfiguration::new(out_of_order_tolerance, maximum_forward_distance)`.
+///
+/// **The argument order is the opposite of what it reads like**, and both clients
+/// had the two literals transposed with comments asserting the reverse. Checked
+/// against `openmls-0.8.1/src/tree/sender_ratchet.rs:40`, whose default is
+/// `(5, 1000)`:
+///
+/// * `out_of_order_tolerance` is how many *spent* decryption secrets are kept so
+///   a message that arrives late can still be read. Every one of them is live key
+///   material sitting in the state file, so this is the parameter that costs
+///   intra-epoch forward secrecy. 500 of them per sender per epoch - which is
+///   what `new(500, 10)` actually configured - is ~100x the library default for
+///   no benefit anybody asked for.
+/// * `maximum_forward_distance` is how many generations may be *skipped*. The
+///   transposed value made this 10, so the eleventh message read ahead of the app
+///   in one epoch - trivially reached by a lock screen full of notifications -
+///   was rejected permanently, with no attacker involved.
+///
+/// Alpine pins the same two numbers and must mirror this exactly: a device that
+/// keeps fewer secrets than its peers assume is a device that drops messages.
+const OUT_OF_ORDER_TOLERANCE: u32 = 10;
+const MAXIMUM_FORWARD_DISTANCE: u32 = 500;
+
+pub(crate) fn ratchet_config() -> SenderRatchetConfiguration {
+    SenderRatchetConfiguration::new(OUT_OF_ORDER_TOLERANCE, MAXIMUM_FORWARD_DISTANCE)
+}
+
 fn create_config() -> MlsGroupCreateConfig {
-    let ratchet_config = SenderRatchetConfiguration::new(
-        500, // max_forward_distance
-        10,  // out_of_order_tolerance
-    );
     MlsGroupCreateConfig::builder()
-        .sender_ratchet_configuration(ratchet_config)
+        .sender_ratchet_configuration(ratchet_config())
         .use_ratchet_tree_extension(true)
         .build()
 }
 
 fn join_config() -> MlsGroupJoinConfig {
-    let ratchet_config = SenderRatchetConfiguration::new(500, 10);
     MlsGroupJoinConfig::builder()
-        .sender_ratchet_configuration(ratchet_config)
+        .sender_ratchet_configuration(ratchet_config())
         .use_ratchet_tree_extension(true)
         .build()
 }
@@ -1314,10 +1494,38 @@ pub fn get_group_info(mls: &MlsState, group_id_b64: &str) -> Result<MlsGroupInfo
 /// Decrypting one notification is not worth that risk, and the plaintext it
 /// produces is kept in the message cache anyway, so nothing is lost by throwing
 /// the advanced ratchet away.
-pub fn init_storage(mls: &mut MlsState, dir: &str, read_only: bool) -> Result<bool, String> {
+pub fn init_storage(
+    mls: &mut MlsState,
+    dir: &str,
+    read_only: bool,
+    state_key_b64: Option<&str>,
+) -> Result<bool, String> {
     let dir_path = PathBuf::from(dir);
     std::fs::create_dir_all(&dir_path).map_err(|e| e.to_string())?;
     let state_path = dir_path.join("mls_state.json");
+
+    let state_key = state_key_b64.map(decode_state_key).transpose()?;
+
+    // Nothing this engine does can be persisted without one, so say so here
+    // rather than at whichever group operation happens to save first - which
+    // would surface as a failed invite rather than as "the keychain is not
+    // answering".
+    //
+    // The wording names the state key on purpose. `MlsService.init` on the Dart
+    // side matches on that to tell "the key is unavailable this launch" apart
+    // from "the state file is corrupt", and only the second wipes the handset's
+    // groups. Getting classified as the second here would be an irreversible
+    // response to a transient fault.
+    //
+    // `read_only` is exempt: it has nowhere to save by definition, and the
+    // extension reading a legacy plaintext file is a real case.
+    if !read_only && state_key.is_none() {
+        return Err(
+            "MlsError: no state key was supplied - mls_state.json cannot be written unsealed, so \
+             encryption stays unavailable until the keychain produces one"
+                .to_string(),
+        );
+    }
 
     // Already pointing here. A second Dart isolate in the same process - which is
     // exactly what Android's FCM background handler is - re-initialises on every
@@ -1343,6 +1551,7 @@ pub fn init_storage(mls: &mut MlsState, dir: &str, read_only: bool) -> Result<bo
     mls.provider.storage().values.write().unwrap().clear();
 
     mls.read_only = read_only;
+    mls.state_key = state_key;
     // Left unset when read-only, so nothing can write even by accident. The
     // `read_only` flag above is what keeps `save_to_disk` from reading that as
     // "never initialised".
@@ -1352,8 +1561,35 @@ pub fn init_storage(mls: &mut MlsState, dir: &str, read_only: bool) -> Result<bo
         return Ok(false);
     }
 
-    let json = std::fs::read(&state_path).map_err(|e| e.to_string())?;
+    let raw = std::fs::read(&state_path).map_err(|e| e.to_string())?;
+    let sealed = raw.starts_with(STATE_FILE_MAGIC);
+    let json = if sealed {
+        let key = mls.state_key.as_ref().ok_or_else(|| {
+            "MlsError: mls_state.json is sealed but no state key was supplied - the keychain \
+             entry that opens it is missing"
+                .to_string()
+        })?;
+        decrypt_blob(&raw[STATE_FILE_MAGIC.len()..], key).map_err(|e| {
+            format!(
+                "MlsError: mls_state.json did not open with this device's state key: {}",
+                e
+            )
+        })?
+    } else {
+        raw
+    };
     let persisted: PersistedMlsState = serde_json::from_slice(&json).map_err(|e| e.to_string())?;
+
+    // An install that predates the sealed format. Rewriting it now is the whole
+    // migration: the plaintext copy is what a device backup would have carried,
+    // so it should not survive the first launch that can replace it. Best-effort
+    // because a failure here must not cost the user their groups - the next save
+    // tries again.
+    if !sealed && !read_only && mls.state_key.is_some() {
+        if let Err(e) = write_state_file(&state_path, &json, mls.state_key.as_deref()) {
+            eprintln!("MlsError: could not seal the existing state file: {}", e);
+        }
+    }
 
     {
         let mut values = mls.provider.storage().values.write().unwrap();
@@ -1490,6 +1726,47 @@ const BACKUP_AAD_PREFIX: &str = "venta.keybackup.v1";
 const ARGON2_M_KIB: u32 = 65536;
 const ARGON2_T: u32 = 3;
 const ARGON2_P: u32 = 4;
+
+// Ceilings on the KDF parameters a *blob header* may declare (§L.9).
+//
+// Both formats here are deliberately self-describing - the reader derives from
+// the declared parameters, never from the write-side constants, because that is
+// the only way a blob written under one parameter set stays openable by a build
+// compiled with another. The cost is that the header is attacker-controlled, and
+// `m` is a u32 of kibibytes: 4 TiB, allocated eagerly, on the recovery path.
+//
+// These are not a security boundary. Weak parameters do not make a stolen blob
+// crackable - the attacker would need our ciphertext *and* would have to make us
+// read their header, and the wrapping still fails closed. This is denial of
+// service only, so the ceilings are set well above anything either client writes
+// (64 MiB / t=3 / p=4) and well below anything that hangs a phone.
+const KDF_MAX_MEMORY_KIB: u32 = 1024 * 1024; // 1 GiB
+const KDF_MAX_ITERATIONS: u32 = 10;
+const KDF_MAX_PARALLELISM: u32 = 16;
+
+/// Rejects a declared KDF header before it is handed to Argon2.
+///
+/// Deliberately an error rather than a clamp: silently deriving with parameters
+/// other than the ones declared produces the wrong key and reports it as a wrong
+/// passphrase, which is the single worst diagnostic to give someone mid-recovery.
+fn check_kdf_parameters(memory_kib: u32, iterations: u32, parallelism: u32) -> Result<(), String> {
+    if memory_kib > KDF_MAX_MEMORY_KIB
+        || iterations > KDF_MAX_ITERATIONS
+        || parallelism > KDF_MAX_PARALLELISM
+    {
+        return Err(format!(
+            "MlsError: refusing declared Argon2 parameters (m={} KiB, t={}, p={}) - above the \
+             m<={} KiB, t<={}, p<={} this build will attempt",
+            memory_kib,
+            iterations,
+            parallelism,
+            KDF_MAX_MEMORY_KIB,
+            KDF_MAX_ITERATIONS,
+            KDF_MAX_PARALLELISM
+        ));
+    }
+    Ok(())
+}
 
 #[derive(Serialize, Deserialize)]
 struct BackupKdf {
@@ -1703,6 +1980,7 @@ pub fn import_backup(
         return Err("MlsError: backup nonce is not 12 bytes".to_string());
     }
 
+    check_kdf_parameters(envelope.kdf.m, envelope.kdf.t, envelope.kdf.p)?;
     let params = Params::new(envelope.kdf.m, envelope.kdf.t, envelope.kdf.p, Some(32))
         .map_err(|e| format!("MlsError: bad Argon2 parameters: {}", e))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
@@ -1909,6 +2187,9 @@ fn derive_wrap_key(
     iterations: u32,
     parallelism: u32,
 ) -> Result<[u8; 32], String> {
+    // The unwrap path reads these from `EncryptedMasterKey`, which is a server
+    // row - so they are as attacker-controlled as the backup header (§L.9).
+    check_kdf_parameters(memory, iterations, parallelism)?;
     let params = Params::new(memory, iterations, parallelism, Some(32))
         .map_err(|e| format!("MlsError: bad Argon2 parameters: {}", e))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
@@ -2244,9 +2525,11 @@ pub fn generate_account_identity(mls: &MlsState) -> Result<MlsAccountIdentity, S
 /// The server cannot mint one of these - it never holds the private half - which
 /// is exactly what stops an external-commit rejoin (§H.3) from being a
 /// server-side backdoor into every group.
+#[allow(clippy::too_many_arguments)]
 pub fn issue_device_certificate(
     mls: &MlsState,
     account_identity_private_key_b64: &str,
+    user_id: &str,
     device_id: &str,
     device_signature_key_b64: &str,
     issued_at: i64,
@@ -2255,7 +2538,13 @@ pub fn issue_device_certificate(
     let private = B64
         .decode(account_identity_private_key_b64)
         .map_err(|e| e.to_string())?;
-    let payload = device_cert_payload(device_id, device_signature_key_b64, issued_at, expires_at);
+    let payload = device_cert_payload(
+        user_id,
+        device_id,
+        device_signature_key_b64,
+        issued_at,
+        expires_at,
+    )?;
     let signature = mls
         .provider
         .crypto()
@@ -2269,9 +2558,20 @@ pub fn issue_device_certificate(
 /// Returns `false` rather than erroring for an invalid signature: at §I.1's
 /// `Observe` and `Warn` phases the caller counts and warns rather than acting,
 /// and an error type would push that decision down here.
+///
+/// **Expiry is checked here as well as by the caller** (§L.9). The certificate
+/// carries its own window and this is the only function that sees the signed
+/// bytes, so a caller that forgets - or a future one that never knew - cannot
+/// turn a 180-day certificate into a permanent one.
+///
+/// This function still says nothing about *which leaf* the certificate is for.
+/// That comparison is the caller's, and it is mandatory: see the note on
+/// [`device_cert_payload`].
+#[allow(clippy::too_many_arguments)]
 pub fn verify_device_certificate(
     mls: &MlsState,
     account_identity_public_key_b64: &str,
+    user_id: &str,
     device_id: &str,
     device_signature_key_b64: &str,
     issued_at: i64,
@@ -2287,7 +2587,23 @@ pub fn verify_device_certificate(
         // bytes came off the wire.
         Err(_) => return Ok(false),
     };
-    let payload = device_cert_payload(device_id, device_signature_key_b64, issued_at, expires_at);
+
+    let now = now_unix();
+    if expires_at <= now || issued_at > now + CERT_CLOCK_SKEW_SECONDS {
+        return Ok(false);
+    }
+
+    let Ok(payload) = device_cert_payload(
+        user_id,
+        device_id,
+        device_signature_key_b64,
+        issued_at,
+        expires_at,
+    ) else {
+        // A signature key that is not base64 cannot be the one in any leaf, so
+        // there is nothing this certificate could validly be about.
+        return Ok(false);
+    };
     Ok(mls
         .provider
         .crypto()
@@ -2295,21 +2611,61 @@ pub fn verify_device_certificate(
         .is_ok())
 }
 
+/// Tolerance for an issuer whose clock runs ahead of the verifier's. Small on
+/// purpose: this exists for clock drift, not for pre-dating.
+const CERT_CLOCK_SKEW_SECONDS: i64 = 300;
+
+/// `venta.device-cert.v1 || userId || deviceId || signatureKey || issuedAt || expiresAt`.
+///
+/// Two things changed here after the security review, both breaking, and **Alpine
+/// must mirror both** or no certificate verifies across clients:
+///
+/// 1. **`userId` is in the payload.** Without it the certificate makes no
+///    self-contained statement about *whose* device it is, and `ClientDeviceId`
+///    is unique only per user - so a certificate for user A's device 7 is a
+///    structurally valid certificate for user B's device 7 (§L.2).
+/// 2. **The signature key is signed as raw bytes, not as the base64 string.**
+///    §K.1 chose the string "so neither side has to agree on a decoding". That
+///    rationale is what produced the critical finding: it invited the verifier to
+///    compare strings the certificate itself supplied rather than the key in the
+///    leaf, and it leaves the equivalence of two different base64 encodings of
+///    the same key as an open question. Raw bytes have exactly one
+///    representation.
+///
+/// Neither change makes the certificate bind to a leaf on its own. That binding
+/// is the *verifier's* obligation - extract the signature key from the MLS leaf
+/// credential, compare it to the one the certificate names, and compare the
+/// device id - because certificates are public and a server that could not be
+/// forced to do that comparison would simply replay a genuine certificate against
+/// a leaf it injected. `LeafVerificationService.check` on mobile is where that
+/// happens.
 fn device_cert_payload(
+    user_id: &str,
     device_id: &str,
     device_signature_key_b64: &str,
     issued_at: i64,
     expires_at: i64,
-) -> Vec<u8> {
-    tagged_payload(
+) -> Result<Vec<u8>, String> {
+    let signature_key = B64
+        .decode(device_signature_key_b64)
+        .map_err(|e| format!("MlsError: device signature key is not base64: {}", e))?;
+    Ok(tagged_payload(
         DEVICE_CERT_LABEL,
         &[
+            user_id.as_bytes(),
             device_id.as_bytes(),
-            device_signature_key_b64.as_bytes(),
+            &signature_key,
             &issued_at.to_be_bytes(),
             &expires_at.to_be_bytes(),
         ],
-    )
+    ))
+}
+
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 /// HKDF-SHA256 over the account master key. A derived key rather than the master

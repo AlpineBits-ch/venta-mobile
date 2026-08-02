@@ -586,7 +586,10 @@ class GuildRepository {
     return role;
   }
 
-  Future<RoleDto> updateRole({
+  /// Answers with the saved role as the guild now reports it - the PATCH itself
+  /// returns no body, so the refresh below is the only place the new values can
+  /// come from. Null only if the role vanished between the two calls.
+  Future<RoleDto?> updateRole({
     required String guildId,
     required String roleId,
     required String name,
@@ -594,7 +597,7 @@ class GuildRepository {
     String? color,
     required GuildPermissions permissions,
   }) async {
-    final role = await api.updateRole(
+    await api.updateRole(
       roleId: roleId,
       name: name,
       description: description,
@@ -602,7 +605,10 @@ class GuildRepository {
       permissions: permissions,
     );
     await _refreshGuild(guildId);
-    return role;
+    for (final role in cachedById(guildId)?.roles ?? const <RoleDto>[]) {
+      if (role.id == roleId) return role;
+    }
+    return null;
   }
 
   Future<void> deleteRole(String guildId, String roleId) async {
@@ -632,11 +638,26 @@ class GuildRepository {
     await _refreshGuild(guildId);
   }
 
+  /// Resolves the join rows [GuildApi.getRoleMembers] returns to the members
+  /// themselves. A row the server didn't project a `member` onto is matched
+  /// against the guild's member list rather than dropped, so the caller never
+  /// quietly under-reports who holds a role.
   Future<List<GuildMemberDto>> getRoleMembers(
+    String guildId,
     String roleId, {
     int skip = 0,
     int take = 30,
-  }) => api.getRoleMembers(roleId, skip: skip, take: take);
+  }) async {
+    final rows = await api.getRoleMembers(roleId, skip: skip, take: take);
+    if (rows.every((row) => row.member != null)) {
+      return [for (final row in rows) row.member!];
+    }
+    final members = await api.getMembers(guildId, take: 200);
+    final byId = {for (final member in members) member.id: member};
+    return [
+      for (final row in rows) ?(row.member ?? byId[row.memberId]),
+    ];
+  }
 
   Future<void> addRoleMember(String roleId, String memberId) =>
       api.addRoleMember(roleId, memberId);

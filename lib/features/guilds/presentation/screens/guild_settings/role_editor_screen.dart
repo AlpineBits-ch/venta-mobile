@@ -72,6 +72,7 @@ class _RoleEditorScreenState extends State<RoleEditorScreen> {
   Future<void> _loadMembers() async {
     try {
       final members = await getIt<GuildRepository>().getRoleMembers(
+        widget.guildId,
         widget.role.id,
       );
       if (mounted) setState(() => _members = members);

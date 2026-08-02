@@ -9,6 +9,8 @@ import 'package:venta_mobile/core/mls/mls_service.dart';
 import 'package:venta_mobile/core/mls/mls_store.dart';
 import 'package:venta_mobile/core/storage/secure_storage_service.dart';
 
+import 'fake_state_cipher.dart';
+
 /// What these cover: two failures that are confidentiality bugs rather than
 /// corruption ones, and one that quietly destroys a device's ability to talk to
 /// anyone.
@@ -42,7 +44,20 @@ void main() {
     if (await root.exists()) await root.delete(recursive: true);
   });
 
-  MlsStore storeIn(Directory dir) => MlsStore(directory: () async => dir);
+  // Sealed, like the shipping configuration, with a stand-in cipher because a
+  // unit test has neither a keychain nor the native engine. Per-account keys,
+  // since that is how they are scoped.
+  MlsStore storeIn(Directory dir) => MlsStore(
+    directory: () async => dir,
+    stateKey: (userId) async => 'key-for-$userId',
+    cipher: FakeStateCipher.new,
+  );
+
+  String? cached(MlsStore store, String messageId) => store.cachedMessage(
+    contextId: 'conv_1',
+    generation: 1,
+    messageId: messageId,
+  );
 
   group('MlsStore account scoping', () {
     test('resolves a different directory per account', () async {
@@ -70,7 +85,12 @@ void main() {
         generation: 1,
         mlsGroupId: 'Z3JvdXBB',
       );
-      store.cacheMessage('msg_1', base64Encode(utf8.encode('a secret')));
+      store.cacheMessage(
+        contextId: 'conv_1',
+        generation: 1,
+        messageId: 'msg_1',
+        plaintextB64: base64Encode(utf8.encode('a secret')),
+      );
       await store.flush();
 
       // The FCM background isolate initialises whichever account a notification
@@ -79,14 +99,14 @@ void main() {
       await store.init('user_b');
 
       expect(store.groupId('conv_1', 1), isNull);
-      expect(store.cachedMessage('msg_1'), isNull);
+      expect(cached(store, 'msg_1'), isNull);
       expect(store.loadedUserId, 'user_b');
 
       // And account A's own state is intact, not wiped - switching back has to
       // find its history.
       await store.init('user_a');
       expect(store.groupId('conv_1', 1), 'Z3JvdXBB');
-      expect(store.cachedMessage('msg_1'), isNotNull);
+      expect(cached(store, 'msg_1'), isNotNull);
 
       store.dispose();
     });
@@ -134,7 +154,13 @@ void main() {
       );
 
       when(() => deviceIds.deviceId).thenReturn('device-a');
-      when(() => engine.initStorage(any())).thenAnswer((_) async => true);
+      when(
+        () => engine.initStorage(
+          any(),
+          readOnly: any(named: 'readOnly'),
+          stateKeyB64: any(named: 'stateKeyB64'),
+        ),
+      ).thenAnswer((_) async => true);
       when(() => engine.clearStorage()).thenAnswer((_) async {});
       when(
         () => storage.readMlsIdentity(

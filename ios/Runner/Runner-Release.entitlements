@@ -12,5 +12,14 @@
 	<array>
 		<string>group.gg.venta.mobile</string>
 	</array>
+	<!-- See Runner.entitlements, including why the app's own group has to be
+	     first. Both files have to carry this or the debug and release builds
+	     disagree about where the MLS state key lives, and the one that is wrong
+	     seals nothing while reporting success. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)gg.venta.mobile</string>
+		<string>$(AppIdentifierPrefix)gg.venta.mobile.shared</string>
+	</array>
 </dict>
 </plist>

@@ -1905,6 +1905,10 @@ class _MessageBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Cleartext in an encrypted thread. Shown, because genuine cleartext
+        // history exists above an encryption switch-on, but never shown as if it
+        // were sealed - that is the whole of the server-injection path.
+        if (message.isUnverifiedPlaintext) const UnverifiedPlaintextNotice(),
         if (isGifMessage)
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadii.chip),

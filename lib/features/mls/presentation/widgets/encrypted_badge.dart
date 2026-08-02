@@ -81,3 +81,38 @@ class UndecryptableMessageBody extends StatelessWidget {
     );
   }
 }
+
+/// Sits above a message that arrived as cleartext in an encrypted thread.
+///
+/// The encryption state of a message is a plain field on a shape the server
+/// composes, so flipping it to `Plain` is all it takes to put server-chosen text
+/// into an end-to-end encrypted conversation. Refusing to show those would be
+/// wrong - a context that had encryption switched on has genuine cleartext
+/// history above the switch - so they are shown and marked. A line of UI is the
+/// difference between an injection nobody can see and one that is obvious.
+class UnverifiedPlaintextNotice extends StatelessWidget {
+  const UnverifiedPlaintextNotice({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.error.withValues(alpha: 0.85);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_open_outlined, size: 13, color: color),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(
+              'Not encrypted - nobody in this conversation sealed this.',
+              style: theme.textTheme.labelSmall?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,3 +1,4 @@
+import Foundation
 import UserNotifications
 
 /// Rewrites an incoming message notification before iOS shows it: the encrypted
@@ -71,12 +72,30 @@ class NotificationService: UNNotificationServiceExtension {
     deliver()
   }
 
+  /// Serialises [deliver] against itself. The two callers are on different
+  /// threads - `serviceExtensionTimeWillExpire` on the main one, the avatar
+  /// completion on `URLSession`'s delegate queue - so the guard and the nil-out
+  /// below are a read-modify-write that both can be inside at once.
+  ///
+  /// Not theoretical: `dataTask`'s default timeout is 60 seconds and the
+  /// extension's budget is about 30, so the avatar fetch outliving the deadline
+  /// is the ordinary case rather than the exotic one. Calling a
+  /// `UNNotificationServiceExtension` handler twice is a runtime error.
+  private let deliveryLock = NSLock()
+
   /// Idempotent: the timeout and the avatar callback race, and calling the
   /// handler twice is a runtime error.
   private func deliver() {
-    guard let contentHandler, let bestAttempt else { return }
-    self.contentHandler = nil
-    contentHandler(bestAttempt)
+    deliveryLock.lock()
+    let handler = contentHandler
+    let content = bestAttempt
+    contentHandler = nil
+    deliveryLock.unlock()
+
+    // Outside the lock: the handler is iOS's, it can do what it likes, and
+    // holding a lock across it is how the other kind of bug starts.
+    guard let handler, let content else { return }
+    handler(content)
   }
 
   // MARK: - Decryption

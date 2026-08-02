@@ -47,6 +47,25 @@ class RecoveryCodeNotStoredException implements Exception {
       'but did not store it, so it would not open anything';
 }
 
+/// What a read of the account's recovery-key envelope produced.
+///
+/// Three outcomes, not two. "The account has no envelope" is a fact about the
+/// account and licenses minting one; "the request failed" is a fact about the
+/// network and licenses nothing. They used to be the same `null`.
+class RecoveryKeyStatus {
+  const RecoveryKeyStatus.read(this.envelope) : reachable = true;
+  const RecoveryKeyStatus.unavailable()
+    : envelope = null,
+      reachable = false;
+
+  /// The envelope, or null when the account genuinely has none.
+  final RecoveryKeyStateDto? envelope;
+
+  /// False when the server could not be asked. Callers must not treat this as
+  /// any statement about the account.
+  final bool reachable;
+}
+
 /// What setting up a master key produced.
 class MasterKeySetupResult {
   const MasterKeySetupResult({
@@ -139,13 +158,22 @@ class MasterKeyService {
   /// Cheap - no Argon2 - so it is safe on a launch path. Updates [status], which
   /// is what puts the "your encrypted history is no longer recoverable" notice
   /// and the "save a recovery code" prompt on screen.
-  Future<RecoveryKeyStateDto?> refreshStatus() async {
+  ///
+  /// **"There is no envelope" and "I could not ask" are different answers**, and
+  /// collapsing them into one `null` is what made [unlock] mint a fresh master
+  /// key over the account's real one on any transport failure - orphaning every
+  /// backup blob, every admission proof and the account identity key, silently,
+  /// and only discoverable at the moment somebody needed a restore. So the
+  /// outcome is a small result type rather than a nullable.
+  Future<RecoveryKeyStatus> readStatus() async {
     final RecoveryKeyStateDto? state;
     try {
       state = await api.fetchRecoveryKey();
     } catch (e) {
       debugPrint('MasterKeyService: could not read the recovery key state: $e');
-      return null;
+      // Deliberately leaves `status` alone. Whatever was last known is closer to
+      // the truth than "not set up".
+      return const RecoveryKeyStatus.unavailable();
     }
 
     status.value = switch (state) {
@@ -156,8 +184,13 @@ class MasterKeyService {
         MasterKeyStatus.needsRecoveryCode,
       _ => MasterKeyStatus.ready,
     };
-    return state;
+    return RecoveryKeyStatus.read(state);
   }
+
+  /// [readStatus] for callers that only want the envelope and do not act on the
+  /// difference between "absent" and "unreadable".
+  Future<RecoveryKeyStateDto?> refreshStatus() async =>
+      (await readStatus()).envelope;
 
   /// Mints a master key and both of its wrappings (contract §C.1.1).
   ///
@@ -215,8 +248,22 @@ class MasterKeyService {
     required String password,
     String? recoveryCode,
   }) async {
-    final state = await refreshStatus();
+    final read = await readStatus();
 
+    if (!read.reachable) {
+      // **Never mint here.** A timeout, a 500 or a dropped connection used to
+      // arrive as the same `null` an account with no envelope does, and `setUp`
+      // would then write a brand new random master key over the real one -
+      // orphaning every backup blob and the account identity key, and reporting
+      // success. Failing the unlock costs one retry.
+      debugPrint(
+        'MasterKeyService: the recovery-key state could not be read, so the '
+        'master key is not being set up - retrying beats overwriting it',
+      );
+      return null;
+    }
+
+    final state = read.envelope;
     if (state == null) {
       // §I.2: an account that predates encryption has no envelope. Minting one
       // here rather than at signup is what lets existing accounts acquire a

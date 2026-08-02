@@ -131,14 +131,66 @@ import WebRTC
     let channel = FlutterMethodChannel(
       name: Self.sharedContainerChannelName, binaryMessenger: messenger)
     channel.setMethodCallHandler { call, result in
-      guard call.method == "containerPath" else {
+      switch call.method {
+      case "containerPath":
+        let url = FileManager.default.containerURL(
+          forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier)
+        result(url?.path)
+      case "protect":
+        guard let path = call.arguments as? String else {
+          result(false)
+          return
+        }
+        result(Self.protect(path: path))
+      default:
         result(FlutterMethodNotImplemented)
-        return
       }
-      let url = FileManager.default.containerURL(
-        forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier)
-      result(url?.path)
     }
+  }
+
+  // Keeps the MLS state directory out of iCloud and iTunes backups, and pins the
+  // file protection class of anything created inside it.
+  //
+  // The App Group container is backed up like any other part of the app, and it
+  // holds mls_state.json - every epoch secret and every leaf HPKE private key -
+  // alongside the plaintext of every message this device has decrypted. Those
+  // files are sealed, and the key is in the keychain rather than the container,
+  // so a restore onto another handset would get blobs it cannot open. Excluding
+  // them is the second half of that: a restored copy that cannot be opened is
+  // not a working install either, and the exclusion means the new device starts
+  // clean and re-joins from Welcomes rather than showing "cannot decrypt" on
+  // every message forever.
+  //
+  // `completeUntilFirstUserAuthentication` rather than `complete`, for the same
+  // reason the keychain items use `first_unlock_this_device`: the notification
+  // service extension has to read this directory while the device is locked.
+  // `complete` would turn every push into the placeholder text.
+  //
+  // Best-effort. A container that cannot be marked is still a container the app
+  // has to run out of.
+  private static func protect(path: String) -> Bool {
+    var url = URL(fileURLWithPath: path)
+    var succeeded = true
+
+    do {
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      try url.setResourceValues(values)
+    } catch {
+      NSLog("[venta] could not exclude %@ from backups: %@", path, String(describing: error))
+      succeeded = false
+    }
+
+    do {
+      try FileManager.default.setAttributes(
+        [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+        ofItemAtPath: path)
+    } catch {
+      NSLog("[venta] could not set file protection on %@: %@", path, String(describing: error))
+      succeeded = false
+    }
+
+    return succeeded
   }
 
   // `pendingEvents` is the single source of truth - relayEvent always

@@ -158,14 +158,20 @@ class GuildApi {
     return RoleDto.fromJson(response.data!);
   }
 
-  Future<RoleDto> updateRole({
+  /// Returns nothing: unlike `POST .../roles`, the PATCH answers with a bare
+  /// `200` and an **empty body** (`Results.Ok()` server-side, `Observable<void>`
+  /// in the web client). Parsing a `RoleDto` out of it threw on every single
+  /// save - which, because creating a role opens the editor straight away, read
+  /// to the user as "roles can't be created". Re-read the role from the guild
+  /// refresh the repository does instead of trusting a response that isn't there.
+  Future<void> updateRole({
     required String roleId,
     required String name,
     String? description,
     String? color,
     required GuildPermissions permissions,
   }) async {
-    final response = await client.dio.patch<Map<String, dynamic>>(
+    await client.dio.patch<void>(
       '$_base/roles/$roleId',
       data: {
         'name': name,
@@ -174,7 +180,6 @@ class GuildApi {
         'permissions': permissions.toWireString(),
       },
     );
-    return RoleDto.fromJson(response.data!);
   }
 
   Future<void> deleteRole(String roleId) async {
@@ -196,7 +201,17 @@ class GuildApi {
     );
   }
 
-  Future<List<GuildMemberDto>> getRoleMembers(
+  /// What comes back here are **role-membership join rows**, not members:
+  /// `{id, roleId, memberId, expiresAt, member?}` - `RoleMemberDto` server-side,
+  /// whose nested `member` is a `FlatMemberDto`. Reading a row straight into a
+  /// [GuildMemberDto] threw on the absent `userId`/`guildId`, and the one caller
+  /// swallows that into an empty list, so the role editor said "No members have
+  /// this role yet" no matter who held it.
+  ///
+  /// `member` stays nullable because whether the projection carries it is the
+  /// server's business, not something worth crashing over; callers that need
+  /// the member resolve [memberId] instead.
+  Future<List<({String memberId, GuildMemberDto? member})>> getRoleMembers(
     String roleId, {
     int skip = 0,
     int take = 30,
@@ -204,9 +219,15 @@ class GuildApi {
     final response = await client.dio.get<List<dynamic>>(
       '$_base/roles/$roleId/members?skip=$skip&take=$take',
     );
-    return response.data!
-        .map((json) => GuildMemberDto.fromJson(json as Map<String, dynamic>))
-        .toList();
+    return [
+      for (final row in response.data!.cast<Map<String, dynamic>>())
+        (
+          memberId: row['memberId'] as String,
+          member: row['member'] is Map<String, dynamic>
+              ? GuildMemberDto.fromJson(row['member'] as Map<String, dynamic>)
+              : null,
+        ),
+    ];
   }
 
   Future<void> addRoleMember(String roleId, String memberId) async {

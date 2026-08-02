@@ -46,9 +46,62 @@ class VentaMls {
   /// That is for a *separate process* reading along - an iOS notification
   /// service extension - where writing back would eventually replace whatever
   /// the app committed in the meantime with an older copy.
-  Future<bool> initStorage(String directory, {bool readOnly = false}) async =>
-      _ffi.invoke('initStorage', {'dir': directory, 'readOnly': readOnly})
+  /// [stateKeyB64] is the 32-byte AES key `mls_state.json` is sealed under, held
+  /// in the OS keychain by the host. It is what keeps that file - every epoch
+  /// secret, every leaf HPKE private key and every init private key this device
+  /// holds - from being usable after a device backup is restored onto another
+  /// handset, where the directory comes back and the Keystore/Keychain entry
+  /// does not.
+  ///
+  /// Null is accepted so the Rust tests have a plaintext mode and so a build
+  /// whose keychain is unreachable degrades rather than refusing to start.
+  /// **Every shipping caller supplies one**, and a file that was written sealed
+  /// cannot be read without it.
+  Future<bool> initStorage(
+    String directory, {
+    bool readOnly = false,
+    String? stateKeyB64,
+  }) async =>
+      _ffi.invoke('initStorage', {
+            'dir': directory,
+            'readOnly': readOnly,
+            'stateKeyB64': stateKeyB64,
+          })
           as bool;
+
+  /// Seals arbitrary host bytes under the same key `mls_state.json` uses.
+  ///
+  /// For the two files the *host* owns rather than the engine: the group
+  /// registry, and the plaintext message cache - which is every message this
+  /// device has ever decrypted, and the single most sensitive thing on it.
+  /// Routed through the engine so there is one AES-256-GCM implementation
+  /// rather than one per language; the iOS notification-service extension calls
+  /// the same command.
+  ///
+  /// Both sides are base64: the FFI boundary is JSON.
+  Future<String> sealHostBlob({
+    required String plaintextB64,
+    required String stateKeyB64,
+  }) async =>
+      _ffi.invoke('sealHostBlob', {
+            'plaintextB64': plaintextB64,
+            'stateKeyB64': stateKeyB64,
+          })
+          as String;
+
+  /// Opens [sealHostBlob]. Throws rather than returning the input when the blob
+  /// is not sealed or the key is wrong - a caller that fell back to raw bytes
+  /// would decide the cache was corrupt and replace it with an empty one, which
+  /// is the permanent loss of every message it held.
+  Future<String> openHostBlob({
+    required String sealedB64,
+    required String stateKeyB64,
+  }) async =>
+      _ffi.invoke('openHostBlob', {
+            'sealedB64': sealedB64,
+            'stateKeyB64': stateKeyB64,
+          })
+          as String;
 
   /// Deletes the persisted state file and drops all in-memory group state.
   /// Recovery path for a corrupt store - the caller must clear its own group
@@ -266,8 +319,13 @@ class VentaMls {
   /// Signs a device certificate. The server cannot mint one of these - it never
   /// holds the account identity private half - which is what stops an
   /// external-commit rejoin from being a server-side backdoor into every group.
+  ///
+  /// [userId] is in the signed payload (§L.2). `ClientDeviceId` is unique only
+  /// per user, so a certificate that named only the device would be a valid
+  /// certificate for every account that happened to have a device by that id.
   Future<String> issueDeviceCertificate({
     required String accountIdentityPrivateKeyB64,
+    required String userId,
     required String deviceId,
     required String deviceSignatureKeyB64,
     required DateTime issuedAt,
@@ -275,6 +333,7 @@ class VentaMls {
   }) async =>
       _ffi.invoke('issueDeviceCertificate', {
             'accountIdentityPrivateKeyB64': accountIdentityPrivateKeyB64,
+            'userId': userId,
             'deviceId': deviceId,
             'deviceSignatureKeyB64': deviceSignatureKeyB64,
             'issuedAt': issuedAt.toUtc().millisecondsSinceEpoch ~/ 1000,
@@ -286,9 +345,19 @@ class VentaMls {
   ///
   /// False rather than throwing for a bad signature: §I.1 makes enforcement
   /// three-state, so whether an unverifiable leaf is tolerated, flagged or
-  /// removed is the caller's decision, not this layer's.
+  /// removed is the caller's decision, not this layer's. The certificate's own
+  /// validity window is checked here.
+  ///
+  /// **This says nothing about which leaf the certificate is for.** Certificates
+  /// are public, so a caller that passes the certificate's own self-reported
+  /// fields back in is asking "did somebody sign this?", not "does this vouch
+  /// for the leaf in front of me" - and a server replaying a genuine certificate
+  /// against an injected leaf passes the first question every time. Pass the
+  /// values taken from the *leaf*, and compare them to the certificate's before
+  /// you get here: [LeafVerificationService.check] is where that happens.
   Future<bool> verifyDeviceCertificate({
     required String accountIdentityPublicKeyB64,
+    required String userId,
     required String deviceId,
     required String deviceSignatureKeyB64,
     required DateTime issuedAt,
@@ -297,6 +366,7 @@ class VentaMls {
   }) async =>
       _ffi.invoke('verifyDeviceCertificate', {
             'accountIdentityPublicKeyB64': accountIdentityPublicKeyB64,
+            'userId': userId,
             'deviceId': deviceId,
             'deviceSignatureKeyB64': deviceSignatureKeyB64,
             'issuedAt': issuedAt.toUtc().millisecondsSinceEpoch ~/ 1000,
@@ -744,9 +814,24 @@ class VentaMls {
 
   /// True when [senderIdentity] is in the group's current roster.
   ///
-  /// Worth calling after decrypting an application message: a compromised
-  /// server can replay a valid ciphertext with a spoofed credential, and the
-  /// roster is what catches that.
+  /// **This is very nearly a tautology and must not be relied on as a spoofing
+  /// defence.** It used to claim it stopped "a compromised server replaying a
+  /// valid ciphertext with a spoofed credential". It does not: openmls resolves
+  /// the sender to a leaf *in the tree* and verifies the signature against that
+  /// leaf's key before `processMessage` returns anything at all, so the
+  /// credential handed back is by construction a credential of a current member.
+  /// A server cannot produce a ciphertext under a credential that is not in the
+  /// group, with or without this call.
+  ///
+  /// What it does still catch is narrow and worth keeping: a caller that passes
+  /// a `senderIdentity` from one group alongside another group's id, and the
+  /// window between a removing commit being merged and a message decrypted under
+  /// the previous epoch being rendered.
+  ///
+  /// The check that actually matters is a different one — the *displayed author*
+  /// must be the authenticated [MlsProcessedMessage.senderIdentity], never the
+  /// server-supplied `authorId`. See [MessageDecryptor] and
+  /// [MessagePushDecryptor], which both enforce that.
   Future<bool> verifySenderInRoster({
     required String senderIdentity,
     required String groupIdB64,

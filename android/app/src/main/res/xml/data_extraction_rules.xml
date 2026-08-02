@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Nothing this app stores leaves the device through Android's backup machinery.
+
+  `android:allowBackup="false"` in the manifest already switches off cloud backup
+  and `adb backup`, but on Android 12 and later it does **not** cover
+  device-to-device transfer: that path is on by default and is governed only by
+  this file. Without the <device-transfer> block below, setting up a new handset
+  from an old one copies the whole data directory across, which is
+  `mls_state.json` - every epoch secret and every leaf HPKE private key - and
+  `mls_message_cache.json`, the plaintext of every message this device has
+  decrypted.
+
+  Both files are sealed (see StateFileCipher), and the key that opens them lives
+  in the Keystore, which is not transferred. So a copy that got through would be
+  unopenable rather than readable. Excluding it anyway is the point: the sealing
+  is one mechanism and this is another, and the failure mode of relying on
+  sealing alone is that any future file written here unsealed is silently
+  exfiltrated. The same argument covers `sharedpref`, where
+  flutter_secure_storage keeps its Keystore-wrapped blobs - transferring those to
+  a device that cannot unwrap them turns "no keys" into "keys that decrypt to
+  garbage", which is a worse thing to debug than a clean start.
+
+  `<exclude domain="root" />` covers the whole `/data/data/<pkg>` tree including
+  files/ and databases/; the rest are named individually because `root` does not
+  imply the external-storage or no-backup domains.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

@@ -115,9 +115,19 @@ class ProtectionLevelService {
 
   /// Fetches and verifies the current level for [userId].
   ///
-  /// The last **validly signed** level seen on this device is the floor: a
-  /// server that removes the endpoint, or answers with an unsigned level, must
-  /// not thereby relax an account that had opted into the strict tier.
+  /// Two properties, both of which the first version of this got wrong (§L.6):
+  ///
+  /// 1. **A monotonic version floor.** "Enforce the last validly-signed level
+  ///    you have seen" is unimplementable without one. A genuinely-signed *older*
+  ///    assertion verifies perfectly, so a server that keeps the assertion from
+  ///    the day before the upgrade can roll the account back to `TrustedSignIn`
+  ///    and then auto-admit its own device. Anything below the remembered
+  ///    version is refused as tampering regardless of signature validity.
+  /// 2. **A 200 with nothing in it fails closed.** An empty body used to leave
+  ///    `reachable` true, which produced `verified: true` on a `TrustedSignIn`
+  ///    fallback - the exact downgrade the tier exists to prevent, available by
+  ///    returning `200 {}`. Only a 404, and only on a device that has never seen
+  ///    a signed assertion, means "this account has not set a level".
   Future<ProtectionLevelState> refresh({
     required String userId,
     required String deviceId,
@@ -125,22 +135,37 @@ class ProtectionLevelService {
     final remembered = await _readRemembered(userId: userId, deviceId: deviceId);
 
     Map<String, dynamic>? body;
-    var reachable = true;
+    var unset = false;
     try {
       final response = await client.dio.get<Map<String, dynamic>>(
         client.url('/api/v1/identity/protection-level'),
       );
       body = response.data;
+      if (body == null || body['signedAssertion'] == null) {
+        // A 200 that asserts nothing. Not "the account has no level" - that is
+        // a 404 - so it is treated as a failure to read rather than as an
+        // answer.
+        debugPrint(
+          'ProtectionLevelService: the endpoint answered 200 with no assertion',
+        );
+        body = null;
+      }
     } on DioException catch (e) {
       // 404 is "this account has never set a level", which is not a failure to
       // verify - there is nothing asserted, so there is nothing to have been
       // tampered with. §G.5 says new and existing accounts start on
       // TrustedSignIn, and treating an unset account as strict would demand a
       // manual approval nobody was ever told to expect.
-      reachable = e.response?.statusCode == 404;
+      //
+      // Only believed on a device that has never seen a *signed* level. Once one
+      // has been seen, "there is no level" is a claim that contradicts something
+      // this device verified, and the floor wins.
+      unset = e.response?.statusCode == 404 && remembered == null;
+      if (e.response?.statusCode == 404 && remembered != null) {
+        warning.value = _rollbackWarning;
+      }
     } catch (e) {
       debugPrint('ProtectionLevelService: could not read the level: $e');
-      reachable = false;
     }
 
     if (body == null) {
@@ -153,9 +178,9 @@ class ProtectionLevelService {
             version: 0,
             updatedAt: '',
             // Verified only in the "the account has demonstrably not set one"
-            // sense. Unreachable is a different thing and stays unverified, so
-            // `effectiveLevel` reads strict.
-            verified: reachable,
+            // sense - a real 404 on a device with no floor. Anything else stays
+            // unverified, so `effectiveLevel` reads strict.
+            verified: unset,
           );
       state.value = fallback;
       return fallback;
@@ -166,6 +191,20 @@ class ProtectionLevelService {
     final updatedAt = body['updatedAt'] as String? ?? '';
     final assertion = body['signedAssertion'] as String? ?? '';
 
+    // The floor, checked before the signature and independent of it. A replayed
+    // older assertion is genuinely signed - that is the whole attack - so
+    // verifying it first and rejecting afterwards would be the same code with a
+    // pointless Ed25519 verification in it.
+    if (remembered != null && version < remembered.version) {
+      debugPrint(
+        'ProtectionLevelService: refusing version $version, below the '
+        '${remembered.version} this device has already seen signed',
+      );
+      warning.value = _rollbackWarning;
+      state.value = remembered;
+      return remembered;
+    }
+
     final verified = await _verify(
       userId: userId,
       level: level,
@@ -175,7 +214,9 @@ class ProtectionLevelService {
     );
 
     // A downgrade this device did not participate in. §G.3: warn loudly rather
-    // than applying it quietly.
+    // than applying it quietly. Note this is a *legitimate* downgrade path -
+    // signed, at a higher version - which the tier permits with re-auth; the
+    // warning exists so it cannot happen quietly.
     if (remembered != null &&
         remembered.level == ProtectionLevel.verifiedDevices &&
         level == ProtectionLevel.trustedSignIn) {
@@ -191,6 +232,15 @@ class ProtectionLevelService {
           'This account\'s device protection setting could not be verified, so '
           'this device is enforcing the strictest one. New devices will need '
           'approving here.';
+
+      // Unverified never becomes the answer while a verified floor exists.
+      // Returning the unverified state would still read strict through
+      // `effectiveLevel`, but it would also discard the version this device has
+      // seen, and the next fetch would then accept anything at or above zero.
+      if (remembered != null) {
+        state.value = remembered;
+        return remembered;
+      }
     }
 
     final resolved = ProtectionLevelState(
@@ -209,6 +259,12 @@ class ProtectionLevelService {
     state.value = resolved;
     return resolved;
   }
+
+  static const _rollbackWarning =
+      'This account\'s device protection setting was replaced with an older '
+      'one. That is not something a client does; either the server is '
+      'misbehaving or somebody is trying to lower this account\'s protection. '
+      'This device is enforcing what it last saw signed.';
 
   /// Sets the level, signing the assertion with the account identity key.
   ///
@@ -244,8 +300,15 @@ class ProtectionLevelService {
       return false;
     }
 
-    final current = state.value;
-    final version = (current?.version ?? 0) + 1;
+    // Above the floor, not merely above whatever is in memory. A device that has
+    // not refreshed this session would otherwise sign version 1, which its own
+    // rollback check would then refuse on the next read.
+    final remembered = await _readRemembered(userId: userId, deviceId: deviceId);
+    final floor = [
+      state.value?.version ?? 0,
+      remembered?.version ?? 0,
+    ].reduce((a, b) => a > b ? a : b);
+    final version = floor + 1;
     final updatedAt = DateTime.now().toUtc().toIso8601String();
 
     final assertion = await _engine.signProtectionLevel(

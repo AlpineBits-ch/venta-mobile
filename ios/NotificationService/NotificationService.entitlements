@@ -9,5 +9,19 @@
 	<array>
 		<string>group.gg.venta.mobile</string>
 	</array>
+	<!-- Identical to the Runner's, and for a reason that is not symmetry: the
+	     files in the shared container are sealed, so the container on its own
+	     tells this extension nothing. Without the key it can neither open the
+	     message cache nor hand initStorage what mls_state.json needs, and every
+	     push falls back to the server's placeholder text.
+
+	     The extension's own group is first for the same reason the Runner's is:
+	     the first entry is the default for any write that does not name a group,
+	     and nothing this process writes belongs in a shared one. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)gg.venta.mobile.NotificationService</string>
+		<string>$(AppIdentifierPrefix)gg.venta.mobile.shared</string>
+	</array>
 </dict>
 </plist>

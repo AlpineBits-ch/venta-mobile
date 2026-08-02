@@ -108,6 +108,20 @@ sealed class MessageDto with _$MessageDto {
     @JsonKey(includeFromJson: false, includeToJson: false)
     @Default(false)
     bool isUndecryptable,
+
+    /// Client-only: cleartext, in a context this device holds a live MLS group
+    /// for.
+    ///
+    /// `encryptionState` is a plain server field, so flipping it to `Plain` is
+    /// the whole of what it takes to put server-chosen text into an end-to-end
+    /// encrypted thread. Not refused - a context that had encryption switched on
+    /// has genuine cleartext history above the switch, and hiding it would be a
+    /// bigger lie than showing it - but marked, so the difference between an
+    /// injection that is invisible and one that is obvious is a line of UI
+    /// rather than nothing at all.
+    @JsonKey(includeFromJson: false, includeToJson: false)
+    @Default(false)
+    bool isUnverifiedPlaintext,
   }) = _MessageDto;
 
   factory MessageDto.fromJson(Map<String, dynamic> json) =>
