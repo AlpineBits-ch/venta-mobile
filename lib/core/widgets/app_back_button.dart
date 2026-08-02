@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../routing/back_navigation.dart';
 
 /// An `AppBar` `leading` back arrow that falls back to [fallbackLocation]
