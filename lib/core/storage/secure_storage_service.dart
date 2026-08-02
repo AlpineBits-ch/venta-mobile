@@ -252,6 +252,45 @@ class SecureStorageService {
     await _storage.delete(key: '$scope.account.priv');
   }
 
+  /// The device certificate this device last issued for itself (§H.2), as JSON.
+  ///
+  /// Cached so an ordinary launch does not re-sign and re-upload one that is
+  /// still good. That is not only a saved round trip: `PUT .../certificate`
+  /// replaces the stored row, so a client that reissued on every start would
+  /// churn the value peers are verifying against for no reason, and any peer
+  /// mid-verification would see it change under them.
+  Future<String?> readDeviceCertificate({
+    required String deviceId,
+    required String userId,
+  }) => _storage.read(key: '${_mlsScope(deviceId, userId)}.cert');
+
+  Future<void> writeDeviceCertificate({
+    required String deviceId,
+    required String userId,
+    required String value,
+  }) => _storage.write(
+    key: '${_mlsScope(deviceId, userId)}.cert',
+    value: value,
+  );
+
+  Future<void> clearDeviceCertificate({
+    required String deviceId,
+    required String userId,
+  }) => _storage.delete(key: '${_mlsScope(deviceId, userId)}.cert');
+
+  /// Whether the account's recovery code has been shown to, and confirmed by,
+  /// the human on this device.
+  ///
+  /// Per account rather than per device: the code is the account's. Stored so
+  /// the prompt is asked once and not on every launch, and so a user who has
+  /// already saved one from another device is never pushed into regenerating -
+  /// which would silently invalidate the copy they wrote down.
+  Future<bool> readRecoveryCodeAcknowledged(String userId) async =>
+      await _storage.read(key: 'venta.mls.recoverycode.ack.$userId') == '1';
+
+  Future<void> writeRecoveryCodeAcknowledged(String userId) =>
+      _storage.write(key: 'venta.mls.recoverycode.ack.$userId', value: '1');
+
   /// The last protection-level assertion this device verified (§G.3).
   ///
   /// Persisted so a client that cannot reach the endpoint enforces the last

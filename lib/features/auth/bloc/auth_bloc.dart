@@ -176,7 +176,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
-      unawaited(startAuthenticatedServices());
+      // The password is handed on rather than dropped: publishing the account
+      // identity key and writing the recovery-key envelope are both gated on it
+      // server-side, and a sign-in is the only moment this client legitimately
+      // holds one. It is passed, used and never stored - the same reasoning as
+      // `_pending` below.
+      unawaited(startAuthenticatedServices(password: event.password));
       emit(state.copyWith(status: AuthStatus.success));
     } on MfaRequiredException {
       emit(state.copyWith(status: AuthStatus.mfaRequired, errorMessage: null));
@@ -222,7 +227,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
-      unawaited(startAuthenticatedServices());
+      unawaited(startAuthenticatedServices(password: event.password));
       emit(state.copyWith(status: AuthStatus.success));
     } on EmailNotVerifiedException {
       // The account is created; only the sign-in that follows it was refused.
@@ -278,10 +283,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       // Verified - finish the sign-in they were already trying to make.
       await authRepository.login(pending.login, pending.password);
-      _pending = null;
       sessionCubit.signedIn(authRepository.currentUserId ?? '');
       unawaited(realtimeService.start());
-      unawaited(startAuthenticatedServices());
+      unawaited(startAuthenticatedServices(password: pending.password));
+      _pending = null;
       emit(state.copyWith(status: AuthStatus.success));
     } catch (_) {
       // The address is confirmed either way - don't strand them on the code

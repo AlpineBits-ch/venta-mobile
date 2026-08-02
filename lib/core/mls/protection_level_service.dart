@@ -373,7 +373,7 @@ class ProtectionLevelService {
 
   Future<String?> _fetchIdentityKey(String userId) async {
     try {
-      return await masterKeyApi.fetchIdentityKey(userId);
+      return (await masterKeyApi.fetchIdentityKey(userId))?.publicKey;
     } catch (e) {
       debugPrint('ProtectionLevelService: could not read the identity key: $e');
       return null;

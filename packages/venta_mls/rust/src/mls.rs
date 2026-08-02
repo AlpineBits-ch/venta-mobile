@@ -2168,6 +2168,14 @@ const MASTER_ARGON2_ITERS: u32 = 3;
 const MASTER_ARGON2_LANES: u32 = 1;
 const MASTER_SCHEMA_VERSION: u32 = 1;
 
+/// HKDF `info` for the master-key public verifier. Contract §L.11, and it is
+/// **wire format**: the value is compared byte-for-byte against whatever an
+/// earlier write - possibly from the desktop client - stored, so the string is
+/// exact, ASCII and versioned. A change to the derivation takes a new suffix
+/// rather than a silent redefinition, because an account's stored verifier has
+/// to stay comparable for the life of its master key.
+const MASTER_KEY_VERIFIER_INFO: &[u8] = b"venta.masterkey.verifier.v1";
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptedMasterKey {
@@ -2178,6 +2186,43 @@ pub struct EncryptedMasterKey {
     pub argon2_memory: u32,
     pub argon2_parallelism: u32,
     pub version: u32,
+
+    /// Derived from the **master key**, never from the secret that wraps it
+    /// (contract §L.11).
+    ///
+    /// It exists so the server can confirm that a `rewrap-password` seals the
+    /// key it already holds, without ever holding that key. §C.1 cited the field
+    /// as the safety property of that route while no client generated one, which
+    /// left the gate inert on every account in existence - so the route was in
+    /// practice an unauthenticated write that destroys an account's entire
+    /// encrypted history.
+    ///
+    /// Optional on the way *in*: envelopes written before this existed have
+    /// none, and refusing to open those would brick the recovery journey for the
+    /// whole install base to enforce a check whose input does not exist. Always
+    /// present on the way *out*.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_verifier: Option<String>,
+}
+
+/// The §L.11 verifier for a raw 32-byte master key.
+///
+/// HKDF of the key rather than of a wrapping, because the value has to survive a
+/// re-wrap unchanged - that is its entire purpose. Anything derived from a
+/// wrapping moves with its salt and nonce and would fail on the first legitimate
+/// password change. And of the *key* rather than of the password, because a
+/// verifier derived from the password is an offline cracking oracle for anyone
+/// who can read the row, which is the §L.1 mistake repeated.
+///
+/// Safe to disclose: a 32-byte HKDF-SHA256 output over a 32-byte uniformly
+/// random ikm reveals the master key only to somebody who can invert HKDF, and
+/// the server treats it as an equality check, never as authorisation to unwrap.
+fn derive_public_verifier(master_key: &[u8]) -> Result<String, String> {
+    let hkdf = Hkdf::<Sha256>::new(None, master_key);
+    let mut out = [0u8; 32];
+    hkdf.expand(MASTER_KEY_VERIFIER_INFO, &mut out)
+        .map_err(|e| format!("MlsError: verifier derivation failed: {}", e))?;
+    Ok(B64.encode(out))
 }
 
 fn derive_wrap_key(
@@ -2344,6 +2389,11 @@ fn wrap_master_key(master_key: &[u8], secret: &str) -> Result<EncryptedMasterKey
         argon2_memory: MASTER_ARGON2_MEM,
         argon2_parallelism: MASTER_ARGON2_LANES,
         version: MASTER_SCHEMA_VERSION,
+        // Both wrappings of one key necessarily agree, because both derive from
+        // the same bytes. The server refuses a write whose two wrappings carry
+        // different verifiers, precisely because that means two different keys
+        // were wrapped and called one.
+        public_verifier: Some(derive_public_verifier(master_key)?),
     })
 }
 

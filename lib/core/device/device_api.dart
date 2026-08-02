@@ -125,13 +125,30 @@ class DeviceApi {
 
   /// Publishes this device's certificate (contract §H.2) alongside its key
   /// packages, so peers can verify offline that it belongs to this account.
+  ///
+  /// The body is `UpdateDeviceCertificateDto`, not the certificate object the
+  /// client models: the server stores the signature plus its validity window and
+  /// the identity-key version that signed it, and derives the device from the
+  /// route. Timestamps are ISO-8601 - the wire type is `DateTimeOffset`, so the
+  /// epoch-seconds form the *signed payload* uses does not deserialise here.
+  ///
+  /// Needs no password. Only publishing the account identity key does, which is
+  /// what makes refreshing a certificate possible on a cold start.
   Future<void> uploadDeviceCertificate({
     required String clientDeviceId,
-    required Map<String, Object?> certificate,
+    required String certificate,
+    required DateTime issuedAt,
+    required DateTime expiresAt,
+    required int identityKeyVersion,
   }) async {
     await client.dio.put<void>(
-      '$_base/client/$clientDeviceId/certificate',
-      data: certificate,
+      '$_base/client/${Uri.encodeComponent(clientDeviceId)}/certificate',
+      data: {
+        'certificate': certificate,
+        'issuedAt': issuedAt.toUtc().toIso8601String(),
+        'expiresAt': expiresAt.toUtc().toIso8601String(),
+        'identityKeyVersion': identityKeyVersion,
+      },
     );
   }
 

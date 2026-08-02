@@ -93,12 +93,15 @@ void main() {
         version: any(named: 'version'),
         passwordWrapping: any(named: 'passwordWrapping'),
         recoveryCodeWrapping: any(named: 'recoveryCodeWrapping'),
+        password: any(named: 'password'),
       ),
     ).thenAnswer((_) async {});
+    when(() => api.upload(any())).thenAnswer((_) async => false);
     when(
       () => api.rewrapPassword(
         version: any(named: 'version'),
         passwordWrapping: any(named: 'passwordWrapping'),
+        password: any(named: 'password'),
       ),
     ).thenAnswer((_) async {});
   });
@@ -208,6 +211,7 @@ void main() {
           version: any(named: 'version'),
           passwordWrapping: any(named: 'passwordWrapping'),
           recoveryCodeWrapping: any(named: 'recoveryCodeWrapping'),
+          password: any(named: 'password'),
         ),
       );
       verifyNever(
@@ -245,7 +249,7 @@ void main() {
   });
 
   group('setup', () {
-    test('writes both wrappings under one version and returns the code', () async {
+    setUp(() {
       when(
         () => engine.setupMasterKey(any(), recoveryCode: any(named: 'recoveryCode')),
       ).thenAnswer(
@@ -256,15 +260,78 @@ void main() {
           'masterKey': _masterKey,
         },
       );
+      when(() => engine.generateRecoveryCode())
+          .thenAnswer((_) async => 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23');
+      when(
+        () => engine.wrapMasterKeyUnder(
+          masterKeyB64: any(named: 'masterKeyB64'),
+          secret: any(named: 'secret'),
+        ),
+      ).thenAnswer((_) async => _wrapping('r').toJson());
+    });
 
-      final result = await service.setUp(
+    // The first write goes through the legacy `POST users/master`, not through
+    // `PUT backup/recovery-key`. Not a style preference: the latter refuses any
+    // write that *establishes* key material without a `publicVerifier` (§L.8),
+    // and no engine on any of the three clients derives one - so routing a first
+    // write through it is a guaranteed 400 and the account never gets a master
+    // key at all.
+    test('establishes the envelope through the route that accepts a first write', () async {
+      final key = await service.establish(
         userId: _userId,
         deviceId: _deviceId,
         password: 'hunter2',
       );
 
-      expect(result.recoveryCode, 'ABCD-EFGH-2345-6789');
+      expect(key, _masterKey);
+      verify(() => api.upload(any())).called(1);
+      verifyNever(
+        () => api.putRecoveryKey(
+          version: any(named: 'version'),
+          passwordWrapping: any(named: 'passwordWrapping'),
+          recoveryCodeWrapping: any(named: 'recoveryCodeWrapping'),
+          password: any(named: 'password'),
+        ),
+      );
+    });
+
+    // A code minted inside `establish` would be one nobody ever saw. Leaving the
+    // account at `needsRecoveryCode` is what routes it through the one flow that
+    // shows a code and takes confirmation before committing to it.
+    test('leaves the account owed a recovery code rather than minting one silently', () async {
+      await service.establish(
+        userId: _userId,
+        deviceId: _deviceId,
+        password: 'hunter2',
+      );
+
+      expect(service.status.value, MasterKeyStatus.needsRecoveryCode);
+    });
+
+    test('the full setUp adds the second wrapping at the same version', () async {
+      var reads = 0;
+      when(() => api.fetchRecoveryKey()).thenAnswer((_) async {
+        reads++;
+        return reads == 1
+            ? _state(password: _wrapping('p'))
+            : _state(password: _wrapping('p'), recoveryCode: _wrapping('r'));
+      });
+      when(
+        () => storage.readMasterKey(
+          deviceId: any(named: 'deviceId'),
+          userId: any(named: 'userId'),
+        ),
+      ).thenAnswer((_) async => _masterKey);
+
+      final result = await service.setUp(
+        userId: _userId,
+        deviceId: _deviceId,
+        password: 'hunter2',
+        recoveryCode: 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23',
+      );
+
       expect(result.masterKey, _masterKey);
+      expect(result.recoveryCode, 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23');
       expect(service.status.value, MasterKeyStatus.ready);
 
       final captured = verify(
@@ -272,6 +339,7 @@ void main() {
           version: captureAny(named: 'version'),
           passwordWrapping: captureAny(named: 'passwordWrapping'),
           recoveryCodeWrapping: captureAny(named: 'recoveryCodeWrapping'),
+          password: captureAny(named: 'password'),
         ),
       ).captured;
       expect(
@@ -281,6 +349,11 @@ void main() {
       );
       expect((captured[1] as EncryptedMasterKeyDto).cipherText, 'ct-p');
       expect((captured[2] as EncryptedMasterKeyDto).cipherText, 'ct-r');
+      expect(
+        captured[3],
+        'hunter2',
+        reason: '§C.1 requires re-authentication and the server enforces it',
+      );
     });
   });
 
@@ -333,6 +406,7 @@ void main() {
         () => api.rewrapPassword(
           version: 2,
           passwordWrapping: any(named: 'passwordWrapping'),
+          password: any(named: 'password'),
         ),
       ).called(1);
       expect(service.status.value, MasterKeyStatus.ready);
@@ -374,6 +448,7 @@ void main() {
         () => api.rewrapPassword(
           version: any(named: 'version'),
           passwordWrapping: any(named: 'passwordWrapping'),
+          password: any(named: 'password'),
         ),
       );
     });
@@ -385,6 +460,7 @@ void main() {
         () => api.rewrapPassword(
           version: any(named: 'version'),
           passwordWrapping: any(named: 'passwordWrapping'),
+          password: any(named: 'password'),
         ),
       ).thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
 
@@ -453,6 +529,7 @@ void main() {
       final code = await service.addRecoveryCode(
         userId: _userId,
         deviceId: _deviceId,
+        password: 'hunter2',
       );
 
       expect(code, generated);
@@ -487,13 +564,14 @@ void main() {
             : _state(password: stored, recoveryCode: _wrapping('r'));
       });
 
-      await service.addRecoveryCode(userId: _userId, deviceId: _deviceId);
+      await service.addRecoveryCode(userId: _userId, deviceId: _deviceId, password: 'hunter2');
 
       final captured = verify(
         () => api.putRecoveryKey(
           version: captureAny(named: 'version'),
           passwordWrapping: captureAny(named: 'passwordWrapping'),
           recoveryCodeWrapping: captureAny(named: 'recoveryCodeWrapping'),
+          password: any(named: 'password'),
         ),
       ).captured;
 
@@ -521,7 +599,7 @@ void main() {
           .thenAnswer((_) async => _state(password: _wrapping('p')));
 
       await expectLater(
-        service.addRecoveryCode(userId: _userId, deviceId: _deviceId),
+        service.addRecoveryCode(userId: _userId, deviceId: _deviceId, password: 'hunter2'),
         throwsA(isA<RecoveryCodeNotStoredException>()),
       );
       expect(

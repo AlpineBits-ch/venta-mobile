@@ -192,43 +192,88 @@ class MasterKeyService {
   Future<RecoveryKeyStateDto?> refreshStatus() async =>
       (await readStatus()).envelope;
 
+  /// A fresh recovery code, in the format the desktop client also reads.
+  ///
+  /// Delegated to the engine rather than generated in Dart. The 31-symbol
+  /// alphabet and the rejection sampling are wire format shared across clients
+  /// (§C.1.2), and a second implementation of them is precisely how they
+  /// diverged the first time - mobile padded the alphabet to 32 symbols so a
+  /// bitmask would be uniform, and the desktop validator then rejected, and
+  /// silently mis-derived from, every code containing the extra character.
+  Future<String> generateRecoveryCode() => _engine.generateRecoveryCode();
+
+  /// Mints a master key and stores the **password wrapping only**.
+  ///
+  /// This is the write that gives an account a master key at all, and it
+  /// deliberately does not attempt the second wrapping. Two reasons, and the
+  /// first is decisive:
+  ///
+  /// * `PUT backup/recovery-key` **refuses any write that establishes key
+  ///   material without a `publicVerifier`** (§L.8), and no engine on any of the
+  ///   three clients derives one. Going through that route for a first write is
+  ///   a guaranteed 400. The legacy `POST users/master` accepts it, and an
+  ///   account that has an envelope can then acquire the second wrapping through
+  ///   the additive same-version path, which does not demand a verifier.
+  /// * A recovery code minted here is a code nobody has seen. Leaving the
+  ///   account at [MasterKeyStatus.needsRecoveryCode] routes it through the one
+  ///   flow that shows it and takes confirmation before committing to it, so
+  ///   there is exactly one such flow to get right rather than two.
+  ///
+  /// Returns the master key, or null when the envelope could not be written -
+  /// never a half-established state.
+  Future<String?> establish({
+    required String userId,
+    required String deviceId,
+    required String password,
+  }) async {
+    final minted = await _engine.setupMasterKey(password);
+    final passwordWrapping = EncryptedMasterKeyDto.fromEngine(
+      Map<String, Object?>.from(minted['passwordWrapping']! as Map),
+    );
+
+    // The recovery-code wrapping the engine also produced is discarded on
+    // purpose - see above. One wasted Argon2 pass, against a code the user would
+    // never have been shown.
+    await api.upload(passwordWrapping);
+
+    final key = minted['masterKey']! as String;
+    await _remember(userId: userId, deviceId: deviceId, key: key);
+    status.value = MasterKeyStatus.needsRecoveryCode;
+    return key;
+  }
+
   /// Mints a master key and both of its wrappings (contract §C.1.1).
   ///
   /// Returns the recovery code, which the caller **must** show once and take
   /// confirmation for. It is not recoverable from anything the server holds, and
   /// it is the only credential that survives a password reset.
+  ///
+  /// Composed of [establish] plus [addRecoveryCode] rather than one write, for
+  /// the `publicVerifier` reason spelled out on [establish].
   Future<MasterKeySetupResult> setUp({
     required String userId,
     required String deviceId,
     required String password,
     String? recoveryCode,
   }) async {
-    final minted = await _engine.setupMasterKey(
-      password,
+    final key = await establish(
+      userId: userId,
+      deviceId: deviceId,
+      password: password,
+    );
+    if (key == null) {
+      throw StateError('the master key envelope could not be established');
+    }
+
+    final code = await addRecoveryCode(
+      userId: userId,
+      deviceId: deviceId,
+      password: password,
       recoveryCode: recoveryCode,
     );
+    if (code == null) throw const RecoveryCodeNotStoredException();
 
-    final passwordWrapping = EncryptedMasterKeyDto.fromEngine(
-      Map<String, Object?>.from(minted['passwordWrapping']! as Map),
-    );
-    final recoveryWrapping = EncryptedMasterKeyDto.fromEngine(
-      Map<String, Object?>.from(minted['recoveryCodeWrapping']! as Map),
-    );
-
-    await api.putRecoveryKey(
-      version: passwordWrapping.version,
-      passwordWrapping: passwordWrapping,
-      recoveryCodeWrapping: recoveryWrapping,
-    );
-
-    final key = minted['masterKey']! as String;
-    await _remember(userId: userId, deviceId: deviceId, key: key);
-    status.value = MasterKeyStatus.ready;
-
-    return MasterKeySetupResult(
-      masterKey: key,
-      recoveryCode: minted['recoveryCode']! as String,
-    );
+    return MasterKeySetupResult(masterKey: key, recoveryCode: code);
   }
 
   /// Unwraps the master key with [password], or with [recoveryCode] when the
@@ -267,14 +312,13 @@ class MasterKeyService {
     if (state == null) {
       // §I.2: an account that predates encryption has no envelope. Minting one
       // here rather than at signup is what lets existing accounts acquire a
-      // master key without a migration - and it now gets both wrappings.
-      final result = await setUp(
-        userId: userId,
-        deviceId: deviceId,
-        password: password,
-        recoveryCode: recoveryCode,
-      );
-      return result.masterKey;
+      // master key without a migration.
+      //
+      // The password wrapping only. The recovery code is a thing a human has to
+      // be shown and asked to confirm, and an unlock is not a place that can do
+      // that - so the account lands on `needsRecoveryCode` and the prompt picks
+      // it up. See [establish].
+      return establish(userId: userId, deviceId: deviceId, password: password);
     }
 
     // The ordinary path.
@@ -323,6 +367,11 @@ class MasterKeyService {
       await api.rewrapPassword(
         version: state.version,
         passwordWrapping: rewrapped,
+        // §L.8: the route is no longer credential-free. The password is the one
+        // the user has just set, which is what the in-app change case proves
+        // with; the reset ticket is the other accepted credential and belongs to
+        // the reset flow that issued it.
+        password: password,
       );
       status.value = MasterKeyStatus.ready;
     } catch (e) {
@@ -349,9 +398,15 @@ class MasterKeyService {
   /// returning early on a same-version write. Showing someone a code that opens
   /// nothing, while telling them they are now protected, is worse than not
   /// offering the retrofit at all.
+  ///
+  /// [password] is the account password. §C.1 requires re-authentication for
+  /// this write and the server enforces it, so the prompt that offers the
+  /// retrofit has to collect it - there is no cold-start path that can do this
+  /// silently.
   Future<String?> addRecoveryCode({
     required String userId,
     required String deviceId,
+    required String password,
     String? recoveryCode,
   }) async {
     final key = await peek(userId: userId, deviceId: deviceId);
@@ -382,6 +437,7 @@ class MasterKeyService {
       version: state.version,
       passwordWrapping: passwordWrapping,
       recoveryCodeWrapping: recoveryWrapping,
+      password: password,
     );
 
     // Verified by re-reading rather than trusting the 200. The server has a path
@@ -421,9 +477,16 @@ class MasterKeyService {
   /// proof is bound to the current one; replacing it would orphan all of them,
   /// and the user would find out the next time they needed a restore.
   ///
-  /// The recovery-code wrapping is carried across untouched - it seals the same
-  /// bytes, so it stays valid, and rewriting only the password side would leave
-  /// the two on different versions.
+  /// The recovery-code wrapping is untouched - it seals the same bytes, so it
+  /// stays valid.
+  ///
+  /// Goes through `rewrap-password`, **not** `PUT backup/recovery-key`. Both of
+  /// the routes this used to take refuse a differing password wrapping at an
+  /// unchanged version, and they have to: the server cannot tell a re-wrap under
+  /// a new password from a different master key wearing the same version's
+  /// number, and guessing wrong makes every blob at that version unopenable
+  /// while claiming nothing changed. `rewrap-password` is the route that means
+  /// "same key, new password" unambiguously.
   Future<bool> rewrap({
     required String userId,
     required String deviceId,
@@ -432,6 +495,9 @@ class MasterKeyService {
     final key = await peek(userId: userId, deviceId: deviceId);
     if (key == null) return false;
 
+    final state = await api.fetchRecoveryKey();
+    if (state == null) return false;
+
     final rewrapped = EncryptedMasterKeyDto.fromEngine(
       await _engine.wrapMasterKeyUnder(
         masterKeyB64: key,
@@ -439,22 +505,12 @@ class MasterKeyService {
       ),
     );
 
-    final state = await api.fetchRecoveryKey();
-    final recoveryWrapping = state?.recoveryCodeWrapping;
-    if (state == null || recoveryWrapping == null) {
-      // No recovery-code wrapping to preserve, so the legacy single-wrapping
-      // write is all there is. The account stays one reset from losing
-      // everything, which `status` is what says out loud.
-      await api.upload(rewrapped);
-      await refreshStatus();
-      return true;
-    }
-
-    await api.putRecoveryKey(
+    await api.rewrapPassword(
       version: state.version,
       passwordWrapping: rewrapped,
-      recoveryCodeWrapping: recoveryWrapping,
+      password: newPassword,
     );
+    await refreshStatus();
     return true;
   }
 

@@ -1977,6 +1977,116 @@ fn the_two_wrappings_share_no_salt_and_no_ciphertext() {
 }
 
 // ---------------------------------------------------------------------------
+// The master-key public verifier (contract §L.11)
+// ---------------------------------------------------------------------------
+
+/// The construction is **wire format**. Echo compares the submitted value
+/// byte-for-byte against whatever an earlier write stored - possibly a write
+/// from the desktop client - so a derivation differing by one byte of `info`
+/// turns every later `rewrap-password` into a refusal, on the one journey that
+/// has no fallback.
+///
+/// Pinned against a recomputation from the literal `info` string rather than
+/// against `derive_public_verifier` itself, so changing the derivation is a
+/// deliberate act with a new version suffix (§L.11) rather than a silent
+/// redefinition nothing notices until an account cannot re-wrap.
+#[test]
+fn the_public_verifier_matches_the_normative_derivation() {
+    let master_key = [7u8; 32];
+    let wrapping = wrap_master_key_under(&B64.encode(master_key), "hunter2").unwrap();
+
+    // HKDF-SHA256(ikm = masterKey, salt = none, info = "venta.masterkey.verifier.v1", L = 32)
+    let hkdf = hkdf::Hkdf::<sha2::Sha256>::new(None, &master_key);
+    let mut expected = [0u8; 32];
+    hkdf.expand(b"venta.masterkey.verifier.v1", &mut expected)
+        .unwrap();
+
+    assert_eq!(
+        wrapping.public_verifier.as_deref(),
+        Some(B64.encode(expected).as_str()),
+        "the verifier is HKDF-SHA256 over the master key with the §L.11 info string"
+    );
+}
+
+/// The property the field exists for: identical across a re-wrap, because that
+/// is what proves a `rewrap-password` seals *the same key*. Anything derived
+/// from a wrapping would move with its salt and nonce and fail on the first
+/// legitimate password change.
+#[test]
+fn the_public_verifier_survives_a_re_wrap() {
+    let setup = setup_master_key("hunter2", None).unwrap();
+    let rewrapped = wrap_master_key_under(&setup.master_key, "a-brand-new-password").unwrap();
+
+    assert!(setup.password_wrapping.public_verifier.is_some());
+    assert_eq!(
+        setup.password_wrapping.public_verifier, rewrapped.public_verifier,
+        "same key, so same verifier - a re-wrap changes the wrapping, not the key"
+    );
+    assert_ne!(
+        setup.password_wrapping.cipher_text, rewrapped.cipher_text,
+        "and the wrapping itself really did change"
+    );
+}
+
+/// Echo refuses a write whose two wrappings carry different verifiers, because
+/// that means two different keys were wrapped and called one - the recovery code
+/// would open material no backup is sealed under, discovered years later on the
+/// one journey with no fallback.
+#[test]
+fn both_wrappings_of_one_key_carry_the_same_verifier() {
+    let setup = setup_master_key("hunter2", None).unwrap();
+
+    assert_eq!(
+        setup.password_wrapping.public_verifier,
+        setup.recovery_code_wrapping.public_verifier,
+    );
+    assert!(setup.password_wrapping.public_verifier.is_some());
+}
+
+/// Two accounts must not collide, or the check proves nothing.
+#[test]
+fn a_different_master_key_produces_a_different_verifier() {
+    let first = setup_master_key("hunter2", None).unwrap();
+    let second = setup_master_key("hunter2", None).unwrap();
+
+    assert_ne!(
+        first.password_wrapping.public_verifier,
+        second.password_wrapping.public_verifier,
+    );
+}
+
+/// Derived from the key, never from the secret. If it moved with the password it
+/// would be an offline password-cracking oracle for anyone who can read the row
+/// - the §L.1 mistake repeated.
+#[test]
+fn the_verifier_does_not_depend_on_the_wrapping_secret() {
+    let master_key = B64.encode([3u8; 32]);
+    let under_password = wrap_master_key_under(&master_key, "hunter2").unwrap();
+    let under_code = wrap_master_key_under(&master_key, "WXYZ23456789ABCD").unwrap();
+
+    assert_eq!(under_password.public_verifier, under_code.public_verifier);
+}
+
+/// Envelopes written before §L.11 have no verifier, and every account in the
+/// field is one. Refusing to parse them would brick the recovery journey for the
+/// whole install base to enforce a check whose input does not exist.
+#[test]
+fn an_envelope_with_no_verifier_still_opens() {
+    let setup = setup_master_key("hunter2", None).unwrap();
+
+    let mut json: serde_json::Value = serde_json::to_value(&setup.password_wrapping).unwrap();
+    json.as_object_mut().unwrap().remove("publicVerifier");
+    let legacy: EncryptedMasterKey = serde_json::from_value(json).unwrap();
+
+    assert!(legacy.public_verifier.is_none());
+    assert_eq!(
+        decrypt_master_key(&legacy, "hunter2").unwrap(),
+        setup.master_key,
+        "a pre-§L.11 envelope must still unwrap"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Recovery-code format (contract §C.1.2)
 // ---------------------------------------------------------------------------
 

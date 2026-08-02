@@ -29,6 +29,7 @@ import '../../features/voice/data/voice_repository.dart';
 import '../../features/voice/webrtc/call_webrtc_service.dart';
 import '../../features/wiki/data/wiki_api.dart';
 import '../../features/wiki/data/wiki_repository.dart';
+import '../crypto/account_encryption_service.dart';
 import '../crypto/account_identity_service.dart';
 import '../crypto/master_key_api.dart';
 import '../crypto/master_key_service.dart';
@@ -210,6 +211,21 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       secureStorage: getIt(),
     ),
   );
+  // The production caller for all of the above. Without it the master key, the
+  // account identity key and this device's certificate are all code nothing ever
+  // runs - which is the state §G/§H were in, and why certificate coverage was
+  // zero and `certificateEnforcement` could never leave `Observe`.
+  getIt.registerLazySingleton<AccountEncryptionService>(
+    () => AccountEncryptionService(
+      masterKeys: getIt(),
+      identity: getIt(),
+      mls: getIt(),
+      deviceApi: getIt(),
+      deviceIdService: getIt(),
+      authRepository: getIt(),
+      secureStorage: getIt(),
+    ),
+  );
   getIt.registerLazySingleton<MlsPolicyService>(
     () => MlsPolicyService(client: getIt()),
   );
@@ -381,12 +397,26 @@ void resetSessionScopedCaches() {
 /// The MLS *sync* half runs detached. Uploading key packages and joining every
 /// group this device was invited to while away can take several round-trips, and
 /// none of the app's other screens need to wait on it.
-Future<void> startAuthenticatedServices() async {
+///
+/// [password] is present only on the paths that just collected one - sign-in,
+/// registration, email verification. Contract §I.2 says the account identity key
+/// "can only appear when an upgraded client next unlocks", and on this platform
+/// that is literally true: the server gates publishing it, and writing the
+/// recovery-key envelope, on the account password. A cold start with a restored
+/// session passes null and does the subset that needs no credential - adopting a
+/// master key and identity key already in the keychain, and refreshing this
+/// device's certificate. It must never be a *required* parameter: the overwhelming
+/// majority of launches have no password and must not be degraded by that.
+Future<void> startAuthenticatedServices({String? password}) async {
   await getIt<MlsSessionManager>().prepareIdentity();
   await getIt<DeviceRegistrationService>().ensureRegistered();
   await getIt<PushNotificationService>().start();
   await getIt<CallKitService>().start();
   getIt<MlsRealtimeBridge>().start();
+  // Detached, and after registration: publishing a certificate needs the device
+  // row to exist, and none of it is worth holding a launch on. Failure here is
+  // logged and leaves the account exactly as it was.
+  unawaited(getIt<AccountEncryptionService>().establish(password: password));
   unawaited(getIt<MlsSessionManager>().sync());
 }
 
@@ -402,6 +432,9 @@ Future<void> stopAuthenticatedServices() async {
   await getIt<PushNotificationService>().unregisterToken();
   await getIt<CallKitService>().unregisterVoipToken();
   await getIt<MlsRealtimeBridge>().stop();
+  // The prompt belongs to one account. Leaving it raised would show the next
+  // sign-in a recovery-code offer for somebody else's master key.
+  getIt<AccountEncryptionService>().recoveryCodeOwed.value = false;
   // Locks the session, keeping the groups and the identity. Those belong to the
   // installation, and throwing them away on an ordinary sign-out would lock this
   // handset out of every group it is in - `MlsService.forgetEverything` is the

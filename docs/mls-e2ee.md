@@ -454,22 +454,29 @@ does not exist on either client rather than an MLS decision.
 only, so a search there returns empty rather than erroring. `ThreadView` shows an
 explicit "not available" state instead of an empty-results one.
 
-**The protection-level and device-certificate machinery is built but not
-enforced.** `MasterKeyService`, `AccountIdentityService`, `ProtectionLevelService`,
-`DeviceAdmissionService`, `MlsPolicyService` and `LeafVerificationService` exist
-and are tested, but nothing calls `LeafVerificationService` from the commit path
-yet, and no launch sequence establishes the account identity key. That ordering is
-deliberate: contract §I.7 puts these at deployment steps 4–5 while the base64 fix,
-failure surfacing and key-package reset are steps 1–2, and §I.1 defaults
+**Generation is wired; enforcement is not.** `AccountEncryptionService` runs from
+`startAuthenticatedServices` and establishes the master key, the account identity
+key and this device's certificate (§I.2); `DeviceApi.register` reports capabilities
+(§I.4). Nothing calls `LeafVerificationService` from the commit path, and nothing
+enforces a protection level. The split is deliberate: contract §I.7 puts
+enforcement at deployment steps 4–5 while generation is step 2, and §I.1 defaults
 certificate enforcement to `Observe` precisely because no device in the field has
 a certificate. Wiring enforcement before coverage exists would have this client
 proposing the removal of every other device in every group it is in.
 
-**No settings UI for the recovery code yet.** `MasterKeyService.setUp` /
-`addRecoveryCode` and `RecoveryCodeScreen` exist and are tested, but nothing calls
-them from a launch or settings path — so §C.1.1's retrofit prompt for existing
-accounts is unwired, and `MasterKeyStatus.historyLost` has no surface. The
-mechanism is complete; the trigger is not.
+**The password is what gates generation, and a cold start has none.** The server
+requires the account password to publish an identity key — a *first* publication
+as well as a rotation — and to write the recovery-key envelope. So only sign-in,
+registration and email verification can establish either. A launch with a restored
+session adopts what is already in the keychain and refreshes this device's
+certificate, which needs no credential, and defers the rest. Coverage climbs one
+sign-in at a time.
+
+**The recovery-code prompt is a banner, not a gate.** `RecoveryCodeBanner` in
+`AppShell` offers `RecoveryCodeSetupScreen` whenever the account has no
+recovery-code wrapping *and* this device holds the master key. It generates, shows
+and confirms the code **before** writing anything, so backing out costs nothing and
+the next launch asks again. `MasterKeyStatus.historyLost` still has no surface.
 
 **The backup cadence is manual.** `MlsBackupService.backUpIfStale` implements the
 §H.6 debounce but nothing calls it on a state change, and there is no settings UI

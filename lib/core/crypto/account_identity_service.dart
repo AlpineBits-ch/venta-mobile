@@ -90,6 +90,7 @@ class AccountIdentityService {
 
   String? _publicKey;
   String? _privateKey;
+  int _version = 1;
 
   /// True once this device holds the account identity key and can therefore
   /// issue certificates and enforce §H.4.
@@ -97,15 +98,27 @@ class AccountIdentityService {
 
   String? get publicKey => _publicKey;
 
+  /// Which version of the account identity key this device holds. Travels on
+  /// every certificate so a peer can tell which key to verify against.
+  int get version => _version;
+
   /// Loads the identity key, generating one if the account has none.
   ///
   /// Returns false when it could not be established - overwhelmingly because the
   /// master key is not unlocked on this device yet, which §I.2 says is the
   /// ordinary state of every existing account. A false here means "treat this
   /// account as Observe and do not offer VerifiedDevices", never "fail".
+  ///
+  /// [password] is the account password, and it is what makes generation
+  /// possible at all: the server gates `PUT users/identity-key` on it for a
+  /// *first* publication as well as a rotation, because whoever publishes first
+  /// is who every peer pins. Without one this can still adopt a key already in
+  /// the keychain - which is the whole of the cold-start path - but it cannot
+  /// establish a new one.
   Future<bool> ensure({
     required String userId,
     required String deviceId,
+    String? password,
   }) async {
     final cached = await secureStorage.readAccountIdentity(
       deviceId: deviceId,
@@ -113,18 +126,60 @@ class AccountIdentityService {
     );
     if (cached != null) {
       final (publicKey, privateKey) = cached;
+
+      // What the account actually publishes decides whether the cached private
+      // half is the account's identity key or a stranded one.
+      PublishedIdentityKey? published;
+      var reachable = true;
+      try {
+        published = await api.fetchIdentityKey(userId);
+      } catch (e) {
+        reachable = false;
+        debugPrint('AccountIdentityService: could not read the published identity key: $e');
+      }
+
+      if (published != null && published.publicKey != publicKey) {
+        // Another device published a different key - this one raced it, or
+        // restored from a backup older than a rotation. Certificates issued from
+        // here would not verify against what peers pin, and an *invalid*
+        // certificate is a security warning at every phase (§I.1), so issuing
+        // one is worse than issuing none.
+        debugPrint(
+          'AccountIdentityService: the account publishes an identity key this '
+          'device does not hold - not issuing certificates against the local one',
+        );
+        _publicKey = published.publicKey;
+        _privateKey = null;
+        _version = published.version;
+        return false;
+      }
+
       _publicKey = publicKey;
       _privateKey = privateKey;
+      _version = published?.version ?? _version;
 
       // The published half may be missing even when the local one is not - a
       // device that generated the key offline, or an upload that failed. Peers
       // can verify nothing until it is up there.
-      try {
-        if (await api.fetchIdentityKey(userId) == null) {
-          await api.uploadIdentityKey(identityPublicKey: _publicKey!);
+      if (reachable && published == null) {
+        if (password == null) {
+          debugPrint(
+            'AccountIdentityService: this device holds an unpublished identity '
+            'key and has no password to publish it with; peers cannot verify it '
+            'until the next sign-in',
+          );
+        } else {
+          try {
+            await api.uploadIdentityKey(
+              identityPublicKey: publicKey,
+              password: password,
+              version: _version,
+              deviceId: deviceId,
+            );
+          } catch (e) {
+            debugPrint('AccountIdentityService: could not publish the identity key: $e');
+          }
         }
-      } catch (e) {
-        debugPrint('AccountIdentityService: could not publish the identity key: $e');
       }
       return true;
     }
@@ -149,7 +204,8 @@ class AccountIdentityService {
           'AccountIdentityService: the account already has an identity key this '
           'device does not hold - restore a backup rather than rotating',
         );
-        _publicKey = published;
+        _publicKey = published.publicKey;
+        _version = published.version;
         return false;
       }
     } catch (e) {
@@ -159,16 +215,36 @@ class AccountIdentityService {
       return false;
     }
 
+    if (password == null) {
+      // Generating one we cannot publish would leave this device holding a key
+      // no peer has pinned, and would race whichever device publishes first.
+      // Deferring costs a launch; the §I.1 long tail already assumes one.
+      debugPrint(
+        'AccountIdentityService: the account has no identity key and no '
+        'password is available to publish one, so none is being minted',
+      );
+      return false;
+    }
+
     final identity = await _engine.generateAccountIdentity();
+    // Published *before* it is cached. A key in the keychain that the account
+    // does not publish is the state the mismatch branch above has to clean up
+    // after, so the ordering that avoids creating it is the cheaper one.
+    await api.uploadIdentityKey(
+      identityPublicKey: identity.publicKey,
+      password: password,
+      version: 1,
+      deviceId: deviceId,
+    );
     await secureStorage.writeAccountIdentity(
       deviceId: deviceId,
       userId: userId,
       publicKey: identity.publicKey,
       privateKey: identity.privateKey,
     );
-    await api.uploadIdentityKey(identityPublicKey: identity.publicKey);
     _publicKey = identity.publicKey;
     _privateKey = identity.privateKey;
+    _version = 1;
     return true;
   }
 
@@ -272,7 +348,7 @@ class AccountIdentityService {
       // First contact. Trust on first use, then never again - the same bargain
       // Signal makes with a safety number.
       try {
-        identityKey = await api.fetchIdentityKey(ownerUserId);
+        identityKey = (await api.fetchIdentityKey(ownerUserId))?.publicKey;
       } catch (e) {
         debugPrint('AccountIdentityService: could not fetch $ownerUserId\'s identity key: $e');
         return CertificateVerdict.unknownIssuer;
@@ -332,6 +408,7 @@ class AccountIdentityService {
   Future<void> reset({String? userId, String? deviceId}) async {
     _publicKey = null;
     _privateKey = null;
+    _version = 1;
     if (userId != null && deviceId != null) {
       await secureStorage.clearAccountIdentity(
         deviceId: deviceId,

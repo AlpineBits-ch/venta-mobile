@@ -98,6 +98,13 @@ class MlsService {
   /// the fingerprint can be derived without touching the engine's key store.
   String? _signaturePublicKey;
 
+  /// This device's MLS signature public key, base64, or null before unlock.
+  ///
+  /// Exposed because a device certificate (§H.2) is a statement binding *this*
+  /// signing key to this device id, so the issuer needs the same value the leaf
+  /// carries - not a freshly minted one.
+  String? get signaturePublicKey => _signaturePublicKey;
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------

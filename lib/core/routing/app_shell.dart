@@ -8,6 +8,7 @@ import '../../features/guilds/data/models/guild_template_dto.dart';
 import '../../features/guilds/presentation/screens/create_guild_screen.dart';
 import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
 import '../../features/guild_voice/presentation/widgets/voice_status_bar.dart';
+import '../../features/mls/presentation/widgets/recovery_code_banner.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/presentation/screens/call_screen.dart';
 import '../di/injector.dart';
@@ -257,6 +258,7 @@ class _AppShellState extends State<AppShell> {
       body: Column(
         children: [
           const ConnectionStatusBanner(),
+          const RecoveryCodeBanner(),
           Expanded(
             child: Stack(
               children: [
