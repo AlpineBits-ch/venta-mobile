@@ -28,15 +28,15 @@ const _callPushType = 'call';
 /// has no CallKit-style auto-timeout for a custom incoming-call UI). See
 /// docs/native-call-push-backend-spec.md.
 ///
-/// A cancel is never applied to a call this device is *in*. The server leaves
-/// the accepting device out of the fan-out, but only when that device sent a
-/// registered `X-Device-Id` on accept - and since the device-identity
-/// consolidation the user's *other* devices are deliberately included, where
-/// the whole user used to be skipped. That makes a stray cancel reaching the
-/// answering device a live possibility (an unregistered id, a token still
-/// unattached from before the migration), and acting on it hangs up a
-/// connected call. The active call id is read from secure storage because
-/// this runs in a background isolate with no access to [CallCubit].
+/// A cancel is never applied to a call this device itself resolved. The server
+/// addresses the whole account - it cannot reliably tell which push token is
+/// which device, since a token only carries that if it was registered after the
+/// device-identity consolidation - so it names the acting device in
+/// `excludeDeviceId` and leaves the decision here, where it is exact. Acting on
+/// your own cancel hangs up a connected call. The active call id is checked too,
+/// for pushes from a server predating `excludeDeviceId`; both it and the device
+/// id come from secure storage because this runs in a background isolate with
+/// no access to [CallCubit] or [getIt].
 Future<void> showCallKitFromPushData(Map<String, dynamic> data) async {
   if (data['type'] != _callPushType) return;
   // Android only. iOS drives its CallKit UI exclusively through `AppDelegate`'s
@@ -51,7 +51,13 @@ Future<void> showCallKitFromPushData(Map<String, dynamic> data) async {
   if (Platform.isIOS) return;
   final callId = data['callId'] as String;
   if (data['callSubtype'] == 'end') {
-    if (await SecureStorageService().readActiveCallId() == callId) return;
+    final storage = SecureStorageService();
+    final excludeDeviceId = data['excludeDeviceId'] as String? ?? '';
+    if (excludeDeviceId.isNotEmpty &&
+        excludeDeviceId == await storage.readDeviceId()) {
+      return;
+    }
+    if (await storage.readActiveCallId() == callId) return;
     await FlutterCallkitIncoming.endCall(callId);
     return;
   }
@@ -101,6 +107,31 @@ Future<void> callKitBackgroundMessageHandler(CallEvent event) async {
   );
 }
 
+/// Who is calling, for the purpose of naming the ring.
+///
+/// [CallDto.creatorId] is the answer whenever the server sent one. The fallback
+/// below is for a call that reached this device before it did, and it is wrong
+/// by construction in two ways worth knowing about, both of which showed up as
+/// "the incoming-call screen has no name on it":
+///
+///  * in a group call "the participant that isn't me" names an arbitrary one of
+///    them, not the caller;
+///  * with no [myUserId] - a cold start where auth hasn't finished restoring -
+///    every participant differs from `null`, so it names *this user*, and the
+///    ring ends up labelled with your own name.
+///
+/// The second case is why this returns empty rather than guessing when
+/// [myUserId] is null: no name is recoverable, and a wrong one is worse than a
+/// placeholder that a later profile lookup can replace.
+String callerUserIdOf(CallDto call, String? myUserId) {
+  final creatorId = call.creatorId;
+  if (creatorId != null && creatorId.isNotEmpty) return creatorId;
+  if (myUserId == null || myUserId.isEmpty) return '';
+  return call.participants
+      .map((p) => p.userId)
+      .firstWhere((id) => id != myUserId, orElse: () => '');
+}
+
 /// Bridges the native CallKit/Android-incoming-call UI to [CallCubit] - the
 /// single source of truth for actual call state. This service never decides
 /// call state itself; it only forwards native UI actions into the cubit and
@@ -147,6 +178,11 @@ class CallKitService {
     final iosBridge = _iosBridge;
     if (iosBridge != null) {
       _iosEventSub = iosBridge.events.listen(_handleIosEvent);
+      // Native decides whether a "stop ringing" push is this device's own copy,
+      // and it has to be able to do that with no engine running - so hand it the
+      // device id now, while there is one. See `AppDelegate.localDeviceId`.
+      final deviceId = deviceIdService.deviceIdOrNull;
+      if (deviceId != null) await iosBridge.setDeviceId(deviceId);
       await _registerVoipToken();
     } else {
       _androidEventSub = FlutterCallkitIncoming.onEvent.listen(
@@ -232,12 +268,11 @@ class CallKitService {
       // what actually triggers it. Harmless no-op if the native button
       // already answered it (both platforms).
       //
-      // Deliberately NOT gated on `_shownForCallId == state.call!.id` - that's
-      // only ever set by this Dart instance's own _showForIncoming, but most
+      // Deliberately NOT gated on `_shownForCallId == state.call!.id`. Most
       // real calls arrive while backgrounded/killed, where the native side
-      // shows the incoming-call UI directly and this field never gets set
-      // for that call at all. Gating on it here silently skipped the
-      // fallback for the majority of real calls.
+      // shows the incoming-call UI directly; on Android nothing sets this
+      // field for such a call at all, so gating on it here silently skipped
+      // the fallback for the majority of real calls.
       _shownForCallId = state.call!.id;
       _connectedForCallId = state.call!.id;
       // Persisted, not just held in memory: the FCM background isolate that
@@ -265,38 +300,78 @@ class CallKitService {
   }
 
   Future<void> _showForIncoming(CallDto call) async {
-    final myUserId = authRepository.currentUserId;
-    final callerUserId = call.participants
-        .map((p) => p.userId)
-        .firstWhere((id) => id != myUserId, orElse: () => '');
-    String? callerName;
-    String? callerAvatarUrl;
-    if (callerUserId.isNotEmpty) {
-      try {
-        final profile = await profileRepository.getByUserId(callerUserId);
-        callerName = profile.userName;
-        callerAvatarUrl = profile.avatarUrl;
-      } catch (_) {
-        // Fall through with no name/avatar - still worth ringing.
-      }
-    }
+    final callerUserId = callerUserIdOf(call, authRepository.currentUserId);
     final iosBridge = _iosBridge;
-    if (iosBridge != null) {
-      await iosBridge.reportIncomingCall(
-        callId: call.id,
-        callerName: callerName ?? 'Unknown',
+
+    if (iosBridge == null) {
+      // Android: the incoming-call UI can only be *shown*, never amended - the
+      // plugin's only lever is showCallkitIncoming, and re-issuing it under the
+      // same id restarts the ringtone. So resolve first, then ring once.
+      String? callerName;
+      String? callerAvatarUrl;
+      if (callerUserId.isNotEmpty) {
+        try {
+          final profile = await profileRepository.getByUserId(callerUserId);
+          callerName = profile.userName;
+          callerAvatarUrl = profile.avatarUrl;
+        } catch (_) {
+          // Fall through with no name/avatar - still worth ringing.
+        }
+      }
+      await FlutterCallkitIncoming.showCallkitIncoming(
+        CallKitParams(
+          id: call.id,
+          nameCaller: callerName ?? 'Unknown',
+          avatar: callerAvatarUrl,
+          type: 0,
+          extra: {'conversationId': call.conversationId},
+        ),
       );
       return;
     }
-    await FlutterCallkitIncoming.showCallkitIncoming(
-      CallKitParams(
-        id: call.id,
-        nameCaller: callerName ?? 'Unknown',
-        avatar: callerAvatarUrl,
-        type: 0,
-        extra: {'conversationId': call.conversationId},
-      ),
+
+    // iOS: report now, name it properly a moment later if need be. Waiting on
+    // the profile request first is what made the name a coin flip - whichever
+    // of that request and the VoIP push finished first decided what CallKit
+    // showed, and a request that failed left "Unknown" up for the full 50
+    // seconds the call rings, with no second chance. A cached profile is the
+    // common case anyway (this is somebody you can already call), so the ring
+    // is usually named from the first frame.
+    final cached = callerUserId.isEmpty
+        ? null
+        : profileRepository.cachedByUserId(callerUserId);
+    await iosBridge.reportIncomingCall(
+      callId: call.id,
+      callerName: cached?.userName ?? '',
     );
+    if (cached == null && callerUserId.isNotEmpty) {
+      unawaited(
+        _relabelWithProfile(callId: call.id, callerUserId: callerUserId),
+      );
+    }
+  }
+
+  /// Fills in the caller's name on a ring already on screen. iOS only - see
+  /// [_showForIncoming] for why Android resolves up front instead.
+  Future<void> _relabelWithProfile({
+    required String callId,
+    required String callerUserId,
+  }) async {
+    final iosBridge = _iosBridge;
+    if (iosBridge == null) return;
+    final String name;
+    try {
+      name = (await profileRepository.getByUserId(callerUserId)).userName;
+    } catch (_) {
+      return; // Better a placeholder than no ring - leave what's on screen.
+    }
+    if (name.isEmpty) return;
+    // The call may have been answered, declined or cancelled while that request
+    // was in flight. Harmless either way - updateCall no-ops for a call CallKit
+    // has already let go of - but there is no point relabelling a ring that has
+    // moved on.
+    if (_shownForCallId != callId) return;
+    await iosBridge.updateCall(callId: callId, callerName: name);
   }
 
   void _handleIosEvent(IosCallKitEvent event) {
@@ -309,6 +384,16 @@ class CallKitService {
         callCubit.endCallById(callId);
       case IosVoipTokenUpdated():
         _registerVoipToken();
+      case IosCallReported(:final callId, :final callerId, :final callerName):
+        // The push already put the call on screen with whatever name it
+        // carried. Record it so the cubit going idle still tears the native UI
+        // down, and - when the push named nobody - go and find out who.
+        _shownForCallId = callId;
+        if (callerName.isEmpty && callerId.isNotEmpty) {
+          unawaited(
+            _relabelWithProfile(callId: callId, callerUserId: callerId),
+          );
+        }
     }
   }
 

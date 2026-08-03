@@ -30,6 +30,26 @@ class IosVoipTokenUpdated extends IosCallKitEvent {
   final String token;
 }
 
+/// A VoIP push put a call on screen before any Dart code was running. Carries
+/// what the push knew about the caller so [CallKitService] can fill in what it
+/// didn't - see [IosCallKitBridge.updateCall].
+class IosCallReported extends IosCallKitEvent {
+  const IosCallReported({
+    required this.callId,
+    required this.callerId,
+    required this.callerName,
+  });
+
+  final String callId;
+
+  /// Empty when the push predates the backend sending it.
+  final String callerId;
+
+  /// Empty when the push carried no name - the case the native side shows a
+  /// placeholder for, and the one worth correcting.
+  final String callerName;
+}
+
 /// Thin wrapper around the `gg.venta.mobile/callkit` [MethodChannel] that
 /// `AppDelegate.swift` sets up on whichever Flutter engine ends up live
 /// (the normal UIScene-driven one, or its own lazily-booted fallback for a
@@ -75,13 +95,24 @@ class IosCallKitBridge {
       'voipTokenUpdated' when args['token'] is String => IosVoipTokenUpdated(
         args['token'] as String,
       ),
-      _ =>
-        null, // 'reported' is purely informational - nothing to react to here.
+      'reported' when callId != null => IosCallReported(
+        callId: callId,
+        callerId: args['callerId'] as String? ?? '',
+        callerName: args['callerName'] as String? ?? '',
+      ),
+      _ => null,
     };
   }
 
   Future<String?> getVoipToken() =>
       _channel.invokeMethod<String>('getVoipToken');
+
+  /// Mirrors this installation's `X-Device-Id` into native, which needs it to
+  /// recognise its own "stop ringing" push (see `AppDelegate.localDeviceId`)
+  /// while no Flutter engine is running. Persisted natively, so it only has to
+  /// be sent once per launch.
+  Future<void> setDeviceId(String deviceId) =>
+      _channel.invokeMethod<void>('setDeviceId', deviceId);
 
   /// Foreground/live-socket path - mirrors the old `showCallkitIncoming`
   /// call for a call [CallKitService] already learned about over SignalR.
@@ -95,6 +126,18 @@ class IosCallKitBridge {
     });
     return ok ?? false;
   }
+
+  /// Re-labels a ring already on screen. The native side reports the call from
+  /// the push payload alone - it has no network access and no session - so this
+  /// is how a name resolved afterwards (or one the push never carried) reaches
+  /// the CallKit UI. No-op for a call CallKit no longer knows about.
+  Future<void> updateCall({
+    required String callId,
+    required String callerName,
+  }) => _channel.invokeMethod<void>('updateCall', {
+    'callId': callId,
+    'callerName': callerName,
+  });
 
   Future<void> setCallConnected(String callId) =>
       _channel.invokeMethod<void>('setCallConnected', {'callId': callId});

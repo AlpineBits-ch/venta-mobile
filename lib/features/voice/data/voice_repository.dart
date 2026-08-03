@@ -293,6 +293,10 @@ class VoiceRepository {
 
   Future<CallDto> getCall(String callId) => api.getCall(callId);
 
+  /// See [VoiceApi.getPendingCall] - the catch-up read for a ring this client
+  /// was never told about.
+  Future<CallDto?> getPendingCall() => api.getPendingCall();
+
   Future<void> invokeMuteChanged({
     required String callId,
     required bool isMuted,

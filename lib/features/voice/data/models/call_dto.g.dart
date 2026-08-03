@@ -37,6 +37,7 @@ Map<String, dynamic> _$CallTrackDtoToJson(_CallTrackDto instance) =>
 _CallDto _$CallDtoFromJson(Map<String, dynamic> json) => _CallDto(
   id: json['id'] as String,
   conversationId: json['conversationId'] as String,
+  creatorId: json['creatorId'] as String?,
   status: json['status'] as String?,
   createdAt: _$JsonConverterFromJson<String, DateTime>(
     json['createdAt'],
@@ -61,6 +62,7 @@ _CallDto _$CallDtoFromJson(Map<String, dynamic> json) => _CallDto(
 Map<String, dynamic> _$CallDtoToJson(_CallDto instance) => <String, dynamic>{
   'id': instance.id,
   'conversationId': instance.conversationId,
+  'creatorId': instance.creatorId,
   'status': instance.status,
   'createdAt': _$JsonConverterToJson<String, DateTime>(
     instance.createdAt,

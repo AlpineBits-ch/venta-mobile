@@ -414,6 +414,15 @@ Future<void> startAuthenticatedServices({String? password}) async {
   await getIt<DeviceRegistrationService>().ensureRegistered();
   await getIt<PushNotificationService>().start();
   await getIt<CallKitService>().start();
+  // After CallKitService, so a ring found here reaches the native call UI too.
+  // Detached: it is a network round-trip, and nothing else waits on the answer.
+  //
+  // Needed on top of CallCubit's own realtime-connect hook because the socket is
+  // started before this function runs and connects while it is still awaiting
+  // MLS and device registration - by the time the cubit exists to listen, the
+  // `connected` event it would have caught up on is long gone. Which is exactly
+  // the case this covers: the app opened while the phone was already ringing.
+  unawaited(getIt<CallCubit>().catchUpOnPendingCall());
   getIt<MlsRealtimeBridge>().start();
   // Detached, and after registration: publishing a certificate needs the device
   // row to exist, and none of it is worth holding a launch on. Failure here is

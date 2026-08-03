@@ -486,6 +486,38 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     }
   }
 
+  /// Asks the server whether a call is ringing for this user that this client
+  /// was never told about.
+  ///
+  /// `call.IncomingCall` is broadcast once and never replayed. Every path that
+  /// misses it ends the same way - the phone is ringing somewhere and the app
+  /// shows nothing:
+  ///
+  ///  * the app was opened after the call started (the common one - the socket
+  ///    connects, and the event it needed went out seconds earlier);
+  ///  * the socket was down when the call was placed and reconnected after;
+  ///  * the call push never arrived, which is best-effort by construction.
+  ///
+  /// Called on every realtime connect, and once explicitly at startup
+  /// (`startAuthenticatedServices`) - the socket connects before this cubit is
+  /// constructed on a cold start, so the connect event alone would miss exactly
+  /// the case this exists for. Cheap: `204` with no body is the answer
+  /// essentially always, and the phase guard means it never runs mid-call.
+  Future<void> catchUpOnPendingCall() async {
+    final CallDto? pending;
+    try {
+      pending = await repository.getPendingCall();
+    } catch (_) {
+      return; // Best-effort. A later reconnect tries again.
+    }
+    if (pending == null) return;
+    // Re-checked after the await: an in-app "call" tapped while this was in
+    // flight, or the real `call.IncomingCall` finally landing, both leave a
+    // state this must not overwrite.
+    if (state.phase != CallPhase.idle) return;
+    emitIfOpen(CallState(phase: CallPhase.incoming, call: pending));
+  }
+
   /// A reconnect is the signal that any `call.*` events broadcast during the
   /// gap were dropped - SignalR doesn't queue undelivered messages. Re-fetches
   /// authoritative state and reconciles: subscribes to participants we never
@@ -493,6 +525,10 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   /// call ended (or we were removed) while disconnected.
   Future<void> _handleConnectionStatus(RealtimeConnectionStatus status) async {
     if (status != RealtimeConnectionStatus.connected) return;
+    if (state.phase == CallPhase.idle) {
+      await catchUpOnPendingCall();
+      return;
+    }
     if (state.phase != CallPhase.active) return;
     final call = state.call;
     final webRtc = _webRtc;

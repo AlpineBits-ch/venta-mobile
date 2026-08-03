@@ -204,6 +204,29 @@ transitioning via the normal in-app flow).
 > iOS by ending a throwaway CallKit id instead of the live one
 > (`AppDelegate.swift`).
 
+> **Superseded 2026-08-03 - the exclusion moved to the client.** The rule
+> above quietly failed for the case it was written for. Deciding server-side
+> requires the push token to name its device, and every token registered
+> before the consolidation names nothing; those were the tokens the backend
+> skipped, so a handset holding one kept ringing indefinitely after the call
+> was picked up on another device - most visibly when it was answered on the
+> desktop. The backend now addresses **every** still-ringing device and puts
+> the acting device's id in `excludeDeviceId`; each device compares that
+> against its own `X-Device-Id` and drops its own copy. That is exact, needs
+> no token bookkeeping, and closes the race where the cancel push overtook
+> the accepting device's own state transition.
+>
+> Two further corrections in the same change:
+> - **The caller is never a cancel recipient.** "Everyone except the actor"
+>   named precisely the caller in a 1:1 call, and they are *in* the call - on
+>   iOS that push reported and immediately ended a phantom CallKit call over
+>   the live one. Recipients are now the still-`Pending` invitees plus the
+>   acting user's own other devices, creator always excluded.
+> - **`cancelReason` distinguishes resolved from missed.** iOS reported every
+>   cancelled ring as `.remoteEnded`, which is what the OS logs as a *missed
+>   call* - so answering on your laptop left a missed-call badge on your
+>   phone. It now maps to `.answeredElsewhere` / `.declinedElsewhere`.
+
 ## Payload field reference
 
 | Field | Android (FCM data) | iOS (APNs VoIP custom properties) |
@@ -212,7 +235,73 @@ transitioning via the normal in-app flow).
 | call id | `callId` | `callId` |
 | conversation id | `conversationId` | `conversationId` |
 | caller display name | `callerName` | `callerName` |
+| caller user id | `callerId` | `callerId` |
 | caller avatar | `callerAvatarUrl` | `callerAvatarUrl` |
+| cancel: acting device | `excludeDeviceId` | `excludeDeviceId` |
+| cancel: why | `cancelReason` | `cancelReason` |
+
+`callerId` is what lets a client resolve the caller itself. Without it the
+only way to name the caller off a `call.IncomingCall` roster is "the
+participant that isn't me", which picks an arbitrary person in a group call
+and the wrong person entirely on a cold start where the client hasn't loaded
+its own user id yet.
+
+`cancelReason` is one of `AcceptedElsewhere`, `DeclinedElsewhere`, `Ended`
+(`Messaging.Application/Services/CallPushService.cs`, `CallCancelReason`).
+
+`callerName` is never sent empty for an *incoming* push - it is the only
+string the native call screen has to show, and on iOS the call is reported to
+CallKit straight off this payload, before any client code could fill a gap in.
+
+## 6. The third leg: `GET voice/call/pending` (added 2026-08-03)
+
+Both channels above are best-effort, and neither is a fallback for the other
+failing in the same moment. `call.IncomingCall` is broadcast once and **never
+replayed** - SignalR queues nothing - so a client that wasn't connected when it
+went out never learns about the call at all. The everyday version of that is not
+an edge case: *open the app while somebody is already calling you.* The socket
+connects seconds after the event, and the app shows nothing while the phone
+rings somewhere else. A reconnect after a dropped connection has the identical
+gap, and a push that never arrived leaves nothing behind to recover from.
+
+`VoiceController.CallAsync` therefore also writes a short-lived reverse index
+(`user-ringing:{userId}` → callId, 2-minute absolute TTL, comfortably longer
+than the 50-second ring timeout), and `GET api/v1/messaging/voice/call/pending`
+reads it:
+
+- `200` + the `Call` when one is genuinely ringing for the caller.
+- `204`, no body, otherwise - the answer essentially always.
+
+The index is a **hint, never an answer**. It is written and left to expire;
+nothing deletes it, because a call can end in half a dozen ways (accept,
+decline, ring timeout, caller hang-up, alone timeout, everyone left) and missing
+the cleanup on any one of them would ring a reopening app for a call that is
+long over. Every read re-validates against the call itself: the call must still
+be `Pending`/`Connected`, **and this user's own participant row must still be
+`Pending`**. The second check is what makes a group call others have already
+joined still ring for a late invitee, while a call this user answered on their
+laptop a minute ago stays silent.
+
+Clients call it on every realtime connect, plus once explicitly at startup - the
+socket connects before the call-state layer exists to hear its own connect
+event, which is precisely the cold-start case this exists for
+(`CallCubit.catchUpOnPendingCall`, `CallStateService.catchUpOnPendingCall`).
+
+## What the native iOS call screen can and cannot show
+
+Worth writing down, because it reads as a bug: **there is no way to put the
+caller's avatar on the CallKit screen.** CallKit shows a photo only when the
+call's handle resolves to an entry in the user's Contacts, which an in-app
+account never does - every VoIP app that isn't phone-number-based shows the
+same grey silhouette. The one image slot under our control is
+`CXProviderConfiguration.iconTemplateImageData`, the app badge shown beside
+the call; it is a 40x40pt *template* (alpha only, system-tinted), set in
+`AppDelegate.swift` from `assets/icon/app_icon_foreground.png`. Leaving it
+unset - as it was until 2026-08-03 - is why the screen showed no icon at all.
+
+The caller's avatar does still reach Android, whose incoming-call UI takes an
+image URL (`CallKitParams.avatar`), and both platforms show it in the app's
+own in-call UI.
 
 ## 5. Blocker: backend's Firebase project doesn't match the new app's
 

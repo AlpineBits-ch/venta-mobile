@@ -42,6 +42,13 @@ sealed class CallDto with _$CallDto {
   const factory CallDto({
     required String id,
     required String conversationId,
+
+    /// Who placed the call. The one reliable way to name the caller on the
+    /// incoming-call UI: picking "the participant that isn't me" off
+    /// [participants] is wrong the moment a call has three people in it, and
+    /// picks the wrong row entirely on a cold start where this device hasn't
+    /// loaded its own user id yet.
+    String? creatorId,
     String? status,
     DateTime? createdAt,
     DateTime? updatedAt,

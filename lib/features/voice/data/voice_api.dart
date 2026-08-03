@@ -41,6 +41,30 @@ class VoiceApi {
     return CallDto.fromJson(response.data!);
   }
 
+  /// The call ringing for this user right now, or null when none is.
+  ///
+  /// `call.IncomingCall` is broadcast once and never replayed, so a client that
+  /// wasn't connected when it went out - killed, backgrounded onto a dead
+  /// socket, or opened while the phone was already ringing - never hears about
+  /// the call at all, and the push fallback can be missed too. This is the
+  /// catch-up read for that, and the counterpart to [getCall] for a call
+  /// already joined.
+  ///
+  /// The server answers `204` with no body for "nothing ringing", which is the
+  /// overwhelmingly common case - hence the null return rather than a throw.
+  /// Deliberately requested as `dynamic`: a typed `get<Map<String, dynamic>>`
+  /// against an empty body is a cast error, not a null, and the common answer
+  /// here is precisely an empty body.
+  Future<CallDto?> getPendingCall() async {
+    final response = await client.dio.get<dynamic>(
+      client.url('$_base/call/pending'),
+      options: _deviceOptions,
+    );
+    final data = response.data;
+    if (data is! Map<String, dynamic> || data.isEmpty) return null;
+    return CallDto.fromJson(data);
+  }
+
   Future<CallDto> createCall({
     required String conversationId,
     required List<String> participantUserIds,

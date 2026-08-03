@@ -541,7 +541,12 @@ as String,
 /// @nodoc
 mixin _$CallDto {
 
- String get id; String get conversationId; String? get status; DateTime? get createdAt; DateTime? get updatedAt; List<CallTrackDto> get tracks; List<CallParticipantDto> get participants;
+ String get id; String get conversationId;/// Who placed the call. The one reliable way to name the caller on the
+/// incoming-call UI: picking "the participant that isn't me" off
+/// [participants] is wrong the moment a call has three people in it, and
+/// picks the wrong row entirely on a cold start where this device hasn't
+/// loaded its own user id yet.
+ String? get creatorId; String? get status; DateTime? get createdAt; DateTime? get updatedAt; List<CallTrackDto> get tracks; List<CallParticipantDto> get participants;
 /// Create a copy of CallDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -554,16 +559,16 @@ $CallDtoCopyWith<CallDto> get copyWith => _$CallDtoCopyWithImpl<CallDto>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is CallDto&&(identical(other.id, id) || other.id == id)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&const DeepCollectionEquality().equals(other.tracks, tracks)&&const DeepCollectionEquality().equals(other.participants, participants));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CallDto&&(identical(other.id, id) || other.id == id)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.creatorId, creatorId) || other.creatorId == creatorId)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&const DeepCollectionEquality().equals(other.tracks, tracks)&&const DeepCollectionEquality().equals(other.participants, participants));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,conversationId,status,createdAt,updatedAt,const DeepCollectionEquality().hash(tracks),const DeepCollectionEquality().hash(participants));
+int get hashCode => Object.hash(runtimeType,id,conversationId,creatorId,status,createdAt,updatedAt,const DeepCollectionEquality().hash(tracks),const DeepCollectionEquality().hash(participants));
 
 @override
 String toString() {
-  return 'CallDto(id: $id, conversationId: $conversationId, status: $status, createdAt: $createdAt, updatedAt: $updatedAt, tracks: $tracks, participants: $participants)';
+  return 'CallDto(id: $id, conversationId: $conversationId, creatorId: $creatorId, status: $status, createdAt: $createdAt, updatedAt: $updatedAt, tracks: $tracks, participants: $participants)';
 }
 
 
@@ -574,7 +579,7 @@ abstract mixin class $CallDtoCopyWith<$Res>  {
   factory $CallDtoCopyWith(CallDto value, $Res Function(CallDto) _then) = _$CallDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String conversationId, String? status, DateTime? createdAt, DateTime? updatedAt, List<CallTrackDto> tracks, List<CallParticipantDto> participants
+ String id, String conversationId, String? creatorId, String? status, DateTime? createdAt, DateTime? updatedAt, List<CallTrackDto> tracks, List<CallParticipantDto> participants
 });
 
 
@@ -591,11 +596,12 @@ class _$CallDtoCopyWithImpl<$Res>
 
 /// Create a copy of CallDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? conversationId = null,Object? status = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? tracks = null,Object? participants = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? conversationId = null,Object? creatorId = freezed,Object? status = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? tracks = null,Object? participants = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,conversationId: null == conversationId ? _self.conversationId : conversationId // ignore: cast_nullable_to_non_nullable
-as String,status: freezed == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
+as String,creatorId: freezed == creatorId ? _self.creatorId : creatorId // ignore: cast_nullable_to_non_nullable
+as String?,status: freezed == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,tracks: null == tracks ? _self.tracks : tracks // ignore: cast_nullable_to_non_nullable
@@ -682,10 +688,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String conversationId,  String? status,  DateTime? createdAt,  DateTime? updatedAt,  List<CallTrackDto> tracks,  List<CallParticipantDto> participants)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String conversationId,  String? creatorId,  String? status,  DateTime? createdAt,  DateTime? updatedAt,  List<CallTrackDto> tracks,  List<CallParticipantDto> participants)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _CallDto() when $default != null:
-return $default(_that.id,_that.conversationId,_that.status,_that.createdAt,_that.updatedAt,_that.tracks,_that.participants);case _:
+return $default(_that.id,_that.conversationId,_that.creatorId,_that.status,_that.createdAt,_that.updatedAt,_that.tracks,_that.participants);case _:
   return orElse();
 
 }
@@ -703,10 +709,10 @@ return $default(_that.id,_that.conversationId,_that.status,_that.createdAt,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String conversationId,  String? status,  DateTime? createdAt,  DateTime? updatedAt,  List<CallTrackDto> tracks,  List<CallParticipantDto> participants)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String conversationId,  String? creatorId,  String? status,  DateTime? createdAt,  DateTime? updatedAt,  List<CallTrackDto> tracks,  List<CallParticipantDto> participants)  $default,) {final _that = this;
 switch (_that) {
 case _CallDto():
-return $default(_that.id,_that.conversationId,_that.status,_that.createdAt,_that.updatedAt,_that.tracks,_that.participants);}
+return $default(_that.id,_that.conversationId,_that.creatorId,_that.status,_that.createdAt,_that.updatedAt,_that.tracks,_that.participants);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -720,10 +726,10 @@ return $default(_that.id,_that.conversationId,_that.status,_that.createdAt,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String conversationId,  String? status,  DateTime? createdAt,  DateTime? updatedAt,  List<CallTrackDto> tracks,  List<CallParticipantDto> participants)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String conversationId,  String? creatorId,  String? status,  DateTime? createdAt,  DateTime? updatedAt,  List<CallTrackDto> tracks,  List<CallParticipantDto> participants)?  $default,) {final _that = this;
 switch (_that) {
 case _CallDto() when $default != null:
-return $default(_that.id,_that.conversationId,_that.status,_that.createdAt,_that.updatedAt,_that.tracks,_that.participants);case _:
+return $default(_that.id,_that.conversationId,_that.creatorId,_that.status,_that.createdAt,_that.updatedAt,_that.tracks,_that.participants);case _:
   return null;
 
 }
@@ -735,11 +741,17 @@ return $default(_that.id,_that.conversationId,_that.status,_that.createdAt,_that
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _CallDto implements CallDto {
-  const _CallDto({required this.id, required this.conversationId, this.status, this.createdAt, this.updatedAt, final  List<CallTrackDto> tracks = const <CallTrackDto>[], final  List<CallParticipantDto> participants = const <CallParticipantDto>[]}): _tracks = tracks,_participants = participants;
+  const _CallDto({required this.id, required this.conversationId, this.creatorId, this.status, this.createdAt, this.updatedAt, final  List<CallTrackDto> tracks = const <CallTrackDto>[], final  List<CallParticipantDto> participants = const <CallParticipantDto>[]}): _tracks = tracks,_participants = participants;
   factory _CallDto.fromJson(Map<String, dynamic> json) => _$CallDtoFromJson(json);
 
 @override final  String id;
 @override final  String conversationId;
+/// Who placed the call. The one reliable way to name the caller on the
+/// incoming-call UI: picking "the participant that isn't me" off
+/// [participants] is wrong the moment a call has three people in it, and
+/// picks the wrong row entirely on a cold start where this device hasn't
+/// loaded its own user id yet.
+@override final  String? creatorId;
 @override final  String? status;
 @override final  DateTime? createdAt;
 @override final  DateTime? updatedAt;
@@ -771,16 +783,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CallDto&&(identical(other.id, id) || other.id == id)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&const DeepCollectionEquality().equals(other._tracks, _tracks)&&const DeepCollectionEquality().equals(other._participants, _participants));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CallDto&&(identical(other.id, id) || other.id == id)&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.creatorId, creatorId) || other.creatorId == creatorId)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&const DeepCollectionEquality().equals(other._tracks, _tracks)&&const DeepCollectionEquality().equals(other._participants, _participants));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,conversationId,status,createdAt,updatedAt,const DeepCollectionEquality().hash(_tracks),const DeepCollectionEquality().hash(_participants));
+int get hashCode => Object.hash(runtimeType,id,conversationId,creatorId,status,createdAt,updatedAt,const DeepCollectionEquality().hash(_tracks),const DeepCollectionEquality().hash(_participants));
 
 @override
 String toString() {
-  return 'CallDto(id: $id, conversationId: $conversationId, status: $status, createdAt: $createdAt, updatedAt: $updatedAt, tracks: $tracks, participants: $participants)';
+  return 'CallDto(id: $id, conversationId: $conversationId, creatorId: $creatorId, status: $status, createdAt: $createdAt, updatedAt: $updatedAt, tracks: $tracks, participants: $participants)';
 }
 
 
@@ -791,7 +803,7 @@ abstract mixin class _$CallDtoCopyWith<$Res> implements $CallDtoCopyWith<$Res> {
   factory _$CallDtoCopyWith(_CallDto value, $Res Function(_CallDto) _then) = __$CallDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String conversationId, String? status, DateTime? createdAt, DateTime? updatedAt, List<CallTrackDto> tracks, List<CallParticipantDto> participants
+ String id, String conversationId, String? creatorId, String? status, DateTime? createdAt, DateTime? updatedAt, List<CallTrackDto> tracks, List<CallParticipantDto> participants
 });
 
 
@@ -808,11 +820,12 @@ class __$CallDtoCopyWithImpl<$Res>
 
 /// Create a copy of CallDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? conversationId = null,Object? status = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? tracks = null,Object? participants = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? conversationId = null,Object? creatorId = freezed,Object? status = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? tracks = null,Object? participants = null,}) {
   return _then(_CallDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,conversationId: null == conversationId ? _self.conversationId : conversationId // ignore: cast_nullable_to_non_nullable
-as String,status: freezed == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
+as String,creatorId: freezed == creatorId ? _self.creatorId : creatorId // ignore: cast_nullable_to_non_nullable
+as String?,status: freezed == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,tracks: null == tracks ? _self._tracks : tracks // ignore: cast_nullable_to_non_nullable

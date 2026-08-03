@@ -37,16 +37,52 @@ import WebRTC
   static let appGroupIdentifier = "group.gg.venta.mobile"
   private static let sharedContainerChannelName = "venta/shared_container"
 
+  // This installation's `X-Device-Id`, mirrored out of Dart (see `setDeviceId`) so the PushKit
+  // path can read it with no engine running. A "stop ringing" push names the device that resolved
+  // the call, and that device has to recognise and drop its own copy - see the cancel branch in
+  // pushRegistry(_:didReceiveIncomingPushWith:).
+  private static let deviceIdDefaultsKey = "gg.venta.mobile.deviceId"
+  private var localDeviceId: String? {
+    UserDefaults.standard.string(forKey: Self.deviceIdDefaultsKey)
+  }
+
   private lazy var cxProvider: CXProvider = {
     let config = CXProviderConfiguration(localizedName: "Venta Mobile")
     config.supportsVideo = false
     config.maximumCallGroups = 1
     config.maximumCallsPerCallGroup = 1
     config.supportedHandleTypes = [.generic]
+    config.iconTemplateImageData = AppDelegate.callKitIconTemplateData()
     let provider = CXProvider(configuration: config)
     provider.setDelegate(self, queue: nil)
     return provider
   }()
+
+  // The only image CallKit will ever render for us. It is worth being explicit about what this
+  // is *not*: there is no API to put the caller's avatar on the native incoming-call screen.
+  // CallKit shows a photo only when the call's handle resolves to an entry in the user's
+  // Contacts, which an in-app account never does - every VoIP app that isn't phone-number-based
+  // shows the same grey silhouette. This is the app badge shown beside the call, and leaving it
+  // unset (as it was) is why the native screen had no icon at all.
+  //
+  // Rendered as a template: only the alpha channel survives, tinted by the system, so the source
+  // needs transparency rather than colour - hence the adaptive-icon foreground rather than the
+  // full app icon, whose opaque background would mask to a plain square. Apple specifies 40x40
+  // points; a larger image is scaled but softens, so downscale here.
+  private static func callKitIconTemplateData() -> Data? {
+    let key = FlutterDartProject.lookupKey(forAsset: "assets/icon/app_icon_foreground.png")
+    guard let path = Bundle.main.path(forResource: key, ofType: nil),
+      let source = UIImage(contentsOfFile: path)
+    else {
+      NSLog("[venta] CallKit icon template asset missing - native call screen will show no icon")
+      return nil
+    }
+    let size = CGSize(width: 40, height: 40)
+    let scaled = UIGraphicsImageRenderer(size: size).image { _ in
+      source.draw(in: CGRect(origin: .zero, size: size))
+    }
+    return scaled.pngData()
+  }
 
   private let callController = CXCallController()
 
@@ -218,6 +254,14 @@ import WebRTC
       result(pendingEvents)
       pendingEvents.removeAll()
 
+    case "setDeviceId":
+      guard let deviceId = call.arguments as? String, !deviceId.isEmpty else {
+        result(FlutterError(code: "bad_args", message: "deviceId required", details: nil))
+        return
+      }
+      UserDefaults.standard.set(deviceId, forKey: Self.deviceIdDefaultsKey)
+      result(nil)
+
     case "reportIncomingCall":
       guard let args = call.arguments as? [String: Any], let id = args["callId"] as? String else {
         result(FlutterError(code: "bad_args", message: "callId required", details: nil))
@@ -225,10 +269,18 @@ import WebRTC
       }
       reportIncomingCall(
         id: id,
-        callerName: args["callerName"] as? String ?? "Unknown",
+        callerName: args["callerName"] as? String ?? "",
         completion: { error in
           result(error == nil)
         })
+
+    case "updateCall":
+      guard let args = call.arguments as? [String: Any], let id = args["callId"] as? String else {
+        result(FlutterError(code: "bad_args", message: "callId required", details: nil))
+        return
+      }
+      updateCall(id: id, callerName: args["callerName"] as? String ?? "")
+      result(nil)
 
     case "setCallConnected":
       guard let args = call.arguments as? [String: Any], let id = args["callId"] as? String else {
@@ -260,20 +312,62 @@ import WebRTC
     return NSUUID(uuidBytes: Array(digest.prefix(16))) as UUID
   }
 
+  // CallKit renders `localizedCallerName` when it has one and falls back to the handle otherwise,
+  // so an empty name is not merely a blank line - the whole screen ends up nameless. Worse, an
+  // empty CXHandle value is grounds for reportNewIncomingCall to reject the call outright, which
+  // on the PushKit path means failing Apple's report-every-push requirement. Never pass one on.
+  private static let unknownCallerName = "Unknown caller"
+
   private func reportIncomingCall(id: String, callerName: String, completion: ((Error?) -> Void)? = nil) {
     configureAudioSession()
     let callUUID = uuid(for: id)
     callIdsByUUID[callUUID] = id
+    let name = callerName.isEmpty ? Self.unknownCallerName : callerName
     let update = CXCallUpdate()
-    update.remoteHandle = CXHandle(type: .generic, value: callerName)
-    update.localizedCallerName = callerName
+    update.remoteHandle = CXHandle(type: .generic, value: name)
+    update.localizedCallerName = name
     update.hasVideo = false
     update.supportsHolding = false
     update.supportsGrouping = false
     update.supportsUngrouping = false
     update.supportsDTMF = false
-    cxProvider.reportNewIncomingCall(with: callUUID, update: update) { error in
+    cxProvider.reportNewIncomingCall(with: callUUID, update: update) { [weak self] error in
+      // Both transports can reach us for the same call - the VoIP push, and Dart once its
+      // websocket delivers call.IncomingCall - and either may land first. reportNewIncomingCall on
+      // a UUID CallKit already knows fails, and the second arrival used to be discarded whole,
+      // including a name better than the one already on screen. The call is up either way, so
+      // apply it as an update.
+      //
+      // Still reported unconditionally rather than short-circuited when the id looks familiar:
+      // PushKit demands an actual reportNewIncomingCall per push, and being SIGKILLed for skipping
+      // one costs rather more than a rejected duplicate.
+      if error != nil { self?.updateCall(id: id, callerName: name) }
       completion?(error)
+    }
+  }
+
+  /// Re-labels a call already on screen. Dart uses this once it has resolved the caller's profile,
+  /// so a ring that came up nameless (or as the placeholder) corrects itself in place rather than
+  /// staying wrong for the whole 50 seconds it rings.
+  private func updateCall(id: String, callerName: String) {
+    guard !callerName.isEmpty else { return }
+    let callUUID = uuid(for: id)
+    guard callIdsByUUID[callUUID] != nil else { return }
+    let update = CXCallUpdate()
+    update.remoteHandle = CXHandle(type: .generic, value: callerName)
+    update.localizedCallerName = callerName
+    cxProvider.reportCall(with: callUUID, updated: update)
+  }
+
+  // Why a ring stopped, as the backend's CallCancelReason wire strings. This is not cosmetic:
+  // .remoteEnded is what iOS records as a *missed call*, so a ring answered on the user's laptop
+  // used to leave a missed-call entry - and a red badge - on their phone. .answeredElsewhere and
+  // .declinedElsewhere exist precisely to say "resolved, not missed".
+  private static func endedReason(from raw: String?) -> CXCallEndedReason {
+    switch raw {
+    case "AcceptedElsewhere": return .answeredElsewhere
+    case "DeclinedElsewhere": return .declinedElsewhere
+    default: return .remoteEnded
     }
   }
 
@@ -431,33 +525,50 @@ import WebRTC
     // process) - reportCall(endedAt:) alone doesn't satisfy that, it only
     // updates a call CallKit already knows about.
     //
-    // A cancel is never applied to a call this device already answered. The
-    // server leaves the accepting device out of the fan-out, but only when that
-    // device sent a registered X-Device-Id on accept - and since the
-    // device-identity consolidation the user's *other* devices are
-    // deliberately included, where the whole user used to be skipped. A stray
-    // cancel reaching the answering device would end a connected call (same
-    // callId -> same deterministic UUID -> endReportedCall on the live call).
-    // PushKit still demands a reportNewIncomingCall per push, so report and
-    // immediately end a throwaway id instead, leaving the real call alone.
+    // A cancel is never applied to a call this device itself resolved. The server addresses the
+    // whole account - it cannot reliably tell which push token is which device, since a token only
+    // carries that if it was registered after the device-identity consolidation - so it names the
+    // acting device in `excludeDeviceId` and leaves the decision here, where it is exact. Acting on
+    // your own cancel hangs up the call you just answered (same callId -> same deterministic UUID
+    // -> endReportedCall on the live call).
+    //
+    // `answeredCalls` covers the same ground for a call answered on *this* device through CallKit,
+    // and stays as a second line of defence for pushes from a server that predates excludeDeviceId.
+    //
+    // PushKit still demands a reportNewIncomingCall per push whatever we decide (Apple enforces it
+    // with -[PKPushRegistry _terminateAppIfThereAreUnhandledVoIPPushes]), so an ignored cancel
+    // reports and immediately ends a throwaway id, leaving the real call alone.
     if payload.dictionaryPayload["type"] as? String == "end" {
-      let isLiveCall = answeredCalls.contains(uuid(for: id))
-      let target = isLiveCall ? UUID().uuidString : id
-      reportIncomingCall(id: target, callerName: "") { [weak self] _ in
+      let excluded = payload.dictionaryPayload["excludeDeviceId"] as? String ?? ""
+      let isOwnAction = !excluded.isEmpty && excluded == localDeviceId
+      let ignore = isOwnAction || answeredCalls.contains(uuid(for: id))
+      let target = ignore ? UUID().uuidString : id
+      let reason = Self.endedReason(from: payload.dictionaryPayload["cancelReason"] as? String)
+      // The cancel carries the caller's name too. Passing it on matters only for the moment the
+      // required report is on screen before the end lands - and, when this is a real cancel for a
+      // ring already up, it keeps the duplicate-report path in reportIncomingCall from briefly
+      // re-labelling that ring with the placeholder on its way out.
+      let name = payload.dictionaryPayload["callerName"] as? String ?? ""
+      reportIncomingCall(id: target, callerName: name) { [weak self] _ in
         // Tearing the audio session down is right when the ring being
         // cancelled was the only call; on the throwaway it would mute the call
         // actually in progress.
-        self?.endReportedCall(id: target, reason: .remoteEnded, teardownAudio: !isLiveCall)
+        self?.endReportedCall(id: target, reason: reason, teardownAudio: !ignore)
         completion()
       }
       return
     }
 
-    let callerName = payload.dictionaryPayload["callerName"] as? String ?? "Unknown"
+    // Empty rather than a literal "Unknown": reportIncomingCall owns that fallback, and an empty
+    // name is also the signal Dart needs to know the ring is worth re-labelling once it has
+    // resolved the caller's profile.
+    let callerName = payload.dictionaryPayload["callerName"] as? String ?? ""
     let conversationId = payload.dictionaryPayload["conversationId"] as? String ?? ""
+    let callerId = payload.dictionaryPayload["callerId"] as? String ?? ""
     reportIncomingCall(id: id, callerName: callerName) { [weak self] _ in
       self?.relayEvent([
         "type": "reported", "callId": id, "conversationId": conversationId,
+        "callerId": callerId, "callerName": callerName,
       ])
       completion()
     }
