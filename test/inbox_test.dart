@@ -15,6 +15,7 @@ import 'package:venta_mobile/features/inbox/data/inbox_api.dart';
 import 'package:venta_mobile/features/inbox/data/inbox_repository.dart';
 import 'package:venta_mobile/features/inbox/data/models/inbox_breadcrumb_dto.dart';
 import 'package:venta_mobile/features/inbox/data/models/inbox_mention_dto.dart';
+import 'package:venta_mobile/features/inbox/data/models/inbox_summary_dto.dart';
 
 /// The parts of the inbox where being wrong is silent.
 ///
@@ -290,6 +291,63 @@ void main() {
         const InboxBreadcrumbDto(channelType: -1).channelKind,
         ChannelType.unknown,
       );
+    });
+  });
+
+  group('badge label', () {
+    // The whole point of the header badge is answering "is there anything in
+    // there". A badge that counted only mentions showed nothing at all for an
+    // inbox full of unread channels, which is the same as no badge.
+    test('counts unread channels as well as mentions', () {
+      expect(
+        const InboxSummaryDto(
+          unreadChannelCount: 4,
+          mentionCount: 0,
+        ).badgeLabel,
+        '4',
+      );
+      expect(
+        const InboxSummaryDto(
+          unreadChannelCount: 4,
+          mentionCount: 12,
+        ).badgeLabel,
+        '16',
+      );
+    });
+
+    test('caps at 99, from either side', () {
+      expect(
+        const InboxSummaryDto(
+          unreadChannelCount: 90,
+          mentionCount: 20,
+        ).badgeLabel,
+        '99+',
+      );
+      // The server saying it stopped counting caps it regardless of the
+      // numbers it did report.
+      expect(
+        const InboxSummaryDto(
+          unreadChannelCount: 1,
+          mentionCount: 1,
+          capped: true,
+        ).badgeLabel,
+        '99+',
+      );
+    });
+
+    test('the tooltip keeps the two counts apart', () {
+      expect(
+        const InboxSummaryDto(
+          unreadChannelCount: 1,
+          mentionCount: 1,
+        ).badgeBreakdown,
+        'Inbox - 1 mention, 1 unread channel',
+      );
+      expect(
+        const InboxSummaryDto(unreadChannelCount: 4).badgeBreakdown,
+        'Inbox - 4 unread channels',
+      );
+      expect(const InboxSummaryDto().badgeBreakdown, 'Inbox');
     });
   });
 

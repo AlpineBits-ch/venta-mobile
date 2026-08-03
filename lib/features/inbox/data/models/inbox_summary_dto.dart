@@ -24,8 +24,33 @@ extension InboxSummaryDtoX on InboxSummaryDto {
 
   bool get hasAnything => mentionCount > 0 || unreadChannelCount > 0;
 
-  /// The badge's text: mentions are what gets a number, because they're the
-  /// exact count. `99+` once [InboxSummaryDto.capped] or past two digits.
-  String get badgeLabel =>
-      capped || mentionCount > 99 ? '99+' : '$mentionCount';
+  /// Everything waiting, as one number.
+  ///
+  /// The two counts are different units - mentions are messages, the other is
+  /// channels - so this is a "how much is in there" total rather than a count
+  /// of any single thing, and a channel holding one mention contributes to
+  /// both. That's the deliberate trade: a badge that only counted mentions
+  /// showed nothing at all for an inbox full of unread channels, which is no
+  /// use as the answer to "is there anything in there". [badgeBreakdown] is
+  /// what says which is which.
+  int get badgeCount => mentionCount + unreadChannelCount;
+
+  /// The badge's text. `99+` once [InboxSummaryDto.capped] - meaning the real
+  /// numbers are higher than reported and counting further would be an
+  /// unbounded scan - or past two digits, where a third one no longer fits the
+  /// badge anyway.
+  String get badgeLabel => capped || badgeCount > 99 ? '99+' : '$badgeCount';
+
+  /// The tooltip, which is where the two counts get to be themselves again.
+  String get badgeBreakdown {
+    if (!hasAnything) return 'Inbox';
+    final parts = [
+      if (mentionCount > 0)
+        '$mentionCount mention${mentionCount == 1 ? '' : 's'}',
+      if (unreadChannelCount > 0)
+        '$unreadChannelCount unread channel'
+            '${unreadChannelCount == 1 ? '' : 's'}',
+    ];
+    return 'Inbox - ${parts.join(', ')}${capped ? ' or more' : ''}';
+  }
 }

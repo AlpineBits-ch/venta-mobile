@@ -47,22 +47,30 @@ class _InboxAppBarActionState extends State<InboxAppBarAction> {
       builder: (context, summary, child) {
         final button = IconButton(
           icon: Icon(
-            // Filled once there's something in it, so the state reads without
-            // needing the badge to be legible at a glance.
+            // Filled once there's something in it, so the state still reads at
+            // a glance on a narrow app bar where the badge is small.
             summary.hasAnything ? Icons.inbox : Icons.inbox_outlined,
-            // A channel that is merely unread doesn't get the dot - only a
-            // mention does, matching how the rest of the app treats the two.
             color: summary.hasAnything ? theme.colorScheme.primary : null,
           ),
-          tooltip: 'Inbox',
+          tooltip: summary.badgeBreakdown,
           onPressed: () =>
               context.push(RoutePaths.inboxPath(guildId: widget.guildId)),
         );
-        if (!summary.hasMentions) return button;
+        // Badged for anything at all, not just mentions: "is there anything in
+        // there" is the question this button exists to answer, and an unread
+        // channel is an answer of yes.
+        if (!summary.hasAnything) return button;
         return Badge(
           label: Text(summary.badgeLabel),
-          backgroundColor: theme.colorScheme.error,
-          textColor: theme.colorScheme.onError,
+          // Red keeps meaning "somebody wants you". Unread-only stays on the
+          // brand colour so a busy server doesn't cry wolf and leave the real
+          // mention badge indistinguishable from noise.
+          backgroundColor: summary.hasMentions
+              ? theme.colorScheme.error
+              : theme.colorScheme.primary,
+          textColor: summary.hasMentions
+              ? theme.colorScheme.onError
+              : theme.colorScheme.onPrimary,
           child: button,
         );
       },
