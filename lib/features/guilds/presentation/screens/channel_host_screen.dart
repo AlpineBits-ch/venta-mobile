@@ -137,10 +137,7 @@ class _ChannelHostScreenState extends State<ChannelHostScreen> {
       ),
       // Text, Announcement, Voice and a forum post (a Thread) all open the
       // message thread.
-      _ => ChannelScreen(
-        guildId: widget.guildId,
-        channelId: widget.channelId,
-      ),
+      _ => ChannelScreen(guildId: widget.guildId, channelId: widget.channelId),
     };
   }
 }

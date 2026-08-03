@@ -9,6 +9,7 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
+import '../../../inbox/presentation/widgets/inbox_app_bar_action.dart';
 import '../../bloc/conversation_list_bloc.dart';
 import '../../data/conversation_prefs.dart';
 import '../../data/conversation_repository.dart';
@@ -40,7 +41,10 @@ class _HomeView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Home')),
+      appBar: AppBar(
+        title: const Text('Home'),
+        actions: const [InboxAppBarAction()],
+      ),
       body: BlocListener<ConversationListBloc, ConversationListState>(
         // Reconciling dismissed unread counts writes, so it can't happen in
         // `build` - a listener runs after the frame that delivered the list.

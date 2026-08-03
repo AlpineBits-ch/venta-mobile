@@ -21,6 +21,7 @@ import '../../features/guilds/presentation/screens/forum_settings_screen.dart';
 import '../../features/guilds/presentation/screens/guild_detail_screen.dart';
 import '../../features/guilds/presentation/screens/guild_members_screen.dart';
 import '../../features/guilds/presentation/screens/guild_settings/guild_settings_screen.dart';
+import '../../features/inbox/presentation/screens/inbox_screen.dart';
 import '../../features/messaging/presentation/screens/conversation_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_editor_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_history_screen.dart';
@@ -197,6 +198,11 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         (context, state) => ConversationScreen(
           conversationId: state.pathParameters['conversationId']!,
         ),
+      ),
+      _route(
+        RoutePaths.inbox,
+        (context, state) =>
+            InboxScreen(guildId: state.uri.queryParameters['guildId']),
       ),
       // Which screen a channel opens into depends on its type, and the type
       // isn't always known at route time - a cold start into a persisted

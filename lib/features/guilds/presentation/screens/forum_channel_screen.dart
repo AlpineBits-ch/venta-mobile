@@ -394,8 +394,7 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
     }
   }
 
-  void _openPost(ForumPostDto post) =>
-      _openPostById(post.id, name: post.name);
+  void _openPost(ForumPostDto post) => _openPostById(post.id, name: post.name);
 
   void _openPostById(String postId, {required String name}) {
     // Recorded here as well as in `ChannelScreen` because a just-created post
@@ -443,8 +442,9 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
           SnackBar(
             content: Text(switch (status) {
               403 => 'You don\'t have permission to post in this forum.',
-              null || >= 500 => 'The server couldn\'t take that post. Try '
-                  'again in a moment.',
+              null || >= 500 =>
+                'The server couldn\'t take that post. Try '
+                    'again in a moment.',
               _ => 'Could not create post.',
             }),
           ),

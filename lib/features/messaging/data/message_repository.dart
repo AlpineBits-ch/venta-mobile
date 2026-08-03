@@ -173,46 +173,52 @@ class MessageRepository {
     switch (event.name) {
       case 'conversation.MessageCreated' || 'guild.MessageCreated':
         _emitReceived(
-            MessageDto(
-              id: payload['messageId'] as String,
-              content: payload['content'] as String,
-              conversationId: payload['conversationId'] as String?,
-              channelId: payload['channelId'] as String?,
-              authorId: payload['authorId'] as String,
-              createdAt: DateTime.now(),
-              inReplyTo: payload['inReplyTo'] as String?,
-              mentions:
-                  (payload['mentions'] as List?)?.cast<String>() ?? const [],
-              roleMentions:
-                  (payload['roleMentions'] as List?)?.cast<String>() ??
-                  const [],
-              mentionsEveryone: payload['mentionsEveryone'] as bool? ?? false,
-              mentionsHere: payload['mentionsHere'] as bool? ?? false,
-              attachments:
-                  (payload['attachments'] as List?)
-                      ?.map(
-                        (a) => AttachmentDto.fromJson(
-                          (a as Map).cast<String, dynamic>(),
-                        ),
-                      )
-                      .toList() ??
-                  const [],
-              authorIdType: payload['authorIdType'] == 'Bot'
-                  ? MessageAuthorType.bot
-                  : MessageAuthorType.standard,
-              encryptionState: payload['encryptionState'] == 'Encrypted'
-                  ? MessageEncryptionState.encrypted
-                  : MessageEncryptionState.plain,
-              // The server's `MessageCreated` contract carries `mlsGeneration`
-              // but the send endpoint does not populate it, so in practice this
-              // arrives null and the decryptor falls back to the generation this
-              // device believes is live. Read anyway: the fallback is wrong for
-              // a message that arrives moments after a toggle, and the day the
-              // backend fills the field in, this starts being right for free.
-              mlsGeneration: (payload['mlsGeneration'] as num?)?.toInt(),
-              mlsEpoch: (payload['mlsEpoch'] as num?)?.toInt(),
-              senderDeviceId: payload['senderDeviceId'] as String?,
-            ),
+          MessageDto(
+            id: payload['messageId'] as String,
+            content: payload['content'] as String,
+            conversationId: payload['conversationId'] as String?,
+            channelId: payload['channelId'] as String?,
+            authorId: payload['authorId'] as String,
+            // The message's *stored* timestamp, added to both `MessageCreated`
+            // payloads on 2026-08-03. Receipt time was the only thing
+            // available before, and the two drift by however long the message
+            // spent on the broker - enough to sort a message ahead of one that
+            // was actually sent after it. Still falls back, since this device
+            // can be talking to a server that predates the field.
+            createdAt:
+                tryParseApiDateTime(payload['createdAt']) ?? DateTime.now(),
+            inReplyTo: payload['inReplyTo'] as String?,
+            mentions:
+                (payload['mentions'] as List?)?.cast<String>() ?? const [],
+            roleMentions:
+                (payload['roleMentions'] as List?)?.cast<String>() ?? const [],
+            mentionsEveryone: payload['mentionsEveryone'] as bool? ?? false,
+            mentionsHere: payload['mentionsHere'] as bool? ?? false,
+            attachments:
+                (payload['attachments'] as List?)
+                    ?.map(
+                      (a) => AttachmentDto.fromJson(
+                        (a as Map).cast<String, dynamic>(),
+                      ),
+                    )
+                    .toList() ??
+                const [],
+            authorIdType: payload['authorIdType'] == 'Bot'
+                ? MessageAuthorType.bot
+                : MessageAuthorType.standard,
+            encryptionState: payload['encryptionState'] == 'Encrypted'
+                ? MessageEncryptionState.encrypted
+                : MessageEncryptionState.plain,
+            // The server's `MessageCreated` contract carries `mlsGeneration`
+            // but the send endpoint does not populate it, so in practice this
+            // arrives null and the decryptor falls back to the generation this
+            // device believes is live. Read anyway: the fallback is wrong for
+            // a message that arrives moments after a toggle, and the day the
+            // backend fills the field in, this starts being right for free.
+            mlsGeneration: (payload['mlsGeneration'] as num?)?.toInt(),
+            mlsEpoch: (payload['mlsEpoch'] as num?)?.toInt(),
+            senderDeviceId: payload['senderDeviceId'] as String?,
+          ),
         );
       case 'conversation.MessageUpdated' || 'guild.MessageUpdated':
         // Never emitted verbatim. `content` here is whatever the server chose
@@ -325,7 +331,9 @@ class MessageRepository {
           ),
         );
       } catch (e) {
-        debugPrint('MessageRepository: failed to decrypt edit of $messageId: $e');
+        debugPrint(
+          'MessageRepository: failed to decrypt edit of $messageId: $e',
+        );
         _eventsController.add(
           RemoteMessageUpdated(
             messageId: messageId,
@@ -340,7 +348,11 @@ class MessageRepository {
   Future<List<MessageDto>> fetchPage({int offset = 0, int limit = 50}) async {
     final page = isChannel
         ? await api.getForChannel(_contextId, offset: offset, limit: limit)
-        : await api.getForConversation(_contextId, offset: offset, limit: limit);
+        : await api.getForConversation(
+            _contextId,
+            offset: offset,
+            limit: limit,
+          );
     return _decryptor.decryptAll(page);
   }
 

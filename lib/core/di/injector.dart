@@ -18,6 +18,8 @@ import '../../features/guilds/data/guild_api.dart';
 import '../../features/guilds/data/guild_repository.dart';
 import '../../features/household/data/household_api.dart';
 import '../../features/household/data/household_repository.dart';
+import '../../features/inbox/data/inbox_api.dart';
+import '../../features/inbox/data/inbox_repository.dart';
 import '../../features/messaging/data/bot_command_api.dart';
 import '../../features/messaging/data/message_api.dart';
 import '../../features/mls/data/mls_api.dart';
@@ -290,6 +292,10 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       realtimeService: getIt(),
     ),
   );
+  getIt.registerLazySingleton<InboxApi>(() => InboxApi(client: getIt()));
+  getIt.registerLazySingleton<InboxRepository>(
+    () => InboxRepository(api: getIt(), realtimeService: getIt(), mls: getIt()),
+  );
   getIt.registerLazySingleton<HouseholdApi>(
     () => HouseholdApi(client: getIt()),
   );
@@ -371,6 +377,10 @@ void resetSessionScopedCaches() {
   getIt<ConversationRepository>().clear();
   getIt<RelationshipRepository>().clear();
   getIt<GuildRepository>().clear();
+  // The badge is drawn from a cached summary and sits in the app bar of the
+  // first screen the next account sees - carrying the previous one's count
+  // over is the most visible possible stale-cache bug.
+  getIt<InboxRepository>().clear();
   // Device registration is per account, not per install: the id this handset
   // registered for the previous user means nothing to the next one, and every
   // call/voice action would be rejected until it registers again.

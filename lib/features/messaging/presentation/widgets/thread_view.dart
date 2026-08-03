@@ -34,6 +34,7 @@ import '../../data/message_repository.dart';
 import '../../data/bot_command_api.dart';
 import '../../data/gif_api.dart';
 import '../../data/message_content_codec.dart';
+import '../../data/system_message_text.dart';
 import '../../data/models/attachment_dto.dart';
 import '../../data/models/bot_command_dto.dart';
 import '../../data/models/message_dto.dart';
@@ -82,36 +83,6 @@ Future<void> _openMessageLink(BuildContext context, String? href) async {
       }
   }
 }
-
-/// Flavor-text rotations for join/leave system messages - kept verbatim from
-/// desktop's locale strings (`MESSAGE.SYSTEM.GUILD_MEMBER_JOIN/LEAVE.*`) so
-/// the same server-assigned `systemMessageVariant` index reads identically
-/// on both clients.
-const _joinVariants = [
-  '%USER% joined the server',
-  '%USER% just showed up',
-  'Welcome, %USER%. Say hi!',
-  '%USER% joined. Everyone, look busy!',
-  '%USER% slid into the server',
-  '%USER% arrived',
-  "Glad you're here, %USER%",
-  'A wild %USER% appeared',
-  '%USER% hopped into the server',
-  'Everyone welcome %USER%!',
-];
-
-const _leaveVariants = [
-  '%USER% left the server',
-  '%USER% wandered off',
-  '%USER% has left the building',
-  '%USER% is gone',
-  '%USER% slipped away',
-  "%USER% left. We'll miss you!",
-  '%USER% has left the party',
-  '%USER% disappeared',
-  '%USER% said goodbye',
-  '%USER% is no longer with us',
-];
 
 /// Client-only commands that don't hit a bot - matches desktop's
 /// `COMMANDS` in `commands.ts`.
@@ -2300,21 +2271,15 @@ class _SystemMessageRow extends StatelessWidget {
               )
             : ProfileResolver(
                 userId: message.authorId,
-                builder: (context, profile) {
-                  final variants = message.type == MessageType.guildMemberLeave
-                      ? _leaveVariants
-                      : _joinVariants;
-                  final index = message.systemMessageVariant ?? 0;
-                  final template = index >= 0 && index < variants.length
-                      ? variants[index]
-                      : variants[0];
-                  final name = profile?.userName ?? '…';
-                  return Text(
-                    template.replaceAll('%USER%', name),
-                    style: style,
-                    textAlign: TextAlign.center,
-                  );
-                },
+                builder: (context, profile) => Text(
+                  systemJoinLeaveText(
+                    leaving: message.type == MessageType.guildMemberLeave,
+                    variant: message.systemMessageVariant,
+                    userName: profile?.userName ?? '…',
+                  ),
+                  style: style,
+                  textAlign: TextAlign.center,
+                ),
               ),
       ),
     );

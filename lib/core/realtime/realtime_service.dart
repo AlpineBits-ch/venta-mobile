@@ -125,6 +125,13 @@ class RealtimeService {
     'guild.WikiCategoryCreated',
     'guild.WikiCategoryUpdated',
     'guild.WikiCategoryDeleted',
+    // Inbox. Server->client only - there are no client->server inbox methods,
+    // the REST endpoints are the write side. `MentionAdded` reaches only the
+    // users a message actually mentioned and only those who can see the
+    // channel; `ReadStateChanged` goes to the acking user's *other* devices,
+    // so a device never sees its own acks come back (see `InboxRepository`).
+    'inbox.MentionAdded',
+    'inbox.ReadStateChanged',
     'call.IncomingCall',
     'call.ParticipantJoined',
     'call.ParticipantLeft',

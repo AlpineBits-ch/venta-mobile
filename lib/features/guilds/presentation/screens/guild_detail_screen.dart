@@ -16,6 +16,8 @@ import '../../../auth/data/auth_repository.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
 import '../../../household/presentation/widgets/home_status_board.dart';
+import '../../../inbox/data/inbox_repository.dart';
+import '../../../inbox/presentation/widgets/inbox_app_bar_action.dart';
 import '../../data/forum_visits.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/category_dto.dart';
@@ -24,11 +26,17 @@ import '../../data/models/guild_dto.dart';
 import '../../data/models/guild_features.dart';
 import '../../data/models/guild_permissions.dart';
 import '../../data/models/onboarding_dto.dart';
+import '../widgets/channel_type_icon.dart';
 import 'onboarding_wizard_screen.dart';
 
 /// Per-channel read state tracked locally in [_GuildDetailScreenState] -
 /// [isUnread] drives the bold channel-name styling, [mentionCount] the red
 /// badge, mirroring Alpine's `GuildReadStateService`/`ChannelReadState`.
+///
+/// Seeded from the inbox rather than from `GET /guilds/{id}/me`: the
+/// `readState[].mentionCount` this used to read has been zeroed permanently
+/// (see `GuildSelfPermissions`), and kept live from `guild.MessageCreated`
+/// after that.
 typedef _ChannelReadState = ({bool isUnread, int mentionCount});
 
 /// Content pane shown inside `AppShell` when a server is selected from the
@@ -113,24 +121,54 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     try {
       final self = await getIt<GuildRepository>().getOwnMember(guildId);
       if (_isStale(guildId)) return;
-      setState(() {
-        _permissions = self.effectivePermissions(ownerId);
-        _unread = {
-          for (final entry in self.unreadMentionCounts.entries)
-            entry.key: (isUnread: true, mentionCount: entry.value),
-        };
-      });
+      setState(() => _permissions = self.effectivePermissions(ownerId));
     } catch (_) {
       // Leave permission-gated entries hidden - they're still enforced
       // server-side on every write regardless.
     }
   }
 
-  /// Local-only, like Alpine's own `markChannelRead` - there's no per-
-  /// channel "mark read" endpoint, just the same `readState` rows the
-  /// server updates when messages are actually viewed in-channel.
+  /// Seeds the channel-list badges from the inbox.
+  ///
+  /// Separate from [_loadOwnPermissions], which is where this used to live: the
+  /// two now come from different services, and a `/me` that 500s must not also
+  /// take the badges down with it (nor the reverse). Failure here leaves the
+  /// list unbadged rather than blocking it - the live
+  /// `guild.MessageCreated` handler still fills it in from this point on.
+  Future<void> _loadUnread(String guildId) async {
+    try {
+      final counts = await getIt<InboxRepository>().unreadByChannel(
+        guildId: guildId,
+      );
+      if (_isStale(guildId)) return;
+      setState(() {
+        _unread = {
+          for (final entry in counts.entries)
+            entry.key: (isUnread: true, mentionCount: entry.value.mentionCount),
+        };
+      });
+    } catch (_) {
+      // No badges beats wrong badges, and this is not worth a visible error.
+    }
+  }
+
+  /// Clears the badge here and acks the channel server-side.
+  ///
+  /// The ack is new: `POST /inbox/channels/{id}/read` is a real endpoint now,
+  /// where this used to be local-only and the badge came back on the next
+  /// launch. Fire-and-forget on purpose - the row is already gone from a map
+  /// that is rebuilt from the server on every open, so a failed write costs a
+  /// badge reappearing rather than anything the caller needs to hear about.
   void _markChannelRead(String channelId) {
+    final mentionCount = _unread[channelId]?.mentionCount ?? 0;
     setState(() => _unread = {..._unread}..remove(channelId));
+    unawaited(
+      getIt<InboxRepository>()
+          .markChannelRead(channelId, mentionCount: mentionCount)
+          .catchError((Object e, StackTrace st) {
+            debugPrint('mark channel read failed: $e\n$st');
+          }),
+    );
   }
 
   Future<void> _showChannelActions(ChannelDto channel) async {
@@ -260,6 +298,9 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     }
     if (_isStale(guildId)) return;
     unawaited(_checkOnboarding(guildId));
+    // Detached and last: badges are the least of what this screen is for, and
+    // nothing above waits on them.
+    unawaited(_loadUnread(guildId));
   }
 
   /// Cheap enough to call on every guild-open per the backend guide.
@@ -571,6 +612,7 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
       appBar: AppBar(
         title: Text(guild.name),
         actions: [
+          InboxAppBarAction(guildId: guild.id),
           // Modules are hidden, never greyed out - a household should not see
           // a wiki button it can't press. The owner is not exempt either:
           // a disabled module is a product state, not a permission level.
@@ -790,20 +832,7 @@ class _ChannelTile extends StatelessWidget {
     final mentionCount = unread?.mentionCount ?? 0;
     return ListTile(
       dense: true,
-      leading: Icon(switch (channel.type) {
-        ChannelType.forum => Icons.forum_outlined,
-        ChannelType.media => Icons.perm_media_outlined,
-        ChannelType.announcement => Icons.campaign_outlined,
-        // Household channels hold rows, not messages - a `#` in front of a
-        // shopping list would promise a conversation that isn't there.
-        ChannelType.list => Icons.checklist_rounded,
-        ChannelType.chores => Icons.cleaning_services_outlined,
-        ChannelType.ledger => Icons.account_balance_wallet_outlined,
-        ChannelType.pantry => Icons.kitchen_outlined,
-        ChannelType.decisions => Icons.how_to_vote_outlined,
-        ChannelType.unknown => Icons.help_outline_rounded,
-        _ => Icons.tag,
-      }),
+      leading: Icon(channelTypeIcon(channel.type)),
       title: Text(
         channel.name,
         style: isUnread
@@ -1246,9 +1275,8 @@ class _CreateChannelDialogState extends State<_CreateChannelDialog> {
                           title: _householdTypes[i].title,
                           subtitle: _householdTypes[i].subtitle,
                           selected: _type == _householdTypes[i].type,
-                          onTap: () => setState(
-                            () => _type = _householdTypes[i].type,
-                          ),
+                          onTap: () =>
+                              setState(() => _type = _householdTypes[i].type),
                         ),
                       ],
                     ],

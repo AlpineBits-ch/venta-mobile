@@ -8,6 +8,13 @@ abstract final class RoutePaths {
   static const homeFriends = '/home/friends';
   static const conversation = '/home/conversation/:conversationId';
 
+  /// Unread channels and mentions across every guild. Outside the shell, and
+  /// outside `/home` in particular - it's reachable from a guild as readily as
+  /// from Home, and nesting it under one of them would make the back arrow lie
+  /// about where it came from. Takes an optional `?guildId=` that only scopes
+  /// the Mentions tab.
+  static const inbox = '/inbox';
+
   static const server = '/server/:guildId';
   static const serverChannel = '/server/:guildId/channel/:channelId';
   static const serverChannelSettings =
@@ -93,6 +100,7 @@ abstract final class RoutePaths {
       ['home'] => null,
       // Friends and conversations both sit under Home.
       ['home', ...] => home,
+      ['inbox'] => home,
       ['me'] => home,
       ['me', ...] => selfProfile,
       ['settings'] => home,
@@ -104,6 +112,9 @@ abstract final class RoutePaths {
 
   static String conversationPath(String conversationId) =>
       '/home/conversation/$conversationId';
+
+  static String inboxPath({String? guildId}) =>
+      guildId == null ? inbox : '$inbox?guildId=$guildId';
 
   static String userProfilePath(String userId) => '/user/$userId';
 

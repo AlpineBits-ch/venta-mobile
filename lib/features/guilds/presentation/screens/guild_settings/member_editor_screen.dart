@@ -251,7 +251,8 @@ class _MemberEditorScreenState extends State<MemberEditorScreen> {
                   dense: true,
                   secondary: CircleAvatar(
                     radius: 8,
-                    backgroundColor: role.color != null && role.color!.isNotEmpty
+                    backgroundColor:
+                        role.color != null && role.color!.isNotEmpty
                         ? parseHexColor(role.color!)
                         : theme.colorScheme.onSurface.withValues(alpha: 0.3),
                   ),
@@ -292,8 +293,7 @@ class _MemberEditorScreenState extends State<MemberEditorScreen> {
                       label: Text(GuildPermissions.labelFor(flag)),
                       labelStyle: theme.textTheme.labelSmall,
                       visualDensity: VisualDensity.compact,
-                      materialTapTargetSize:
-                          MaterialTapTargetSize.shrinkWrap,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                 ],
               ),

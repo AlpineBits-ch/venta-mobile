@@ -654,9 +654,7 @@ class GuildRepository {
     }
     final members = await api.getMembers(guildId, take: 200);
     final byId = {for (final member in members) member.id: member};
-    return [
-      for (final row in rows) ?(row.member ?? byId[row.memberId]),
-    ];
+    return [for (final row in rows) ?(row.member ?? byId[row.memberId])];
   }
 
   Future<void> addRoleMember(String roleId, String memberId) =>

@@ -10,22 +10,25 @@ import 'guild_permissions.dart';
 /// model throws. Only `permissions` is actually needed here, so this hand-
 /// parses just that instead of widening [RoleDto] to accommodate a shape
 /// used nowhere else.
+///
+/// This response still carries a `readState` array, and it is deliberately not
+/// read for mention counts any more: `readState[].mentionCount` is always `0`
+/// as of the 2026-08-03 inbox release. It used to be a stored counter bumped
+/// per mention, which stopped being possible once an `@everyone` became one row
+/// rather than one per member - and it was never idempotent anyway (a retried
+/// message doubled it, a deleted one left it high). Counts are computed on read
+/// now and live on the inbox endpoints: `GET /inbox/summary` for the total,
+/// `GET /inbox/unread` for per-channel. See `InboxRepository.unreadByChannel`,
+/// which is what seeds the channel-list badges.
+///
+/// The field is still in the JSON and still an int, so nothing failed to
+/// deserialise - it just quietly stopped being a number. Parsing it here would
+/// compile, run, and silently show every channel as having no mentions.
 class GuildSelfPermissions {
-  const GuildSelfPermissions({
-    required this.userId,
-    required this.permissions,
-    this.unreadMentionCounts = const {},
-  });
+  const GuildSelfPermissions({required this.userId, required this.permissions});
 
   final String userId;
   final GuildPermissions permissions;
-
-  /// channelId -> mentionCount, from this member's `readState` rows -
-  /// present only where `mentionCount > 0`. Seeds
-  /// [_GuildDetailScreenState]'s live-tracked unread map on load; mirrors
-  /// Alpine's `GuildReadStateService.loadForGuild`, which reads the same
-  /// `readState` array off this same `/guilds/{id}/me` response.
-  final Map<String, int> unreadMentionCounts;
 
   factory GuildSelfPermissions.fromJson(Map<String, dynamic> json) {
     var permissions = GuildPermissions.none;
@@ -44,19 +47,9 @@ class GuildSelfPermissions {
       if (wire != null)
         permissions = permissions | GuildPermissions.parse(wire);
     }
-    final unreadMentionCounts = <String, int>{};
-    for (final raw in (json['readState'] as List?) ?? const []) {
-      final map = raw as Map<String, dynamic>;
-      final channelId = map['channelId'] as String?;
-      final mentionCount = map['mentionCount'] as int? ?? 0;
-      if (channelId != null && mentionCount > 0) {
-        unreadMentionCounts[channelId] = mentionCount;
-      }
-    }
     return GuildSelfPermissions(
       userId: json['userId'] as String,
       permissions: permissions,
-      unreadMentionCounts: unreadMentionCounts,
     );
   }
 
