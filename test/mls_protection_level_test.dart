@@ -65,9 +65,9 @@ void main() {
     client = _MockApiClient();
     dio = _MockDio();
     when(() => client.dio).thenReturn(dio);
-    when(() => client.url(any())).thenAnswer(
-      (i) => 'https://example.test${i.positionalArguments.first}',
-    );
+    when(
+      () => client.url(any()),
+    ).thenAnswer((i) => 'https://example.test${i.positionalArguments.first}');
   });
 
   group('certificate enforcement (§I.1)', () {
@@ -183,7 +183,9 @@ void main() {
       );
       when(
         () => engine.verifyProtectionLevel(
-          accountIdentityPublicKeyB64: any(named: 'accountIdentityPublicKeyB64'),
+          accountIdentityPublicKeyB64: any(
+            named: 'accountIdentityPublicKeyB64',
+          ),
           userId: any(named: 'userId'),
           level: any(named: 'level'),
           version: any(named: 'version'),
@@ -234,7 +236,9 @@ void main() {
       );
       when(
         () => engine.verifyProtectionLevel(
-          accountIdentityPublicKeyB64: any(named: 'accountIdentityPublicKeyB64'),
+          accountIdentityPublicKeyB64: any(
+            named: 'accountIdentityPublicKeyB64',
+          ),
           userId: any(named: 'userId'),
           level: any(named: 'level'),
           version: any(named: 'version'),
@@ -249,29 +253,39 @@ void main() {
       expect(service.warning.value, contains('could not be verified'));
     });
 
-    test('an account that never set a level is TrustedSignIn, not strict', () async {
-      // 404 is "nothing asserted", which is not a failure to verify - there is
-      // nothing that could have been tampered with. §G.5 starts every account
-      // here, and treating it as strict would demand an approval nobody was told
-      // to expect.
-      when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(_status(404));
+    test(
+      'an account that never set a level is TrustedSignIn, not strict',
+      () async {
+        // 404 is "nothing asserted", which is not a failure to verify - there is
+        // nothing that could have been tampered with. §G.5 starts every account
+        // here, and treating it as strict would demand an approval nobody was told
+        // to expect.
+        when(
+          () => dio.get<Map<String, dynamic>>(any()),
+        ).thenThrow(_status(404));
 
-      await service.refresh(userId: 'user_a', deviceId: 'device-a');
+        await service.refresh(userId: 'user_a', deviceId: 'device-a');
 
-      expect(service.effectiveLevel, ProtectionLevel.trustedSignIn);
-    });
+        expect(service.effectiveLevel, ProtectionLevel.trustedSignIn);
+      },
+    );
 
-    test('an unreachable endpoint does not relax an account, it tightens it', () async {
-      when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(_status(503));
+    test(
+      'an unreachable endpoint does not relax an account, it tightens it',
+      () async {
+        when(
+          () => dio.get<Map<String, dynamic>>(any()),
+        ).thenThrow(_status(503));
 
-      await service.refresh(userId: 'user_a', deviceId: 'device-a');
+        await service.refresh(userId: 'user_a', deviceId: 'device-a');
 
-      expect(
-        service.effectiveLevel,
-        ProtectionLevel.verifiedDevices,
-        reason: 'taking the endpoint away must not be a downgrade',
-      );
-    });
+        expect(
+          service.effectiveLevel,
+          ProtectionLevel.verifiedDevices,
+          reason: 'taking the endpoint away must not be a downgrade',
+        );
+      },
+    );
 
     test('warns loudly about a downgrade this device did not make', () async {
       when(
@@ -293,7 +307,9 @@ void main() {
       );
       when(
         () => engine.verifyProtectionLevel(
-          accountIdentityPublicKeyB64: any(named: 'accountIdentityPublicKeyB64'),
+          accountIdentityPublicKeyB64: any(
+            named: 'accountIdentityPublicKeyB64',
+          ),
           userId: any(named: 'userId'),
           level: any(named: 'level'),
           version: any(named: 'version'),
@@ -319,13 +335,15 @@ void main() {
         ),
       ).thenAnswer((_) async => json);
 
-      void serves(Map<String, dynamic> body) =>
-          when(() => dio.get<Map<String, dynamic>>(any()))
-              .thenAnswer((_) async => _ok(body));
+      void serves(Map<String, dynamic> body) => when(
+        () => dio.get<Map<String, dynamic>>(any()),
+      ).thenAnswer((_) async => _ok(body));
 
       void signatureIs(bool valid) => when(
         () => engine.verifyProtectionLevel(
-          accountIdentityPublicKeyB64: any(named: 'accountIdentityPublicKeyB64'),
+          accountIdentityPublicKeyB64: any(
+            named: 'accountIdentityPublicKeyB64',
+          ),
           userId: any(named: 'userId'),
           level: any(named: 'level'),
           version: any(named: 'version'),
@@ -406,22 +424,28 @@ void main() {
         expect(service.effectiveLevel, ProtectionLevel.verifiedDevices);
       });
 
-      test('a 404 does not erase a level this device has already seen signed', () async {
-        remembered(
-          '{"level":"VerifiedDevices","version":7,"updatedAt":"2026-07-01T00:00:00Z"}',
-        );
-        when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(_status(404));
+      test(
+        'a 404 does not erase a level this device has already seen signed',
+        () async {
+          remembered(
+            '{"level":"VerifiedDevices","version":7,"updatedAt":"2026-07-01T00:00:00Z"}',
+          );
+          when(
+            () => dio.get<Map<String, dynamic>>(any()),
+          ).thenThrow(_status(404));
 
-        await service.refresh(userId: 'user_a', deviceId: 'device-a');
+          await service.refresh(userId: 'user_a', deviceId: 'device-a');
 
-        expect(
-          service.effectiveLevel,
-          ProtectionLevel.verifiedDevices,
-          reason: '"this account has no level" contradicts something this '
-              'device verified, so the floor wins',
-        );
-        expect(service.warning.value, contains('older one'));
-      });
+          expect(
+            service.effectiveLevel,
+            ProtectionLevel.verifiedDevices,
+            reason:
+                '"this account has no level" contradicts something this '
+                'device verified, so the floor wins',
+          );
+          expect(service.warning.value, contains('older one'));
+        },
+      );
 
       test('setting a level signs above the floor, not above nothing', () async {
         remembered(
@@ -435,7 +459,9 @@ void main() {
         ).thenAnswer((_) async => ('account-pub', 'account-priv'));
         when(
           () => engine.signProtectionLevel(
-            accountIdentityPrivateKeyB64: any(named: 'accountIdentityPrivateKeyB64'),
+            accountIdentityPrivateKeyB64: any(
+              named: 'accountIdentityPrivateKeyB64',
+            ),
             userId: any(named: 'userId'),
             level: any(named: 'level'),
             version: any(named: 'version'),
@@ -455,13 +481,16 @@ void main() {
           level: ProtectionLevel.verifiedDevices,
         );
 
-        final sent = verify(
-          () => dio.put<void>(any(), data: captureAny(named: 'data')),
-        ).captured.single as Map<String, dynamic>;
+        final sent =
+            verify(
+                  () => dio.put<void>(any(), data: captureAny(named: 'data')),
+                ).captured.single
+                as Map<String, dynamic>;
         expect(
           sent['version'],
           10,
-          reason: 'a device that has not refreshed this session would otherwise '
+          reason:
+              'a device that has not refreshed this session would otherwise '
               'sign version 1, which its own floor then refuses',
         );
       });
@@ -506,7 +535,9 @@ void main() {
       masterKeyStatus.value = MasterKeyStatus.needsRecoveryCode;
       when(
         () => engine.signProtectionLevel(
-          accountIdentityPrivateKeyB64: any(named: 'accountIdentityPrivateKeyB64'),
+          accountIdentityPrivateKeyB64: any(
+            named: 'accountIdentityPrivateKeyB64',
+          ),
           userId: any(named: 'userId'),
           level: any(named: 'level'),
           version: any(named: 'version'),
@@ -519,9 +550,7 @@ void main() {
           userId: any(named: 'userId'),
         ),
       ).thenAnswer((_) async => ('account-pub', 'account-priv'));
-      when(
-        () => dio.put<void>(any(), data: any(named: 'data')),
-      ).thenAnswer(
+      when(() => dio.put<void>(any(), data: any(named: 'data'))).thenAnswer(
         (_) async => Response<void>(
           statusCode: 200,
           requestOptions: RequestOptions(path: '/'),

@@ -93,15 +93,13 @@ class _RecoveryCodeBannerState extends State<RecoveryCodeBanner> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => Navigator.of(
-                      context,
-                      rootNavigator: true,
-                    ).push<bool>(
-                      MaterialPageRoute(
-                        fullscreenDialog: true,
-                        builder: (_) => const RecoveryCodeSetupScreen(),
-                      ),
-                    ),
+                    onPressed: () =>
+                        Navigator.of(context, rootNavigator: true).push<bool>(
+                          MaterialPageRoute(
+                            fullscreenDialog: true,
+                            builder: (_) => const RecoveryCodeSetupScreen(),
+                          ),
+                        ),
                     child: const Text('Set up'),
                   ),
                   IconButton(

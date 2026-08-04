@@ -85,7 +85,8 @@ class HouseholdRepository {
   /// `Pantry`/`Decisions` screen listens to.
   Stream<RealtimeEvent> channelEvents(String channelId, Set<String> names) =>
       _controller.stream.where(
-        (e) => names.contains(e.name) && e.stringField('channelId') == channelId,
+        (e) =>
+            names.contains(e.name) && e.stringField('channelId') == channelId,
       );
 
   /// Guild-scoped events (home status), plus the module events when a screen

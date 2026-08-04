@@ -261,7 +261,10 @@ class _LedgerChannelScreenState
         bottom: moduleEnabled
             ? TabBar(
                 controller: _tabs,
-                tabs: const [Tab(text: 'Expenses'), Tab(text: 'Who owes who')],
+                tabs: const [
+                  Tab(text: 'Expenses'),
+                  Tab(text: 'Who owes who'),
+                ],
               )
             : null,
       ),
@@ -289,11 +292,12 @@ class _LedgerChannelScreenState
   }
 
   Widget _buildExpenses() {
-    final expenses = [..._expenses ?? const <ExpenseDto>[]]..sort(
-      (a, b) => (b.occurredAt ?? DateTime(0)).compareTo(
-        a.occurredAt ?? DateTime(0),
-      ),
-    );
+    final expenses = [..._expenses ?? const <ExpenseDto>[]]
+      ..sort(
+        (a, b) => (b.occurredAt ?? DateTime(0)).compareTo(
+          a.occurredAt ?? DateTime(0),
+        ),
+      );
     if (expenses.isEmpty) {
       return HouseEmptyState(
         icon: Icons.receipt_long_outlined,
@@ -312,7 +316,9 @@ class _LedgerChannelScreenState
     }
 
     String? lastHeading;
-    final rows = <Widget>[_MyPositionCard(netMinor: _myNetMinor, currency: _currency)];
+    final rows = <Widget>[
+      _MyPositionCard(netMinor: _myNetMinor, currency: _currency),
+    ];
     for (final expense in expenses) {
       final heading = _monthHeading(expense.occurredAt);
       if (heading != lastHeading) {
@@ -326,9 +332,7 @@ class _LedgerChannelScreenState
             expense: expense,
             currency: _currency,
             myUserId: currentUserId,
-            onTap: _canEdit(expense)
-                ? () => _openExpenseEditor(expense)
-                : null,
+            onTap: _canEdit(expense) ? () => _openExpenseEditor(expense) : null,
             onDelete: _canEdit(expense) ? () => _deleteExpense(expense) : null,
           ),
         ),
@@ -406,8 +410,7 @@ class _LedgerChannelScreenState
                 child: _SettleCard(
                   transfer: transfer,
                   currency: _currency,
-                  canRecord:
-                      transfer.fromUserId == currentUserId || _canManage,
+                  canRecord: transfer.fromUserId == currentUserId || _canManage,
                   onRecord: () => _recordSettlement(transfer),
                 ),
               ),

@@ -35,14 +35,20 @@ class VentaLogoMark extends StatelessWidget {
     return SizedBox.square(
       dimension: size,
       child: CustomPaint(
-        painter: _VentaLogoMarkPainter(bodyColor: bodyColor, eyeColor: eyeColor),
+        painter: _VentaLogoMarkPainter(
+          bodyColor: bodyColor,
+          eyeColor: eyeColor,
+        ),
       ),
     );
   }
 }
 
 class _VentaLogoMarkPainter extends CustomPainter {
-  const _VentaLogoMarkPainter({required this.bodyColor, required this.eyeColor});
+  const _VentaLogoMarkPainter({
+    required this.bodyColor,
+    required this.eyeColor,
+  });
 
   final Color bodyColor;
   final Color eyeColor;

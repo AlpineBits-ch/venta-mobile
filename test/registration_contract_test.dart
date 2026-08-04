@@ -240,28 +240,30 @@ void main() {
       birthdate: DateTime.utc(2000),
     );
 
-    test('an accepted signup goes to the code screen, not into the app',
-        () async {
-      // There is no session to enter with: `202` carries no token and no id,
-      // and may not even have created an account.
-      whenRegister(() async {});
+    test(
+      'an accepted signup goes to the code screen, not into the app',
+      () async {
+        // There is no session to enter with: `202` carries no token and no id,
+        // and may not even have created an account.
+        whenRegister(() async {});
 
-      bloc.add(submit());
-      await expectLater(
-        bloc.stream,
-        emitsInOrder([
-          predicate<AuthState>((s) => s.status == AuthStatus.loading),
-          predicate<AuthState>(
-            (s) =>
-                s.status == AuthStatus.emailVerificationRequired &&
-                s.pendingVerificationEmail == 'user@example.com',
-          ),
-        ]),
-      );
+        bloc.add(submit());
+        await expectLater(
+          bloc.stream,
+          emitsInOrder([
+            predicate<AuthState>((s) => s.status == AuthStatus.loading),
+            predicate<AuthState>(
+              (s) =>
+                  s.status == AuthStatus.emailVerificationRequired &&
+                  s.pendingVerificationEmail == 'user@example.com',
+            ),
+          ]),
+        );
 
-      verifyNever(() => session.signedIn(any()));
-      verifyNever(() => realtime.start());
-    });
+        verifyNever(() => session.signedIn(any()));
+        verifyNever(() => realtime.start());
+      },
+    );
 
     test('a taken username lands on the username field, verbatim', () async {
       whenRegister(

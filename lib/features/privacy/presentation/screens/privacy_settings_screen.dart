@@ -188,10 +188,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                   ? const {DirectMessagePolicy.everyone}
                   : const {},
               unavailableNote: _minorNote,
-              onChanged: (v) => _patch(
-                {'directMessagePolicy': v.name.pascal},
-                optimistic: s.copyWith(directMessagePolicy: v),
-              ),
+              onChanged: (v) => _patch({
+                'directMessagePolicy': v.name.pascal,
+              }, optimistic: s.copyWith(directMessagePolicy: v)),
             ),
             PrivacyChoiceRow<FriendRequestPolicy>(
               icon: Icons.person_add_alt_1_outlined,
@@ -199,10 +198,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               value: s.friendRequestPolicy,
               options: FriendRequestPolicy.values,
               labelOf: (v) => v.label,
-              onChanged: (v) => _patch(
-                {'friendRequestPolicy': v.name.pascal},
-                optimistic: s.copyWith(friendRequestPolicy: v),
-              ),
+              onChanged: (v) => _patch({
+                'friendRequestPolicy': v.name.pascal,
+              }, optimistic: s.copyWith(friendRequestPolicy: v)),
             ),
             SettingsRow(
               icon: Icons.dns_outlined,
@@ -234,30 +232,27 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 value: s.discoverableByUsername,
                 onChanged: _saving
                     ? null
-                    : (v) => _patch(
-                        {'discoverableByUsername': v},
-                        optimistic: s.copyWith(discoverableByUsername: v),
-                      ),
+                    : (v) => _patch({
+                        'discoverableByUsername': v,
+                      }, optimistic: s.copyWith(discoverableByUsername: v)),
               ),
               _MinorLockableSwitch(
                 title: 'By email address',
                 value: s.discoverableByEmail,
                 locked: _locked('discoverableByEmail'),
                 enabled: !_saving,
-                onChanged: (v) => _patch(
-                  {'discoverableByEmail': v},
-                  optimistic: s.copyWith(discoverableByEmail: v),
-                ),
+                onChanged: (v) => _patch({
+                  'discoverableByEmail': v,
+                }, optimistic: s.copyWith(discoverableByEmail: v)),
               ),
               _MinorLockableSwitch(
                 title: 'By phone number',
                 value: s.discoverableByPhone,
                 locked: _locked('discoverableByPhone'),
                 enabled: !_saving,
-                onChanged: (v) => _patch(
-                  {'discoverableByPhone': v},
-                  optimistic: s.copyWith(discoverableByPhone: v),
-                ),
+                onChanged: (v) => _patch({
+                  'discoverableByPhone': v,
+                }, optimistic: s.copyWith(discoverableByPhone: v)),
               ),
             ],
           ),
@@ -278,10 +273,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               value: s.mutualServersVisibility,
               options: ProfileVisibility.values,
               labelOf: (v) => v.label,
-              onChanged: (v) => _patch(
-                {'mutualServersVisibility': v.name.pascal},
-                optimistic: s.copyWith(mutualServersVisibility: v),
-              ),
+              onChanged: (v) => _patch({
+                'mutualServersVisibility': v.name.pascal,
+              }, optimistic: s.copyWith(mutualServersVisibility: v)),
             ),
             PrivacyChoiceRow<ProfileVisibility>(
               icon: Icons.people_outline,
@@ -289,10 +283,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               value: s.mutualFriendsVisibility,
               options: ProfileVisibility.values,
               labelOf: (v) => v.label,
-              onChanged: (v) => _patch(
-                {'mutualFriendsVisibility': v.name.pascal},
-                optimistic: s.copyWith(mutualFriendsVisibility: v),
-              ),
+              onChanged: (v) => _patch({
+                'mutualFriendsVisibility': v.name.pascal,
+              }, optimistic: s.copyWith(mutualFriendsVisibility: v)),
             ),
             PrivacyChoiceRow<ProfileVisibility>(
               icon: Icons.link,
@@ -300,10 +293,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               value: s.connectionsVisibility,
               options: ProfileVisibility.values,
               labelOf: (v) => v.label,
-              onChanged: (v) => _patch(
-                {'connectionsVisibility': v.name.pascal},
-                optimistic: s.copyWith(connectionsVisibility: v),
-              ),
+              onChanged: (v) => _patch({
+                'connectionsVisibility': v.name.pascal,
+              }, optimistic: s.copyWith(connectionsVisibility: v)),
             ),
             PrivacyChoiceRow<ProfileVisibility>(
               icon: Icons.cake_outlined,
@@ -311,10 +303,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               value: s.birthdayVisibility,
               options: ProfileVisibility.values,
               labelOf: (v) => v.label,
-              onChanged: (v) => _patch(
-                {'birthdayVisibility': v.name.pascal},
-                optimistic: s.copyWith(birthdayVisibility: v),
-              ),
+              onChanged: (v) => _patch({
+                'birthdayVisibility': v.name.pascal,
+              }, optimistic: s.copyWith(birthdayVisibility: v)),
             ),
           ],
         ),
@@ -335,10 +326,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 value: s.shareActivity,
                 onChanged: _saving
                     ? null
-                    : (v) => _patch(
-                        {'shareActivity': v},
-                        optimistic: s.copyWith(shareActivity: v),
-                      ),
+                    : (v) => _patch({
+                        'shareActivity': v,
+                      }, optimistic: s.copyWith(shareActivity: v)),
               ),
               SwitchListTile(
                 title: const Text('Proximity voice'),
@@ -360,10 +350,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 value: s.allowVoiceRecordingInClips,
                 locked: _locked('allowVoiceRecordingInClips'),
                 enabled: !_saving,
-                onChanged: (v) => _patch(
-                  {'allowVoiceRecordingInClips': v},
-                  optimistic: s.copyWith(allowVoiceRecordingInClips: v),
-                ),
+                onChanged: (v) => _patch({
+                  'allowVoiceRecordingInClips': v,
+                }, optimistic: s.copyWith(allowVoiceRecordingInClips: v)),
               ),
             ],
           ),
@@ -381,25 +370,27 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
             children: [
               SwitchListTile(
                 title: const Text('Send read receipts'),
-                subtitle: const Text('Off means you don\'t see others\' either'),
+                subtitle: const Text(
+                  'Off means you don\'t see others\' either',
+                ),
                 value: s.sendReadReceipts,
                 onChanged: _saving
                     ? null
-                    : (v) => _patch(
-                        {'sendReadReceipts': v},
-                        optimistic: s.copyWith(sendReadReceipts: v),
-                      ),
+                    : (v) => _patch({
+                        'sendReadReceipts': v,
+                      }, optimistic: s.copyWith(sendReadReceipts: v)),
               ),
               SwitchListTile(
                 title: const Text('Send typing indicators'),
-                subtitle: const Text('Off means you don\'t see others\' either'),
+                subtitle: const Text(
+                  'Off means you don\'t see others\' either',
+                ),
                 value: s.sendTypingIndicators,
                 onChanged: _saving
                     ? null
-                    : (v) => _patch(
-                        {'sendTypingIndicators': v},
-                        optimistic: s.copyWith(sendTypingIndicators: v),
-                      ),
+                    : (v) => _patch({
+                        'sendTypingIndicators': v,
+                      }, optimistic: s.copyWith(sendTypingIndicators: v)),
               ),
               PrivacyChoiceRow<int?>(
                 icon: Icons.auto_delete_outlined,
@@ -441,10 +432,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                   ? const {ExplicitContentFilter.off}
                   : const {},
               unavailableNote: _minorNote,
-              onChanged: (v) => _patch(
-                {'explicitContentFilter': v.name.pascal},
-                optimistic: s.copyWith(explicitContentFilter: v),
-              ),
+              onChanged: (v) => _patch({
+                'explicitContentFilter': v.name.pascal,
+              }, optimistic: s.copyWith(explicitContentFilter: v)),
             ),
           ],
         ),
@@ -459,10 +449,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
             value: s.hidePushContent,
             onChanged: _saving
                 ? null
-                : (v) => _patch(
-                    {'hidePushContent': v},
-                    optimistic: s.copyWith(hidePushContent: v),
-                  ),
+                : (v) => _patch({
+                    'hidePushContent': v,
+                  }, optimistic: s.copyWith(hidePushContent: v)),
           ),
         ),
         const SizedBox(height: AppSpacing.l),
@@ -482,10 +471,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 value: s.allowDataCollection,
                 onChanged: _saving
                     ? null
-                    : (v) => _patch(
-                        {'allowDataCollection': v},
-                        optimistic: s.copyWith(allowDataCollection: v),
-                      ),
+                    : (v) => _patch({
+                        'allowDataCollection': v,
+                      }, optimistic: s.copyWith(allowDataCollection: v)),
               ),
               _MinorLockableSwitch(
                 title: 'Personalisation',
@@ -493,10 +481,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 value: s.allowPersonalization,
                 locked: _locked('allowPersonalization'),
                 enabled: !_saving,
-                onChanged: (v) => _patch(
-                  {'allowPersonalization': v},
-                  optimistic: s.copyWith(allowPersonalization: v),
-                ),
+                onChanged: (v) => _patch({
+                  'allowPersonalization': v,
+                }, optimistic: s.copyWith(allowPersonalization: v)),
               ),
             ],
           ),
@@ -596,9 +583,7 @@ class _MinorLockableSwitch extends StatelessWidget {
     return SwitchListTile(
       title: Text(title),
       subtitle: switch ((locked, subtitle)) {
-        (true, _) => const Text(
-          _PrivacySettingsScreenState._minorNote,
-        ),
+        (true, _) => const Text(_PrivacySettingsScreenState._minorNote),
         (_, final String text) => Text(text),
         _ => null,
       },

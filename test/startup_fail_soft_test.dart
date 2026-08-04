@@ -42,7 +42,10 @@ void main() {
     test('a failing step is recorded, not thrown', () async {
       final bootstrap = AppBootstrap();
 
-      final ok = await bootstrap.step('boom', () async => throw StateError('no'));
+      final ok = await bootstrap.step(
+        'boom',
+        () async => throw StateError('no'),
+      );
 
       expect(ok, isFalse);
       expect(bootstrap.isClean, isFalse);
@@ -69,7 +72,10 @@ void main() {
       final bootstrap = AppBootstrap();
 
       await bootstrap.step('platform', () async => throw _keychainRefused());
-      await bootstrap.step('state', () async => throw StateError('unregistered'));
+      await bootstrap.step(
+        'state',
+        () async => throw StateError('unregistered'),
+      );
       await bootstrap.step('assert', () async => throw AssertionError('nope'));
 
       expect(bootstrap.failures, hasLength(3));
@@ -105,17 +111,20 @@ void main() {
     // unassigned after a disk failure turns that failure into a widget-tree
     // failure a beat after `runApp` succeeded - the same blank screen, one frame
     // later.
-    test('reads back what it wrote and never throws on a missing key', () async {
-      final storage = InMemoryHydratedStorage();
+    test(
+      'reads back what it wrote and never throws on a missing key',
+      () async {
+        final storage = InMemoryHydratedStorage();
 
-      expect(storage.read('absent'), isNull);
-      await storage.write('theme', 'dark');
-      expect(storage.read('theme'), 'dark');
-      await storage.delete('theme');
-      expect(storage.read('theme'), isNull);
-      await storage.clear();
-      await storage.close();
-    });
+        expect(storage.read('absent'), isNull);
+        await storage.write('theme', 'dark');
+        expect(storage.read('theme'), 'dark');
+        await storage.delete('theme');
+        expect(storage.read('theme'), isNull);
+        await storage.clear();
+        await storage.close();
+      },
+    );
 
     test('satisfies the Storage contract HydratedBloc reads', () {
       // Assigning it is the fallback `main` installs; if the interface ever
@@ -134,18 +143,22 @@ void main() {
       service = DeviceIdService(secureStorage: storage);
     });
 
-    test('a read that throws yields an ephemeral id rather than killing launch',
-        () async {
-      when(() => storage.readDeviceId()).thenThrow(_keychainRefused());
-      when(() => storage.readDeviceIdentityKey()).thenThrow(_keychainRefused());
+    test(
+      'a read that throws yields an ephemeral id rather than killing launch',
+      () async {
+        when(() => storage.readDeviceId()).thenThrow(_keychainRefused());
+        when(
+          () => storage.readDeviceIdentityKey(),
+        ).thenThrow(_keychainRefused());
 
-      await service.init();
+        await service.init();
 
-      expect(service.deviceIdOrNull, isNotNull);
-      expect(service.deviceIdOrNull, isNotEmpty);
-      expect(service.identityPublicKey, isNotEmpty);
-      expect(service.isEphemeral, isTrue);
-    });
+        expect(service.deviceIdOrNull, isNotNull);
+        expect(service.deviceIdOrNull, isNotEmpty);
+        expect(service.identityPublicKey, isNotEmpty);
+        expect(service.isEphemeral, isTrue);
+      },
+    );
 
     test('a failed read never writes over what may still be there', () async {
       // A read that failed is no evidence that nothing is stored. Writing on
@@ -165,8 +178,9 @@ void main() {
       when(() => storage.readDeviceId()).thenAnswer((_) async => null);
       when(() => storage.readDeviceIdentityKey()).thenAnswer((_) async => null);
       when(() => storage.writeDeviceId(any())).thenThrow(_keychainRefused());
-      when(() => storage.writeDeviceIdentityKey(any()))
-          .thenThrow(_keychainRefused());
+      when(
+        () => storage.writeDeviceIdentityKey(any()),
+      ).thenThrow(_keychainRefused());
 
       await service.init();
 
@@ -176,8 +190,9 @@ void main() {
 
     test('the ordinary path is unchanged and not ephemeral', () async {
       when(() => storage.readDeviceId()).thenAnswer((_) async => 'stored-id');
-      when(() => storage.readDeviceIdentityKey())
-          .thenAnswer((_) async => 'stored-key');
+      when(
+        () => storage.readDeviceIdentityKey(),
+      ).thenAnswer((_) async => 'stored-key');
 
       await service.init();
 
@@ -278,8 +293,9 @@ void main() {
   });
 
   group('the last-resort error surface', () {
-    testWidgets('names the failure instead of rendering nothing',
-        (tester) async {
+    testWidgets('names the failure instead of rendering nothing', (
+      tester,
+    ) async {
       // The release default for a build failure is a bare grey rectangle with no
       // text, which is indistinguishable from the blank screen. This is what
       // makes the next one self-reporting.
@@ -294,8 +310,9 @@ void main() {
       expect(find.textContaining('-34018'), findsOneWidget);
     });
 
-    testWidgets('renders with no MaterialApp, Directionality or theme above it',
-        (tester) async {
+    testWidgets('renders with no MaterialApp, Directionality or theme above it', (
+      tester,
+    ) async {
       // It has to draw in exactly the situation where those are what failed, so
       // it may not depend on any of them.
       await tester.pumpWidget(

@@ -63,10 +63,13 @@ void main() {
       expect(resolved, isEmpty);
     });
 
-    test('resolves nobody rather than this user when the roster is only me', () {
-      final resolved = callerUserIdOf(call(participants: [me]), me);
+    test(
+      'resolves nobody rather than this user when the roster is only me',
+      () {
+        final resolved = callerUserIdOf(call(participants: [me]), me);
 
-      expect(resolved, isEmpty);
-    });
+        expect(resolved, isEmpty);
+      },
+    );
   });
 }

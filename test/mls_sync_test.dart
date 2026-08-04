@@ -90,8 +90,9 @@ void main() {
     test('applies every commit above the local epoch, in order', () async {
       // Local group sits at 5; server holds 6, 7, 8.
       var localEpoch = 5;
-      when(() => mls.getGroupInfo(_group))
-          .thenAnswer((_) async => _groupAt(localEpoch));
+      when(
+        () => mls.getGroupInfo(_group),
+      ).thenAnswer((_) async => _groupAt(localEpoch));
       when(
         () => api.getCommits(
           contextId: _context,
@@ -101,9 +102,7 @@ void main() {
         ),
       ).thenAnswer((invocation) async {
         final since = invocation.namedArguments[#sinceEpoch] as int;
-        return [
-          for (var e = since + 1; e <= 8; e++) _commit(e),
-        ];
+        return [for (var e = since + 1; e <= 8; e++) _commit(e)];
       });
 
       final applied = <String>[];
@@ -203,7 +202,9 @@ void main() {
 
       // Completing at all is half the assertion - an inline commit would hang
       // here forever waiting on the queue this call already holds.
-      await sync.syncContext(_context, false).timeout(const Duration(seconds: 5));
+      await sync
+          .syncContext(_context, false)
+          .timeout(const Duration(seconds: 5));
 
       verify(() => mls.commitPendingProposals(_group)).called(1);
     });
@@ -276,8 +277,7 @@ void main() {
       final published = await sync.publish(
         contextId: _context,
         isChannel: false,
-        produce: () async =>
-            const StagedCommit(commit: 'staged', epoch: 7),
+        produce: () async => const StagedCommit(commit: 'staged', epoch: 7),
       );
 
       expect(published, isTrue);
@@ -285,54 +285,57 @@ void main() {
       verifyNever(() => mls.clearPendingCommit(_group));
     });
 
-    test('discards and retries once when the server rejects the epoch', () async {
-      var attempt = 0;
-      when(
-        () => api.publishCommit(
+    test(
+      'discards and retries once when the server rejects the epoch',
+      () async {
+        var attempt = 0;
+        when(
+          () => api.publishCommit(
+            contextId: _context,
+            isChannel: false,
+            dto: any(named: 'dto'),
+          ),
+        ).thenAnswer((_) async {
+          attempt++;
+          if (attempt == 1) {
+            throw const MlsEpochConflictException(
+              MlsEpochConflictDto(
+                currentEpoch: 7,
+                rejectedEpoch: 7,
+                currentGeneration: 1,
+                rejectedGeneration: 1,
+                reason: 'Another member already committed this epoch.',
+              ),
+            );
+          }
+          return const MlsCommitPublishedDto(
+            contextId: _context,
+            generation: 1,
+            epoch: 8,
+          );
+        });
+        when(
+          () => api.getCommits(
+            contextId: any(named: 'contextId'),
+            isChannel: any(named: 'isChannel'),
+            sinceEpoch: any(named: 'sinceEpoch'),
+            generation: any(named: 'generation'),
+          ),
+        ).thenAnswer((_) async => const []);
+
+        final published = await sync.publish(
           contextId: _context,
           isChannel: false,
-          dto: any(named: 'dto'),
-        ),
-      ).thenAnswer((_) async {
-        attempt++;
-        if (attempt == 1) {
-          throw const MlsEpochConflictException(
-            MlsEpochConflictDto(
-              currentEpoch: 7,
-              rejectedEpoch: 7,
-              currentGeneration: 1,
-              rejectedGeneration: 1,
-              reason: 'Another member already committed this epoch.',
-            ),
-          );
-        }
-        return const MlsCommitPublishedDto(
-          contextId: _context,
-          generation: 1,
-          epoch: 8,
+          produce: () async => const StagedCommit(commit: 'staged', epoch: 7),
         );
-      });
-      when(
-        () => api.getCommits(
-          contextId: any(named: 'contextId'),
-          isChannel: any(named: 'isChannel'),
-          sinceEpoch: any(named: 'sinceEpoch'),
-          generation: any(named: 'generation'),
-        ),
-      ).thenAnswer((_) async => const []);
 
-      final published = await sync.publish(
-        contextId: _context,
-        isChannel: false,
-        produce: () async => const StagedCommit(commit: 'staged', epoch: 7),
-      );
-
-      expect(published, isTrue, reason: 'the second attempt should have won');
-      // The rejected commit must be thrown away, not merged - a group that
-      // advanced on a commit the server refused is forked with no way back.
-      verify(() => mls.clearPendingCommit(_group)).called(1);
-      verify(() => mls.mergePendingCommit(_group)).called(1);
-    });
+        expect(published, isTrue, reason: 'the second attempt should have won');
+        // The rejected commit must be thrown away, not merged - a group that
+        // advanced on a commit the server refused is forked with no way back.
+        verify(() => mls.clearPendingCommit(_group)).called(1);
+        verify(() => mls.mergePendingCommit(_group)).called(1);
+      },
+    );
 
     test('gives up after a second rejection instead of looping', () async {
       when(
@@ -391,10 +394,12 @@ void main() {
       );
       when(() => mls.groupId(any(), any())).thenReturn(null);
       when(() => mls.knownGeneration(any())).thenReturn(null);
-      when(() => mls.joinGroup('welcome-w1'))
-          .thenAnswer((_) async => _groupAt(0));
-      when(() => mls.joinGroup('welcome-w2'))
-          .thenThrow(const MlsException(MlsErrorKind.mlsError, 'bad welcome'));
+      when(
+        () => mls.joinGroup('welcome-w1'),
+      ).thenAnswer((_) async => _groupAt(0));
+      when(
+        () => mls.joinGroup('welcome-w2'),
+      ).thenThrow(const MlsException(MlsErrorKind.mlsError, 'bad welcome'));
       when(
         () => mls.registerGroup(
           contextId: any(named: 'contextId'),
@@ -402,8 +407,9 @@ void main() {
           mlsGroupId: any(named: 'mlsGroupId'),
         ),
       ).thenAnswer((_) async {});
-      when(() => api.ackWelcomes(any(), deviceId: any(named: 'deviceId')))
-          .thenAnswer((_) async => const AckWelcomesResultDto(acknowledged: 1));
+      when(
+        () => api.ackWelcomes(any(), deviceId: any(named: 'deviceId')),
+      ).thenAnswer((_) async => const AckWelcomesResultDto(acknowledged: 1));
 
       await sync.processPendingWelcomes();
 
@@ -417,8 +423,9 @@ void main() {
       // A previous run joined but died before acking. Re-joining would fail, and
       // leaving it pending makes every future sweep retry a join that can never
       // succeed.
-      when(() => api.getPendingWelcomes(_device))
-          .thenAnswer((_) async => [welcome('w1', 'conv_joined')]);
+      when(
+        () => api.getPendingWelcomes(_device),
+      ).thenAnswer((_) async => [welcome('w1', 'conv_joined')]);
       when(() => mls.groupId('conv_joined', 1)).thenReturn(_group);
       when(() => mls.knownGeneration('conv_joined')).thenReturn(1);
       when(() => mls.getGroupInfo(_group)).thenAnswer((_) async => _groupAt(3));
@@ -430,8 +437,9 @@ void main() {
           generation: any(named: 'generation'),
         ),
       ).thenAnswer((_) async => const []);
-      when(() => api.ackWelcomes(any(), deviceId: any(named: 'deviceId')))
-          .thenAnswer((_) async => const AckWelcomesResultDto(acknowledged: 1));
+      when(
+        () => api.ackWelcomes(any(), deviceId: any(named: 'deviceId')),
+      ).thenAnswer((_) async => const AckWelcomesResultDto(acknowledged: 1));
 
       await sync.processPendingWelcomes();
 
@@ -449,15 +457,23 @@ void main() {
   });
 
   group('encryption state reconciliation', () {
-    test('clears the active generation when encryption was turned off', () async {
-      when(() => api.getState(contextId: _context, isChannel: false))
-          .thenAnswer((_) async => const MlsContextStateDto(contextId: _context));
-      when(() => mls.clearActiveGeneration(_context)).thenAnswer((_) async {});
+    test(
+      'clears the active generation when encryption was turned off',
+      () async {
+        when(
+          () => api.getState(contextId: _context, isChannel: false),
+        ).thenAnswer(
+          (_) async => const MlsContextStateDto(contextId: _context),
+        );
+        when(
+          () => mls.clearActiveGeneration(_context),
+        ).thenAnswer((_) async {});
 
-      await sync.refreshState(_context, false);
+        await sync.refreshState(_context, false);
 
-      verify(() => mls.clearActiveGeneration(_context)).called(1);
-    });
+        verify(() => mls.clearActiveGeneration(_context)).called(1);
+      },
+    );
 
     test(
       'fetches Welcomes for a generation this device has never joined',
@@ -465,17 +481,19 @@ void main() {
         // Encryption was toggled off and back on while we were away, minting a
         // whole new group. Continuing to encrypt to the old one would produce
         // ciphertext nobody in the context can read.
-        when(() => api.getState(contextId: _context, isChannel: false))
-            .thenAnswer(
-              (_) async => const MlsContextStateDto(
-                contextId: _context,
-                encrypted: true,
-                activeGeneration: 2,
-              ),
-            );
+        when(
+          () => api.getState(contextId: _context, isChannel: false),
+        ).thenAnswer(
+          (_) async => const MlsContextStateDto(
+            contextId: _context,
+            encrypted: true,
+            activeGeneration: 2,
+          ),
+        );
         when(() => mls.groupId(_context, 2)).thenReturn(null);
-        when(() => api.getPendingWelcomes(_device))
-            .thenAnswer((_) async => const []);
+        when(
+          () => api.getPendingWelcomes(_device),
+        ).thenAnswer((_) async => const []);
 
         await sync.refreshState(_context, false);
 
@@ -501,74 +519,79 @@ void main() {
     /// The old test suite mocked this into passing by returning `[]` on the
     /// second call, which the real server does not do. This one keeps returning
     /// the proposal, exactly as the server would.
-    test('terminates when the server keeps returning the same proposal', () async {
-      when(() => mls.getGroupInfo(_group)).thenAnswer((_) async => _groupAt(5));
+    test(
+      'terminates when the server keeps returning the same proposal',
+      () async {
+        when(
+          () => mls.getGroupInfo(_group),
+        ).thenAnswer((_) async => _groupAt(5));
 
-      var pages = 0;
-      when(
-        () => api.getCommits(
-          contextId: any(named: 'contextId'),
-          isChannel: any(named: 'isChannel'),
-          sinceEpoch: any(named: 'sinceEpoch'),
-          generation: any(named: 'generation'),
-        ),
-      ).thenAnswer((_) async {
-        pages++;
-        // The server's honest behaviour: the proposal is still there, and this
-        // device's epoch has not moved, so it comes back every time.
-        return [_commit(6, bytes: 'proposal')];
-      });
-      when(
-        () => mls.processMessage(
-          groupIdB64: any(named: 'groupIdB64'),
-          messageB64: any(named: 'messageB64'),
-        ),
-      ).thenAnswer(
-        (_) async => MlsProcessedMessage(
-          kind: MlsMessageKind.proposal,
-          plaintext: null,
-          selfRemoved: false,
-          addedMembers: const [],
-          removedLeafIndices: const [],
-          senderIdentity: 'user_leaver',
-          epoch: null,
-        ),
-      );
-      when(() => mls.commitPendingProposals(_group)).thenAnswer(
-        (_) async => const MlsCommitOut(commit: 'c', welcome: null, epoch: 6),
-      );
-      when(() => mls.exportGroupInfo(_group)).thenAnswer((_) async => 'gi');
-      when(() => mls.mergePendingCommit(_group)).thenAnswer((_) async => 6);
-      when(
-        () => api.publishCommit(
-          contextId: any(named: 'contextId'),
-          isChannel: any(named: 'isChannel'),
-          dto: any(named: 'dto'),
-        ),
-      ).thenAnswer(
-        (_) async => const MlsCommitPublishedDto(
-          contextId: _context,
-          generation: 1,
-          epoch: 6,
-        ),
-      );
+        var pages = 0;
+        when(
+          () => api.getCommits(
+            contextId: any(named: 'contextId'),
+            isChannel: any(named: 'isChannel'),
+            sinceEpoch: any(named: 'sinceEpoch'),
+            generation: any(named: 'generation'),
+          ),
+        ).thenAnswer((_) async {
+          pages++;
+          // The server's honest behaviour: the proposal is still there, and this
+          // device's epoch has not moved, so it comes back every time.
+          return [_commit(6, bytes: 'proposal')];
+        });
+        when(
+          () => mls.processMessage(
+            groupIdB64: any(named: 'groupIdB64'),
+            messageB64: any(named: 'messageB64'),
+          ),
+        ).thenAnswer(
+          (_) async => MlsProcessedMessage(
+            kind: MlsMessageKind.proposal,
+            plaintext: null,
+            selfRemoved: false,
+            addedMembers: const [],
+            removedLeafIndices: const [],
+            senderIdentity: 'user_leaver',
+            epoch: null,
+          ),
+        );
+        when(() => mls.commitPendingProposals(_group)).thenAnswer(
+          (_) async => const MlsCommitOut(commit: 'c', welcome: null, epoch: 6),
+        );
+        when(() => mls.exportGroupInfo(_group)).thenAnswer((_) async => 'gi');
+        when(() => mls.mergePendingCommit(_group)).thenAnswer((_) async => 6);
+        when(
+          () => api.publishCommit(
+            contextId: any(named: 'contextId'),
+            isChannel: any(named: 'isChannel'),
+            dto: any(named: 'dto'),
+          ),
+        ).thenAnswer(
+          (_) async => const MlsCommitPublishedDto(
+            contextId: _context,
+            generation: 1,
+            epoch: 6,
+          ),
+        );
 
-      await sync
-          .syncContext(_context, false)
-          .timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => fail(
-              'catch-up span on a proposal - a proposal does not advance the '
-              'epoch, so it must not count as progress',
-            ),
-          );
+        await sync
+            .syncContext(_context, false)
+            .timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => fail(
+                'catch-up span on a proposal - a proposal does not advance the '
+                'epoch, so it must not count as progress',
+              ),
+            );
 
-      expect(
-        pages,
-        1,
-        reason: 'a page of nothing but proposals is a terminating page',
-      );
-    });
+        expect(
+          pages,
+          1,
+          reason: 'a page of nothing but proposals is a terminating page',
+        );
+      },
+    );
   });
 
   group('a commit whose publish outcome is unknown', () {
@@ -582,67 +605,70 @@ void main() {
     /// committed. The next catch-up then handed this device its own commit,
     /// `processMessage` refused it, and the device was forked off the group with
     /// no way back.
-    test('is merged, not reprocessed, when it turns up in the next page', () async {
-      when(
-        () => api.publishCommit(
-          contextId: any(named: 'contextId'),
-          isChannel: any(named: 'isChannel'),
-          dto: any(named: 'dto'),
-        ),
-      ).thenThrow(_TimedOut());
+    test(
+      'is merged, not reprocessed, when it turns up in the next page',
+      () async {
+        when(
+          () => api.publishCommit(
+            contextId: any(named: 'contextId'),
+            isChannel: any(named: 'isChannel'),
+            dto: any(named: 'dto'),
+          ),
+        ).thenThrow(_TimedOut());
 
-      await expectLater(
-        sync.publish(
-          contextId: _context,
-          isChannel: false,
-          produce: () async => const StagedCommit(commit: 'staged', epoch: 7),
-        ),
-        throwsA(isA<_TimedOut>()),
-      );
+        await expectLater(
+          sync.publish(
+            contextId: _context,
+            isChannel: false,
+            produce: () async => const StagedCommit(commit: 'staged', epoch: 7),
+          ),
+          throwsA(isA<_TimedOut>()),
+        );
 
-      verifyNever(
-        () => mls.clearPendingCommit(_group),
-      );
+        verifyNever(() => mls.clearPendingCommit(_group));
 
-      // The server did take it. It comes back in the next page, attributed to
-      // this device.
-      when(() => mls.getGroupInfo(_group)).thenAnswer((_) async => _groupAt(6));
-      var page = 0;
-      when(
-        () => api.getCommits(
-          contextId: any(named: 'contextId'),
-          isChannel: any(named: 'isChannel'),
-          sinceEpoch: any(named: 'sinceEpoch'),
-          generation: any(named: 'generation'),
-        ),
-      ).thenAnswer(
-        (_) async => page++ == 0
-            ? [
-                MlsCommitDto(
-                  id: 'mlsc_own',
-                  contextId: _context,
-                  conversationId: _context,
-                  generation: 1,
-                  epoch: 7,
-                  commit: 'staged',
-                  senderUserId: 'user_me',
-                  senderDeviceId: _device,
-                ),
-              ]
-            : const [],
-      );
-      when(() => mls.mergePendingCommit(_group)).thenAnswer((_) async => 7);
+        // The server did take it. It comes back in the next page, attributed to
+        // this device.
+        when(
+          () => mls.getGroupInfo(_group),
+        ).thenAnswer((_) async => _groupAt(6));
+        var page = 0;
+        when(
+          () => api.getCommits(
+            contextId: any(named: 'contextId'),
+            isChannel: any(named: 'isChannel'),
+            sinceEpoch: any(named: 'sinceEpoch'),
+            generation: any(named: 'generation'),
+          ),
+        ).thenAnswer(
+          (_) async => page++ == 0
+              ? [
+                  MlsCommitDto(
+                    id: 'mlsc_own',
+                    contextId: _context,
+                    conversationId: _context,
+                    generation: 1,
+                    epoch: 7,
+                    commit: 'staged',
+                    senderUserId: 'user_me',
+                    senderDeviceId: _device,
+                  ),
+                ]
+              : const [],
+        );
+        when(() => mls.mergePendingCommit(_group)).thenAnswer((_) async => 7);
 
-      await sync.syncContext(_context, false);
+        await sync.syncContext(_context, false);
 
-      verify(() => mls.mergePendingCommit(_group)).called(1);
-      verifyNever(
-        () => mls.processMessage(
-          groupIdB64: any(named: 'groupIdB64'),
-          messageB64: any(named: 'messageB64'),
-        ),
-      );
-    });
+        verify(() => mls.mergePendingCommit(_group)).called(1);
+        verifyNever(
+          () => mls.processMessage(
+            groupIdB64: any(named: 'groupIdB64'),
+            messageB64: any(named: 'messageB64'),
+          ),
+        );
+      },
+    );
 
     test('is discarded when somebody else won that epoch instead', () async {
       when(
@@ -686,10 +712,7 @@ void main() {
 
       verify(() => mls.clearPendingCommit(_group)).called(1);
       verify(
-        () => mls.processMessage(
-          groupIdB64: _group,
-          messageB64: 'commit-7',
-        ),
+        () => mls.processMessage(groupIdB64: _group, messageB64: 'commit-7'),
       ).called(1);
     });
 
@@ -760,7 +783,9 @@ void main() {
       // ack is what destroys the server's copy, and a fixed client should get
       // another go at it.
       verify(() => mls.joinGroup('garbage')).called(3);
-      verifyNever(() => api.ackWelcomes(any(), deviceId: any(named: 'deviceId')));
+      verifyNever(
+        () => api.ackWelcomes(any(), deviceId: any(named: 'deviceId')),
+      );
     });
   });
 }

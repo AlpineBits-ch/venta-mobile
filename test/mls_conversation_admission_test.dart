@@ -485,9 +485,7 @@ void main() {
       ).thenAnswer((invocation) async {
         return _request(
           requesterDeviceId: _thisDevice,
-        ).copyWith(
-          contextId: invocation.namedArguments[#contextId] as String,
-        );
+        ).copyWith(contextId: invocation.namedArguments[#contextId] as String);
       });
     });
 

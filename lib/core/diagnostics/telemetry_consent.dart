@@ -148,13 +148,18 @@ class TelemetryConsent {
   /// API put an identifier in the path (`/relationships/{userId}/block`,
   /// `/user/{id}`). The path is what makes the breadcrumb useful, so it stays;
   /// the query string - where a token or an email lookup would sit - does not.
-  static Map<String, dynamic>? _scrubBreadcrumbData(Map<String, dynamic>? data) {
+  static Map<String, dynamic>? _scrubBreadcrumbData(
+    Map<String, dynamic>? data,
+  ) {
     if (data == null || data.isEmpty) return data;
     final scrubbed = <String, dynamic>{};
     for (final entry in data.entries) {
-      if (const {'body', 'data', 'request_body', 'headers'}.contains(
-        entry.key,
-      )) {
+      if (const {
+        'body',
+        'data',
+        'request_body',
+        'headers',
+      }.contains(entry.key)) {
         continue;
       }
       final value = entry.value;

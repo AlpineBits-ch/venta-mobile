@@ -132,7 +132,10 @@ class ProtectionLevelService {
     required String userId,
     required String deviceId,
   }) async {
-    final remembered = await _readRemembered(userId: userId, deviceId: deviceId);
+    final remembered = await _readRemembered(
+      userId: userId,
+      deviceId: deviceId,
+    );
 
     Map<String, dynamic>? body;
     var unset = false;
@@ -172,7 +175,8 @@ class ProtectionLevelService {
       // Whatever this device last saw *signed* is the floor. A server that
       // removes the endpoint, or that answers with nothing, must not thereby
       // relax an account that opted into the strict tier.
-      final fallback = remembered ??
+      final fallback =
+          remembered ??
           ProtectionLevelState(
             level: ProtectionLevel.trustedSignIn,
             version: 0,
@@ -303,7 +307,10 @@ class ProtectionLevelService {
     // Above the floor, not merely above whatever is in memory. A device that has
     // not refreshed this session would otherwise sign version 1, which its own
     // rollback check would then refuse on the next read.
-    final remembered = await _readRemembered(userId: userId, deviceId: deviceId);
+    final remembered = await _readRemembered(
+      userId: userId,
+      deviceId: deviceId,
+    );
     final floor = [
       state.value?.version ?? 0,
       remembered?.version ?? 0,

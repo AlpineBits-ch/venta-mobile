@@ -31,7 +31,8 @@ import '../widgets/household_widgets.dart';
 /// including the owner, and there is no escape hatch - so the module state is
 /// checked *before* rendering and shown as a product state ("your house
 /// doesn't do money"), never as "you're not allowed".
-abstract class HouseholdChannelState<W extends StatefulWidget> extends State<W> {
+abstract class HouseholdChannelState<W extends StatefulWidget>
+    extends State<W> {
   String get guildId;
   String get channelId;
 
@@ -180,9 +181,9 @@ abstract class HouseholdChannelState<W extends StatefulWidget> extends State<W> 
   /// the one place that decision is made.
   void showError(Object error, String fallback) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(apiErrorMessage(error) ?? fallback)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(apiErrorMessage(error) ?? fallback)));
   }
 
   void showMessage(String message) {

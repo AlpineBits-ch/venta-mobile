@@ -87,10 +87,7 @@ class MlsRealtimeBridge {
       // is device-scoped, and the Welcome is acknowledged only once its join has
       // actually worked.
       case 'conversation.Welcome':
-        _guard(
-          'process pending Welcomes',
-          () => sync.processPendingWelcomes(),
-        );
+        _guard('process pending Welcomes', () => sync.processPendingWelcomes());
 
       // A commit landed. Group state advances by fetching commits above our own
       // epoch and applying them in order, never in push-arrival order.

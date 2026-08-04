@@ -344,7 +344,10 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         RoutePaths.guildDmPrivacy,
         (context, state) => const GuildDmPrivacyScreen(),
       ),
-      _route(RoutePaths.dataExport, (context, state) => const DataExportScreen()),
+      _route(
+        RoutePaths.dataExport,
+        (context, state) => const DataExportScreen(),
+      ),
       _route(
         RoutePaths.legalDocuments,
         (context, state) => const LegalDocumentsScreen(),

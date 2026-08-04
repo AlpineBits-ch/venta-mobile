@@ -56,8 +56,12 @@ void main() {
     when(() => deviceIds.deviceIdOrNull).thenReturn(_deviceId);
 
     when(() => encryption.recoveryCodeOwed).thenReturn(owed);
-    when(() => encryption.markRecoveryCodeSaved(any())).thenAnswer((_) async {});
-    when(() => masterKeys.generateRecoveryCode()).thenAnswer((_) async => _code);
+    when(
+      () => encryption.markRecoveryCodeSaved(any()),
+    ).thenAnswer((_) async {});
+    when(
+      () => masterKeys.generateRecoveryCode(),
+    ).thenAnswer((_) async => _code);
     when(
       () => masterKeys.addRecoveryCode(
         userId: any(named: 'userId'),
@@ -78,9 +82,7 @@ void main() {
   tearDown(() => getIt.reset());
 
   Future<void> pumpSetup(WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: RecoveryCodeSetupScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: RecoveryCodeSetupScreen()));
   }
 
   /// Types the password and walks through show -> confirm -> re-entry.
@@ -108,33 +110,37 @@ void main() {
     //
     // `getIt` throws `StateError` for an unregistered type. Moving the lookup
     // back into `build` turns this red immediately.
-    testWidgets('an unregistered encryption service renders nothing, not an error',
-        (tester) async {
-      await getIt.reset();
+    testWidgets(
+      'an unregistered encryption service renders nothing, not an error',
+      (tester) async {
+        await getIt.reset();
 
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: Column(children: [RecoveryCodeBanner(), Text('the app')]),
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: Column(children: [RecoveryCodeBanner(), Text('the app')]),
+            ),
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      expect(
-        tester.takeException(),
-        isNull,
-        reason: 'a cosmetic offer must degrade to nothing, never take the shell '
-            'with it',
-      );
-      expect(find.text('the app'), findsOneWidget);
-      expect(find.text('Set up'), findsNothing);
-    });
+        expect(
+          tester.takeException(),
+          isNull,
+          reason:
+              'a cosmetic offer must degrade to nothing, never take the shell '
+              'with it',
+        );
+        expect(find.text('the app'), findsOneWidget);
+        expect(find.text('Set up'), findsNothing);
+      },
+    );
   });
 
   group('the banner', () {
-    testWidgets('offers setup when a code is owed and nothing when it is not',
-        (tester) async {
+    testWidgets('offers setup when a code is owed and nothing when it is not', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: RecoveryCodeBanner())),
       );
@@ -170,8 +176,9 @@ void main() {
   });
 
   group('the setup flow', () {
-    testWidgets('writes nothing until the code has been typed back',
-        (tester) async {
+    testWidgets('writes nothing until the code has been typed back', (
+      tester,
+    ) async {
       await pumpSetup(tester);
       await tester.enterText(find.byType(TextField).first, 'hunter2');
       await tester.tap(find.text('Show my recovery code'));
@@ -190,8 +197,9 @@ void main() {
       );
     });
 
-    testWidgets('commits the confirmed code and records the acknowledgement',
-        (tester) async {
+    testWidgets('commits the confirmed code and records the acknowledgement', (
+      tester,
+    ) async {
       await pumpSetup(tester);
       await confirmTheCode(tester);
 
@@ -206,8 +214,9 @@ void main() {
       verify(() => encryption.markRecoveryCodeSaved(_userId)).called(1);
     });
 
-    testWidgets('the code the user types back is the code that gets wrapped',
-        (tester) async {
+    testWidgets('the code the user types back is the code that gets wrapped', (
+      tester,
+    ) async {
       // The confirmation is compared against the *displayed* code, and the code
       // handed to `addRecoveryCode` is that same string - not a second draw. A
       // UI that showed one code and wrapped another would hand somebody a
@@ -226,8 +235,9 @@ void main() {
       verify(() => masterKeys.generateRecoveryCode()).called(1);
     });
 
-    testWidgets('backing out of the confirmation commits nothing',
-        (tester) async {
+    testWidgets('backing out of the confirmation commits nothing', (
+      tester,
+    ) async {
       await pumpSetup(tester);
       await tester.enterText(find.byType(TextField).first, 'hunter2');
       await tester.tap(find.text('Show my recovery code'));
@@ -240,8 +250,10 @@ void main() {
       await tester.tap(find.text('Confirm'));
       await tester.pumpAndSettle();
 
-      expect(find.text('That does not match. Check it and try again.'),
-          findsOneWidget);
+      expect(
+        find.text('That does not match. Check it and try again.'),
+        findsOneWidget,
+      );
       verifyNever(
         () => masterKeys.addRecoveryCode(
           userId: any(named: 'userId'),
@@ -253,26 +265,29 @@ void main() {
       verifyNever(() => encryption.markRecoveryCodeSaved(any()));
     });
 
-    testWidgets('a server that accepted and did not store is reported, not claimed',
-        (tester) async {
-      when(
-        () => masterKeys.addRecoveryCode(
-          userId: any(named: 'userId'),
-          deviceId: any(named: 'deviceId'),
-          password: any(named: 'password'),
-          recoveryCode: any(named: 'recoveryCode'),
-        ),
-      ).thenThrow(const RecoveryCodeNotStoredException());
+    testWidgets(
+      'a server that accepted and did not store is reported, not claimed',
+      (tester) async {
+        when(
+          () => masterKeys.addRecoveryCode(
+            userId: any(named: 'userId'),
+            deviceId: any(named: 'deviceId'),
+            password: any(named: 'password'),
+            recoveryCode: any(named: 'recoveryCode'),
+          ),
+        ).thenThrow(const RecoveryCodeNotStoredException());
 
-      await pumpSetup(tester);
-      await confirmTheCode(tester);
+        await pumpSetup(tester);
+        await confirmTheCode(tester);
 
-      expect(find.textContaining('did not store it'), findsOneWidget);
-      verifyNever(() => encryption.markRecoveryCodeSaved(any()));
-    });
+        expect(find.textContaining('did not store it'), findsOneWidget);
+        verifyNever(() => encryption.markRecoveryCodeSaved(any()));
+      },
+    );
 
-    testWidgets('a rejected password keeps the same code for the retry',
-        (tester) async {
+    testWidgets('a rejected password keeps the same code for the retry', (
+      tester,
+    ) async {
       when(
         () => masterKeys.addRecoveryCode(
           userId: any(named: 'userId'),
@@ -294,7 +309,9 @@ void main() {
       verify(() => masterKeys.generateRecoveryCode()).called(1);
     });
 
-    testWidgets('an unlocked master key is required and says so', (tester) async {
+    testWidgets('an unlocked master key is required and says so', (
+      tester,
+    ) async {
       when(
         () => masterKeys.addRecoveryCode(
           userId: any(named: 'userId'),
@@ -307,11 +324,16 @@ void main() {
       await pumpSetup(tester);
       await confirmTheCode(tester);
 
-      expect(find.textContaining('not unlocked on this device'), findsOneWidget);
+      expect(
+        find.textContaining('not unlocked on this device'),
+        findsOneWidget,
+      );
       verifyNever(() => encryption.markRecoveryCodeSaved(any()));
     });
 
-    testWidgets('"not now" leaves the account exactly as it was', (tester) async {
+    testWidgets('"not now" leaves the account exactly as it was', (
+      tester,
+    ) async {
       await pumpSetup(tester);
       await tester.tap(find.text('Not now'));
       await tester.pumpAndSettle();

@@ -37,7 +37,9 @@ class _SessionNotPersistedBannerState extends State<SessionNotPersistedBanner> {
     try {
       _persisted = getIt<AuthRepository>().sessionPersisted;
     } catch (e) {
-      debugPrint('SessionNotPersistedBanner: no auth repository, staying hidden: $e');
+      debugPrint(
+        'SessionNotPersistedBanner: no auth repository, staying hidden: $e',
+      );
     }
   }
 

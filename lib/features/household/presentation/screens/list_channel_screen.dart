@@ -38,8 +38,7 @@ class ListChannelScreen extends StatefulWidget {
   State<ListChannelScreen> createState() => _ListChannelScreenState();
 }
 
-class _ListChannelScreenState
-    extends HouseholdChannelState<ListChannelScreen> {
+class _ListChannelScreenState extends HouseholdChannelState<ListChannelScreen> {
   @override
   String get guildId => widget.guildId;
   @override
@@ -342,9 +341,10 @@ class _ListChannelScreenState
     final unchecked = [...items.where((i) => !i.isChecked)]
       ..sort((a, b) => a.position.compareTo(b.position));
     final checked = [...items.where((i) => i.isChecked)]
-      ..sort((a, b) => (b.checkedAt ?? DateTime(0)).compareTo(
-        a.checkedAt ?? DateTime(0),
-      ));
+      ..sort(
+        (a, b) =>
+            (b.checkedAt ?? DateTime(0)).compareTo(a.checkedAt ?? DateTime(0)),
+      );
 
     // Nothing *visible* - which is a different state from an empty list when
     // everything has been ticked off and ticked items are hidden.
@@ -771,8 +771,9 @@ class _ListItemSheetState extends State<_ListItemSheet> {
               style: TextButton.styleFrom(
                 foregroundColor: theme.colorScheme.error,
               ),
-              onPressed: () =>
-                  Navigator.of(context).pop(const _ItemEditResult(delete: true)),
+              onPressed: () => Navigator.of(
+                context,
+              ).pop(const _ItemEditResult(delete: true)),
               child: const Text('Delete'),
             )
           : null,

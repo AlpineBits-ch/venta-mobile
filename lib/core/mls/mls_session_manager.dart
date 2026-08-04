@@ -97,7 +97,9 @@ class MlsSessionManager {
       // is the user-initiated path, behind the "re-link this device" affordance,
       // because taking it silently destroys every encrypted message this account
       // holds on this handset.
-      debugPrint('MLS: $e - waiting for the user to restore a backup or re-link');
+      debugPrint(
+        'MLS: $e - waiting for the user to restore a backup or re-link',
+      );
     } catch (e, stack) {
       debugPrint('MLS: identity setup failed: $e');
       debugPrintStack(stackTrace: stack);

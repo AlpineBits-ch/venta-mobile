@@ -41,10 +41,17 @@ void main() {
     legacy = _MockStore();
     store = MigratingSecureStore(current: current, legacy: legacy);
 
-    when(() => current.read(key: any(named: 'key'))).thenAnswer((_) async => null);
-    when(() => legacy.read(key: any(named: 'key'))).thenAnswer((_) async => null);
     when(
-      () => current.write(key: any(named: 'key'), value: any(named: 'value')),
+      () => current.read(key: any(named: 'key')),
+    ).thenAnswer((_) async => null);
+    when(
+      () => legacy.read(key: any(named: 'key')),
+    ).thenAnswer((_) async => null);
+    when(
+      () => current.write(
+        key: any(named: 'key'),
+        value: any(named: 'value'),
+      ),
     ).thenAnswer((_) async {});
     when(() => current.delete(key: any(named: 'key'))).thenAnswer((_) async {});
     when(() => legacy.delete(key: any(named: 'key'))).thenAnswer((_) async {});
@@ -54,8 +61,9 @@ void main() {
     test('a value only the legacy class can see is still returned', () async {
       // The silent half of the bug. This read returned null on every upgraded
       // handset, so the app concluded it had no session and no device id.
-      when(() => legacy.read(key: 'venta.auth.refresh_token'))
-          .thenAnswer((_) async => 'the-real-refresh-token');
+      when(
+        () => legacy.read(key: 'venta.auth.refresh_token'),
+      ).thenAnswer((_) async => 'the-real-refresh-token');
 
       final value = await store.read(key: 'venta.auth.refresh_token');
 
@@ -75,19 +83,24 @@ void main() {
       verify(() => current.write(key: 'k', value: 'stranded')).called(1);
     });
 
-    test('the current class wins and the legacy one is never consulted',
-        () async {
-      when(() => current.read(key: 'k')).thenAnswer((_) async => 'fresh');
+    test(
+      'the current class wins and the legacy one is never consulted',
+      () async {
+        when(() => current.read(key: 'k')).thenAnswer((_) async => 'fresh');
 
-      expect(await store.read(key: 'k'), 'fresh');
+        expect(await store.read(key: 'k'), 'fresh');
 
-      verifyNever(() => legacy.read(key: any(named: 'key')));
-    });
+        verifyNever(() => legacy.read(key: any(named: 'key')));
+      },
+    );
 
     test('genuinely absent is still absent', () async {
       expect(await store.read(key: 'k'), isNull);
       verifyNever(
-        () => current.write(key: any(named: 'key'), value: any(named: 'value')),
+        () => current.write(
+          key: any(named: 'key'),
+          value: any(named: 'value'),
+        ),
       );
     });
 
@@ -104,9 +117,7 @@ void main() {
       // launch and "Something went wrong": `containsKey` misses, the plugin
       // calls `SecItemAdd`, and the primary key is taken.
       var attempts = 0;
-      when(
-        () => current.write(key: 'k', value: 'v'),
-      ).thenAnswer((_) async {
+      when(() => current.write(key: 'k', value: 'v')).thenAnswer((_) async {
         attempts++;
         if (attempts == 1) throw _duplicateItem();
       });
@@ -124,20 +135,28 @@ void main() {
       verifyNever(() => legacy.delete(key: any(named: 'key')));
     });
 
-    test('a second failure is the caller\'s problem, not a retry loop',
-        () async {
-      when(
-        () => current.write(key: any(named: 'key'), value: any(named: 'value')),
-      ).thenThrow(_duplicateItem());
+    test(
+      'a second failure is the caller\'s problem, not a retry loop',
+      () async {
+        when(
+          () => current.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),
+          ),
+        ).thenThrow(_duplicateItem());
 
-      await expectLater(
-        store.write(key: 'k', value: 'v'),
-        throwsA(isA<PlatformException>()),
-      );
-      verify(
-        () => current.write(key: any(named: 'key'), value: any(named: 'value')),
-      ).called(2);
-    });
+        await expectLater(
+          store.write(key: 'k', value: 'v'),
+          throwsA(isA<PlatformException>()),
+        );
+        verify(
+          () => current.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),
+          ),
+        ).called(2);
+      },
+    );
   });
 
   group('deletes clear both classes', () {
@@ -155,20 +174,27 @@ void main() {
     test('an upgraded install finds its session again', () async {
       final currentStore = _MockStore();
       final legacyStore = _MockStore();
-      when(() => currentStore.read(key: any(named: 'key')))
-          .thenAnswer((_) async => null);
-      when(() => currentStore.write(
-            key: any(named: 'key'),
-            value: any(named: 'value'),
-          )).thenAnswer((_) async {});
-      when(() => legacyStore.delete(key: any(named: 'key')))
-          .thenAnswer((_) async {});
-      when(() => legacyStore.read(key: any(named: 'key')))
-          .thenAnswer((_) async => null);
-      when(() => legacyStore.read(key: 'venta.auth.refresh_token'))
-          .thenAnswer((_) async => 'legacy-refresh');
-      when(() => legacyStore.read(key: 'venta.device.id'))
-          .thenAnswer((_) async => 'a9418a4b7efd50a31d5aed562273ff16');
+      when(
+        () => currentStore.read(key: any(named: 'key')),
+      ).thenAnswer((_) async => null);
+      when(
+        () => currentStore.write(
+          key: any(named: 'key'),
+          value: any(named: 'value'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        () => legacyStore.delete(key: any(named: 'key')),
+      ).thenAnswer((_) async {});
+      when(
+        () => legacyStore.read(key: any(named: 'key')),
+      ).thenAnswer((_) async => null);
+      when(
+        () => legacyStore.read(key: 'venta.auth.refresh_token'),
+      ).thenAnswer((_) async => 'legacy-refresh');
+      when(
+        () => legacyStore.read(key: 'venta.device.id'),
+      ).thenAnswer((_) async => 'a9418a4b7efd50a31d5aed562273ff16');
 
       final service = SecureStorageService(
         storage: currentStore,
@@ -179,7 +205,8 @@ void main() {
       expect(
         await service.readDeviceId(),
         'a9418a4b7efd50a31d5aed562273ff16',
-        reason: 'the device id the server has on file, rather than a fresh one '
+        reason:
+            'the device id the server has on file, rather than a fresh one '
             'it has never seen',
       );
     });

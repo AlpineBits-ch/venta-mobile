@@ -134,9 +134,8 @@ class _GuildDmPrivacyScreenState extends State<GuildDmPrivacyScreen> {
             ),
           ),
         ),
-        (_, null, _) || (_, _, null) => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        (_, null, _) ||
+        (_, _, null) => const Center(child: CircularProgressIndicator()),
         (_, final List<GuildDto> list, final PrivacySettingsDto s) => ListView(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.m,
@@ -156,9 +155,7 @@ class _GuildDmPrivacyScreenState extends State<GuildDmPrivacyScreen> {
                   child: Text(
                     'You aren\'t in any servers.',
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.6,
-                      ),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ),

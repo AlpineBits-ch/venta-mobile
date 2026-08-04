@@ -59,9 +59,8 @@ class ProfileConnection {
   final bool verified;
 
   /// What to show: the account's own name where it gave one, otherwise the id.
-  String get label => (displayName?.isNotEmpty ?? false)
-      ? displayName!
-      : externalId;
+  String get label =>
+      (displayName?.isNotEmpty ?? false) ? displayName! : externalId;
 
   Map<String, dynamic> toJson() => {
     'type': type,

@@ -254,7 +254,9 @@ class MlsApi {
     required String requestId,
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
-      client.url('${_joinRequestBase(contextId, isChannel)}/$requestId/approve'),
+      client.url(
+        '${_joinRequestBase(contextId, isChannel)}/$requestId/approve',
+      ),
     );
     return MlsJoinRequestApprovalResultDto.fromJson(response.data!);
   }
@@ -351,7 +353,9 @@ class MlsApi {
   }) async {
     try {
       final response = await client.dio.get<Map<String, dynamic>>(
-        client.url('${_joinRequestBase(contextId, isChannel)}/$requestId/proof'),
+        client.url(
+          '${_joinRequestBase(contextId, isChannel)}/$requestId/proof',
+        ),
       );
       final data = response.data;
       if (data == null || data.isEmpty) return null;

@@ -88,10 +88,8 @@ void main() {
       ),
     ).thenAnswer((_) async => _masterKey);
     when(() => engine.generateAccountIdentity()).thenAnswer(
-      (_) async => MlsAccountIdentity(
-        publicKey: _ourPublic,
-        privateKey: _ourPrivate,
-      ),
+      (_) async =>
+          MlsAccountIdentity(publicKey: _ourPublic, privateKey: _ourPrivate),
     );
     when(
       () => api.uploadIdentityKey(
@@ -105,11 +103,8 @@ void main() {
     when(() => api.fetchIdentityKey(any())).thenAnswer((_) async => null);
   });
 
-  Future<bool> ensure({String? password}) => service.ensure(
-    userId: _userId,
-    deviceId: _deviceId,
-    password: password,
-  );
+  Future<bool> ensure({String? password}) =>
+      service.ensure(userId: _userId, deviceId: _deviceId, password: password);
 
   group('a fresh account', () {
     test('mints, publishes and caches an identity key', () async {
@@ -143,7 +138,10 @@ void main() {
         ),
       ).thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
 
-      await expectLater(ensure(password: 'hunter2'), throwsA(isA<DioException>()));
+      await expectLater(
+        ensure(password: 'hunter2'),
+        throwsA(isA<DioException>()),
+      );
       expect(stored, isNull);
       expect(service.isAvailable, isFalse);
     });
@@ -169,8 +167,9 @@ void main() {
       // Fail closed on the *generation* decision. Minting because a GET timed
       // out is a self-inflicted safety-number change on an account that was
       // perfectly healthy.
-      when(() => api.fetchIdentityKey(any()))
-          .thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
+      when(
+        () => api.fetchIdentityKey(any()),
+      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
 
       expect(await ensure(password: 'hunter2'), isFalse);
       verifyNever(() => engine.generateAccountIdentity());
@@ -200,25 +199,29 @@ void main() {
       verifyNever(() => engine.generateAccountIdentity());
     });
 
-    test('a second ensure adopts the cached key rather than minting again', () async {
-      await ensure(password: 'hunter2');
-      // The account now publishes what this device holds.
-      when(() => api.fetchIdentityKey(any())).thenAnswer(
-        (_) async => const PublishedIdentityKey(publicKey: _ourPublic, version: 1),
-      );
+    test(
+      'a second ensure adopts the cached key rather than minting again',
+      () async {
+        await ensure(password: 'hunter2');
+        // The account now publishes what this device holds.
+        when(() => api.fetchIdentityKey(any())).thenAnswer(
+          (_) async =>
+              const PublishedIdentityKey(publicKey: _ourPublic, version: 1),
+        );
 
-      expect(await ensure(password: 'hunter2'), isTrue);
+        expect(await ensure(password: 'hunter2'), isTrue);
 
-      verify(() => engine.generateAccountIdentity()).called(1);
-      verify(
-        () => api.uploadIdentityKey(
-          identityPublicKey: any(named: 'identityPublicKey'),
-          password: any(named: 'password'),
-          version: any(named: 'version'),
-          deviceId: any(named: 'deviceId'),
-        ),
-      ).called(1);
-    });
+        verify(() => engine.generateAccountIdentity()).called(1);
+        verify(
+          () => api.uploadIdentityKey(
+            identityPublicKey: any(named: 'identityPublicKey'),
+            password: any(named: 'password'),
+            version: any(named: 'version'),
+            deviceId: any(named: 'deviceId'),
+          ),
+        ).called(1);
+      },
+    );
   });
 
   group('a cached key that the account does not publish', () {
@@ -239,32 +242,39 @@ void main() {
       expect(
         service.isAvailable,
         isFalse,
-        reason: 'certificates signed by this key would not verify against what '
+        reason:
+            'certificates signed by this key would not verify against what '
             'peers pin, and an invalid certificate is a security warning at '
             'every phase - strictly worse than no certificate at all',
       );
       expect(service.publicKey, 'YW5vdGhlci1kZXZpY2VzLWtleQ==');
       expect(service.version, 4);
-      expect(await service.issueForThisDevice(
-        userId: _userId,
-        deviceId: _deviceId,
-        deviceSignatureKey: 'a2V5',
-      ), isNull);
-    });
-
-    test('is published when the account has none and a password is available', () async {
-      expect(await ensure(password: 'hunter2'), isTrue);
-
-      expect(service.isAvailable, isTrue);
-      verify(
-        () => api.uploadIdentityKey(
-          identityPublicKey: _ourPublic,
-          password: 'hunter2',
-          version: 1,
+      expect(
+        await service.issueForThisDevice(
+          userId: _userId,
           deviceId: _deviceId,
+          deviceSignatureKey: 'a2V5',
         ),
-      ).called(1);
+        isNull,
+      );
     });
+
+    test(
+      'is published when the account has none and a password is available',
+      () async {
+        expect(await ensure(password: 'hunter2'), isTrue);
+
+        expect(service.isAvailable, isTrue);
+        verify(
+          () => api.uploadIdentityKey(
+            identityPublicKey: _ourPublic,
+            password: 'hunter2',
+            version: 1,
+            deviceId: _deviceId,
+          ),
+        ).called(1);
+      },
+    );
 
     test('is still usable on a cold start with no password', () async {
       // The ordinary launch. Nothing can be published, but this device holds the
@@ -284,8 +294,9 @@ void main() {
     });
 
     test('an unreachable server does not invalidate a cached key', () async {
-      when(() => api.fetchIdentityKey(any()))
-          .thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
+      when(
+        () => api.fetchIdentityKey(any()),
+      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
 
       expect(await ensure(password: 'hunter2'), isTrue);
       expect(
@@ -312,47 +323,52 @@ void main() {
   });
 
   group('issuing for this device', () {
-    test('signs over the leaf\'s own signature key and this device\'s id', () async {
-      when(
-        () => engine.issueDeviceCertificate(
-          accountIdentityPrivateKeyB64: any(named: 'accountIdentityPrivateKeyB64'),
-          userId: any(named: 'userId'),
-          deviceId: any(named: 'deviceId'),
-          deviceSignatureKeyB64: any(named: 'deviceSignatureKeyB64'),
-          issuedAt: any(named: 'issuedAt'),
-          expiresAt: any(named: 'expiresAt'),
-        ),
-      ).thenAnswer((_) async => 'c2lnbmF0dXJl');
+    test(
+      'signs over the leaf\'s own signature key and this device\'s id',
+      () async {
+        when(
+          () => engine.issueDeviceCertificate(
+            accountIdentityPrivateKeyB64: any(
+              named: 'accountIdentityPrivateKeyB64',
+            ),
+            userId: any(named: 'userId'),
+            deviceId: any(named: 'deviceId'),
+            deviceSignatureKeyB64: any(named: 'deviceSignatureKeyB64'),
+            issuedAt: any(named: 'issuedAt'),
+            expiresAt: any(named: 'expiresAt'),
+          ),
+        ).thenAnswer((_) async => 'c2lnbmF0dXJl');
 
-      await ensure(password: 'hunter2');
-      final certificate = await service.issueForThisDevice(
-        userId: _userId,
-        deviceId: _deviceId,
-        deviceSignatureKey: 'bGVhZi1zaWduYXR1cmUta2V5',
-      );
-
-      expect(certificate, isNotNull);
-      expect(certificate!.deviceId, _deviceId);
-      expect(certificate.deviceSignatureKey, 'bGVhZi1zaWduYXR1cmUta2V5');
-      // §L.2: the payload includes the user id, because `ClientDeviceId` is
-      // unique only per user - a certificate naming only the device would be a
-      // valid certificate for every account that happened to have one by that id.
-      verify(
-        () => engine.issueDeviceCertificate(
-          accountIdentityPrivateKeyB64: _ourPrivate,
+        await ensure(password: 'hunter2');
+        final certificate = await service.issueForThisDevice(
           userId: _userId,
           deviceId: _deviceId,
-          deviceSignatureKeyB64: 'bGVhZi1zaWduYXR1cmUta2V5',
-          issuedAt: any(named: 'issuedAt'),
-          expiresAt: any(named: 'expiresAt'),
-        ),
-      ).called(1);
+          deviceSignatureKey: 'bGVhZi1zaWduYXR1cmUta2V5',
+        );
 
-      expect(
-        certificate.expiresAt.difference(certificate.issuedAt),
-        AccountIdentityService.certificateLifetime,
-      );
-      expect(certificate.isExpired, isFalse);
-    });
+        expect(certificate, isNotNull);
+        expect(certificate!.deviceId, _deviceId);
+        expect(certificate.deviceSignatureKey, 'bGVhZi1zaWduYXR1cmUta2V5');
+        // §L.2: the payload includes the user id, because `ClientDeviceId` is
+        // unique only per user - a certificate naming only the device would be a
+        // valid certificate for every account that happened to have one by that id.
+        verify(
+          () => engine.issueDeviceCertificate(
+            accountIdentityPrivateKeyB64: _ourPrivate,
+            userId: _userId,
+            deviceId: _deviceId,
+            deviceSignatureKeyB64: 'bGVhZi1zaWduYXR1cmUta2V5',
+            issuedAt: any(named: 'issuedAt'),
+            expiresAt: any(named: 'expiresAt'),
+          ),
+        ).called(1);
+
+        expect(
+          certificate.expiresAt.difference(certificate.issuedAt),
+          AccountIdentityService.certificateLifetime,
+        );
+        expect(certificate.isExpired, isFalse);
+      },
+    );
   });
 }

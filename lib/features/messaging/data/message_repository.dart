@@ -25,12 +25,34 @@ class RemoteMessageReceived extends MessageRepositoryEvent {
 class RemoteMessageUpdated extends MessageRepositoryEvent {
   const RemoteMessageUpdated({
     required this.messageId,
-    required this.content,
+    this.content,
+    this.embedsJson,
+    this.flags,
+    this.editedAt,
+    this.isAuthorEdit = true,
     this.isUndecryptable = false,
     this.isUnverifiedPlaintext = false,
   });
   final String messageId;
-  final String content;
+
+  /// Null means "leave the text alone" - an update that only attached a link
+  /// preview or flipped the suppress flag doesn't touch the body.
+  final String? content;
+
+  /// Null means "unchanged"; `''` and a JSON `[]` both mean "no cards", which
+  /// is what a suppression sends.
+  final String? embedsJson;
+
+  /// The message bitfield, null when the server didn't restate it.
+  final int? flags;
+
+  /// Non-null only when the author actually edited the text.
+  final DateTime? editedAt;
+
+  /// False for the updates the author did not cause - a preview attaching, a
+  /// suppression. Those now reach the author too (they used to be skipped), so
+  /// this is what keeps an optimistic edit render from fighting them.
+  final bool isAuthorEdit;
 
   /// The edit arrived as ciphertext this device could not open. The old text is
   /// stale and the new text is unknown, so the row has to say so rather than
@@ -218,6 +240,11 @@ class MessageRepository {
             mlsGeneration: (payload['mlsGeneration'] as num?)?.toInt(),
             mlsEpoch: (payload['mlsEpoch'] as num?)?.toInt(),
             senderDeviceId: payload['senderDeviceId'] as String?,
+            // Practically always null for a human's message - a link preview
+            // is unfurled asynchronously and arrives later as an update. A bot
+            // that posts its own cards populates it on the way in.
+            embedsJson: payload['embedsJson'] as String?,
+            flags: (payload['flags'] as num?)?.toInt() ?? 0,
           ),
         );
       case 'conversation.MessageUpdated' || 'guild.MessageUpdated':
@@ -225,9 +252,17 @@ class MessageRepository {
         // to broadcast, and rendering it straight into an end-to-end encrypted
         // thread - with no decrypt, no encryption-state check and no indicator -
         // let the server rewrite any message in any conversation to any text.
+        //
+        // Read defensively rather than cast: this event now fires for reasons
+        // other than an edit (a link preview attaching, a suppression), and
+        // those carry no body at all.
         _emitUpdated(
-          payload['messageId'] as String,
-          payload['content'] as String,
+          messageId: payload['messageId'] as String,
+          wireContent: payload['content'] as String?,
+          embedsJson: payload['embedsJson'] as String?,
+          flags: (payload['flags'] as num?)?.toInt(),
+          editedAt: tryParseApiDateTime(payload['editedAt']),
+          isAuthorEdit: payload['isAuthorEdit'] as bool? ?? true,
         );
       case 'conversation.MessageDeleted' || 'guild.MessageDeleted':
         _eventsController.add(
@@ -314,8 +349,32 @@ class MessageRepository {
   /// Chained behind the decrypt queue for the same reason arrivals are: an edit
   /// that decrypts faster than the message it edits would apply to a row that is
   /// not there yet.
-  void _emitUpdated(String messageId, String wireContent) {
+  ///
+  /// [wireContent] null is the link-preview case: the body did not change, so
+  /// there is nothing to decrypt and the existing text stays exactly as it is.
+  /// Still chained, so an embed landing can't overtake the arrival of the
+  /// message it belongs to.
+  void _emitUpdated({
+    required String messageId,
+    String? wireContent,
+    String? embedsJson,
+    int? flags,
+    DateTime? editedAt,
+    bool isAuthorEdit = true,
+  }) {
     _decryptChain = _decryptChain.then((_) async {
+      if (wireContent == null) {
+        _eventsController.add(
+          RemoteMessageUpdated(
+            messageId: messageId,
+            embedsJson: embedsJson,
+            flags: flags,
+            editedAt: editedAt,
+            isAuthorEdit: isAuthorEdit,
+          ),
+        );
+        return;
+      }
       try {
         final result = await _decryptor.decryptEdit(
           contextId: _contextId,
@@ -326,6 +385,10 @@ class MessageRepository {
           RemoteMessageUpdated(
             messageId: messageId,
             content: result.content,
+            embedsJson: embedsJson,
+            flags: flags,
+            editedAt: editedAt,
+            isAuthorEdit: isAuthorEdit,
             isUndecryptable: result.isUndecryptable,
             isUnverifiedPlaintext: result.isUnverifiedPlaintext,
           ),
@@ -338,6 +401,10 @@ class MessageRepository {
           RemoteMessageUpdated(
             messageId: messageId,
             content: wireContent,
+            embedsJson: embedsJson,
+            flags: flags,
+            editedAt: editedAt,
+            isAuthorEdit: isAuthorEdit,
             isUndecryptable: true,
           ),
         );
@@ -608,6 +675,14 @@ class MessageRepository {
   Future<void> pinMessage(String messageId) => api.pinMessage(messageId);
 
   Future<void> unpinMessage(String messageId) => api.unpinMessage(messageId);
+
+  /// Dismisses or restores a message's link previews *for everyone*. The
+  /// resulting card change arrives over realtime as a `MessageUpdated`, so
+  /// nothing here writes to the timeline.
+  Future<void> setEmbedsSuppressed({
+    required String messageId,
+    required bool suppress,
+  }) => api.setEmbedsSuppressed(messageId: messageId, suppress: suppress);
 
   Future<List<MessageDto>> getPinnedMessages() async {
     final pinned = isChannel

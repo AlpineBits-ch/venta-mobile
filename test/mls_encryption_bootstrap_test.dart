@@ -117,8 +117,9 @@ void main() {
         deviceId: any(named: 'deviceId'),
       ),
     ).thenAnswer((_) async => _masterKey);
-    when(() => masterKeys.readStatus())
-        .thenAnswer((_) async => const RecoveryKeyStatus.read(null));
+    when(
+      () => masterKeys.readStatus(),
+    ).thenAnswer((_) async => const RecoveryKeyStatus.read(null));
     when(
       () => masterKeys.unlock(
         userId: any(named: 'userId'),
@@ -170,10 +171,12 @@ void main() {
       keychain[i.namedArguments[#deviceId] as String] =
           i.namedArguments[#value] as String;
     });
-    when(() => storage.readRecoveryCodeAcknowledged(any()))
-        .thenAnswer((_) async => false);
-    when(() => storage.writeRecoveryCodeAcknowledged(any()))
-        .thenAnswer((_) async {});
+    when(
+      () => storage.readRecoveryCodeAcknowledged(any()),
+    ).thenAnswer((_) async => false);
+    when(
+      () => storage.writeRecoveryCodeAcknowledged(any()),
+    ).thenAnswer((_) async {});
   });
 
   group('a fresh account, signing in with a password', () {
@@ -274,22 +277,25 @@ void main() {
       );
     });
 
-    test('a cold start with no password still refreshes the certificate', () async {
-      // The overwhelming majority of launches. There is no password, so nothing
-      // that establishes credentials can run - but the certificate route needs
-      // none, and refreshing it is what keeps coverage from decaying as
-      // certificates age out.
-      final result = await service.establish();
+    test(
+      'a cold start with no password still refreshes the certificate',
+      () async {
+        // The overwhelming majority of launches. There is no password, so nothing
+        // that establishes credentials can run - but the certificate route needs
+        // none, and refreshing it is what keeps coverage from decaying as
+        // certificates age out.
+        final result = await service.establish();
 
-      expect(result.certificateIssued, isTrue);
-      verify(
-        () => identity.ensure(
-          userId: _userId,
-          deviceId: _deviceId,
-          password: null,
-        ),
-      ).called(1);
-    });
+        expect(result.certificateIssued, isTrue);
+        verify(
+          () => identity.ensure(
+            userId: _userId,
+            deviceId: _deviceId,
+            password: null,
+          ),
+        ).called(1);
+      },
+    );
 
     test('a cold start with no master key defers instead of failing', () async {
       when(
@@ -334,8 +340,9 @@ void main() {
           deviceId: any(named: 'deviceId'),
         ),
       ).thenAnswer((_) async => null);
-      when(() => masterKeys.readStatus())
-          .thenAnswer((_) async => const RecoveryKeyStatus.unavailable());
+      when(
+        () => masterKeys.readStatus(),
+      ).thenAnswer((_) async => const RecoveryKeyStatus.unavailable());
 
       final result = await service.establish(password: 'hunter2');
 
@@ -352,31 +359,34 @@ void main() {
   });
 
   group('idempotency', () {
-    test('two launches do not mint two identity keys or two certificates', () async {
-      await service.establish(password: 'hunter2');
-      await service.establish(password: 'hunter2');
+    test(
+      'two launches do not mint two identity keys or two certificates',
+      () async {
+        await service.establish(password: 'hunter2');
+        await service.establish(password: 'hunter2');
 
-      // `ensure` runs both times - it is the thing that *loads* the key, and it
-      // is idempotent by construction - but the certificate is signed and
-      // uploaded once. Reissuing on every launch would churn the value peers are
-      // verifying against for no reason.
-      verify(
-        () => identity.issueForThisDevice(
-          userId: any(named: 'userId'),
-          deviceId: any(named: 'deviceId'),
-          deviceSignatureKey: any(named: 'deviceSignatureKey'),
-        ),
-      ).called(1);
-      verify(
-        () => deviceApi.uploadDeviceCertificate(
-          clientDeviceId: any(named: 'clientDeviceId'),
-          certificate: any(named: 'certificate'),
-          issuedAt: any(named: 'issuedAt'),
-          expiresAt: any(named: 'expiresAt'),
-          identityKeyVersion: any(named: 'identityKeyVersion'),
-        ),
-      ).called(1);
-    });
+        // `ensure` runs both times - it is the thing that *loads* the key, and it
+        // is idempotent by construction - but the certificate is signed and
+        // uploaded once. Reissuing on every launch would churn the value peers are
+        // verifying against for no reason.
+        verify(
+          () => identity.issueForThisDevice(
+            userId: any(named: 'userId'),
+            deviceId: any(named: 'deviceId'),
+            deviceSignatureKey: any(named: 'deviceSignatureKey'),
+          ),
+        ).called(1);
+        verify(
+          () => deviceApi.uploadDeviceCertificate(
+            clientDeviceId: any(named: 'clientDeviceId'),
+            certificate: any(named: 'certificate'),
+            issuedAt: any(named: 'issuedAt'),
+            expiresAt: any(named: 'expiresAt'),
+            identityKeyVersion: any(named: 'identityKeyVersion'),
+          ),
+        ).called(1);
+      },
+    );
 
     test('concurrent triggers share one run', () async {
       // A sign-in and `startAuthenticatedServices` land within milliseconds of
@@ -422,26 +432,29 @@ void main() {
   });
 
   group('failure degrades gracefully', () {
-    test('an offline certificate upload still lets the user into the app', () async {
-      when(
-        () => deviceApi.uploadDeviceCertificate(
-          clientDeviceId: any(named: 'clientDeviceId'),
-          certificate: any(named: 'certificate'),
-          issuedAt: any(named: 'issuedAt'),
-          expiresAt: any(named: 'expiresAt'),
-          identityKeyVersion: any(named: 'identityKeyVersion'),
-        ),
-      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
+    test(
+      'an offline certificate upload still lets the user into the app',
+      () async {
+        when(
+          () => deviceApi.uploadDeviceCertificate(
+            clientDeviceId: any(named: 'clientDeviceId'),
+            certificate: any(named: 'certificate'),
+            issuedAt: any(named: 'issuedAt'),
+            expiresAt: any(named: 'expiresAt'),
+            identityKeyVersion: any(named: 'identityKeyVersion'),
+          ),
+        ).thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
 
-      final result = await service.establish(password: 'hunter2');
+        final result = await service.establish(password: 'hunter2');
 
-      expect(result.identityKeyReady, isTrue);
-      expect(result.certificateIssued, isFalse);
-      expect(result.certificateCurrent, isFalse);
-      // And nothing was cached, so the next launch retries rather than believing
-      // it already published one.
-      expect(keychain, isEmpty);
-    });
+        expect(result.identityKeyReady, isTrue);
+        expect(result.certificateIssued, isFalse);
+        expect(result.certificateCurrent, isFalse);
+        // And nothing was cached, so the next launch retries rather than believing
+        // it already published one.
+        expect(keychain, isEmpty);
+      },
+    );
 
     test('a 500 from the identity-key publish does not stop the run', () async {
       when(
@@ -468,8 +481,9 @@ void main() {
     });
 
     test('a thrown master-key read is swallowed, not propagated', () async {
-      when(() => masterKeys.readStatus())
-          .thenThrow(StateError('the platform channel is not available'));
+      when(
+        () => masterKeys.readStatus(),
+      ).thenThrow(StateError('the platform channel is not available'));
 
       // No throw. A launch that fell over here would take the whole app with it
       // for an account that has nothing to encrypt yet.
@@ -492,32 +506,38 @@ void main() {
       );
     });
 
-    test('a device with no MLS identity issues no certificate and does not throw', () async {
-      when(() => mls.signaturePublicKey).thenReturn(null);
+    test(
+      'a device with no MLS identity issues no certificate and does not throw',
+      () async {
+        when(() => mls.signaturePublicKey).thenReturn(null);
 
-      final result = await service.establish(password: 'hunter2');
+        final result = await service.establish(password: 'hunter2');
 
-      expect(result.identityKeyReady, isTrue);
-      expect(result.certificateIssued, isFalse);
-      verifyNever(
-        () => identity.issueForThisDevice(
-          userId: any(named: 'userId'),
-          deviceId: any(named: 'deviceId'),
-          deviceSignatureKey: any(named: 'deviceSignatureKey'),
-        ),
-      );
-    });
+        expect(result.identityKeyReady, isTrue);
+        expect(result.certificateIssued, isFalse);
+        verifyNever(
+          () => identity.issueForThisDevice(
+            userId: any(named: 'userId'),
+            deviceId: any(named: 'deviceId'),
+            deviceSignatureKey: any(named: 'deviceSignatureKey'),
+          ),
+        );
+      },
+    );
   });
 
   group('the recovery-code prompt', () {
-    test('is raised for an account that has no recovery-code wrapping', () async {
-      status.value = MasterKeyStatus.needsRecoveryCode;
+    test(
+      'is raised for an account that has no recovery-code wrapping',
+      () async {
+        status.value = MasterKeyStatus.needsRecoveryCode;
 
-      final result = await service.establish(password: 'hunter2');
+        final result = await service.establish(password: 'hunter2');
 
-      expect(result.needsRecoveryCode, isTrue);
-      expect(service.recoveryCodeOwed.value, isTrue);
-    });
+        expect(result.needsRecoveryCode, isTrue);
+        expect(service.recoveryCodeOwed.value, isTrue);
+      },
+    );
 
     test('is not raised for a user who already has one', () async {
       // Whichever device wrote the wrapping. Offering a fresh code here would
@@ -531,26 +551,33 @@ void main() {
       expect(service.recoveryCodeOwed.value, isFalse);
     });
 
-    test('is not raised again once a code has been confirmed on this device', () async {
-      status.value = MasterKeyStatus.needsRecoveryCode;
-      when(() => storage.readRecoveryCodeAcknowledged(any()))
-          .thenAnswer((_) async => true);
+    test(
+      'is not raised again once a code has been confirmed on this device',
+      () async {
+        status.value = MasterKeyStatus.needsRecoveryCode;
+        when(
+          () => storage.readRecoveryCodeAcknowledged(any()),
+        ).thenAnswer((_) async => true);
 
-      final result = await service.establish(password: 'hunter2');
+        final result = await service.establish(password: 'hunter2');
 
-      expect(result.needsRecoveryCode, isFalse);
-    });
+        expect(result.needsRecoveryCode, isFalse);
+      },
+    );
 
-    test('marking it saved records the acknowledgement and lowers the flag', () async {
-      status.value = MasterKeyStatus.needsRecoveryCode;
-      await service.establish(password: 'hunter2');
-      expect(service.recoveryCodeOwed.value, isTrue);
+    test(
+      'marking it saved records the acknowledgement and lowers the flag',
+      () async {
+        status.value = MasterKeyStatus.needsRecoveryCode;
+        await service.establish(password: 'hunter2');
+        expect(service.recoveryCodeOwed.value, isTrue);
 
-      await service.markRecoveryCodeSaved(_userId);
+        await service.markRecoveryCodeSaved(_userId);
 
-      expect(service.recoveryCodeOwed.value, isFalse);
-      verify(() => storage.writeRecoveryCodeAcknowledged(_userId)).called(1);
-    });
+        expect(service.recoveryCodeOwed.value, isFalse);
+        verify(() => storage.writeRecoveryCodeAcknowledged(_userId)).called(1);
+      },
+    );
 
     test('a completed loss is not offered a retrofit', () async {
       // `historyLost` means the password wrapping was invalidated by a reset and
@@ -569,26 +596,30 @@ void main() {
     // another device wrote satisfies the status check on a handset that has
     // never unlocked it. The banner appeared, the flow ran, and the write failed
     // at the last step with "your master key is not unlocked on this device".
-    test('is not raised when this device does not hold the master key', () async {
-      when(
-        () => masterKeys.peek(
-          userId: any(named: 'userId'),
-          deviceId: any(named: 'deviceId'),
-        ),
-      ).thenAnswer((_) async => null);
-      status.value = MasterKeyStatus.needsRecoveryCode;
+    test(
+      'is not raised when this device does not hold the master key',
+      () async {
+        when(
+          () => masterKeys.peek(
+            userId: any(named: 'userId'),
+            deviceId: any(named: 'deviceId'),
+          ),
+        ).thenAnswer((_) async => null);
+        status.value = MasterKeyStatus.needsRecoveryCode;
 
-      // No password either, so nothing can unlock it this launch.
-      final result = await service.establish();
+        // No password either, so nothing can unlock it this launch.
+        final result = await service.establish();
 
-      expect(result.masterKeyReady, isFalse);
-      expect(
-        result.needsRecoveryCode,
-        isFalse,
-        reason: 'offering something that cannot work is worse than not offering',
-      );
-      expect(service.recoveryCodeOwed.value, isFalse);
-    });
+        expect(result.masterKeyReady, isFalse);
+        expect(
+          result.needsRecoveryCode,
+          isFalse,
+          reason:
+              'offering something that cannot work is worse than not offering',
+        );
+        expect(service.recoveryCodeOwed.value, isFalse);
+      },
+    );
   });
 
   group('generation enforces nothing', () {
@@ -600,20 +631,23 @@ void main() {
       verifyNever(() => deviceApi.resetKeyPackages(any()));
     });
 
-    test('certificate enforcement is untouched and defaults to Observe', () async {
-      // §I.1: the phase is server-supplied and defaults to Observe. Wiring
-      // generation must not move it - a client that inferred a stricter phase
-      // from its own capabilities would start proposing removals against an
-      // install base with 0% coverage, including its owner's other devices.
-      final policy = MlsPolicyService(client: _MockApiClient());
+    test(
+      'certificate enforcement is untouched and defaults to Observe',
+      () async {
+        // §I.1: the phase is server-supplied and defaults to Observe. Wiring
+        // generation must not move it - a client that inferred a stricter phase
+        // from its own capabilities would start proposing removals against an
+        // install base with 0% coverage, including its owner's other devices.
+        final policy = MlsPolicyService(client: _MockApiClient());
 
-      expect(policy.current, CertificateEnforcement.observe);
-      await service.establish(password: 'hunter2');
-      expect(
-        policy.current,
-        CertificateEnforcement.observe,
-        reason: 'the phase is the server\'s to move, on coverage data',
-      );
-    });
+        expect(policy.current, CertificateEnforcement.observe);
+        await service.establish(password: 'hunter2');
+        expect(
+          policy.current,
+          CertificateEnforcement.observe,
+          reason: 'the phase is the server\'s to move, on coverage data',
+        );
+      },
+    );
   });
 }

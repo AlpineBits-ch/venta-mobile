@@ -88,8 +88,10 @@ void main() {
     });
 
     test('is never active while disabled', () {
-      expect(overnight.copyWith(enabled: false).containsMinute(23 * 60),
-          isFalse);
+      expect(
+        overnight.copyWith(enabled: false).containsMinute(23 * 60),
+        isFalse,
+      );
     });
 
     test('formats minutes past midnight as a 24-hour clock', () {
@@ -111,8 +113,11 @@ void main() {
     });
 
     test('leaves free text alone', () {
-      expect(formatListQuantity('a bunch of the small ones'), 'a bunch of the '
-          'small ones');
+      expect(
+        formatListQuantity('a bunch of the small ones'),
+        'a bunch of the '
+        'small ones',
+      );
       expect(formatListQuantity('2x6 pack'), '2x6 pack');
       expect(formatListQuantity('half a kilo'), 'half a kilo');
       expect(formatListQuantity(''), '');

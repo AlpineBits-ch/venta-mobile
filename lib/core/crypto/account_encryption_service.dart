@@ -181,7 +181,9 @@ class AccountEncryptionService {
     } catch (e, stack) {
       // Nothing above may stop a launch. A user whose encryption setup failed
       // still has plaintext conversations, a call history and an account.
-      debugPrint('AccountEncryptionService: encryption setup did not complete: $e');
+      debugPrint(
+        'AccountEncryptionService: encryption setup did not complete: $e',
+      );
       debugPrintStack(stackTrace: stack);
       return _last;
     }
@@ -265,7 +267,8 @@ class AccountEncryptionService {
         deviceId: deviceId,
         deviceSignatureKey: signatureKey,
       );
-      if (certificate == null) return (issued: false, current: existing != null);
+      if (certificate == null)
+        return (issued: false, current: existing != null);
 
       await deviceApi.uploadDeviceCertificate(
         clientDeviceId: deviceId,
@@ -284,7 +287,9 @@ class AccountEncryptionService {
       );
       return (issued: true, current: true);
     } catch (e) {
-      debugPrint('AccountEncryptionService: could not publish this device\'s certificate: $e');
+      debugPrint(
+        'AccountEncryptionService: could not publish this device\'s certificate: $e',
+      );
       return (issued: false, current: existing != null);
     }
   }
@@ -303,7 +308,9 @@ class AccountEncryptionService {
         Map<String, dynamic>.from(jsonDecode(raw) as Map),
       );
     } catch (e) {
-      debugPrint('AccountEncryptionService: the cached certificate is unreadable: $e');
+      debugPrint(
+        'AccountEncryptionService: the cached certificate is unreadable: $e',
+      );
       return null;
     }
   }

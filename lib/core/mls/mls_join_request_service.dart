@@ -177,7 +177,10 @@ class MlsJoinRequestService {
       // recovery requests from a device that is already locked out, and firing
       // them in parallel is the burst the limits are there to stop.
       try {
-        await requestAccess(candidate.contextId, isChannel: candidate.isChannel);
+        await requestAccess(
+          candidate.contextId,
+          isChannel: candidate.isChannel,
+        );
         requested.add(candidate.contextId);
       } catch (e) {
         debugPrint(
@@ -210,7 +213,6 @@ class MlsJoinRequestService {
     // pressing a button rather than a loop that runs on its own.
     if (mls.wasRemovedHere(candidate.contextId)) return false;
 
-
     // Nothing to join. The local floor outranks the wire: a context this device
     // has ever held a group for stays a candidate even when the server now calls
     // it plaintext, because that claim is the one thing the floor exists to
@@ -234,7 +236,10 @@ class MlsJoinRequestService {
   Future<bool> rejoin(String contextId, {required bool isChannel}) async {
     if (!mls.isUnlocked) return false;
 
-    final state = await api.getState(contextId: contextId, isChannel: isChannel);
+    final state = await api.getState(
+      contextId: contextId,
+      isChannel: isChannel,
+    );
     final groupInfo = state.mlsGroupInfo;
     final generation = state.activeGeneration;
     if (!state.encrypted || groupInfo == null || generation == null) {

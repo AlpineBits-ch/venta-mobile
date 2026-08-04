@@ -21,7 +21,9 @@ void main() {
   final extractionRules = File(
     'android/app/src/main/res/xml/data_extraction_rules.xml',
   );
-  final decryptor = File('ios/NotificationService/MlsNotificationDecryptor.swift');
+  final decryptor = File(
+    'ios/NotificationService/MlsNotificationDecryptor.swift',
+  );
   final entitlements = [
     File('ios/Runner/Runner.entitlements'),
     File('ios/Runner/Runner-Release.entitlements'),
@@ -32,7 +34,10 @@ void main() {
     test('the data directory is not uploaded to Auto Backup', () {
       // The default is true. Left alone, mls_state.json and the decrypted
       // message cache leave the device the first time the user backs up.
-      expect(manifest.readAsStringSync(), contains('android:allowBackup="false"'));
+      expect(
+        manifest.readAsStringSync(),
+        contains('android:allowBackup="false"'),
+      );
     });
 
     test('device-to-device transfer is excluded as well', () {
@@ -79,14 +84,15 @@ void main() {
       // A bare `gg.venta.mobile.shared` is the failure mode: it is what the
       // entitlements file literally says, it looks right next to it, and it
       // matches no access group at runtime.
-      final team = RegExp(r'DEVELOPMENT_TEAM = ([A-Z0-9]{10});')
-          .firstMatch(pbxproj.readAsStringSync())
-          ?.group(1);
+      final team = RegExp(
+        r'DEVELOPMENT_TEAM = ([A-Z0-9]{10});',
+      ).firstMatch(pbxproj.readAsStringSync())?.group(1);
       expect(team, isNotNull, reason: 'no DEVELOPMENT_TEAM to check against');
       expect(
         accessGroup,
         startsWith('$team.'),
-        reason: r'kSecAttrAccessGroup needs the expanded $(AppIdentifierPrefix)',
+        reason:
+            r'kSecAttrAccessGroup needs the expanded $(AppIdentifierPrefix)',
       );
     });
 
@@ -126,7 +132,8 @@ void main() {
         expect(
           first,
           isNot(endsWith('.shared')),
-          reason: '${file.path} hands the extension every new secret by default',
+          reason:
+              '${file.path} hands the extension every new secret by default',
         );
       }
     });
@@ -220,7 +227,9 @@ void main() {
       // on iOS.
       expect(
         swift,
-        contains(r'"\(contextId)#\(generation.map(String.init) ?? "?")#\(messageId)"'),
+        contains(
+          r'"\(contextId)#\(generation.map(String.init) ?? "?")#\(messageId)"',
+        ),
       );
       expect(
         swift,
@@ -232,7 +241,10 @@ void main() {
     test('a fresh install still gets its first cache file', () {
       // replaceItemAt throws when there is nothing to replace, and the first
       // push to an install that has never decrypted anything is exactly that.
-      expect(swift, contains('try FileManager.default.moveItem(at: temporary, to: url)'));
+      expect(
+        swift,
+        contains('try FileManager.default.moveItem(at: temporary, to: url)'),
+      );
     });
 
     test('a file that exists but will not read is not treated as empty', () {
@@ -241,9 +253,14 @@ void main() {
       // overwrite straight back. Only absence may mean empty.
       expect(
         swift,
-        contains('guard FileManager.default.fileExists(atPath: url.path) else {'),
+        contains(
+          'guard FileManager.default.fileExists(atPath: url.path) else {',
+        ),
       );
-      expect(swift, contains('guard let data = try? Data(contentsOf: url) else {'));
+      expect(
+        swift,
+        contains('guard let data = try? Data(contentsOf: url) else {'),
+      );
     });
 
     test('it opens and seals the host files rather than reading them raw', () {
@@ -283,10 +300,9 @@ void main() {
     final rust = File('packages/venta_mls/rust/src/mls.rs').readAsStringSync();
 
     /// Every `MlsError` literal in the crate that is about the state key.
-    final stateKeyErrors = RegExp(r'"(MlsError: [^"]*state key[^"]*)"')
-        .allMatches(rust)
-        .map((m) => m.group(1)!)
-        .toList();
+    final stateKeyErrors = RegExp(
+      r'"(MlsError: [^"]*state key[^"]*)"',
+    ).allMatches(rust).map((m) => m.group(1)!).toList();
 
     test('the crate still raises the errors this matches on', () {
       // A floor rather than isNotEmpty, because the selector above and the

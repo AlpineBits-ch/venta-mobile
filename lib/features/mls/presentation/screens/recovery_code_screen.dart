@@ -157,7 +157,10 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
                   autocorrect: false,
                   enableSuggestions: false,
                   textCapitalization: TextCapitalization.characters,
-                  style: const TextStyle(fontFamily: 'monospace', letterSpacing: 1.5),
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    letterSpacing: 1.5,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Recovery code',
                     errorText: _error,

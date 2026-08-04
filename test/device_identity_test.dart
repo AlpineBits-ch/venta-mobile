@@ -94,18 +94,25 @@ void main() {
   }
 
   group('X-Device-Id interceptor', () {
-    test('attaches the id to a request that set no header of its own', () async {
-      // The reason this moved off the call sites: GuildVoiceApi's Cloudflare
-      // endpoints sent nothing while VoiceApi's sent the real id, and the
-      // asymmetry was invisible until the server started rejecting it.
-      final c = clientWith([() => _json({'ok': true})]);
-      await c.client.dio.get<dynamic>(c.client.url('/api/v1/anything'));
+    test(
+      'attaches the id to a request that set no header of its own',
+      () async {
+        // The reason this moved off the call sites: GuildVoiceApi's Cloudflare
+        // endpoints sent nothing while VoiceApi's sent the real id, and the
+        // asymmetry was invisible until the server started rejecting it.
+        final c = clientWith([
+          () => _json({'ok': true}),
+        ]);
+        await c.client.dio.get<dynamic>(c.client.url('/api/v1/anything'));
 
-      expect(c.adapter.requests.single.headers['X-Device-Id'], _kDeviceId);
-    });
+        expect(c.adapter.requests.single.headers['X-Device-Id'], _kDeviceId);
+      },
+    );
 
     test('leaves an explicitly set header alone', () async {
-      final c = clientWith([() => _json({'ok': true})]);
+      final c = clientWith([
+        () => _json({'ok': true}),
+      ]);
       await c.client.dio.get<dynamic>(
         c.client.url('/api/v1/anything'),
         options: Options(headers: {'X-Device-Id': 'set-by-the-call-site'}),
@@ -121,7 +128,9 @@ void main() {
       // DeviceIdService.init() is awaited at startup, but a request that
       // somehow beats it should degrade to the server's `default` bucket
       // rather than throw a StateError out of an unrelated API call.
-      final c = clientWith([() => _json({'ok': true})], deviceId: null);
+      final c = clientWith([
+        () => _json({'ok': true}),
+      ], deviceId: null);
       await c.client.dio.get<dynamic>(c.client.url('/api/v1/anything'));
 
       expect(
@@ -134,7 +143,9 @@ void main() {
       // The first-run sequence this exists for: the id is real and stable, the
       // account just has no device row for it yet, and every call action and
       // voice join fails identically until one is created.
-      final retry = _ScriptedAdapter([() => _json({'ok': true})]);
+      final retry = _ScriptedAdapter([
+        () => _json({'ok': true}),
+      ]);
       final c = clientWith([
         () => _text(_kUnknownDeviceBody, 400),
       ], retryAdapter: retry);
@@ -154,7 +165,9 @@ void main() {
       final c = clientWith([() => _text('conversationId is required', 400)]);
 
       await expectLater(
-        c.client.dio.post<dynamic>(c.client.url('/api/v1/messaging/voice/call')),
+        c.client.dio.post<dynamic>(
+          c.client.url('/api/v1/messaging/voice/call'),
+        ),
         throwsA(isA<DioException>()),
       );
       expect(c.registrations, isEmpty);
@@ -169,7 +182,9 @@ void main() {
       ], retryAdapter: retry);
 
       await expectLater(
-        c.client.dio.put<dynamic>(c.client.url('/api/v1/messaging/voice/call/c/leave')),
+        c.client.dio.put<dynamic>(
+          c.client.url('/api/v1/messaging/voice/call/c/leave'),
+        ),
         throwsA(isA<DioException>()),
       );
       expect(c.registrations, hasLength(1));
@@ -178,25 +193,31 @@ void main() {
   });
 
   group('push tokens', () {
-    test('register on the consolidated endpoint, carrying the device', () async {
-      // Without the device id the token can't be excluded from a fan-out,
-      // which is what stops the phone that just answered a call from being
-      // sent the cancel push for it.
-      final c = clientWith([() => _json({}, 201)]);
-      await PushTokenApi(client: c.client).registerToken(
-        token: 'fcm-token',
-        kind: PushTokenKind.fcm,
-        deviceId: _kDeviceId,
-      );
+    test(
+      'register on the consolidated endpoint, carrying the device',
+      () async {
+        // Without the device id the token can't be excluded from a fan-out,
+        // which is what stops the phone that just answered a call from being
+        // sent the cancel push for it.
+        final c = clientWith([() => _json({}, 201)]);
+        await PushTokenApi(client: c.client).registerToken(
+          token: 'fcm-token',
+          kind: PushTokenKind.fcm,
+          deviceId: _kDeviceId,
+        );
 
-      final request = c.adapter.requests.single;
-      expect(request.path, endsWith('/api/v1/identity/users/self/push-token'));
-      expect(request.data, {
-        'token': 'fcm-token',
-        'kind': 'Fcm',
-        'deviceId': _kDeviceId,
-      });
-    });
+        final request = c.adapter.requests.single;
+        expect(
+          request.path,
+          endsWith('/api/v1/identity/users/self/push-token'),
+        );
+        expect(request.data, {
+          'token': 'fcm-token',
+          'kind': 'Fcm',
+          'deviceId': _kDeviceId,
+        });
+      },
+    );
 
     test('the VoIP token declares its own transport', () async {
       final c = clientWith([() => _json({}, 201)]);
@@ -206,10 +227,7 @@ void main() {
         deviceId: _kDeviceId,
       );
 
-      expect(
-        (c.adapter.requests.single.data as Map)['kind'],
-        'ApnsVoip',
-      );
+      expect((c.adapter.requests.single.data as Map)['kind'], 'ApnsVoip');
     });
 
     test('deletion names the token and gives up quietly', () async {
@@ -222,39 +240,47 @@ void main() {
 
       final request = c.adapter.requests.single;
       expect(request.method, 'DELETE');
-      expect(request.queryParameters, {
-        'token': 'fcm-token',
-        'kind': 'Fcm',
-      });
+      expect(request.queryParameters, {'token': 'fcm-token', 'kind': 'Fcm'});
     });
   });
 
   group('token endpoint', () {
-    test('names the device instead of leaving the Dart user-agent to', () async {
-      // The visible symptom: this app showed up in the sessions list as
-      // `Dart/3.x (dart:io)`, because the server falls back to the User-Agent
-      // when a login sends no device_name.
-      final adapter = _ScriptedAdapter([
-        () => _json({'access_token': 'a', 'refresh_token': 'r', 'expires_in': 3600}),
-      ]);
-      final api = AuthApi(dio: Dio()..httpClientAdapter = adapter);
+    test(
+      'names the device instead of leaving the Dart user-agent to',
+      () async {
+        // The visible symptom: this app showed up in the sessions list as
+        // `Dart/3.x (dart:io)`, because the server falls back to the User-Agent
+        // when a login sends no device_name.
+        final adapter = _ScriptedAdapter([
+          () => _json({
+            'access_token': 'a',
+            'refresh_token': 'r',
+            'expires_in': 3600,
+          }),
+        ]);
+        final api = AuthApi(dio: Dio()..httpClientAdapter = adapter);
 
-      await api.passwordGrant(
-        baseUrl: 'https://example.test',
-        username: 'alice',
-        password: 'hunter2',
-        deviceId: _kDeviceId,
-      );
+        await api.passwordGrant(
+          baseUrl: 'https://example.test',
+          username: 'alice',
+          password: 'hunter2',
+          deviceId: _kDeviceId,
+        );
 
-      final data = adapter.requests.single.data as Map;
-      expect(data['device_name'], kDeviceName);
-      expect(data['device_type'], kDeviceType);
-      expect(data['device_id'], _kDeviceId);
-    });
+        final data = adapter.requests.single.data as Map;
+        expect(data['device_name'], kDeviceName);
+        expect(data['device_type'], kDeviceType);
+        expect(data['device_id'], _kDeviceId);
+      },
+    );
 
     test('omits the device id when there is none yet', () async {
       final adapter = _ScriptedAdapter([
-        () => _json({'access_token': 'a', 'refresh_token': 'r', 'expires_in': 3600}),
+        () => _json({
+          'access_token': 'a',
+          'refresh_token': 'r',
+          'expires_in': 3600,
+        }),
       ]);
       final api = AuthApi(dio: Dio()..httpClientAdapter = adapter);
 
@@ -264,7 +290,10 @@ void main() {
         password: 'hunter2',
       );
 
-      expect((adapter.requests.single.data as Map).containsKey('device_id'), isFalse);
+      expect(
+        (adapter.requests.single.data as Map).containsKey('device_id'),
+        isFalse,
+      );
     });
   });
 

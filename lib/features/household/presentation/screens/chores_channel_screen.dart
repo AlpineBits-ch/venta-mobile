@@ -202,7 +202,8 @@ class _ChoresChannelScreenState
       } else {
         await _load();
       }
-      if (mounted) showMessage('Passed on to whoever\'s got the lightest load.');
+      if (mounted)
+        showMessage('Passed on to whoever\'s got the lightest load.');
     } catch (error) {
       // The server's own wording is better than anything generic here -
       // "nobody else is in the rotation" is exactly what you need to know.
@@ -275,11 +276,12 @@ class _ChoresChannelScreenState
     final all = _occurrences ?? const <ChoreOccurrenceDto>[];
     final open = [...all.where((o) => o.isOpen)]
       ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
-    final settled = [...all.where((o) => !o.isOpen)]..sort(
-      (a, b) => (b.completedAt ?? b.skippedAt ?? b.dueAt).compareTo(
-        a.completedAt ?? a.skippedAt ?? a.dueAt,
-      ),
-    );
+    final settled = [...all.where((o) => !o.isOpen)]
+      ..sort(
+        (a, b) => (b.completedAt ?? b.skippedAt ?? b.dueAt).compareTo(
+          a.completedAt ?? a.skippedAt ?? a.dueAt,
+        ),
+      );
 
     if (all.isEmpty) {
       return HouseEmptyState(
@@ -361,8 +363,7 @@ class _ChoresChannelScreenState
           child: _OccurrenceCard(
             occurrence: occurrence,
             canComplete: _canComplete,
-            onToggle: () =>
-                _setCompleted(occurrence, !occurrence.isCompleted),
+            onToggle: () => _setCompleted(occurrence, !occurrence.isCompleted),
             onSkip: () => _skip(occurrence),
             onSwap: () => _swap(occurrence),
           ),
@@ -580,8 +581,11 @@ class _OccurrenceCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Row(
                     children: [
-                      Icon(Icons.volunteer_activism_outlined,
-                          size: 12, color: muted),
+                      Icon(
+                        Icons.volunteer_activism_outlined,
+                        size: 12,
+                        color: muted,
+                      ),
                       const SizedBox(width: 4),
                       Flexible(
                         child: MemberName(
@@ -966,7 +970,9 @@ class _ChoreSheetState extends State<_ChoreSheet> {
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(householdErrorText(error, 'Could not save that chore.')),
+          content: Text(
+            householdErrorText(error, 'Could not save that chore.'),
+          ),
         ),
       );
     }
@@ -1063,8 +1069,7 @@ class _ChoreSheetState extends State<_ChoreSheet> {
                 ChoiceChip(
                   label: Text(entry.value),
                   selected: _intervalDays == entry.key,
-                  onSelected: (_) =>
-                      setState(() => _intervalDays = entry.key),
+                  onSelected: (_) => setState(() => _intervalDays = entry.key),
                 ),
               if (!_intervalPresets.containsKey(_intervalDays))
                 ChoiceChip(
@@ -1149,8 +1154,7 @@ class _ChoreSheetState extends State<_ChoreSheet> {
                         ),
                       ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _rotationRoleId = value),
+                  onChanged: (value) => setState(() => _rotationRoleId = value),
                 )
               else
                 DropdownButtonFormField<String?>(

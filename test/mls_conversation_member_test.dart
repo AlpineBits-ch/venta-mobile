@@ -78,7 +78,8 @@ void main() {
     expect(
       calls,
       ['roster', 'group'],
-      reason: 'group keys before membership would let them decrypt traffic for '
+      reason:
+          'group keys before membership would let them decrypt traffic for '
           'a conversation the server says they are not in',
     );
   });
@@ -102,32 +103,35 @@ void main() {
     );
   });
 
-  test('reports devices that could not be admitted rather than dropping them', () async {
-    when(() => mls.knownGeneration(_conversation)).thenReturn(1);
-    when(
-      () => sync.addMembers(
-        contextId: any(named: 'contextId'),
-        isChannel: any(named: 'isChannel'),
-        userIds: any(named: 'userIds'),
-      ),
-    ).thenAnswer(
-      (_) async => const [
-        UnreachableDeviceDto(
-          userId: _invitee,
-          deviceId: 'device-dry',
-          deviceName: 'Their phone',
+  test(
+    'reports devices that could not be admitted rather than dropping them',
+    () async {
+      when(() => mls.knownGeneration(_conversation)).thenReturn(1);
+      when(
+        () => sync.addMembers(
+          contextId: any(named: 'contextId'),
+          isChannel: any(named: 'isChannel'),
+          userIds: any(named: 'userIds'),
         ),
-      ],
-    );
+      ).thenAnswer(
+        (_) async => const [
+          UnreachableDeviceDto(
+            userId: _invitee,
+            deviceId: 'device-dry',
+            deviceName: 'Their phone',
+          ),
+        ],
+      );
 
-    final result = await service.addMember(
-      conversationId: _conversation,
-      userId: _invitee,
-    );
+      final result = await service.addMember(
+        conversationId: _conversation,
+        userId: _invitee,
+      );
 
-    // They are in the conversation but cannot read it until that device comes
-    // back online and uploads new key packages. Saying so beats letting them
-    // discover it when the history stays empty.
-    expect(result.unreachableDevices.single.deviceName, 'Their phone');
-  });
+      // They are in the conversation but cannot read it until that device comes
+      // back online and uploads new key packages. Saying so beats letting them
+      // discover it when the history stays empty.
+      expect(result.unreachableDevices.single.deviceName, 'Their phone');
+    },
+  );
 }

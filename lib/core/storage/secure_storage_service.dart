@@ -35,7 +35,8 @@ class SecureStorageService {
                aOptions: _androidOptions,
              ),
        ),
-       _sharedStorage = sharedStorage ??
+       _sharedStorage =
+           sharedStorage ??
            const FlutterSecureStorage(
              iOptions: _sharedIosOptions,
              aOptions: _androidOptions,
@@ -193,7 +194,8 @@ class SecureStorageService {
     final publicKey = await _storage.read(key: '$scope.pub');
     final privateKey = await _storage.read(key: '$scope.priv');
     final identity = await _storage.read(key: '$scope.identity');
-    if (publicKey == null || privateKey == null || identity == null) return null;
+    if (publicKey == null || privateKey == null || identity == null)
+      return null;
     return (publicKey, privateKey, identity);
   }
 
@@ -308,10 +310,8 @@ class SecureStorageService {
     required String deviceId,
     required String userId,
     required String value,
-  }) => _storage.write(
-    key: '${_mlsScope(deviceId, userId)}.cert',
-    value: value,
-  );
+  }) =>
+      _storage.write(key: '${_mlsScope(deviceId, userId)}.cert', value: value);
 
   Future<void> clearDeviceCertificate({
     required String deviceId,

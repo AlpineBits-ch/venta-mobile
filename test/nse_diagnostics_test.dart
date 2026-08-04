@@ -158,10 +158,10 @@ void main() {
       reason: 'run from the package root, where the ios/ tree is',
     );
 
-    final cases = RegExp(r'^\s*case\s+(\w+)\s*$', multiLine: true)
-        .allMatches(await swift.readAsString())
-        .map((m) => m.group(1)!)
-        .toSet();
+    final cases = RegExp(
+      r'^\s*case\s+(\w+)\s*$',
+      multiLine: true,
+    ).allMatches(await swift.readAsString()).map((m) => m.group(1)!).toSet();
 
     expect(cases, isNotEmpty);
     expect(cases, NseDiagnosticsReporter.knownOutcomes);

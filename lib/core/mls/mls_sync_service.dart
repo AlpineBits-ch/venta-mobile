@@ -250,7 +250,9 @@ class MlsSyncService {
       } catch (e) {
         // Any other member can do this instead; leaving it undone only delays
         // the removal.
-        debugPrint('MLS: could not commit pending proposals for $contextId: $e');
+        debugPrint(
+          'MLS: could not commit pending proposals for $contextId: $e',
+        );
       }
     }
   }
@@ -483,7 +485,9 @@ class MlsSyncService {
       try {
         await mls.deleteGroup(groupId);
       } catch (e) {
-        debugPrint('MLS: failed to delete group after removal from $contextId: $e');
+        debugPrint(
+          'MLS: failed to delete group after removal from $contextId: $e',
+        );
       }
       _contextChanged.add(
         MlsContextChanged(
@@ -758,7 +762,9 @@ class MlsSyncService {
       // Nothing to undo: local state is already gone, which is the part that
       // matters for our own forward secrecy. The group keeps listing us until
       // someone removes us.
-      debugPrint('MLS: leave proposal could not be published for $contextId: $e');
+      debugPrint(
+        'MLS: leave proposal could not be published for $contextId: $e',
+      );
     }
 
     await mls.clearActiveGeneration(contextId);

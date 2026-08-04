@@ -207,7 +207,9 @@ class MlsService {
       // user's messages under someone else's credential, which every other
       // member of the group would reject - minting fresh is the only correct
       // answer, and returning false is what asks for that.
-      debugPrint('MlsService: stored identity is for another account, ignoring');
+      debugPrint(
+        'MlsService: stored identity is for another account, ignoring',
+      );
       identityStatus.value = _statusForMissingIdentity();
       return false;
     }
@@ -263,7 +265,9 @@ class MlsService {
   }) async {
     final userId = _userId;
     if (userId == null) {
-      throw StateError('MlsService.init(userId) must run before createIdentity()');
+      throw StateError(
+        'MlsService.init(userId) must run before createIdentity()',
+      );
     }
 
     final held = heldGroupCount;
@@ -485,8 +489,8 @@ class MlsService {
   Future<MlsCommitOut> leaveGroup(String groupIdB64) =>
       _engine.leaveGroup(groupIdB64: groupIdB64, keyHandle: _requireHandle());
 
-  Future<MlsCommitOut> commitPendingProposals(String groupIdB64) => _engine
-      .commitPendingProposals(
+  Future<MlsCommitOut> commitPendingProposals(String groupIdB64) =>
+      _engine.commitPendingProposals(
         groupIdB64: groupIdB64,
         keyHandle: _requireHandle(),
       );
@@ -505,8 +509,10 @@ class MlsService {
     keyHandle: _requireHandle(),
   );
 
-  Future<MlsRejoinOut> rejoinGroup(String groupInfoB64) =>
-      _engine.rejoinGroup(groupInfoB64: groupInfoB64, keyHandle: _requireHandle());
+  Future<MlsRejoinOut> rejoinGroup(String groupInfoB64) => _engine.rejoinGroup(
+    groupInfoB64: groupInfoB64,
+    keyHandle: _requireHandle(),
+  );
 
   Future<MlsSendOut> encrypt({
     required String groupIdB64,
@@ -578,11 +584,8 @@ class MlsService {
   /// More key packages for the existing identity - the replenish path. Must not
   /// rotate the signing key: every device already in a group with this one keyed
   /// off the current credential.
-  Future<List<KeyPackageResult>> generateKeyPackages(int count) =>
-      _engine.generateAdditionalKeyPackages(
-        keyHandle: _requireHandle(),
-        count: count,
-      );
+  Future<List<KeyPackageResult>> generateKeyPackages(int count) => _engine
+      .generateAdditionalKeyPackages(keyHandle: _requireHandle(), count: count);
 
   String _requireHandle() {
     final handle = keyHandle.value;

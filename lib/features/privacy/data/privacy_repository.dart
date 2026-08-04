@@ -95,8 +95,7 @@ class PrivacyRepository {
 
   // ── Legal ───────────────────────────────────────────────────────────────
 
-  Future<List<LegalDocumentDto>> getLegalDocuments() =>
-      api.getLegalDocuments();
+  Future<List<LegalDocumentDto>> getLegalDocuments() => api.getLegalDocuments();
 
   String legalDocumentUrl(LegalDocumentDto document) =>
       api.legalDocumentUrl(document);

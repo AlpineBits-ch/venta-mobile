@@ -9,7 +9,6 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:markdown/markdown.dart' as md;
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/widgets/app_back_button.dart';
@@ -26,7 +25,6 @@ import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/channel_dto.dart';
 import '../../../guilds/data/models/guild_member_dto.dart';
 import '../../../guilds/data/models/role_dto.dart';
-import '../../../../core/routing/deep_link_handler.dart';
 import '../../../invites/presentation/widgets/invite_dialog.dart';
 import '../../../profile/data/profile_repository.dart';
 import '../../bloc/message_thread_bloc.dart';
@@ -41,6 +39,8 @@ import '../../data/models/message_dto.dart';
 import 'bot_command_options_dialog.dart';
 import 'gif_picker_sheet.dart';
 import 'message_attachment_view.dart';
+import 'message_embeds_view.dart';
+import 'message_link_launcher.dart';
 import 'message_search_screen.dart';
 import 'pinned_messages_screen.dart';
 import 'reaction_bar.dart';
@@ -49,40 +49,6 @@ import 'reaction_picker_sheet.dart';
 const _imageExtensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'bmp'};
 
 final _inviteUrlRe = RegExp(r'https://venta\.gg/invite/([A-Za-z0-9_-]+)');
-
-/// Opens a link tapped in message text.
-///
-/// Anything Venta can handle itself stays in the app - an invite opens the
-/// same popup the `venta://invite/…` deep link does, rather than bouncing out
-/// to a browser and back. Everything else is somebody else's link and goes to
-/// the system handler.
-Future<void> _openMessageLink(BuildContext context, String? href) async {
-  if (href == null || href.isEmpty) return;
-  final uri = Uri.tryParse(href);
-  if (uri == null) return;
-
-  switch (DeepLinkHandler.resolve(uri)) {
-    case InviteTarget(:final code):
-      await showDialog<void>(
-        context: context,
-        builder: (_) => InviteDialog(code: code),
-      );
-    case RouteTarget(:final path):
-      if (context.mounted) context.push(path);
-    case null:
-      // `externalApplication` rather than an in-app webview: a link in a
-      // message is untrusted, and the browser is where the address bar is.
-      try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } catch (_) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Couldn\'t open that link.')),
-          );
-        }
-      }
-  }
-}
 
 /// Client-only commands that don't hit a bot - matches desktop's
 /// `COMMANDS` in `commands.ts`.
@@ -200,6 +166,12 @@ class _ThreadViewState extends State<ThreadView> {
   /// action doesn't flash on then disappear once the permission check lands.
   bool _canPinMessages = false;
 
+  /// Whether the caller may dismiss *anybody's* link previews here. The author
+  /// may always dismiss their own, and a DM is the author only - so this stays
+  /// false outside guild channels rather than defaulting true the way
+  /// [_canPinMessages] does.
+  bool _canDeleteAnyMessage = false;
+
   /// Whether this thread is end-to-end encrypted. Kept in state rather than read
   /// from the repository on every build because it changes underneath us - a
   /// moderator can flip a channel while it is open, and the header badge and the
@@ -224,7 +196,7 @@ class _ThreadViewState extends State<ThreadView> {
     _textController.addListener(_onTextChanged);
     _loadBotCommands();
     _loadGuildMembers();
-    _loadPinPermission();
+    _loadChannelPermissions();
     _watchEncryptionState();
   }
 
@@ -333,6 +305,17 @@ class _ThreadViewState extends State<ThreadView> {
   /// (bottom sheet with a leading icon per row).
   Future<void> _showMessageActions(MessageDto message) async {
     final isMine = message.authorId == widget.myUserId;
+    // Dismissing a preview changes the message for everyone who can see it,
+    // so it is gated exactly the way the server gates it - the author, or
+    // `DeleteAnyMessage` in this channel. Offering it any wider renders a
+    // button that 403s.
+    //
+    // Only offered where there is something to act on: a card to dismiss, or a
+    // dismissal to undo. "Restore preview" on a message that never had one
+    // would promise a card that is never coming.
+    final canSuppressEmbeds =
+        (isMine || _canDeleteAnyMessage) &&
+        (message.embeds.isNotEmpty || message.hasSuppressedEmbeds);
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
@@ -356,6 +339,21 @@ class _ThreadViewState extends State<ThreadView> {
                 leading: const Icon(Icons.campaign_outlined),
                 title: const Text('Publish'),
                 onTap: () => Navigator.pop(context, 'publish'),
+              ),
+            if (canSuppressEmbeds)
+              ListTile(
+                leading: Icon(
+                  message.hasSuppressedEmbeds
+                      ? Icons.link_rounded
+                      : Icons.link_off_rounded,
+                ),
+                title: Text(
+                  message.hasSuppressedEmbeds
+                      ? 'Restore link preview'
+                      : 'Remove link preview',
+                ),
+                subtitle: const Text('Applies for everyone'),
+                onTap: () => Navigator.pop(context, 'embeds'),
               ),
             if (isMine) ...[
               ListTile(
@@ -387,6 +385,10 @@ class _ThreadViewState extends State<ThreadView> {
         context.read<MessageThreadBloc>().add(MessagePinToggled(message.id));
       case 'publish':
         await _publishMessage(message);
+      case 'embeds':
+        context.read<MessageThreadBloc>().add(
+          MessageEmbedsSuppressionToggled(message.id),
+        );
       case 'edit':
         _startEdit(message);
       case 'delete':
@@ -394,7 +396,7 @@ class _ThreadViewState extends State<ThreadView> {
     }
   }
 
-  Future<void> _loadPinPermission() async {
+  Future<void> _loadChannelPermissions() async {
     final guildId = widget.guildId;
     if (guildId == null) return;
     try {
@@ -405,7 +407,10 @@ class _ThreadViewState extends State<ThreadView> {
           ? self.effectivePermissions(ownerId)
           : self.permissions;
       if (mounted) {
-        setState(() => _canPinMessages = effective.has('PinMessages'));
+        setState(() {
+          _canPinMessages = effective.has('PinMessages');
+          _canDeleteAnyMessage = effective.has('DeleteAnyMessage');
+        });
       }
     } catch (_) {
       // Leave it hidden - still enforced server-side on every pin attempt.
@@ -1080,7 +1085,9 @@ class _ThreadViewState extends State<ThreadView> {
           // could give it one.
           if (_lockedOutOfEncryption)
             ChannelAccessBanner(
-              key: ValueKey(context.read<MessageThreadBloc>().repository.contextId),
+              key: ValueKey(
+                context.read<MessageThreadBloc>().repository.contextId,
+              ),
               contextId: context.read<MessageThreadBloc>().repository.contextId,
               isChannel: widget.guildId != null,
             ),
@@ -1982,11 +1989,25 @@ class _MessageBody extends StatelessWidget {
                   ),
                 ),
                 onTapLink: (text, href, title) =>
-                    _openMessageLink(context, href),
+                    openMessageLink(context, href),
               );
             },
           ),
+        // Driven off `editedAt`, never `updatedAt`: the latter also moves when
+        // a link preview attaches or a pin lands, which would label every
+        // message containing a link as edited a second after it was posted.
+        if (message.isEdited)
+          Text(
+            '(edited)',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+            ),
+          ),
         MessageAttachmentsView(attachments: message.attachments),
+        // Below the attachments, matching the order the server lists them in.
+        // Absent on arrival and filled in seconds later by a `MessageUpdated`
+        // once the unfurl completes - which is why nothing here waits for it.
+        MessageEmbedsView(embeds: message.embeds),
       ],
     );
   }

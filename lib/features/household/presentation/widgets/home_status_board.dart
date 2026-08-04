@@ -88,10 +88,8 @@ class _HomeStatusBoardState extends State<HomeStatusBoard> {
   Future<void> _setMine() async {
     final changed = await showHouseSheet<bool>(
       context: context,
-      builder: (_) => _HomeStatusSheet(
-        guildId: widget.guild.id,
-        current: _mine,
-      ),
+      builder: (_) =>
+          _HomeStatusSheet(guildId: widget.guild.id, current: _mine),
     );
     if (changed == true) await _load();
   }
@@ -140,9 +138,8 @@ class _HomeStatusBoardState extends State<HomeStatusBoard> {
                 const Spacer(),
                 if (quietNow)
                   HousePill(
-                    label: 'quiet until ${formatMinuteOfDay(
-                      quiet!.endMinuteLocal,
-                    )}',
+                    label:
+                        'quiet until ${formatMinuteOfDay(quiet!.endMinuteLocal)}',
                     icon: Icons.bedtime_outlined,
                     color: theme.colorScheme.tertiary,
                   ),

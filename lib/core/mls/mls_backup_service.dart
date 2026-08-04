@@ -249,8 +249,7 @@ class MlsBackupService {
     }
   }
 
-  Future<String?> downloadFromCloud() =>
-      api.download(deviceIdService.deviceId);
+  Future<String?> downloadFromCloud() => api.download(deviceIdService.deviceId);
 
   Future<BackupMetaDto?> cloudMeta() => api.meta(deviceIdService.deviceId);
 
@@ -287,7 +286,11 @@ class MlsBackupService {
     // the signing key goes back there as well as into the engine - otherwise the
     // next launch finds no identity, sees groups, and lands in
     // `MlsIdentityStatus.keysMissing`.
-    await _restoreSigningKey(userId: userId, deviceId: deviceId, result: result);
+    await _restoreSigningKey(
+      userId: userId,
+      deviceId: deviceId,
+      result: result,
+    );
 
     if (result.accountIdentityPublicKey case final public?) {
       if (result.accountIdentityPrivateKey case final private?) {

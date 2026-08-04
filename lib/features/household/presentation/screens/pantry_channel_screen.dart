@@ -205,10 +205,7 @@ class _PantryChannelScreenState
                 if (value == 'config') unawaited(_openConfig());
               },
               itemBuilder: (context) => const [
-                PopupMenuItem(
-                  value: 'config',
-                  child: Text('Restock settings'),
-                ),
+                PopupMenuItem(value: 'config', child: Text('Restock settings')),
               ],
             ),
         ],
@@ -239,7 +236,8 @@ class _PantryChannelScreenState
                   : null,
             )
           : _buildList(items, warningDays),
-      floatingActionButton: moduleEnabled && _canManage && (items?.isNotEmpty ?? false)
+      floatingActionButton:
+          moduleEnabled && _canManage && (items?.isNotEmpty ?? false)
           ? FloatingActionButton(
               onPressed: () => _openItemEditor(),
               tooltip: 'Add to the pantry',
@@ -254,9 +252,7 @@ class _PantryChannelScreenState
     final low = items.where((i) => i.isLow).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final expiring =
-        items
-            .where((i) => !i.isLow && i.isExpiringWithin(warningDays))
-            .toList()
+        items.where((i) => !i.isLow && i.isExpiringWithin(warningDays)).toList()
           ..sort(
             (a, b) => (a.expiresAt ?? DateTime(9999)).compareTo(
               b.expiresAt ?? DateTime(9999),
@@ -448,9 +444,11 @@ class _PantryRow extends StatelessWidget {
   static String _expiryLabel(DateTime expiresAt) {
     final now = DateTime.now();
     final local = expiresAt.toLocal();
-    final days = DateTime(local.year, local.month, local.day)
-        .difference(DateTime(now.year, now.month, now.day))
-        .inDays;
+    final days = DateTime(
+      local.year,
+      local.month,
+      local.day,
+    ).difference(DateTime(now.year, now.month, now.day)).inDays;
     return switch (days) {
       < 0 => 'went off',
       0 => 'today',
@@ -860,8 +858,7 @@ class _PantryConfigSheetState extends State<_PantryConfigSheet> {
                 ChoiceChip(
                   label: Text(days == 1 ? '1 day' : '$days days'),
                   selected: _expiryWarningDays == days,
-                  onSelected: (_) =>
-                      setState(() => _expiryWarningDays = days),
+                  onSelected: (_) => setState(() => _expiryWarningDays = days),
                 ),
             ],
           ),

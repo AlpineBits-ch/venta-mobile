@@ -83,11 +83,11 @@ void main() {
         masterKey: any(named: 'masterKey'),
       ),
     ).thenAnswer((_) async {});
-    when(
-      () => engine.normalizeRecoveryCode(any()),
-    ).thenAnswer((i) async => (i.positionalArguments.first as String)
-        .replaceAll('-', '')
-        .toUpperCase());
+    when(() => engine.normalizeRecoveryCode(any())).thenAnswer(
+      (i) async => (i.positionalArguments.first as String)
+          .replaceAll('-', '')
+          .toUpperCase(),
+    );
     when(
       () => api.putRecoveryKey(
         version: any(named: 'version'),
@@ -107,26 +107,28 @@ void main() {
   });
 
   group('status', () {
-    test('an account with no recovery code is flagged, not left to find out', () async {
-      // Every account created before §C.1.1 is here, and each one is a single
-      // password reset away from losing every backup blob and the account
-      // identity key.
-      when(() => api.fetchRecoveryKey())
-          .thenAnswer((_) async => _state(password: _wrapping('p')));
+    test(
+      'an account with no recovery code is flagged, not left to find out',
+      () async {
+        // Every account created before §C.1.1 is here, and each one is a single
+        // password reset away from losing every backup blob and the account
+        // identity key.
+        when(
+          () => api.fetchRecoveryKey(),
+        ).thenAnswer((_) async => _state(password: _wrapping('p')));
 
-      await service.refreshStatus();
+        await service.refreshStatus();
 
-      expect(service.status.value, MasterKeyStatus.needsRecoveryCode);
-    });
+        expect(service.status.value, MasterKeyStatus.needsRecoveryCode);
+      },
+    );
 
     test('a completed loss is reported as a loss, not a warning', () async {
       // A reset invalidated the password wrapping and there was no recovery-code
       // wrapping. This is not "you might lose your history" - it is gone.
       when(() => api.fetchRecoveryKey()).thenAnswer(
-        (_) async => _state(
-          invalidatedAt: DateTime.utc(2026, 8, 1),
-          recoverable: false,
-        ),
+        (_) async =>
+            _state(invalidatedAt: DateTime.utc(2026, 8, 1), recoverable: false),
       );
 
       await service.refreshStatus();
@@ -134,25 +136,26 @@ void main() {
       expect(service.status.value, MasterKeyStatus.historyLost);
     });
 
-    test('a reset with a recovery code to fall back on is recoverable', () async {
-      when(() => api.fetchRecoveryKey()).thenAnswer(
-        (_) async => _state(
-          recoveryCode: _wrapping('r'),
-          invalidatedAt: DateTime.utc(2026, 8, 1),
-        ),
-      );
+    test(
+      'a reset with a recovery code to fall back on is recoverable',
+      () async {
+        when(() => api.fetchRecoveryKey()).thenAnswer(
+          (_) async => _state(
+            recoveryCode: _wrapping('r'),
+            invalidatedAt: DateTime.utc(2026, 8, 1),
+          ),
+        );
 
-      await service.refreshStatus();
+        await service.refreshStatus();
 
-      expect(service.status.value, MasterKeyStatus.needsPasswordRewrap);
-    });
+        expect(service.status.value, MasterKeyStatus.needsPasswordRewrap);
+      },
+    );
 
     test('both wrappings present is ready', () async {
       when(() => api.fetchRecoveryKey()).thenAnswer(
-        (_) async => _state(
-          password: _wrapping('p'),
-          recoveryCode: _wrapping('r'),
-        ),
+        (_) async =>
+            _state(password: _wrapping('p'), recoveryCode: _wrapping('r')),
       );
 
       await service.refreshStatus();
@@ -162,27 +165,32 @@ void main() {
 
     // H3. "The account has no envelope" and "I could not ask" arrived as the
     // same null, and `unlock` read the second as the first.
-    test('a failed read is not reported as an account with no envelope', () async {
-      when(() => api.fetchRecoveryKey())
-          .thenAnswer((_) async => _state(password: _wrapping('p')));
-      await service.readStatus();
-      expect(service.status.value, MasterKeyStatus.needsRecoveryCode);
+    test(
+      'a failed read is not reported as an account with no envelope',
+      () async {
+        when(
+          () => api.fetchRecoveryKey(),
+        ).thenAnswer((_) async => _state(password: _wrapping('p')));
+        await service.readStatus();
+        expect(service.status.value, MasterKeyStatus.needsRecoveryCode);
 
-      when(() => api.fetchRecoveryKey()).thenThrow(
-        DioException(requestOptions: RequestOptions(path: '/')),
-      );
+        when(
+          () => api.fetchRecoveryKey(),
+        ).thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
 
-      final read = await service.readStatus();
+        final read = await service.readStatus();
 
-      expect(read.reachable, isFalse);
-      expect(read.envelope, isNull);
-      expect(
-        service.status.value,
-        MasterKeyStatus.needsRecoveryCode,
-        reason: 'whatever was last known is closer to the truth than '
-            '"not set up"',
-      );
-    });
+        expect(read.reachable, isFalse);
+        expect(read.envelope, isNull);
+        expect(
+          service.status.value,
+          MasterKeyStatus.needsRecoveryCode,
+          reason:
+              'whatever was last known is closer to the truth than '
+              '"not set up"',
+        );
+      },
+    );
   });
 
   // H3, the consequence. `unlock` branched on a null envelope and called
@@ -192,9 +200,9 @@ void main() {
   // it.
   group('unlock never mints over a real master key', () {
     test('a transport failure fails the unlock instead of minting', () async {
-      when(() => api.fetchRecoveryKey()).thenThrow(
-        DioException(requestOptions: RequestOptions(path: '/')),
-      );
+      when(
+        () => api.fetchRecoveryKey(),
+      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
 
       final key = await service.unlock(
         userId: _userId,
@@ -202,9 +210,16 @@ void main() {
         password: 'hunter2',
       );
 
-      expect(key, isNull, reason: 'retrying costs one attempt; minting is final');
+      expect(
+        key,
+        isNull,
+        reason: 'retrying costs one attempt; minting is final',
+      );
       verifyNever(
-        () => engine.setupMasterKey(any(), recoveryCode: any(named: 'recoveryCode')),
+        () => engine.setupMasterKey(
+          any(),
+          recoveryCode: any(named: 'recoveryCode'),
+        ),
       );
       verifyNever(
         () => api.putRecoveryKey(
@@ -228,7 +243,10 @@ void main() {
       // above is just a regression.
       when(() => api.fetchRecoveryKey()).thenAnswer((_) async => null);
       when(
-        () => engine.setupMasterKey(any(), recoveryCode: any(named: 'recoveryCode')),
+        () => engine.setupMasterKey(
+          any(),
+          recoveryCode: any(named: 'recoveryCode'),
+        ),
       ).thenAnswer(
         (_) async => {
           'passwordWrapping': _wrapping('p').toJson(),
@@ -251,7 +269,10 @@ void main() {
   group('setup', () {
     setUp(() {
       when(
-        () => engine.setupMasterKey(any(), recoveryCode: any(named: 'recoveryCode')),
+        () => engine.setupMasterKey(
+          any(),
+          recoveryCode: any(named: 'recoveryCode'),
+        ),
       ).thenAnswer(
         (_) async => {
           'passwordWrapping': _wrapping('p').toJson(),
@@ -260,8 +281,9 @@ void main() {
           'masterKey': _masterKey,
         },
       );
-      when(() => engine.generateRecoveryCode())
-          .thenAnswer((_) async => 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23');
+      when(
+        () => engine.generateRecoveryCode(),
+      ).thenAnswer((_) async => 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23');
       when(
         () => engine.wrapMasterKeyUnder(
           masterKeyB64: any(named: 'masterKeyB64'),
@@ -276,85 +298,94 @@ void main() {
     // and no engine on any of the three clients derives one - so routing a first
     // write through it is a guaranteed 400 and the account never gets a master
     // key at all.
-    test('establishes the envelope through the route that accepts a first write', () async {
-      final key = await service.establish(
-        userId: _userId,
-        deviceId: _deviceId,
-        password: 'hunter2',
-      );
+    test(
+      'establishes the envelope through the route that accepts a first write',
+      () async {
+        final key = await service.establish(
+          userId: _userId,
+          deviceId: _deviceId,
+          password: 'hunter2',
+        );
 
-      expect(key, _masterKey);
-      verify(() => api.upload(any())).called(1);
-      verifyNever(
-        () => api.putRecoveryKey(
-          version: any(named: 'version'),
-          passwordWrapping: any(named: 'passwordWrapping'),
-          recoveryCodeWrapping: any(named: 'recoveryCodeWrapping'),
-          password: any(named: 'password'),
-        ),
-      );
-    });
+        expect(key, _masterKey);
+        verify(() => api.upload(any())).called(1);
+        verifyNever(
+          () => api.putRecoveryKey(
+            version: any(named: 'version'),
+            passwordWrapping: any(named: 'passwordWrapping'),
+            recoveryCodeWrapping: any(named: 'recoveryCodeWrapping'),
+            password: any(named: 'password'),
+          ),
+        );
+      },
+    );
 
     // A code minted inside `establish` would be one nobody ever saw. Leaving the
     // account at `needsRecoveryCode` is what routes it through the one flow that
     // shows a code and takes confirmation before committing to it.
-    test('leaves the account owed a recovery code rather than minting one silently', () async {
-      await service.establish(
-        userId: _userId,
-        deviceId: _deviceId,
-        password: 'hunter2',
-      );
+    test(
+      'leaves the account owed a recovery code rather than minting one silently',
+      () async {
+        await service.establish(
+          userId: _userId,
+          deviceId: _deviceId,
+          password: 'hunter2',
+        );
 
-      expect(service.status.value, MasterKeyStatus.needsRecoveryCode);
-    });
+        expect(service.status.value, MasterKeyStatus.needsRecoveryCode);
+      },
+    );
 
-    test('the full setUp adds the second wrapping at the same version', () async {
-      var reads = 0;
-      when(() => api.fetchRecoveryKey()).thenAnswer((_) async {
-        reads++;
-        return reads == 1
-            ? _state(password: _wrapping('p'))
-            : _state(password: _wrapping('p'), recoveryCode: _wrapping('r'));
-      });
-      when(
-        () => storage.readMasterKey(
-          deviceId: any(named: 'deviceId'),
-          userId: any(named: 'userId'),
-        ),
-      ).thenAnswer((_) async => _masterKey);
+    test(
+      'the full setUp adds the second wrapping at the same version',
+      () async {
+        var reads = 0;
+        when(() => api.fetchRecoveryKey()).thenAnswer((_) async {
+          reads++;
+          return reads == 1
+              ? _state(password: _wrapping('p'))
+              : _state(password: _wrapping('p'), recoveryCode: _wrapping('r'));
+        });
+        when(
+          () => storage.readMasterKey(
+            deviceId: any(named: 'deviceId'),
+            userId: any(named: 'userId'),
+          ),
+        ).thenAnswer((_) async => _masterKey);
 
-      final result = await service.setUp(
-        userId: _userId,
-        deviceId: _deviceId,
-        password: 'hunter2',
-        recoveryCode: 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23',
-      );
+        final result = await service.setUp(
+          userId: _userId,
+          deviceId: _deviceId,
+          password: 'hunter2',
+          recoveryCode: 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23',
+        );
 
-      expect(result.masterKey, _masterKey);
-      expect(result.recoveryCode, 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23');
-      expect(service.status.value, MasterKeyStatus.ready);
+        expect(result.masterKey, _masterKey);
+        expect(result.recoveryCode, 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23');
+        expect(service.status.value, MasterKeyStatus.ready);
 
-      final captured = verify(
-        () => api.putRecoveryKey(
-          version: captureAny(named: 'version'),
-          passwordWrapping: captureAny(named: 'passwordWrapping'),
-          recoveryCodeWrapping: captureAny(named: 'recoveryCodeWrapping'),
-          password: captureAny(named: 'password'),
-        ),
-      ).captured;
-      expect(
-        captured[0],
-        2,
-        reason: 'both wrappings seal the same bytes, so they share a version',
-      );
-      expect((captured[1] as EncryptedMasterKeyDto).cipherText, 'ct-p');
-      expect((captured[2] as EncryptedMasterKeyDto).cipherText, 'ct-r');
-      expect(
-        captured[3],
-        'hunter2',
-        reason: '§C.1 requires re-authentication and the server enforces it',
-      );
-    });
+        final captured = verify(
+          () => api.putRecoveryKey(
+            version: captureAny(named: 'version'),
+            passwordWrapping: captureAny(named: 'passwordWrapping'),
+            recoveryCodeWrapping: captureAny(named: 'recoveryCodeWrapping'),
+            password: captureAny(named: 'password'),
+          ),
+        ).captured;
+        expect(
+          captured[0],
+          2,
+          reason: 'both wrappings seal the same bytes, so they share a version',
+        );
+        expect((captured[1] as EncryptedMasterKeyDto).cipherText, 'ct-p');
+        expect((captured[2] as EncryptedMasterKeyDto).cipherText, 'ct-r');
+        expect(
+          captured[3],
+          'hunter2',
+          reason: '§C.1 requires re-authentication and the server enforces it',
+        );
+      },
+    );
   });
 
   group('unlock after a password reset', () {
@@ -373,7 +404,8 @@ void main() {
         ),
       ).thenAnswer((i) async {
         // Only the normalised recovery code opens it.
-        if (i.namedArguments[#password] == 'ABCDEFGH23456789') return _masterKey;
+        if (i.namedArguments[#password] == 'ABCDEFGH23456789')
+          return _masterKey;
         throw Exception('wrong secret');
       });
       when(
@@ -384,74 +416,86 @@ void main() {
       ).thenAnswer((_) async => _wrapping('p2').toJson());
     });
 
-    test('opens with the recovery code and re-wraps under the new password', () async {
-      final key = await service.unlock(
-        userId: _userId,
-        deviceId: _deviceId,
-        password: 'the-new-one',
-        recoveryCode: 'abcd-efgh-2345-6789',
-      );
-
-      expect(key, _masterKey);
-
-      // Re-wrapped so the *next* unlock is ordinary again. Doing it here rather
-      // than as a separate step is what stops it being forgotten.
-      verify(
-        () => engine.wrapMasterKeyUnder(
-          masterKeyB64: _masterKey,
-          secret: 'the-new-one',
-        ),
-      ).called(1);
-      verify(
-        () => api.rewrapPassword(
-          version: 2,
-          passwordWrapping: any(named: 'passwordWrapping'),
-          password: any(named: 'password'),
-        ),
-      ).called(1);
-      expect(service.status.value, MasterKeyStatus.ready);
-    });
-
-    test('re-wraps the same master key rather than minting a new one', () async {
-      // Every backup blob and every admission proof is bound to the existing
-      // key. Replacing it would orphan all of them, and nobody would notice
-      // until the first restore.
-      await service.unlock(
-        userId: _userId,
-        deviceId: _deviceId,
-        password: 'the-new-one',
-        recoveryCode: 'abcd-efgh-2345-6789',
-      );
-
-      verifyNever(
-        () => engine.setupMasterKey(any(), recoveryCode: any(named: 'recoveryCode')),
-      );
-      verify(
-        () => storage.writeMasterKey(
-          deviceId: _deviceId,
+    test(
+      'opens with the recovery code and re-wraps under the new password',
+      () async {
+        final key = await service.unlock(
           userId: _userId,
-          masterKey: _masterKey,
-        ),
-      ).called(1);
-    });
+          deviceId: _deviceId,
+          password: 'the-new-one',
+          recoveryCode: 'abcd-efgh-2345-6789',
+        );
 
-    test('a wrong recovery code unlocks nothing and re-wraps nothing', () async {
-      final key = await service.unlock(
-        userId: _userId,
-        deviceId: _deviceId,
-        password: 'the-new-one',
-        recoveryCode: '2222-2222-2222-2222',
-      );
+        expect(key, _masterKey);
 
-      expect(key, isNull);
-      verifyNever(
-        () => api.rewrapPassword(
-          version: any(named: 'version'),
-          passwordWrapping: any(named: 'passwordWrapping'),
-          password: any(named: 'password'),
-        ),
-      );
-    });
+        // Re-wrapped so the *next* unlock is ordinary again. Doing it here rather
+        // than as a separate step is what stops it being forgotten.
+        verify(
+          () => engine.wrapMasterKeyUnder(
+            masterKeyB64: _masterKey,
+            secret: 'the-new-one',
+          ),
+        ).called(1);
+        verify(
+          () => api.rewrapPassword(
+            version: 2,
+            passwordWrapping: any(named: 'passwordWrapping'),
+            password: any(named: 'password'),
+          ),
+        ).called(1);
+        expect(service.status.value, MasterKeyStatus.ready);
+      },
+    );
+
+    test(
+      're-wraps the same master key rather than minting a new one',
+      () async {
+        // Every backup blob and every admission proof is bound to the existing
+        // key. Replacing it would orphan all of them, and nobody would notice
+        // until the first restore.
+        await service.unlock(
+          userId: _userId,
+          deviceId: _deviceId,
+          password: 'the-new-one',
+          recoveryCode: 'abcd-efgh-2345-6789',
+        );
+
+        verifyNever(
+          () => engine.setupMasterKey(
+            any(),
+            recoveryCode: any(named: 'recoveryCode'),
+          ),
+        );
+        verify(
+          () => storage.writeMasterKey(
+            deviceId: _deviceId,
+            userId: _userId,
+            masterKey: _masterKey,
+          ),
+        ).called(1);
+      },
+    );
+
+    test(
+      'a wrong recovery code unlocks nothing and re-wraps nothing',
+      () async {
+        final key = await service.unlock(
+          userId: _userId,
+          deviceId: _deviceId,
+          password: 'the-new-one',
+          recoveryCode: '2222-2222-2222-2222',
+        );
+
+        expect(key, isNull);
+        verifyNever(
+          () => api.rewrapPassword(
+            version: any(named: 'version'),
+            passwordWrapping: any(named: 'passwordWrapping'),
+            password: any(named: 'password'),
+          ),
+        );
+      },
+    );
 
     test('the key still unlocks even if the re-wrap upload fails', () async {
       // A failed re-wrap costs the user one more use of the code. Failing the
@@ -475,24 +519,27 @@ void main() {
     });
   });
 
-  test('no password wrapping and no code offered is a loss, not a bad password', () async {
-    when(() => api.fetchRecoveryKey()).thenAnswer(
-      (_) async => _state(invalidatedAt: DateTime.utc(2026, 8, 1)),
-    );
+  test(
+    'no password wrapping and no code offered is a loss, not a bad password',
+    () async {
+      when(() => api.fetchRecoveryKey()).thenAnswer(
+        (_) async => _state(invalidatedAt: DateTime.utc(2026, 8, 1)),
+      );
 
-    final key = await service.unlock(
-      userId: _userId,
-      deviceId: _deviceId,
-      password: 'anything',
-    );
+      final key = await service.unlock(
+        userId: _userId,
+        deviceId: _deviceId,
+        password: 'anything',
+      );
 
-    expect(key, isNull);
-    expect(
-      service.status.value,
-      MasterKeyStatus.historyLost,
-      reason: 'there is no door left, so this must not read as a typo',
-    );
-  });
+      expect(key, isNull);
+      expect(
+        service.status.value,
+        MasterKeyStatus.historyLost,
+        reason: 'there is no door left, so this must not read as a typo',
+      );
+    },
+  );
 
   group('retrofitting a recovery code', () {
     const generated = 'WXYZ-2345-6789-ABCD-JKMN-PQRS-TVWX-YZ23';
@@ -505,8 +552,9 @@ void main() {
           userId: any(named: 'userId'),
         ),
       ).thenAnswer((_) async => _masterKey);
-      when(() => engine.generateRecoveryCode())
-          .thenAnswer((_) async => generated);
+      when(
+        () => engine.generateRecoveryCode(),
+      ).thenAnswer((_) async => generated);
       when(
         () => engine.wrapMasterKeyUnder(
           masterKeyB64: any(named: 'masterKeyB64'),
@@ -564,7 +612,11 @@ void main() {
             : _state(password: stored, recoveryCode: _wrapping('r'));
       });
 
-      await service.addRecoveryCode(userId: _userId, deviceId: _deviceId, password: 'hunter2');
+      await service.addRecoveryCode(
+        userId: _userId,
+        deviceId: _deviceId,
+        password: 'hunter2',
+      );
 
       final captured = verify(
         () => api.putRecoveryKey(
@@ -575,7 +627,11 @@ void main() {
         ),
       ).captured;
 
-      expect(captured[0], 2, reason: 'same version — additive, nothing rotated');
+      expect(
+        captured[0],
+        2,
+        reason: 'same version — additive, nothing rotated',
+      );
       expect(
         captured[1],
         same(stored),
@@ -595,11 +651,16 @@ void main() {
       // persists nothing. Believing it would leave someone convinced they have a
       // recovery code when they do not — found out mid-recovery, with no second
       // copy. Failing visibly is the best a client can do about that.
-      when(() => api.fetchRecoveryKey())
-          .thenAnswer((_) async => _state(password: _wrapping('p')));
+      when(
+        () => api.fetchRecoveryKey(),
+      ).thenAnswer((_) async => _state(password: _wrapping('p')));
 
       await expectLater(
-        service.addRecoveryCode(userId: _userId, deviceId: _deviceId, password: 'hunter2'),
+        service.addRecoveryCode(
+          userId: _userId,
+          deviceId: _deviceId,
+          password: 'hunter2',
+        ),
         throwsA(isA<RecoveryCodeNotStoredException>()),
       );
       expect(

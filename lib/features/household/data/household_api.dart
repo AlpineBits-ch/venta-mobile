@@ -84,9 +84,15 @@ class HouseholdApi {
       '$_base/list-items/$itemId',
       data: {
         if (text != null) 'text': text,
-        if (clearQuantity) 'quantity': null else if (quantity != null) 'quantity': quantity,
+        if (clearQuantity)
+          'quantity': null
+        else if (quantity != null)
+          'quantity': quantity,
         if (clearNote) 'note': null else if (note != null) 'note': note,
-        if (clearSection) 'section': null else if (section != null) 'section': section,
+        if (clearSection)
+          'section': null
+        else if (section != null)
+          'section': section,
         if (clearAssignee)
           'assigneeUserId': null
         else if (assigneeUserId != null)
@@ -122,7 +128,9 @@ class HouseholdApi {
   /// "Clear done" - deletes every checked line. Also re-arms the pantry
   /// restock loop for anything that got here automatically.
   Future<void> clearCheckedListItems(String channelId) async {
-    await client.dio.delete<void>('$_base/channels/$channelId/list-items/checked');
+    await client.dio.delete<void>(
+      '$_base/channels/$channelId/list-items/checked',
+    );
   }
 
   // --------------------------------------------------------------- chores

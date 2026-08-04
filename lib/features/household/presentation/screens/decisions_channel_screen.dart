@@ -358,11 +358,18 @@ class _DecisionDetailScreenState extends State<DecisionDetailScreen> {
       builder: (_) => _ObjectionDialog(
         optionTitle: optionId == null
             ? null
-            : _decision.options.where((o) => o.id == optionId).firstOrNull?.title,
+            : _decision.options
+                  .where((o) => o.id == optionId)
+                  .firstOrNull
+                  ?.title,
       ),
     );
     if (reason == null || reason.trim().isEmpty) return;
-    await _vote(kind: VoteKind.block, optionId: optionId, reason: reason.trim());
+    await _vote(
+      kind: VoteKind.block,
+      optionId: optionId,
+      reason: reason.trim(),
+    );
   }
 
   Future<void> _close() async {
@@ -544,7 +551,8 @@ class _DecisionDetailScreenState extends State<DecisionDetailScreen> {
                 padding: const EdgeInsets.only(bottom: AppSpacing.s),
                 child: _OptionCard(
                   option: option,
-                  isMine: decision.myVoteOptionId == option.id &&
+                  isMine:
+                      decision.myVoteOptionId == option.id &&
                       decision.myVoteKind == VoteKind.support,
                   isOutcome: decision.outcomeOptionId == option.id,
                   onSupport: open && widget.canVote && !_busy
@@ -912,10 +920,7 @@ class _NewDecisionSheet extends StatefulWidget {
 class _NewDecisionSheetState extends State<_NewDecisionSheet> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _optionControllers = [
-    TextEditingController(),
-    TextEditingController(),
-  ];
+  final _optionControllers = [TextEditingController(), TextEditingController()];
   int? _quorum;
   DateTime? _closesAt;
   bool _saving = false;

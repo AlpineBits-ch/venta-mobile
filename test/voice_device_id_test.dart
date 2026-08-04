@@ -131,13 +131,16 @@ void main() {
       expect(deviceHeaderFor('/accept'), deviceHeaderFor('/session'));
     });
 
-    test('the session request never falls back to the "default" bucket', () async {
-      // Guards the specific value the server substitutes for a missing
-      // header - a client that sent the literal string would collide with
-      // every other device in that bucket.
-      await api.cfCreateSession('call-1');
-      expect(deviceHeaderFor('/session'), isNot('default'));
-    });
+    test(
+      'the session request never falls back to the "default" bucket',
+      () async {
+        // Guards the specific value the server substitutes for a missing
+        // header - a client that sent the literal string would collide with
+        // every other device in that bucket.
+        await api.cfCreateSession('call-1');
+        expect(deviceHeaderFor('/session'), isNot('default'));
+      },
+    );
 
     test('leave sends the same id the session request registered', () async {
       // Call.Leave no-ops unless the header matches the ActiveDeviceId that

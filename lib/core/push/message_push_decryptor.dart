@@ -117,10 +117,7 @@ class MessagePushDecryptor {
       if (groupId == null) return null;
 
       final directory = await store.stateDirectory(userId);
-      await engine.initStorage(
-        directory.path,
-        stateKeyB64: store.stateKeyB64,
-      );
+      await engine.initStorage(directory.path, stateKeyB64: store.stateKeyB64);
 
       final processed = await engine.processMessage(
         groupIdB64: groupId,
@@ -133,7 +130,12 @@ class MessagePushDecryptor {
         return null;
       }
 
-      if (!await _senderIsWhoTheServerSaid(engine, groupId, processed, payload)) {
+      if (!await _senderIsWhoTheServerSaid(
+        engine,
+        groupId,
+        processed,
+        payload,
+      )) {
         return null;
       }
 
@@ -150,7 +152,9 @@ class MessagePushDecryptor {
 
       return _decode(plaintext);
     } catch (e) {
-      debugPrint('MessagePushDecryptor: could not decrypt ${payload.messageId}: $e');
+      debugPrint(
+        'MessagePushDecryptor: could not decrypt ${payload.messageId}: $e',
+      );
       // Losing the race against the app's own decrypt attempt looks exactly like
       // a failure from here, and the winner leaves the plaintext behind.
       return _recheckCache(store, payload);

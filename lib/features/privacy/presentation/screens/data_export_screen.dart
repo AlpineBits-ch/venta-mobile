@@ -153,9 +153,9 @@ class _DataExportScreenState extends State<DataExportScreen> {
                       'servers and your settings - as a single archive.\n\n'
                       'It won\'t contain other people\'s personal details, and '
                       'the download link expires after seven days.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        height: 1.4,
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(height: 1.4),
                     ),
                     const SizedBox(height: AppSpacing.m),
                     FilledButton.icon(

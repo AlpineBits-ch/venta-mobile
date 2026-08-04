@@ -59,7 +59,9 @@ void main() {
     connection = StreamController<RealtimeConnectionStatus>.broadcast();
 
     when(() => repository.events).thenAnswer((_) => events.stream);
-    when(() => repository.connectionStatus).thenAnswer((_) => connection.stream);
+    when(
+      () => repository.connectionStatus,
+    ).thenAnswer((_) => connection.stream);
     when(() => auth.currentUserId).thenReturn('user-me');
   });
 

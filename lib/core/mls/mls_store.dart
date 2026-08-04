@@ -84,7 +84,9 @@ class MlsStore {
       // A failed migration must not be fatal: the engine will start fresh in the
       // shared container and re-join from Welcomes, which costs history on this
       // device but leaves the app usable.
-      debugPrint('MlsStore: could not migrate state to the shared container: $e');
+      debugPrint(
+        'MlsStore: could not migrate state to the shared container: $e',
+      );
     }
     return shared;
   }
@@ -172,8 +174,11 @@ class MlsStore {
   /// has seen in another conversation gets this device to render one thread's
   /// plaintext inside another - without breaking any MLS property, because
   /// nothing is decrypted at all on a cache hit.
-  static String _cacheKey(String contextId, int? generation, String messageId) =>
-      '$contextId#${generation ?? '?'}#$messageId';
+  static String _cacheKey(
+    String contextId,
+    int? generation,
+    String messageId,
+  ) => '$contextId#${generation ?? '?'}#$messageId';
 
   /// Where this account's MLS state lives - the engine's own store as well as
   /// the two files here, so "the MLS state" is one directory to inspect or
@@ -608,7 +613,11 @@ class MlsStore {
 
   Future<void> _saveCache() {
     _prune();
-    return _write(_cacheFile, Map<String, Object>.from(_messageCache), merge: true);
+    return _write(
+      _cacheFile,
+      Map<String, Object>.from(_messageCache),
+      merge: true,
+    );
   }
 
   void _prune() {
@@ -629,7 +638,11 @@ class MlsStore {
   /// one writes it whole, so a plain overwrite means whichever saves second
   /// deletes the other's decrypted messages. They can never be recovered: the
   /// ciphertext they came from is only readable once.
-  Future<void> _write(File? file, Map<String, Object> data, {bool merge = false}) {
+  Future<void> _write(
+    File? file,
+    Map<String, Object> data, {
+    bool merge = false,
+  }) {
     if (file == null) return Future<void>.value();
     if (_sealedButUnreadable.contains(file.path)) {
       debugPrint(

@@ -113,8 +113,9 @@ void main() {
 
   group('approving', () {
     test('adds the device once the threshold is met', () async {
-      when(() => mls.inspectKeyPackage(_keyPackage))
-          .thenAnswer((_) async => _info());
+      when(
+        () => mls.inspectKeyPackage(_keyPackage),
+      ).thenAnswer((_) async => _info());
 
       final admitted = await service.approve(
         contextId: _channel,
@@ -162,28 +163,33 @@ void main() {
       );
     });
 
-    test('refuses a key package whose bytes differ from the reviewed ones', () async {
-      // The substitution attack the whole review exists to prevent.
-      when(() => mls.inspectKeyPackage(_keyPackage))
-          .thenAnswer((_) async => _info(hash: 'a-different-hash'));
+    test(
+      'refuses a key package whose bytes differ from the reviewed ones',
+      () async {
+        // The substitution attack the whole review exists to prevent.
+        when(
+          () => mls.inspectKeyPackage(_keyPackage),
+        ).thenAnswer((_) async => _info(hash: 'a-different-hash'));
 
-      await expectLater(
-        service.approve(contextId: _channel, request: _request()),
-        throwsA(isA<JoinRequestVerificationException>()),
-      );
+        await expectLater(
+          service.approve(contextId: _channel, request: _request()),
+          throwsA(isA<JoinRequestVerificationException>()),
+        );
 
-      verifyNever(
-        () => sync.publish(
-          contextId: any(named: 'contextId'),
-          isChannel: any(named: 'isChannel'),
-          produce: any(named: 'produce'),
-        ),
-      );
-    });
+        verifyNever(
+          () => sync.publish(
+            contextId: any(named: 'contextId'),
+            isChannel: any(named: 'isChannel'),
+            produce: any(named: 'produce'),
+          ),
+        );
+      },
+    );
 
     test('refuses a key package under a different identity key', () async {
-      when(() => mls.inspectKeyPackage(_keyPackage))
-          .thenAnswer((_) async => _info(fingerprint: 'FFFFF-FFFFF'));
+      when(
+        () => mls.inspectKeyPackage(_keyPackage),
+      ).thenAnswer((_) async => _info(fingerprint: 'FFFFF-FFFFF'));
 
       await expectLater(
         service.approve(contextId: _channel, request: _request()),
@@ -192,37 +198,41 @@ void main() {
     });
 
     test('refuses a key package claiming a different user', () async {
-      when(() => mls.inspectKeyPackage(_keyPackage))
-          .thenAnswer((_) async => _info(identity: 'user_someone_else'));
-
-      await expectLater(
-        service.approve(contextId: _channel, request: _request()),
-        throwsA(isA<JoinRequestVerificationException>()),
-      );
-    });
-
-    test('refuses when the server claims a threshold but sends no bytes', () async {
       when(
-        () => api.approveJoinRequest(
-          contextId: any(named: 'contextId'),
-          isChannel: any(named: 'isChannel'),
-          requestId: any(named: 'requestId'),
-        ),
-      ).thenAnswer(
-        (_) async => const MlsJoinRequestApprovalResultDto(
-          requestId: 'mljr_1',
-          approvals: 2,
-          requiredApprovals: 2,
-          thresholdMet: true,
-          keyPackageHash: _hash,
-        ),
-      );
+        () => mls.inspectKeyPackage(_keyPackage),
+      ).thenAnswer((_) async => _info(identity: 'user_someone_else'));
 
       await expectLater(
         service.approve(contextId: _channel, request: _request()),
         throwsA(isA<JoinRequestVerificationException>()),
       );
     });
+
+    test(
+      'refuses when the server claims a threshold but sends no bytes',
+      () async {
+        when(
+          () => api.approveJoinRequest(
+            contextId: any(named: 'contextId'),
+            isChannel: any(named: 'isChannel'),
+            requestId: any(named: 'requestId'),
+          ),
+        ).thenAnswer(
+          (_) async => const MlsJoinRequestApprovalResultDto(
+            requestId: 'mljr_1',
+            approvals: 2,
+            requiredApprovals: 2,
+            thresholdMet: true,
+            keyPackageHash: _hash,
+          ),
+        );
+
+        await expectLater(
+          service.approve(contextId: _channel, request: _request()),
+          throwsA(isA<JoinRequestVerificationException>()),
+        );
+      },
+    );
   });
 
   group('own fingerprint', () {
@@ -251,15 +261,17 @@ void main() {
 
   group('requesting', () {
     test('submits freshly minted bytes, not one from the pool', () async {
-      when(() => mls.generateKeyPackages(1))
-          .thenAnswer((_) async => [
-            const KeyPackageResult(
-              keyPackage: _keyPackage,
-              initPrivateKey: 'init',
-            ),
-          ]);
-      when(() => mls.inspectKeyPackage(_keyPackage))
-          .thenAnswer((_) async => _info());
+      when(() => mls.generateKeyPackages(1)).thenAnswer(
+        (_) async => [
+          const KeyPackageResult(
+            keyPackage: _keyPackage,
+            initPrivateKey: 'init',
+          ),
+        ],
+      );
+      when(
+        () => mls.inspectKeyPackage(_keyPackage),
+      ).thenAnswer((_) async => _info());
       when(
         () => api.requestAccess(
           contextId: any(named: 'contextId'),

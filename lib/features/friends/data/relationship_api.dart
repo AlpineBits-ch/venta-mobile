@@ -103,8 +103,7 @@ class RelationshipApi {
     final rows = switch (data) {
       List<dynamic>() => data,
       Map<String, dynamic>() =>
-        (data['blocked'] ?? data['items'] ?? data['results'])
-            as List<dynamic>?,
+        (data['blocked'] ?? data['items'] ?? data['results']) as List<dynamic>?,
       _ => null,
     };
     return BlockedUsersPage(

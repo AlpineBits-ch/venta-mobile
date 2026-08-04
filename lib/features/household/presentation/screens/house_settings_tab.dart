@@ -290,8 +290,7 @@ class _HouseSettingsTabState extends State<HouseSettingsTab> {
                   ),
                   value: _effective.enabled,
                   onChanged: _canManageGuild
-                      ? (value) =>
-                            _edit((v) => v.copyWith(enabled: value))
+                      ? (value) => _edit((v) => v.copyWith(enabled: value))
                       : null,
                 ),
                 SettingsRow(
@@ -300,18 +299,14 @@ class _HouseSettingsTabState extends State<HouseSettingsTab> {
                   trailing: Text(
                     formatMinuteOfDay(_effective.startMinuteLocal),
                   ),
-                  onTap: _canManageGuild
-                      ? () => _pickTime(start: true)
-                      : null,
+                  onTap: _canManageGuild ? () => _pickTime(start: true) : null,
                   showChevron: false,
                 ),
                 SettingsRow(
                   title: 'Until',
                   icon: Icons.wb_twilight_outlined,
                   trailing: Text(formatMinuteOfDay(_effective.endMinuteLocal)),
-                  onTap: _canManageGuild
-                      ? () => _pickTime(start: false)
-                      : null,
+                  onTap: _canManageGuild ? () => _pickTime(start: false) : null,
                   showChevron: false,
                 ),
                 SettingsRow(
@@ -344,8 +339,8 @@ class _HouseSettingsTabState extends State<HouseSettingsTab> {
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton(
-                onPressed: _quietHoursDirty && _quietHoursValid &&
-                        !_savingQuietHours
+                onPressed:
+                    _quietHoursDirty && _quietHoursValid && !_savingQuietHours
                     ? _saveQuietHours
                     : null,
                 child: _savingQuietHours

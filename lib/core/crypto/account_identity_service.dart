@@ -135,7 +135,9 @@ class AccountIdentityService {
         published = await api.fetchIdentityKey(userId);
       } catch (e) {
         reachable = false;
-        debugPrint('AccountIdentityService: could not read the published identity key: $e');
+        debugPrint(
+          'AccountIdentityService: could not read the published identity key: $e',
+        );
       }
 
       if (published != null && published.publicKey != publicKey) {
@@ -177,7 +179,9 @@ class AccountIdentityService {
               deviceId: deviceId,
             );
           } catch (e) {
-            debugPrint('AccountIdentityService: could not publish the identity key: $e');
+            debugPrint(
+              'AccountIdentityService: could not publish the identity key: $e',
+            );
           }
         }
       }
@@ -211,7 +215,9 @@ class AccountIdentityService {
     } catch (e) {
       // Fail closed on the *generation* decision: minting a rotation because a
       // GET timed out is far worse than doing nothing this launch.
-      debugPrint('AccountIdentityService: could not check for an identity key: $e');
+      debugPrint(
+        'AccountIdentityService: could not check for an identity key: $e',
+      );
       return false;
     }
 
@@ -350,7 +356,9 @@ class AccountIdentityService {
       try {
         identityKey = (await api.fetchIdentityKey(ownerUserId))?.publicKey;
       } catch (e) {
-        debugPrint('AccountIdentityService: could not fetch $ownerUserId\'s identity key: $e');
+        debugPrint(
+          'AccountIdentityService: could not fetch $ownerUserId\'s identity key: $e',
+        );
         return CertificateVerdict.unknownIssuer;
       }
       if (identityKey == null) return CertificateVerdict.unknownIssuer;

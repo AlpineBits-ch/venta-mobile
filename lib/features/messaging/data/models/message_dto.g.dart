@@ -61,6 +61,16 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
     const ApiDateTimeConverter().fromJson,
   ),
   pinnedById: json['pinnedById'] as String?,
+  embedsJson: json['embedsJson'] as String?,
+  flags: (json['flags'] as num?)?.toInt() ?? 0,
+  editedAt: _$JsonConverterFromJson<String, DateTime>(
+    json['editedAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
+  updatedAt: _$JsonConverterFromJson<String, DateTime>(
+    json['updatedAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
   systemMessageVariant: (json['systemMessageVariant'] as num?)?.toInt(),
   mlsGeneration: (json['mlsGeneration'] as num?)?.toInt(),
   mlsEpoch: (json['mlsEpoch'] as num?)?.toInt(),
@@ -97,6 +107,16 @@ Map<String, dynamic> _$MessageDtoToJson(
     const ApiDateTimeConverter().toJson,
   ),
   'pinnedById': instance.pinnedById,
+  'embedsJson': instance.embedsJson,
+  'flags': instance.flags,
+  'editedAt': _$JsonConverterToJson<String, DateTime>(
+    instance.editedAt,
+    const ApiDateTimeConverter().toJson,
+  ),
+  'updatedAt': _$JsonConverterToJson<String, DateTime>(
+    instance.updatedAt,
+    const ApiDateTimeConverter().toJson,
+  ),
   'systemMessageVariant': instance.systemMessageVariant,
   'mlsGeneration': instance.mlsGeneration,
   'mlsEpoch': instance.mlsEpoch,

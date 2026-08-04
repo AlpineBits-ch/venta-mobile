@@ -28,6 +28,7 @@ int currencyExponent(String currency) =>
 String formatMinor(
   int amountMinor,
   String currency, {
+
   /// Prefix a `+` on positive amounts - for balances, where the sign *is* the
   /// information ("you're owed" vs "you owe").
   bool signed = false,

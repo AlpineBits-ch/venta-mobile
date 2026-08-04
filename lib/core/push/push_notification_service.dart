@@ -133,7 +133,8 @@ class PushNotificationService {
   /// is torn down - it is an authenticated call, and a token left behind keeps
   /// a signed-out handset receiving the previous account's notifications.
   Future<void> unregisterToken() async {
-    final token = _registeredToken ?? await FirebaseMessaging.instance.getToken();
+    final token =
+        _registeredToken ?? await FirebaseMessaging.instance.getToken();
     if (token == null) return;
     _registeredToken = null;
     await api.deleteToken(token: token, kind: PushTokenKind.fcm);

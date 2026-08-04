@@ -3,6 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import '../../../../core/format/api_date_time.dart';
 
 import 'attachment_dto.dart';
+import 'embed_dto.dart';
 import 'message_reaction_dto.dart';
 
 part 'message_dto.freezed.dart';
@@ -71,6 +72,31 @@ sealed class MessageDto with _$MessageDto {
     DateTime? pinnedAt,
     String? pinnedById,
 
+    /// Bot-authored cards and server-generated link previews, as a
+    /// JSON-encoded **string** rather than a nested object - read it through
+    /// `parseEmbedsJson` (or the [embeds] getter), never `jsonDecode` inline.
+    ///
+    /// Arrives null on a message containing a link and fills in seconds later
+    /// via `MessageUpdated`, once the server has fetched the page. Never hold a
+    /// message back waiting for it: the site may be down, the link may 404, or
+    /// the instance may have previews switched off, and none of those produce a
+    /// signal to stop waiting on.
+    String? embedsJson,
+
+    /// Discord-compatible message bitfield. Bit 2 (`4`) is
+    /// suppressed-embeds - see [hasSuppressedEmbeds].
+    @Default(0) int flags,
+
+    /// When the **author** last changed the text, and the only thing that may
+    /// drive an "(edited)" marker. Null when never edited.
+    DateTime? editedAt,
+
+    /// When the row was last written *by anyone or anything* - including a
+    /// preview attaching or a pin landing. Deliberately not the edit marker:
+    /// driving it off this labels every message containing a link as edited a
+    /// second after it was posted, by nobody.
+    DateTime? updatedAt,
+
     /// Picks the wording variant for `MessageType.system`/`guildMemberJoin`/
     /// `guildMemberLeave` copy (server-assigned, matches Alpine's flavor-text
     /// rotation) - null/out-of-range falls back to variant 0.
@@ -127,3 +153,18 @@ sealed class MessageDto with _$MessageDto {
   factory MessageDto.fromJson(Map<String, dynamic> json) =>
       _$MessageDtoFromJson(json);
 }
+
+extension MessageDtoX on MessageDto {
+  /// Memoised - safe to call from `build`.
+  List<EmbedDto> get embeds => parseEmbedsJson(embedsJson);
+
+  /// Somebody dismissed this message's previews, for everybody. Distinct from
+  /// "there never were any", which is what tells the action sheet whether to
+  /// offer "Remove preview" or "Restore preview".
+  bool get hasSuppressedEmbeds => (flags & _suppressEmbeds) != 0;
+
+  /// The author changed the text. Never [MessageDto.updatedAt] - see its doc.
+  bool get isEdited => editedAt != null;
+}
+
+const _suppressEmbeds = 1 << 2;

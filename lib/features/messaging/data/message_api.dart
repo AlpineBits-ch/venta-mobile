@@ -179,6 +179,26 @@ class MessageApi {
     return MessageDto.fromJson(response.data!);
   }
 
+  /// Dismisses (or restores) a message's link previews.
+  ///
+  /// **Message state, not a per-viewer preference**: this removes the card for
+  /// everyone who can see the message, which is the whole point of the feature.
+  /// Allowed for the author, and for anyone holding `DeleteAnyMessage` in the
+  /// channel - a DM is the author only.
+  ///
+  /// Restoring re-queues the unfurl rather than returning the old card, so the
+  /// preview comes back a moment later on a `MessageUpdated`. Answers `202`
+  /// with a small ack body; the updated message arrives over realtime.
+  Future<void> setEmbedsSuppressed({
+    required String messageId,
+    required bool suppress,
+  }) {
+    return client.dio.patch<void>(
+      client.url('/api/v1/messaging/messaging/$messageId/embeds'),
+      data: {'suppress': suppress},
+    );
+  }
+
   Future<void> delete(String messageId) {
     return client.dio.delete<void>(
       client.url('/api/v1/messaging/messaging/$messageId'),

@@ -123,17 +123,21 @@ void main() {
     // The gateway forwards `/api/v1/identity/{**}` to the identity service and
     // rewrites it to `/api/v1/{**}`. Nothing forwards a bare `/api/v1/backup`.
     test('every recovery-key route goes through the identity prefix', () async {
-      adapter.responses.add(('recovery-key', 200, {
-        'version': 4,
-        'kdf': 'argon2id',
-        'iterations': 3,
-        'memoryKiB': 65536,
-        'parallelism': 1,
-        'salt': 'salt-p',
-        'iv': 'iv-p',
-        'cipherText': 'ct-p',
-        'encryptedHistoryRecoverable': true,
-      }));
+      adapter.responses.add((
+        'recovery-key',
+        200,
+        {
+          'version': 4,
+          'kdf': 'argon2id',
+          'iterations': 3,
+          'memoryKiB': 65536,
+          'parallelism': 1,
+          'salt': 'salt-p',
+          'iv': 'iv-p',
+          'cipherText': 'ct-p',
+          'encryptedHistoryRecoverable': true,
+        },
+      ));
 
       await masterKeys.fetchRecoveryKey();
       await masterKeys.putRecoveryKey(
@@ -213,29 +217,35 @@ void main() {
       expect(
         nested.containsKey('version'),
         isFalse,
-        reason: 'MasterKeyWrappingDto has no version - both wrappings share the '
+        reason:
+            'MasterKeyWrappingDto has no version - both wrappings share the '
             'envelope\'s, because they seal the same bytes',
       );
     });
 
-    test('rewrap-password nests the wrapping and carries a credential', () async {
-      // §J.2 says this route deliberately takes no credential. It does now -
-      // §L.8 found that nothing verified the wrapping, so the route was an
-      // unauthenticated write that destroys the account's encrypted history.
-      await masterKeys.rewrapPassword(
-        version: 4,
-        passwordWrapping: _wrapping('p2'),
-        password: 'hunter2',
-      );
+    test(
+      'rewrap-password nests the wrapping and carries a credential',
+      () async {
+        // §J.2 says this route deliberately takes no credential. It does now -
+        // §L.8 found that nothing verified the wrapping, so the route was an
+        // unauthenticated write that destroys the account's encrypted history.
+        await masterKeys.rewrapPassword(
+          version: 4,
+          passwordWrapping: _wrapping('p2'),
+          password: 'hunter2',
+        );
 
-      final body = bodyFor('rewrap-password');
-      expect(body['version'], 4);
-      expect(body['password'], 'hunter2');
-      expect(
-        Map<String, dynamic>.from(body['passwordWrapping'] as Map)['cipherText'],
-        'ct-p2',
-      );
-    });
+        final body = bodyFor('rewrap-password');
+        expect(body['version'], 4);
+        expect(body['password'], 'hunter2');
+        expect(
+          Map<String, dynamic>.from(
+            body['passwordWrapping'] as Map,
+          )['cipherText'],
+          'ct-p2',
+        );
+      },
+    );
 
     test('a reset ticket is an accepted alternative to the password', () async {
       await masterKeys.rewrapPassword(
@@ -277,21 +287,24 @@ void main() {
           body['recoveryCodeWrapping'] as Map,
         )['publicVerifier'],
         'dmVyaWZpZXI=',
-        reason: 'both wrappings seal one key, so both carry one verifier - Echo '
+        reason:
+            'both wrappings seal one key, so both carry one verifier - Echo '
             'refuses a mismatch because it means two keys were called one',
       );
     });
 
-    test('travels on the legacy first write, which is where key material starts',
-        () async {
-      // `establish` goes through `POST users/master` precisely because
-      // `PUT recovery-key` 400s on an establishing write. That route accepts a
-      // verifier too, so the account acquires one at creation rather than
-      // waiting for a later same-version backfill.
-      await masterKeys.upload(_wrapping('p', verifier: 'dmVyaWZpZXI='));
+    test(
+      'travels on the legacy first write, which is where key material starts',
+      () async {
+        // `establish` goes through `POST users/master` precisely because
+        // `PUT recovery-key` 400s on an establishing write. That route accepts a
+        // verifier too, so the account acquires one at creation rather than
+        // waiting for a later same-version backfill.
+        await masterKeys.upload(_wrapping('p', verifier: 'dmVyaWZpZXI='));
 
-      expect(bodyFor('users/master')['publicVerifier'], 'dmVyaWZpZXI=');
-    });
+        expect(bodyFor('users/master')['publicVerifier'], 'dmVyaWZpZXI=');
+      },
+    );
 
     test('travels on rewrap-password, which is what it gates', () async {
       await masterKeys.rewrapPassword(
@@ -322,82 +335,101 @@ void main() {
     });
 
     test('a stored verifier round-trips back out unchanged', () async {
-      adapter.responses.insert(0, ('backup/recovery-key', 200, {
-        'version': 4,
-        'salt': 'salt-p',
-        'iv': 'iv-p',
-        'cipherText': 'ct-p',
-        'publicVerifier': 'c3RvcmVk',
-        'encryptedHistoryRecoverable': true,
-      }));
+      adapter.responses.insert(0, (
+        'backup/recovery-key',
+        200,
+        {
+          'version': 4,
+          'salt': 'salt-p',
+          'iv': 'iv-p',
+          'cipherText': 'ct-p',
+          'publicVerifier': 'c3RvcmVk',
+          'encryptedHistoryRecoverable': true,
+        },
+      ));
 
       final state = await masterKeys.fetchRecoveryKey();
 
       expect(
         state!.passwordWrapping!.publicVerifier,
         'c3RvcmVk',
-        reason: 'the value is immutable at a version - echoing back what the '
+        reason:
+            'the value is immutable at a version - echoing back what the '
             'server holds is the only correct thing to send',
       );
     });
   });
 
   group('GET backup/recovery-key', () {
-    test('reads the declared KDF parameters rather than compiled-in defaults', () async {
-      // Contract §D: the reader must derive from the declared header. A wrapping
-      // written at m=131072 that is read back as m=65536 does not open, and the
-      // only symptom is "wrong password" on the recovery journey.
-      adapter.responses.add(('recovery-key', 200, {
-        'version': 7,
-        'kdf': 'argon2id',
-        'iterations': 5,
-        'memoryKiB': 131072,
-        'parallelism': 2,
-        'salt': 'salt-p',
-        'iv': 'iv-p',
-        'cipherText': 'ct-p',
-        'recoveryCodeWrapping': {
-          'kdf': 'argon2id',
-          'iterations': 5,
-          'memoryKiB': 131072,
-          'parallelism': 2,
-          'salt': 'salt-r',
-          'iv': 'iv-r',
-          'cipherText': 'ct-r',
-        },
-        'encryptedHistoryRecoverable': true,
-      }));
+    test(
+      'reads the declared KDF parameters rather than compiled-in defaults',
+      () async {
+        // Contract §D: the reader must derive from the declared header. A wrapping
+        // written at m=131072 that is read back as m=65536 does not open, and the
+        // only symptom is "wrong password" on the recovery journey.
+        adapter.responses.add((
+          'recovery-key',
+          200,
+          {
+            'version': 7,
+            'kdf': 'argon2id',
+            'iterations': 5,
+            'memoryKiB': 131072,
+            'parallelism': 2,
+            'salt': 'salt-p',
+            'iv': 'iv-p',
+            'cipherText': 'ct-p',
+            'recoveryCodeWrapping': {
+              'kdf': 'argon2id',
+              'iterations': 5,
+              'memoryKiB': 131072,
+              'parallelism': 2,
+              'salt': 'salt-r',
+              'iv': 'iv-r',
+              'cipherText': 'ct-r',
+            },
+            'encryptedHistoryRecoverable': true,
+          },
+        ));
 
-      final state = await masterKeys.fetchRecoveryKey();
+        final state = await masterKeys.fetchRecoveryKey();
 
-      expect(state!.version, 7);
-      expect(state.passwordWrapping!.argon2Iterations, 5);
-      expect(state.passwordWrapping!.argon2Memory, 131072);
-      expect(state.passwordWrapping!.argon2Parallelism, 2);
-      expect(state.recoveryCodeWrapping!.argon2Memory, 131072);
-      expect(
-        state.recoveryCodeWrapping!.version,
-        7,
-        reason: 'the nested wrapping carries no version of its own',
-      );
-    });
+        expect(state!.version, 7);
+        expect(state.passwordWrapping!.argon2Iterations, 5);
+        expect(state.passwordWrapping!.argon2Memory, 131072);
+        expect(state.passwordWrapping!.argon2Parallelism, 2);
+        expect(state.recoveryCodeWrapping!.argon2Memory, 131072);
+        expect(
+          state.recoveryCodeWrapping!.version,
+          7,
+          reason: 'the nested wrapping carries no version of its own',
+        );
+      },
+    );
 
-    test('a 404 falls back to the legacy route and reports no envelope', () async {
-      adapter.responses.add(('backup/recovery-key', 404, null));
-      adapter.responses.add(('users/master', 404, null));
+    test(
+      'a 404 falls back to the legacy route and reports no envelope',
+      () async {
+        adapter.responses.add(('backup/recovery-key', 404, null));
+        adapter.responses.add(('users/master', 404, null));
 
-      expect(await masterKeys.fetchRecoveryKey(), isNull);
-    });
+        expect(await masterKeys.fetchRecoveryKey(), isNull);
+      },
+    );
 
     test('a completed loss survives the round trip', () async {
-      adapter.responses.add(('recovery-key', 200, {
-        'version': 1,
-        'salt': 'salt-p',
-        'iv': 'iv-p',
-        'cipherText': 'ct-p',
-        'passwordWrappingInvalidatedAt': '2026-08-01T10:00:00Z',
-        'encryptedHistoryRecoverable': false,
-      }));
+      adapter.responses.add((
+        'recovery-key',
+        200,
+        {
+          'version': 1,
+          'salt': 'salt-p',
+          'iv': 'iv-p',
+          'cipherText': 'ct-p',
+          'passwordWrappingInvalidatedAt': '2026-08-01T10:00:00Z',
+          'encryptedHistoryRecoverable': false,
+        },
+      ));
 
       final state = await masterKeys.fetchRecoveryKey();
 
@@ -408,20 +440,27 @@ void main() {
   });
 
   group('the account identity key (§H.2)', () {
-    test('reads publicKey, which is the field the server actually sends', () async {
-      adapter.responses.add(('identity-key', 200, {
-        'userId': 'user_1',
-        'publicKey': 'aWRlbnRpdHktcHVibGlj',
-        'version': 3,
-        'rotationSignature': null,
-      }));
+    test(
+      'reads publicKey, which is the field the server actually sends',
+      () async {
+        adapter.responses.add((
+          'identity-key',
+          200,
+          {
+            'userId': 'user_1',
+            'publicKey': 'aWRlbnRpdHktcHVibGlj',
+            'version': 3,
+            'rotationSignature': null,
+          },
+        ));
 
-      final key = await masterKeys.fetchIdentityKey('user_1');
+        final key = await masterKeys.fetchIdentityKey('user_1');
 
-      expect(key, isNotNull);
-      expect(key!.publicKey, 'aWRlbnRpdHktcHVibGlj');
-      expect(key.version, 3);
-    });
+        expect(key, isNotNull);
+        expect(key!.publicKey, 'aWRlbnRpdHktcHVibGlj');
+        expect(key.version, 3);
+      },
+    );
 
     test('a 404 is "none published", not an error', () async {
       adapter.responses.add(('identity-key', 404, null));
@@ -442,19 +481,22 @@ void main() {
       expect(
         body['version'],
         1,
-        reason: 'the server requires version > the stored one, which starts at 0',
+        reason:
+            'the server requires version > the stored one, which starts at 0',
       );
       expect(
         body['password'],
         'hunter2',
-        reason: 'a first publication costs the password too - whoever publishes '
+        reason:
+            'a first publication costs the password too - whoever publishes '
             'first is who every peer TOFU-pins',
       );
       expect(body.containsKey('identityPublicKey'), isFalse);
       expect(
         body.containsKey('wrappedPrivateKey'),
         isFalse,
-        reason: 'the private half rides in the backup envelope (§K.3), not here '
+        reason:
+            'the private half rides in the backup envelope (§K.3), not here '
             '- the server has no such field and never did',
       );
     });
@@ -531,7 +573,8 @@ void main() {
           'mls.protection-level.v1',
           'mls.backup.v1',
         ]),
-        reason: 'the server computes the §I.1 coverage telemetry from these, '
+        reason:
+            'the server computes the §I.1 coverage telemetry from these, '
             'not from a version string',
       );
     });

@@ -124,10 +124,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
                   style: theme.textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppSpacing.m),
-                FilledButton(
-                  onPressed: _load,
-                  child: const Text('Try again'),
-                ),
+                FilledButton(onPressed: _load, child: const Text('Try again')),
               ],
             ),
           ),
@@ -157,9 +154,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
                   child: Center(
                     child: TextButton(
                       onPressed: _loadingMore ? null : _loadMore,
-                      child: Text(
-                        _loadingMore ? 'Loading...' : 'Show more',
-                      ),
+                      child: Text(_loadingMore ? 'Loading...' : 'Show more'),
                     ),
                   ),
                 );

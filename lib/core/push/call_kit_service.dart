@@ -231,10 +231,7 @@ class CallKitService {
     final token = _registeredVoipToken ?? await _currentVoipToken();
     if (token == null || token.isEmpty) return;
     _registeredVoipToken = null;
-    await pushTokenApi.deleteToken(
-      token: token,
-      kind: PushTokenKind.apnsVoip,
-    );
+    await pushTokenApi.deleteToken(token: token, kind: PushTokenKind.apnsVoip);
   }
 
   Future<String?> _currentVoipToken() async {

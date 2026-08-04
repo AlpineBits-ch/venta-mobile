@@ -104,20 +104,23 @@ void main() {
   });
 
   test('uploads exactly the count the server asked for', () async {
-    when(() => deviceApi.keyPackagesToGenerate(_device)).thenAnswer(
-      (_) async => const GenerateKeyPackagesDto(count: 40),
-    );
-    when(() => mls.generateKeyPackages(40))
-        .thenAnswer((_) async => [for (var i = 0; i < 40; i++) _package('$i')]);
+    when(
+      () => deviceApi.keyPackagesToGenerate(_device),
+    ).thenAnswer((_) async => const GenerateKeyPackagesDto(count: 40));
+    when(
+      () => mls.generateKeyPackages(40),
+    ).thenAnswer((_) async => [for (var i = 0; i < 40; i++) _package('$i')]);
 
     await manager.replenishKeyPackages();
 
-    final captured = verify(
-      () => deviceApi.uploadKeyPackages(
-        clientDeviceId: _device,
-        keyPackages: captureAny(named: 'keyPackages'),
-      ),
-    ).captured.single as List<KeyPackageUpload>;
+    final captured =
+        verify(
+              () => deviceApi.uploadKeyPackages(
+                clientDeviceId: _device,
+                keyPackages: captureAny(named: 'keyPackages'),
+              ),
+            ).captured.single
+            as List<KeyPackageUpload>;
 
     expect(captured, hasLength(40));
     expect(captured.every((p) => !p.isLastResort), isTrue);
@@ -128,19 +131,23 @@ void main() {
       (_) async =>
           const GenerateKeyPackagesDto(count: 2, needsLastResort: true),
     );
-    when(() => mls.generateKeyPackages(2))
-        .thenAnswer((_) async => [_package('a'), _package('b')]);
-    when(() => mls.generateKeyPackages(1))
-        .thenAnswer((_) async => [_package('lr')]);
+    when(
+      () => mls.generateKeyPackages(2),
+    ).thenAnswer((_) async => [_package('a'), _package('b')]);
+    when(
+      () => mls.generateKeyPackages(1),
+    ).thenAnswer((_) async => [_package('lr')]);
 
     await manager.replenishKeyPackages();
 
-    final captured = verify(
-      () => deviceApi.uploadKeyPackages(
-        clientDeviceId: _device,
-        keyPackages: captureAny(named: 'keyPackages'),
-      ),
-    ).captured.single as List<KeyPackageUpload>;
+    final captured =
+        verify(
+              () => deviceApi.uploadKeyPackages(
+                clientDeviceId: _device,
+                keyPackages: captureAny(named: 'keyPackages'),
+              ),
+            ).captured.single
+            as List<KeyPackageUpload>;
 
     expect(captured, hasLength(3));
     expect(
@@ -151,8 +158,9 @@ void main() {
   });
 
   test('a fully stocked device uploads nothing at all', () async {
-    when(() => deviceApi.keyPackagesToGenerate(_device))
-        .thenAnswer((_) async => const GenerateKeyPackagesDto());
+    when(
+      () => deviceApi.keyPackagesToGenerate(_device),
+    ).thenAnswer((_) async => const GenerateKeyPackagesDto());
 
     await manager.replenishKeyPackages();
 
@@ -175,8 +183,9 @@ void main() {
 
   group('resume trigger', () {
     test('checks once, then holds off until the interval elapses', () async {
-      when(() => deviceApi.keyPackagesToGenerate(_device))
-          .thenAnswer((_) async => const GenerateKeyPackagesDto());
+      when(
+        () => deviceApi.keyPackagesToGenerate(_device),
+      ).thenAnswer((_) async => const GenerateKeyPackagesDto());
 
       await manager.replenishIfStale();
       await manager.replenishIfStale();
@@ -185,16 +194,20 @@ void main() {
       verify(() => deviceApi.keyPackagesToGenerate(_device)).called(1);
     });
 
-    test('a failed check still holds off rather than retrying every resume', () async {
-      when(() => deviceApi.keyPackagesToGenerate(_device))
-          .thenThrow(Exception('offline'));
+    test(
+      'a failed check still holds off rather than retrying every resume',
+      () async {
+        when(
+          () => deviceApi.keyPackagesToGenerate(_device),
+        ).thenThrow(Exception('offline'));
 
-      // Must not throw - this runs detached from any UI.
-      await manager.replenishIfStale();
-      await manager.replenishIfStale();
+        // Must not throw - this runs detached from any UI.
+        await manager.replenishIfStale();
+        await manager.replenishIfStale();
 
-      verify(() => deviceApi.keyPackagesToGenerate(_device)).called(1);
-    });
+        verify(() => deviceApi.keyPackagesToGenerate(_device)).called(1);
+      },
+    );
   });
 
   /// Contract §B's discovery sweep, and the control-flow bug Alpine shipped.
@@ -206,32 +219,38 @@ void main() {
   /// from, and none at all for the ones they never open.
   group('launch sequence', () {
     setUp(() {
-      when(() => deviceApi.keyPackagesToGenerate(_device))
-          .thenAnswer((_) async => const GenerateKeyPackagesDto());
+      when(
+        () => deviceApi.keyPackagesToGenerate(_device),
+      ).thenAnswer((_) async => const GenerateKeyPackagesDto());
     });
 
-    test('asks to be admitted to what this device holds no group for', () async {
-      when(() => conversations.cached).thenReturn([
-        _conversation('conv_a', encrypted: true),
-        _conversation('conv_b', encrypted: false),
-      ]);
+    test(
+      'asks to be admitted to what this device holds no group for',
+      () async {
+        when(() => conversations.cached).thenReturn([
+          _conversation('conv_a', encrypted: true),
+          _conversation('conv_b', encrypted: false),
+        ]);
 
-      await manager.sync();
+        await manager.sync();
 
-      final candidates = verify(
-        () => joinRequests.requestAccessWhereMissing(captureAny()),
-      ).captured.single as Iterable<MlsAdmissionCandidate>;
+        final candidates =
+            verify(
+                  () => joinRequests.requestAccessWhereMissing(captureAny()),
+                ).captured.single
+                as Iterable<MlsAdmissionCandidate>;
 
-      expect(candidates.map((c) => c.contextId), ['conv_a', 'conv_b']);
-      expect(
-        candidates.map((c) => c.serverSaysEncrypted),
-        [true, false],
-        reason:
-            'the list is generous because filtering it is free; the sweep '
-            'decides locally which of these to probe',
-      );
-      expect(candidates.every((c) => !c.isChannel), isTrue);
-    });
+        expect(candidates.map((c) => c.contextId), ['conv_a', 'conv_b']);
+        expect(
+          candidates.map((c) => c.serverSaysEncrypted),
+          [true, false],
+          reason:
+              'the list is generous because filtering it is free; the sweep '
+              'decides locally which of these to probe',
+        );
+        expect(candidates.every((c) => !c.isChannel), isTrue);
+      },
+    );
 
     test('a failed replenish does not skip the steps after it', () async {
       // Alpine's bug, verbatim: one `try` wrapped replenish, the master-key
@@ -239,8 +258,9 @@ void main() {
       // silently cancelled the other two - permanently, because nothing else
       // processes pending Welcomes. The device sat outside a group it had been
       // properly invited to and nothing said so.
-      when(() => deviceApi.keyPackagesToGenerate(_device))
-          .thenThrow(Exception('upload refused'));
+      when(
+        () => deviceApi.keyPackagesToGenerate(_device),
+      ).thenThrow(Exception('upload refused'));
 
       await manager.sync();
 
@@ -269,9 +289,9 @@ void main() {
     test('fetches the conversation list when nothing is cached yet', () async {
       // The conversations this device is locked out of are exactly the ones its
       // owner has not opened, so an empty cache is the case that matters most.
-      when(() => conversations.fetch()).thenAnswer(
-        (_) async => [_conversation('conv_a', encrypted: true)],
-      );
+      when(
+        () => conversations.fetch(),
+      ).thenAnswer((_) async => [_conversation('conv_a', encrypted: true)]);
 
       await manager.sync();
 

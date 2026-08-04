@@ -283,7 +283,9 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
                     onPressed: _busy || locked ? null : _request,
                     child: _busy
                         ? const ButtonProgressIndicator()
-                        : Text(keysGone ? 'Re-link this device' : 'Request access'),
+                        : Text(
+                            keysGone ? 'Re-link this device' : 'Request access',
+                          ),
                   )
                 : TextButton(
                     onPressed: _busy ? null : _withdraw,

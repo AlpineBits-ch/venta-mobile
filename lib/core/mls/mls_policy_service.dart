@@ -61,7 +61,9 @@ class MlsPolicyService {
       );
       _cached = _parse(response.data?['certificateEnforcement']);
     } catch (e) {
-      debugPrint('MlsPolicyService: no policy available, staying in observe: $e');
+      debugPrint(
+        'MlsPolicyService: no policy available, staying in observe: $e',
+      );
       _cached = CertificateEnforcement.observe;
     }
     return _cached;

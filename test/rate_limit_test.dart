@@ -112,14 +112,17 @@ void main() {
       expect(c.waits.first, const Duration(milliseconds: 500));
     });
 
-    test('falls back to the Retry-After header when the body has none', () async {
-      final c = _client([
-        () => _tooMany(const <String, dynamic>{}, retryAfterHeader: '2'),
-        _ok,
-      ]);
-      await c.dio.get<dynamic>('https://example.test/a');
-      expect(c.waits.first, const Duration(seconds: 2));
-    });
+    test(
+      'falls back to the Retry-After header when the body has none',
+      () async {
+        final c = _client([
+          () => _tooMany(const <String, dynamic>{}, retryAfterHeader: '2'),
+          _ok,
+        ]);
+        await c.dio.get<dynamic>('https://example.test/a');
+        expect(c.waits.first, const Duration(seconds: 2));
+      },
+    );
 
     test('a global 429 holds back a later request on another route', () async {
       final open = Completer<void>();
@@ -190,9 +193,7 @@ void main() {
     });
 
     test('anything that is not a 429 passes straight through', () async {
-      final c = _client([
-        () => ResponseBody.fromString('nope', 500),
-      ]);
+      final c = _client([() => ResponseBody.fromString('nope', 500)]);
 
       await expectLater(
         c.dio.get<dynamic>('https://example.test/a'),

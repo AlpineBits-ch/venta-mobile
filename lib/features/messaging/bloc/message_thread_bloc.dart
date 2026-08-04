@@ -14,6 +14,11 @@ import '../data/models/attachment_dto.dart';
 import '../data/models/message_dto.dart';
 import '../data/models/message_reaction_dto.dart';
 
+/// `MessageDto.flags` bit 2 - suppressed embeds. Mirrored here (rather than
+/// only in the DTO's extension) because the optimistic toggle has to set and
+/// clear it, not just read it.
+const _suppressEmbedsFlag = 1 << 2;
+
 sealed class ThreadEvent extends Equatable {
   const ThreadEvent();
 
@@ -115,6 +120,18 @@ class MessagePinToggled extends ThreadEvent {
   List<Object?> get props => [messageId];
 }
 
+/// Dismisses this message's link previews, or restores them if they were
+/// already dismissed. Not a per-viewer preference - it changes the message for
+/// everyone who can see it, so the caller gates the action on being the author
+/// or holding `DeleteAnyMessage`.
+class MessageEmbedsSuppressionToggled extends ThreadEvent {
+  const MessageEmbedsSuppressionToggled(this.messageId);
+  final String messageId;
+
+  @override
+  List<Object?> get props => [messageId];
+}
+
 /// Registers a synthetic "the bot is working on it" row while a slash
 /// command invocation is in flight - the caller (the composer) has already
 /// fired the HTTP invoke; this just reserves the placeholder + starts the
@@ -163,12 +180,22 @@ class _MessageReceived extends ThreadEvent {
 class _MessageUpdatedRemote extends ThreadEvent {
   const _MessageUpdatedRemote({
     required this.messageId,
-    required this.content,
+    this.content,
+    this.embedsJson,
+    this.flags,
+    this.editedAt,
+    this.isAuthorEdit = true,
     this.isUndecryptable = false,
     this.isUnverifiedPlaintext = false,
   });
   final String messageId;
-  final String content;
+
+  /// Null leaves the text alone - see [RemoteMessageUpdated.content].
+  final String? content;
+  final String? embedsJson;
+  final int? flags;
+  final DateTime? editedAt;
+  final bool isAuthorEdit;
   final bool isUndecryptable;
   final bool isUnverifiedPlaintext;
 
@@ -176,6 +203,10 @@ class _MessageUpdatedRemote extends ThreadEvent {
   List<Object?> get props => [
     messageId,
     content,
+    embedsJson,
+    flags,
+    editedAt,
+    isAuthorEdit,
     isUndecryptable,
     isUnverifiedPlaintext,
   ];
@@ -333,6 +364,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<ThreadTypingNotified>(_onTypingNotified);
     on<ReactionToggled>(_onReactionToggled);
     on<MessagePinToggled>(_onMessagePinToggled);
+    on<MessageEmbedsSuppressionToggled>(_onMessageEmbedsSuppressionToggled);
     on<ThreadBotPlaceholderAdded>(_onBotPlaceholderAdded);
     on<ThreadBotPlaceholderFailed>(_onBotPlaceholderFailed);
     on<_BotPlaceholderTimedOut>(_onBotPlaceholderTimedOut);
@@ -355,6 +387,10 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
             _MessageUpdatedRemote(
               messageId: event.messageId,
               content: event.content,
+              embedsJson: event.embedsJson,
+              flags: event.flags,
+              editedAt: event.editedAt,
+              isAuthorEdit: event.isAuthorEdit,
               isUndecryptable: event.isUndecryptable,
               isUnverifiedPlaintext: event.isUnverifiedPlaintext,
             ),
@@ -963,23 +999,82 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   ) {
     emit.ifOpen(
       state.copyWith(
-        messages: [
-          for (final m in state.messages)
-            if (m.id == event.messageId)
-              m.copyWith(
-                content: event.content,
-                // Carried across, not dropped. An edit this device could not
-                // open leaves the row showing "can't be decrypted" rather than
-                // the text it used to hold, which is now stale, or the bytes the
-                // server sent, which is the injection.
-                isUndecryptable: event.isUndecryptable,
-                isUnverifiedPlaintext: event.isUnverifiedPlaintext,
-              )
-            else
-              m,
-        ],
+        messages: _updateMessage(event.messageId, (m) {
+          // An update the author did not cause - a link preview attaching, a
+          // suppression - must not disturb the text, the edit marker, or the
+          // decryption flags that describe the text. Those updates carry no
+          // body at all today; refusing one that does is the same call this
+          // file already makes everywhere else, since a server-chosen body on a
+          // channel nobody edited is exactly the injection path.
+          final content = event.isAuthorEdit ? event.content : null;
+          if (content == null) {
+            return m.copyWith(
+              embedsJson: event.embedsJson ?? m.embedsJson,
+              flags: event.flags ?? m.flags,
+            );
+          }
+          return m.copyWith(
+            content: content,
+            embedsJson: event.embedsJson ?? m.embedsJson,
+            flags: event.flags ?? m.flags,
+            // Only ever set from `editedAt`. `updatedAt` moves for a preview or
+            // a pin, and driving the marker off it labels every message
+            // containing a link as edited a second after it was posted.
+            editedAt: event.editedAt ?? m.editedAt,
+            // Carried across, not dropped. An edit this device could not
+            // open leaves the row showing "can't be decrypted" rather than
+            // the text it used to hold, which is now stale, or the bytes the
+            // server sent, which is the injection.
+            isUndecryptable: event.isUndecryptable,
+            isUnverifiedPlaintext: event.isUnverifiedPlaintext,
+          );
+        }),
       ),
     );
+  }
+
+  /// Dismisses or restores a message's link previews - for everyone, not just
+  /// this viewer.
+  ///
+  /// Optimistic on the flag alone: dropping the cards immediately would make an
+  /// unauthorised attempt (which the server answers `403`) look like it worked,
+  /// and the real card state arrives moments later on a `MessageUpdated`.
+  Future<void> _onMessageEmbedsSuppressionToggled(
+    MessageEmbedsSuppressionToggled event,
+    Emitter<ThreadState> emit,
+  ) async {
+    final previous = state.messages
+        .where((m) => m.id == event.messageId)
+        .firstOrNull;
+    if (previous == null) return;
+    final suppress = !previous.hasSuppressedEmbeds;
+
+    emit.ifOpen(
+      state.copyWith(
+        messages: _updateMessage(
+          event.messageId,
+          (m) => m.copyWith(
+            flags: suppress
+                ? m.flags | _suppressEmbedsFlag
+                : m.flags & ~_suppressEmbedsFlag,
+            embedsJson: suppress ? null : m.embedsJson,
+          ),
+        ),
+      ),
+    );
+
+    try {
+      await repository.setEmbedsSuppressed(
+        messageId: event.messageId,
+        suppress: suppress,
+      );
+    } catch (_) {
+      emit.ifOpen(
+        state.copyWith(
+          messages: _updateMessage(event.messageId, (_) => previous),
+        ),
+      );
+    }
   }
 
   void _onMessageDeletedRemote(

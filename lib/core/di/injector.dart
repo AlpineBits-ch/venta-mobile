@@ -216,7 +216,9 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   // new device of yours (§G), wraps the account identity key that lets peers
   // verify a device with none of yours online (§H), and seals the backup
   // envelope (§C).
-  getIt.registerLazySingleton<MasterKeyApi>(() => MasterKeyApi(client: getIt()));
+  getIt.registerLazySingleton<MasterKeyApi>(
+    () => MasterKeyApi(client: getIt()),
+  );
   getIt.registerLazySingleton<MasterKeyService>(
     () => MasterKeyService(api: getIt(), secureStorage: getIt()),
   );

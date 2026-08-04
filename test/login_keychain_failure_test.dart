@@ -105,7 +105,8 @@ void main() {
       expect(
         repository.isAuthenticated,
         isTrue,
-        reason: 'the grant succeeded and the tokens are in memory - the only '
+        reason:
+            'the grant succeeded and the tokens are in memory - the only '
             'thing that failed is durability',
       );
       expect(repository.currentUserId, isNull); // the fake token has no sub
@@ -191,10 +192,8 @@ void main() {
           deviceId: any(named: 'deviceId'),
         ),
       ).thenAnswer(
-        (_) async => const TokenResponse(
-          accessToken: 'access-token',
-          expiresIn: 3600,
-        ),
+        (_) async =>
+            const TokenResponse(accessToken: 'access-token', expiresIn: 3600),
       );
 
       await expectLater(repository.login('someone', 'hunter2'), completes);
@@ -203,48 +202,50 @@ void main() {
   });
 
   group('register no longer signs in', () {
-    test('the keychain is never reached, because no session is created',
-        () async {
-      // This used to call `login` and inherit its keychain exposure. It can't
-      // any more: registration answers `202` with no token and no user id, and
-      // the same `202` whether or not an account was created - so there is
-      // nothing to sign in with. See `registration_contract_test.dart`.
-      when(
-        () => api.register(
-          baseUrl: any(named: 'baseUrl'),
-          email: any(named: 'email'),
-          username: any(named: 'username'),
-          password: any(named: 'password'),
-          birthdate: any(named: 'birthdate'),
-        ),
-      ).thenAnswer((_) async {});
+    test(
+      'the keychain is never reached, because no session is created',
+      () async {
+        // This used to call `login` and inherit its keychain exposure. It can't
+        // any more: registration answers `202` with no token and no user id, and
+        // the same `202` whether or not an account was created - so there is
+        // nothing to sign in with. See `registration_contract_test.dart`.
+        when(
+          () => api.register(
+            baseUrl: any(named: 'baseUrl'),
+            email: any(named: 'email'),
+            username: any(named: 'username'),
+            password: any(named: 'password'),
+            birthdate: any(named: 'birthdate'),
+          ),
+        ).thenAnswer((_) async {});
 
-      await expectLater(
-        repository.register(
-          email: 'a@b.c',
-          username: 'someone',
-          password: 'hunter2',
-          birthdate: DateTime(2000),
-        ),
-        completes,
-      );
-      expect(repository.isAuthenticated, isFalse);
-      verifyNever(
-        () => api.passwordGrant(
-          baseUrl: any(named: 'baseUrl'),
-          username: any(named: 'username'),
-          password: any(named: 'password'),
-          mfaCode: any(named: 'mfaCode'),
-          deviceId: any(named: 'deviceId'),
-        ),
-      );
-      verifyNever(
-        () => storage.writeTokens(
-          accessToken: any(named: 'accessToken'),
-          refreshToken: any(named: 'refreshToken'),
-        ),
-      );
-    });
+        await expectLater(
+          repository.register(
+            email: 'a@b.c',
+            username: 'someone',
+            password: 'hunter2',
+            birthdate: DateTime(2000),
+          ),
+          completes,
+        );
+        expect(repository.isAuthenticated, isFalse);
+        verifyNever(
+          () => api.passwordGrant(
+            baseUrl: any(named: 'baseUrl'),
+            username: any(named: 'username'),
+            password: any(named: 'password'),
+            mfaCode: any(named: 'mfaCode'),
+            deviceId: any(named: 'deviceId'),
+          ),
+        );
+        verifyNever(
+          () => storage.writeTokens(
+            accessToken: any(named: 'accessToken'),
+            refreshToken: any(named: 'refreshToken'),
+          ),
+        );
+      },
+    );
   });
 
   group('SecureStorageFault names the OSStatus', () {
@@ -331,7 +332,8 @@ void main() {
       // happened. "Something went wrong - please try again." was reserved for
       // "we have no idea", and a -34018 is not that.
       when(
-        () => authRepository.login(any(), any(), mfaCode: any(named: 'mfaCode')),
+        () =>
+            authRepository.login(any(), any(), mfaCode: any(named: 'mfaCode')),
       ).thenThrow(_keychainRefused());
 
       bloc.add(const LoginSubmitted(input: 'someone', password: 'hunter2'));
@@ -347,7 +349,8 @@ void main() {
 
     test('a wrong password is still a wrong password', () async {
       when(
-        () => authRepository.login(any(), any(), mfaCode: any(named: 'mfaCode')),
+        () =>
+            authRepository.login(any(), any(), mfaCode: any(named: 'mfaCode')),
       ).thenThrow(
         DioException(
           requestOptions: RequestOptions(path: '/connect/token'),
@@ -368,7 +371,8 @@ void main() {
 
     test('an unrecognised failure still gets the generic message', () async {
       when(
-        () => authRepository.login(any(), any(), mfaCode: any(named: 'mfaCode')),
+        () =>
+            authRepository.login(any(), any(), mfaCode: any(named: 'mfaCode')),
       ).thenThrow(StateError('something genuinely unexpected'));
 
       bloc.add(const LoginSubmitted(input: 'someone', password: 'hunter2'));

@@ -69,47 +69,51 @@ void main() {
       expect(
         a.path,
         isNot(b.path),
-        reason: 'the cache used to ignore the user id entirely, so a push for '
+        reason:
+            'the cache used to ignore the user id entirely, so a push for '
             'account B read account A\'s state directory',
       );
       expect(a.path, contains('user_a'));
       expect(b.path, contains('user_b'));
     });
 
-    test('re-initialising for another account does not serve the first\'s state', () async {
-      final store = storeIn(root);
+    test(
+      're-initialising for another account does not serve the first\'s state',
+      () async {
+        final store = storeIn(root);
 
-      await store.init('user_a');
-      await store.registerGroup(
-        contextId: 'conv_1',
-        generation: 1,
-        mlsGroupId: 'Z3JvdXBB',
-      );
-      store.cacheMessage(
-        contextId: 'conv_1',
-        generation: 1,
-        messageId: 'msg_1',
-        plaintextB64: base64Encode(utf8.encode('a secret')),
-      );
-      await store.flush();
+        await store.init('user_a');
+        await store.registerGroup(
+          contextId: 'conv_1',
+          generation: 1,
+          mlsGroupId: 'Z3JvdXBB',
+        );
+        store.cacheMessage(
+          contextId: 'conv_1',
+          generation: 1,
+          messageId: 'msg_1',
+          plaintextB64: base64Encode(utf8.encode('a secret')),
+        );
+        await store.flush();
 
-      // The FCM background isolate initialises whichever account a notification
-      // names. `init` used to return early on `_ready`, handing it the loaded
-      // account's registry and plaintext cache.
-      await store.init('user_b');
+        // The FCM background isolate initialises whichever account a notification
+        // names. `init` used to return early on `_ready`, handing it the loaded
+        // account's registry and plaintext cache.
+        await store.init('user_b');
 
-      expect(store.groupId('conv_1', 1), isNull);
-      expect(cached(store, 'msg_1'), isNull);
-      expect(store.loadedUserId, 'user_b');
+        expect(store.groupId('conv_1', 1), isNull);
+        expect(cached(store, 'msg_1'), isNull);
+        expect(store.loadedUserId, 'user_b');
 
-      // And account A's own state is intact, not wiped - switching back has to
-      // find its history.
-      await store.init('user_a');
-      expect(store.groupId('conv_1', 1), 'Z3JvdXBB');
-      expect(cached(store, 'msg_1'), isNotNull);
+        // And account A's own state is intact, not wiped - switching back has to
+        // find its history.
+        await store.init('user_a');
+        expect(store.groupId('conv_1', 1), 'Z3JvdXBB');
+        expect(cached(store, 'msg_1'), isNotNull);
 
-      store.dispose();
-    });
+        store.dispose();
+      },
+    );
 
     test('counts groups but not the active-generation pointers', () async {
       final store = storeIn(root);

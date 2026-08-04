@@ -74,7 +74,10 @@ class MessageNotifier {
   ///
   /// [store] is the app's own MLS store when the app is the caller - see
   /// [MessagePushDecryptor.decrypt] for why sharing it is not optional.
-  static Future<void> show(MessagePushPayload payload, {MlsStore? store}) async {
+  static Future<void> show(
+    MessagePushPayload payload, {
+    MlsStore? store,
+  }) async {
     try {
       await _ensureInitialized();
 
@@ -133,7 +136,9 @@ class MessageNotifier {
     } catch (e, stack) {
       // A background isolate that throws here drops the notification silently,
       // which is the single worst outcome available.
-      debugPrint('MessageNotifier: failed to show ${payload.messageId}: $e\n$stack');
+      debugPrint(
+        'MessageNotifier: failed to show ${payload.messageId}: $e\n$stack',
+      );
     }
   }
 }

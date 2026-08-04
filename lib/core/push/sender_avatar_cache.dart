@@ -52,8 +52,9 @@ class SenderAvatarCache {
         if (response.statusCode != HttpStatus.ok) return null;
         if (response.contentLength > _maxBytes) return null;
 
-        final bytes = await consolidateHttpClientResponseBytes(response)
-            .timeout(_timeout);
+        final bytes = await consolidateHttpClientResponseBytes(
+          response,
+        ).timeout(_timeout);
         if (bytes.isEmpty || bytes.length > _maxBytes) return null;
 
         // Written through a temp file: the notification service extension and
@@ -73,7 +74,9 @@ class SenderAvatarCache {
   }
 
   static Future<File> _fileFor(String url) async {
-    final root = Directory('${(await getTemporaryDirectory()).path}/venta_avatars');
+    final root = Directory(
+      '${(await getTemporaryDirectory()).path}/venta_avatars',
+    );
     if (!await root.exists()) await root.create(recursive: true);
     // The URL is per-profile and stable, so its hash is a stable file name. No
     // extension: both platforms sniff the content rather than trusting one.

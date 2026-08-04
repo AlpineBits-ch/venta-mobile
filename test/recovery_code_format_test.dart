@@ -89,7 +89,8 @@ void main() {
         expect(
           _alphabet.contains(c),
           isTrue,
-          reason: '"$c" would be rejected by the other client, which then '
+          reason:
+              '"$c" would be rejected by the other client, which then '
               'silently derives a different key',
         );
       }
@@ -133,15 +134,18 @@ void main() {
       }
     });
 
-    test('surfaces the specific stray character rather than "does not match"', () {
-      // Naming the character is the difference between a fixable typo and giving
-      // up. `0` for `O` and `1` for `I` are the ones people actually hit.
-      const typed = 'PVK8-XHXZ-TXTE-ZJ9V-CTQK-QQAN-R7RX-AGJ0';
-      final stray = _normalize(
-        typed,
-      ).split('').where((c) => !_alphabet.contains(c)).toSet();
+    test(
+      'surfaces the specific stray character rather than "does not match"',
+      () {
+        // Naming the character is the difference between a fixable typo and giving
+        // up. `0` for `O` and `1` for `I` are the ones people actually hit.
+        const typed = 'PVK8-XHXZ-TXTE-ZJ9V-CTQK-QQAN-R7RX-AGJ0';
+        final stray = _normalize(
+          typed,
+        ).split('').where((c) => !_alphabet.contains(c)).toSet();
 
-      expect(stray, {'0'});
-    });
+        expect(stray, {'0'});
+      },
+    );
   });
 }

@@ -50,7 +50,9 @@ void main() {
   group('privacyRefusalOf', () {
     test('reads a code out of each shape the services answer with', () {
       expect(
-        privacyRefusalOf(_refusal(403, {'code': 'recipient_dm_policy'}))?.refusal,
+        privacyRefusalOf(
+          _refusal(403, {'code': 'recipient_dm_policy'}),
+        )?.refusal,
         PrivacyRefusal.recipientDmPolicy,
       );
       expect(
@@ -79,9 +81,7 @@ void main() {
       // the enumeration oracle the server refuses to be.
       expect(
         const PrivacyRefusalException(PrivacyRefusal.blocked).message,
-        const PrivacyRefusalException(
-          PrivacyRefusal.recipientDmPolicy,
-        ).message,
+        const PrivacyRefusalException(PrivacyRefusal.recipientDmPolicy).message,
       );
     });
 
@@ -121,7 +121,9 @@ void main() {
       // a 403 must not be turned into "try again".
       expect(privacyRefusalOf(_refusal(503, {'error': 'blocked'})), isNull);
       expect(
-        privacyRefusalOf(_refusal(403, {'error': 'privacy_lookup_unavailable'})),
+        privacyRefusalOf(
+          _refusal(403, {'error': 'privacy_lookup_unavailable'}),
+        ),
         isNull,
       );
     });
@@ -142,19 +144,21 @@ void main() {
       expect(defaults.shareActivity, isFalse);
     });
 
-    test('an unrecognised policy falls back restrictively, not permissively',
-        () {
-      // A newer server adding a wider policy this build has never heard of
-      // must not be read as "no policy" and therefore "everyone".
-      final parsed = PrivacySettingsDto.fromJson(const {
-        'directMessagePolicy': 'SomethingNewAndWide',
-        'friendRequestPolicy': 'AlsoNew',
-        'birthdayVisibility': 'Whoever',
-      });
-      expect(parsed.directMessagePolicy, DirectMessagePolicy.friends);
-      expect(parsed.friendRequestPolicy, FriendRequestPolicy.nobody);
-      expect(parsed.birthdayVisibility, ProfileVisibility.nobody);
-    });
+    test(
+      'an unrecognised policy falls back restrictively, not permissively',
+      () {
+        // A newer server adding a wider policy this build has never heard of
+        // must not be read as "no policy" and therefore "everyone".
+        final parsed = PrivacySettingsDto.fromJson(const {
+          'directMessagePolicy': 'SomethingNewAndWide',
+          'friendRequestPolicy': 'AlsoNew',
+          'birthdayVisibility': 'Whoever',
+        });
+        expect(parsed.directMessagePolicy, DirectMessagePolicy.friends);
+        expect(parsed.friendRequestPolicy, FriendRequestPolicy.nobody);
+        expect(parsed.birthdayVisibility, ProfileVisibility.nobody);
+      },
+    );
 
     test('minor floors are reported per field, and only for a minor', () {
       const adult = PrivacySettingsDto();
@@ -202,23 +206,27 @@ void main() {
       expect(calls, 1);
     });
 
-    test('a response that lost the race does not roll the cache back',
-        () async {
-      when(() => api.getSettings()).thenAnswer((_) async => _settings);
-      await repository.fetch();
+    test(
+      'a response that lost the race does not roll the cache back',
+      () async {
+        when(() => api.getSettings()).thenAnswer((_) async => _settings);
+        await repository.fetch();
 
-      // Version 1 is older than the version 2 already held - a write that
-      // landed later returning first would otherwise undo it on screen.
-      when(() => api.updateSettings(any())).thenAnswer(
-        (_) async => const PrivacySettingsDto(
-          directMessagePolicy: DirectMessagePolicy.nobody,
-          version: 1,
-        ),
-      );
-      final result = await repository.update({'directMessagePolicy': 'Nobody'});
-      expect(result.directMessagePolicy, DirectMessagePolicy.everyone);
-      expect(repository.cached?.version, 2);
-    });
+        // Version 1 is older than the version 2 already held - a write that
+        // landed later returning first would otherwise undo it on screen.
+        when(() => api.updateSettings(any())).thenAnswer(
+          (_) async => const PrivacySettingsDto(
+            directMessagePolicy: DirectMessagePolicy.nobody,
+            version: 1,
+          ),
+        );
+        final result = await repository.update({
+          'directMessagePolicy': 'Nobody',
+        });
+        expect(result.directMessagePolicy, DirectMessagePolicy.everyone);
+        expect(repository.cached?.version, 2);
+      },
+    );
 
     test('clear drops the record without publishing a synthetic one', () async {
       when(() => api.getSettings()).thenAnswer((_) async => _settings);
@@ -293,20 +301,20 @@ void main() {
       await events.close();
     });
 
-    BlockedUsersPage page(List<String> ids, {String? next}) =>
-        BlockedUsersPage(
-          blocked: [
-            for (final id in ids) BlockedUserDto(userId: id, userName: id),
-          ],
-          nextCursor: next,
-        );
+    BlockedUsersPage page(List<String> ids, {String? next}) => BlockedUsersPage(
+      blocked: [for (final id in ids) BlockedUserDto(userId: id, userName: id)],
+      nextCursor: next,
+    );
 
     test('isBlocked walks every page, not just the first', () async {
       when(
         () => api.getBlocked(limit: any(named: 'limit'), cursor: null),
       ).thenAnswer((_) async => page(['u1'], next: 'c2'));
       when(
-        () => api.getBlocked(limit: any(named: 'limit'), cursor: 'c2'),
+        () => api.getBlocked(
+          limit: any(named: 'limit'),
+          cursor: 'c2',
+        ),
       ).thenAnswer((_) async => page(['u2']));
 
       // The negative case is the one that matters: a first-page-only scan
@@ -334,19 +342,22 @@ void main() {
       ).called(1);
     });
 
-    test('a session change drops the block list with everything else', () async {
-      when(
-        () => api.getBlocked(limit: any(named: 'limit'), cursor: null),
-      ).thenAnswer((_) async => page(['u1']));
-      expect(await repository.isBlocked('u1'), isTrue);
+    test(
+      'a session change drops the block list with everything else',
+      () async {
+        when(
+          () => api.getBlocked(limit: any(named: 'limit'), cursor: null),
+        ).thenAnswer((_) async => page(['u1']));
+        expect(await repository.isBlocked('u1'), isTrue);
 
-      repository.clear();
-      when(
-        () => api.getBlocked(limit: any(named: 'limit'), cursor: null),
-      ).thenAnswer((_) async => page(const []));
-      // The next account's blocks are not this one's.
-      expect(await repository.isBlocked('u1'), isFalse);
-    });
+        repository.clear();
+        when(
+          () => api.getBlocked(limit: any(named: 'limit'), cursor: null),
+        ).thenAnswer((_) async => page(const []));
+        // The next account's blocks are not this one's.
+        expect(await repository.isBlocked('u1'), isFalse);
+      },
+    );
   });
 
   group('consent requirements', () {
@@ -435,7 +446,9 @@ void main() {
     });
 
     test('mints an install id once and reuses the stored one', () async {
-      when(() => storage.readTelemetryInstallId()).thenAnswer((_) async => null);
+      when(
+        () => storage.readTelemetryInstallId(),
+      ).thenAnswer((_) async => null);
       when(
         () => storage.writeTelemetryInstallId(any()),
       ).thenAnswer((_) async {});
@@ -455,16 +468,18 @@ void main() {
       verify(() => storage.writeTelemetryInstallId(any())).called(1);
     });
 
-    test('a keychain failure leaves reports unattributed, not unsent',
-        () async {
-      when(
-        () => storage.readTelemetryInstallId(),
-      ).thenThrow(Exception('errSecMissingEntitlement'));
+    test(
+      'a keychain failure leaves reports unattributed, not unsent',
+      () async {
+        when(
+          () => storage.readTelemetryInstallId(),
+        ).thenThrow(Exception('errSecMissingEntitlement'));
 
-      final consent = TelemetryConsent(secureStorage: storage);
-      await consent.init();
-      expect(consent.installId, isNull);
-    });
+        final consent = TelemetryConsent(secureStorage: storage);
+        await consent.init();
+        expect(consent.installId, isNull);
+      },
+    );
 
     test('scrubEvent strips the identifiers Sentry collects by default', () {
       final event = SentryEvent(
@@ -500,9 +515,7 @@ void main() {
     test('an event whose user carries no id loses the user entirely', () {
       // Otherwise it would go out as a bag of exactly the attributes just
       // stripped, which is a user object that only ever held PII.
-      final event = SentryEvent(
-        user: SentryUser(email: 'someone@example.com'),
-      );
+      final event = SentryEvent(user: SentryUser(email: 'someone@example.com'));
       expect(TelemetryConsent.scrubEvent(event, Hint())!.user, isNull);
     });
 
@@ -522,10 +535,10 @@ void main() {
         ],
       );
 
-      final data = TelemetryConsent.scrubEvent(event, Hint())!
-          .breadcrumbs!
-          .single
-          .data!;
+      final data = TelemetryConsent.scrubEvent(
+        event,
+        Hint(),
+      )!.breadcrumbs!.single.data!;
       expect(data['url'], 'https://venta.example/api/v1/social/lookup');
       expect(data['method'], 'GET');
       expect(data['status_code'], 403);

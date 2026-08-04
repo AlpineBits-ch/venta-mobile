@@ -99,27 +99,24 @@ Future<void> main() async {
   // the runner rather than just another step. If it cannot start, the app still
   // has to - so the fallback is a plain `runApp`, never an early return.
   final sentryStarted = await bootstrap.step('sentry', () async {
-    await SentryFlutter.init(
-      (options) {
-        options.dsn =
-            'https://0de5da8d45ec13c46a2826e6bfbd0589@o4511596550946816.ingest.de.sentry.io/4511829505671248';
-        // Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
-        // We recommend adjusting this value in production.
-        options.tracesSampleRate = 1.0;
-        // The sampling rate for profiling is relative to tracesSampleRate
-        // Setting to 1.0 will profile 100% of sampled transactions:
-        options.enableLogs = true;
-        // Explicit rather than relied upon: the default is already false, but
-        // a report carrying an email address is the failure this whole gate
-        // exists to prevent, and defaults change between majors.
-        options.sendDefaultPii = false;
-        // Runs on every event, consented or not. Consent decides whether a
-        // report is *attributable*; it is never permission to sweep an email
-        // address or a request body into one. See `TelemetryConsent`.
-        options.beforeSend = TelemetryConsent.scrubEvent;
-      },
-      appRunner: () => runApp(SentryWidget(child: const App())),
-    );
+    await SentryFlutter.init((options) {
+      options.dsn =
+          'https://0de5da8d45ec13c46a2826e6bfbd0589@o4511596550946816.ingest.de.sentry.io/4511829505671248';
+      // Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
+      // We recommend adjusting this value in production.
+      options.tracesSampleRate = 1.0;
+      // The sampling rate for profiling is relative to tracesSampleRate
+      // Setting to 1.0 will profile 100% of sampled transactions:
+      options.enableLogs = true;
+      // Explicit rather than relied upon: the default is already false, but
+      // a report carrying an email address is the failure this whole gate
+      // exists to prevent, and defaults change between majors.
+      options.sendDefaultPii = false;
+      // Runs on every event, consented or not. Consent decides whether a
+      // report is *attributable*; it is never permission to sweep an email
+      // address or a request body into one. See `TelemetryConsent`.
+      options.beforeSend = TelemetryConsent.scrubEvent;
+    }, appRunner: () => runApp(SentryWidget(child: const App())));
   });
 
   if (!sentryStarted) runApp(const App());

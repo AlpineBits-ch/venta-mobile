@@ -64,7 +64,8 @@ MlsAdmissionChallengeDto _challenge({DateTime? expiresAt}) =>
       requestId: 'mljr_1',
       challenge: 'Y2hhbGxlbmdl',
       issuedByDeviceId: _ownDevice,
-      expiresAt: expiresAt ?? DateTime.now().toUtc().add(const Duration(minutes: 15)),
+      expiresAt:
+          expiresAt ?? DateTime.now().toUtc().add(const Duration(minutes: 15)),
     );
 
 void main() {
@@ -220,17 +221,20 @@ void main() {
       );
     });
 
-    test('is announced, because silent admission is not silent notification', () async {
-      // §G.2, item 1. An admission nobody is told about is an admission nobody
-      // can dispute, so the fingerprint goes on record for comparison exactly as
-      // it would for a manual approval.
-      await attempt();
+    test(
+      'is announced, because silent admission is not silent notification',
+      () async {
+        // §G.2, item 1. An admission nobody is told about is an admission nobody
+        // can dispute, so the fingerprint goes on record for comparison exactly as
+        // it would for a manual approval.
+        await attempt();
 
-      final admitted = service.recentlyAdmitted.value.single;
-      expect(admitted.deviceId, _joiningDevice);
-      expect(admitted.fingerprint, _fingerprint);
-      expect(admitted.contextId, _context);
-    });
+        final admitted = service.recentlyAdmitted.value.single;
+        expect(admitted.deviceId, _joiningDevice);
+        expect(admitted.fingerprint, _fingerprint);
+        expect(admitted.contextId, _context);
+      },
+    );
 
     test('falls back to manual after one auto-admission in 24h', () async {
       // §G.2, item 3. A burst of admissions is the signature of a compromise, so
@@ -264,7 +268,9 @@ void main() {
         ),
       ).thenAnswer(
         (_) async => _challenge(
-          expiresAt: DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
+          expiresAt: DateTime.now().toUtc().subtract(
+            const Duration(minutes: 1),
+          ),
         ),
       );
 

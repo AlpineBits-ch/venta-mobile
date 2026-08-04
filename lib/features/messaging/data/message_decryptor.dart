@@ -62,7 +62,8 @@ class MessageDecryptor {
     final contextId = message.conversationId ?? message.channelId;
     if (contextId == null) return message;
 
-    if (!_needsDecryption(message)) return _checkedPlaintext(message, contextId);
+    if (!_needsDecryption(message))
+      return _checkedPlaintext(message, contextId);
 
     // The message names the era it was sealed under. Falling back to whichever
     // group we currently hold would decrypt against the wrong keys once a
