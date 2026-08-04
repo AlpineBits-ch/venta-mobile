@@ -62,6 +62,17 @@ class _InboxAppBarActionState extends State<InboxAppBarAction> {
         if (!summary.hasAnything) return button;
         return Badge(
           label: Text(summary.badgeLabel),
+          // On the icon's leading shoulder, not the trailing one Material
+          // defaults to: this is the last action in the app bar, so a two- or
+          // three-character label hung off the right of the button runs into
+          // the edge of the screen and gets clipped. The offset is mirrored by
+          // hand because `offset` is a raw `Offset` - only `alignment` is
+          // direction-aware - and it has to push away from the icon in both.
+          alignment: AlignmentDirectional.topStart,
+          offset: Offset(
+            Directionality.of(context) == TextDirection.ltr ? -4 : 4,
+            -4,
+          ),
           // Red keeps meaning "somebody wants you". Unread-only stays on the
           // brand colour so a busy server doesn't cry wolf and leave the real
           // mention badge indistinguishable from noise.
