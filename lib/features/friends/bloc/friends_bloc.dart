@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/bloc/safe_emit.dart';
+import '../../../core/network/privacy_refusal.dart';
 import '../data/models/relationship_model.dart';
 import '../data/relationship_repository.dart';
 
@@ -161,6 +162,12 @@ class FriendsBloc extends Bloc<FriendsEvent, FriendsState> {
   ) async {
     try {
       await repository.addFriend(event.username);
+    } on PrivacyRefusalException catch (e) {
+      // Their friend-request policy, or a block. Reported with the server's
+      // own deliberately vague wording, and without the username: "Could not
+      // find or add X" distinguishes a refusal from a typo, which is exactly
+      // the enumeration oracle the refusal is worded to withhold.
+      emit.ifOpen(state.copyWith(actionError: e.message));
     } catch (_) {
       emit.ifOpen(
         state.copyWith(

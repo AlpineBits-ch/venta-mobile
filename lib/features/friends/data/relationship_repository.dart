@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
+import '../../privacy/data/models/blocked_user_dto.dart';
 import 'models/relationship_model.dart';
 import 'relationship_api.dart';
 
@@ -79,6 +80,7 @@ class RelationshipRepository {
   /// instead of showing the previous account's relationships.
   void clear() {
     _cache = [];
+    _blockedUserIds = null;
     _relationshipsController.add(_cache);
   }
 
@@ -108,6 +110,80 @@ class RelationshipRepository {
   Future<void> revoke(String id) async {
     await api.revoke(id);
     await fetch();
+  }
+
+  /// Blocks [userId] and refetches, because a block is not a local edit to one
+  /// row: server-side it also drops an existing friendship and cancels a
+  /// pending request in either direction, so the relationship list this device
+  /// holds is wrong in more places than the one that was acted on.
+  Future<void> block(String userId) async {
+    await api.block(userId);
+    _blockedUserIds?.add(userId);
+    await fetch();
+  }
+
+  /// Unblocking does **not** restore the friendship the block removed - the
+  /// pair go back to strangers, which is what the UI has to say.
+  Future<void> unblock(String userId) async {
+    await api.unblock(userId);
+    _blockedUserIds?.remove(userId);
+    await fetch();
+  }
+
+  /// One page of the caller's block list, for the screen that renders it.
+  ///
+  /// Not cached: that screen is the one place a stale copy would have someone
+  /// believing they blocked a person they didn't, and it is reached rarely
+  /// enough to always be worth a round-trip. [isBlocked] below is the cached
+  /// path, and answers a different question.
+  Future<BlockedUsersPage> fetchBlocked({int? limit, String? cursor}) =>
+      api.getBlocked(limit: limit, cursor: cursor);
+
+  /// Every blocked user id, or null until [_loadBlockedIds] has run once.
+  Set<String>? _blockedUserIds;
+
+  Future<Set<String>>? _blockedIdsInFlight;
+
+  /// Whether the caller has blocked [userId].
+  ///
+  /// Reads a session-cached set rather than the paged list, and walks every
+  /// page once to build it. Scanning only the first page would answer "no" for
+  /// anyone past the 50th block - and that answer reaches the profile screen as
+  /// an Add Friend button the server refuses, which looks like breakage rather
+  /// than like the block the user themselves put there.
+  ///
+  /// Kept correct afterwards by [block]/[unblock] rather than by refetching:
+  /// those are the only ways the set changes for this account, and a block made
+  /// on another device is not worth a page walk per profile opened.
+  Future<bool> isBlocked(String userId) async {
+    final cached = _blockedUserIds;
+    if (cached != null) return cached.contains(userId);
+    return (await _loadBlockedIds()).contains(userId);
+  }
+
+  Future<Set<String>> _loadBlockedIds() {
+    final existing = _blockedIdsInFlight;
+    if (existing != null) return existing;
+    final request = _walkBlockedIds();
+    _blockedIdsInFlight = request;
+    return request.whenComplete(() => _blockedIdsInFlight = null);
+  }
+
+  Future<Set<String>> _walkBlockedIds() async {
+    final ids = <String>{};
+    String? cursor;
+    // Bounded: 100 per page against a 429 budget shared with everything else
+    // the app is doing. Twenty pages is two thousand blocked accounts, well
+    // past any real list, and stopping is better than looping on a server that
+    // returns a cursor forever.
+    for (var page = 0; page < 20; page++) {
+      final result = await api.getBlocked(limit: 100, cursor: cursor);
+      ids.addAll(result.blocked.map((b) => b.userId));
+      if (!result.hasMore) break;
+      cursor = result.nextCursor;
+    }
+    _blockedUserIds = ids;
+    return ids;
   }
 
   void dispose() => _realtimeSub.cancel();

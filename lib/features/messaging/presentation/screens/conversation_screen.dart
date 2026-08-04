@@ -97,6 +97,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
         ),
         myUserId: myUserId,
         soundService: getIt(),
+        privacy: getIt(),
       ),
       child: ThreadView(
         title: _title(myUserId),

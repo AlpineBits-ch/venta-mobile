@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/device/device_id_service.dart';
+import '../../../core/network/rate_limit_interceptor.dart';
 import 'models/server_configuration.dart';
 import 'models/token_response.dart';
 
@@ -16,29 +17,102 @@ class MfaInvalidException implements Exception {}
 
 /// Thrown by [AuthApi.passwordGrant] on a `403 Email not verified.` - the
 /// account exists and the password is right, it just can't sign in until the
-/// emailed link is followed.
+/// emailed code is entered.
 ///
-/// Typed rather than left as a bare `DioException` because it's the *normal*
-/// end of registration, not a failure: `AuthRepository.register` signs in
-/// straight after creating the account, so every new account hits this.
+/// Typed rather than left as a bare `DioException` because it isn't really a
+/// failure: the caller has proved it holds the password, so the honest move is
+/// to show the code form rather than "incorrect username or password". This is
+/// the only signup-related refusal that's allowed to be precise, and it is
+/// precise on purpose - nothing is leaked to a caller who already authenticated.
 class EmailNotVerifiedException implements Exception {}
+
+/// Which field on the registration form a [RegistrationFailure] belongs to.
+enum RegistrationField { email, username, birthdate, general }
+
+/// One entry of the validation array `POST /register` answers a `400` with.
+class RegistrationFailure {
+  const RegistrationFailure({
+    required this.propertyName,
+    required this.message,
+    this.errorCode,
+  });
+
+  factory RegistrationFailure.fromJson(Map<dynamic, dynamic> json) =>
+      RegistrationFailure(
+        propertyName: json['propertyName']?.toString() ?? '',
+        message: json['errorMessage']?.toString() ?? '',
+        errorCode: json['errorCode']?.toString(),
+      );
+
+  final String propertyName;
+  final String message;
+  final String? errorCode;
+
+  /// Which input to hang [message] off.
+  ///
+  /// Keyed off [errorCode] first, because two of these don't report the
+  /// property you'd expect: the age check reports an **empty** `propertyName`
+  /// (it validates a bare date, which has no property to name), and the
+  /// email-format checks report `Value` because they come from the `Email`
+  /// value object rather than from the request DTO.
+  RegistrationField get field {
+    switch (errorCode) {
+      case 'LessThanValidator':
+        return RegistrationField.birthdate;
+      case 'EmailInvalidFormat':
+      case 'EmailDisposableNotAllowed':
+        return RegistrationField.email;
+    }
+    switch (propertyName.toLowerCase()) {
+      case 'username':
+        return RegistrationField.username;
+      case 'email':
+      case 'value':
+        return RegistrationField.email;
+      case 'birthdate':
+        return RegistrationField.birthdate;
+    }
+    return RegistrationField.general;
+  }
+}
+
+/// Thrown by [AuthApi.register] on a `400` - the request was refused before
+/// anything was attempted.
+///
+/// A `400` here means the *username* is taken, the address is missing or
+/// unusable, or the age is under 13. It no longer means "that email is already
+/// registered": a taken address answers `202` like everything else.
+class RegistrationRejectedException implements Exception {
+  const RegistrationRejectedException(this.failures);
+
+  final List<RegistrationFailure> failures;
+
+  @override
+  String toString() =>
+      'RegistrationRejectedException(${failures.map((f) => f.message).join('; ')})';
+}
 
 /// Raw calls against the OAuth2 token endpoint and identity API - used only
 /// by [AuthRepository]. Deliberately uses its own plain [Dio] (no auth
 /// interceptor): the token endpoint doesn't take a bearer token, and a
 /// refresh call must never itself trigger a 401-retry loop.
+///
+/// It does carry [RateLimitInterceptor]. The anonymous bucket is smaller than
+/// the authenticated one (20/s against 50/s) and covers login, registration and
+/// the token endpoint - and a refresh that meets a `429` and isn't retried logs
+/// the user out for a reason that had nothing to do with their session.
 class AuthApi {
   /// [dio] is for tests only - production always wants the private client
   /// described above.
   AuthApi({Dio? dio})
     : _dio =
           dio ??
-          Dio(
+          (Dio(
             BaseOptions(
               connectTimeout: const Duration(seconds: 15),
               receiveTimeout: const Duration(seconds: 15),
             ),
-          );
+          )..interceptors.add(RateLimitInterceptor()));
 
   final Dio _dio;
 
@@ -121,6 +195,24 @@ class AuthApi {
     return TokenResponse.fromJson(response.data!);
   }
 
+  /// Asks for an account - or, if [email] already has one, doesn't, and answers
+  /// exactly the same either way.
+  ///
+  /// Success is `202 Accepted` (**never `200`**) with a fixed body that is
+  /// byte-for-byte identical for a free address and a registered one. It means
+  /// "the request was accepted and, if that address could be registered, mail
+  /// is on the way" - not "an account was created". There is no user id in it,
+  /// and there is deliberately no way to tell the two cases apart: `register`
+  /// is anonymous, so an answer that distinguished them let anyone with a list
+  /// of addresses read off which of them have accounts here.
+  ///
+  /// So nothing downstream may claim an account was made, sign the user in off
+  /// the back of this, or reconstruct an "email already in use" branch from
+  /// timing or anything else. The address owner is told someone tried; the
+  /// caller is not.
+  ///
+  /// A `400` is a validation refusal - taken username, unusable address, under
+  /// 13 - and arrives as [RegistrationRejectedException]. There is no `409`.
   Future<void> register({
     required String baseUrl,
     required String email,
@@ -128,22 +220,45 @@ class AuthApi {
     required String password,
     required DateTime birthdate,
   }) async {
-    await _dio.post<void>(
-      '$baseUrl/api/v1/identity/authentication/register',
-      data: {
-        'email': email,
-        'username': username,
-        'password': password,
-        'birthdate': birthdate.toUtc().toIso8601String(),
-      },
-    );
+    try {
+      // Dio accepts any 2xx, so the `202` needs nothing special - but never
+      // narrow this to `200`, which this endpoint no longer returns at all.
+      await _dio.post<void>(
+        '$baseUrl/api/v1/identity/authentication/register',
+        data: {
+          'email': email,
+          'username': username,
+          'password': password,
+          'birthDate': birthdate.toUtc().toIso8601String(),
+        },
+      );
+    } on DioException catch (e) {
+      final failures = _registrationFailures(e.response);
+      if (failures.isNotEmpty) throw RegistrationRejectedException(failures);
+      rethrow;
+    }
+  }
+
+  List<RegistrationFailure> _registrationFailures(Response<dynamic>? response) {
+    if (response?.statusCode != 400) return const [];
+    final data = response?.data;
+    if (data is! List) return const [];
+    return data
+        .whereType<Map<dynamic, dynamic>>()
+        .map(RegistrationFailure.fromJson)
+        .where((f) => f.message.isNotEmpty)
+        .toList(growable: false);
   }
 
   /// Confirms an address with the 6-digit code that was emailed to it.
   ///
   /// `GET` with query parameters rather than a POST body - matches Alpine's
   /// `EmailVerificationService`, which is the only other client of these two
-  /// endpoints. Throws a `400` on a wrong or expired code.
+  /// endpoints.
+  ///
+  /// `400` is the *only* refusal and it is one message for every cause: wrong
+  /// code, expired code, five wrong guesses, unknown address, already verified.
+  /// Don't try to tell them apart - render it and offer a resend.
   Future<void> verifyEmail({
     required String baseUrl,
     required String email,
@@ -155,7 +270,10 @@ class AuthApi {
     );
   }
 
-  /// Sends a fresh code. `400` here means the address is already verified.
+  /// Re-sends the code. Always `202`, for every address, whether or not it
+  /// exists - infer nothing from it. Asking again while a code is still live
+  /// re-sends the **same** code rather than minting a new one, so pressing
+  /// "send it again" can't invalidate the one already in the user's inbox.
   Future<void> generateVerificationCode({
     required String baseUrl,
     required String email,

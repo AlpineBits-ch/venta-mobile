@@ -147,6 +147,15 @@ class SecureStorageService {
   /// access to [CallCubit]. See `showCallKitFromPushData`.
   static const _activeCallIdKey = 'venta.call.active_call_id';
 
+  /// The random per-install id crash reports are tagged with when the account
+  /// has not consented to data collection - see `TelemetryConsent`.
+  ///
+  /// Deliberately not [_deviceIdKey]. That one is registered with the server
+  /// against the account, so tagging a "pseudonymous" report with it would
+  /// re-identify the user through a second system. This value is never sent
+  /// anywhere but Sentry.
+  static const _telemetryInstallIdKey = 'venta.telemetry.install_id';
+
   Future<String?> readAccessToken() => _storage.read(key: _accessTokenKey);
   Future<String?> readRefreshToken() => _storage.read(key: _refreshTokenKey);
   Future<String?> readServerUrl() => _storage.read(key: _serverUrlKey);
@@ -159,6 +168,11 @@ class SecureStorageService {
       _storage.read(key: _deviceIdentityKeyKey);
   Future<void> writeDeviceIdentityKey(String key) =>
       _storage.write(key: _deviceIdentityKeyKey, value: key);
+
+  Future<String?> readTelemetryInstallId() =>
+      _storage.read(key: _telemetryInstallIdKey);
+  Future<void> writeTelemetryInstallId(String id) =>
+      _storage.write(key: _telemetryInstallIdKey, value: id);
 
   /// One account's MLS identity on this device: an Ed25519 keypair plus the
   /// user id it was minted for.

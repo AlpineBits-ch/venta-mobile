@@ -23,6 +23,8 @@ import '../../features/inbox/data/inbox_repository.dart';
 import '../../features/messaging/data/bot_command_api.dart';
 import '../../features/messaging/data/message_api.dart';
 import '../../features/mls/data/mls_api.dart';
+import '../../features/privacy/data/privacy_api.dart';
+import '../../features/privacy/data/privacy_repository.dart';
 import '../../features/profile/data/profile_api.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/voice/bloc/call_cubit.dart';
@@ -38,6 +40,7 @@ import '../crypto/master_key_service.dart';
 import '../device/device_api.dart';
 import '../device/device_id_service.dart';
 import '../device/device_registration_service.dart';
+import '../diagnostics/telemetry_consent.dart';
 import '../mls/channel_encryption_service.dart';
 import '../mls/conversation_encryption_service.dart';
 import '../mls/conversation_member_service.dart';
@@ -82,6 +85,11 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   getIt.registerLazySingleton<DeviceIdService>(
     () => DeviceIdService(secureStorage: getIt()),
   );
+  // Resolved in `main()` before Sentry starts - it decides what identifier a
+  // crash report carries, and there is no useful moment to decide that later.
+  getIt.registerLazySingleton<TelemetryConsent>(
+    () => TelemetryConsent(secureStorage: getIt()),
+  );
   getIt.registerLazySingleton<AuthApi>(() => AuthApi());
   getIt.registerLazySingleton<AuthRepository>(
     () => AuthRepository(
@@ -120,6 +128,10 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       authRepository: getIt(),
       deviceIdService: getIt(),
     ),
+  );
+  getIt.registerLazySingleton<PrivacyApi>(() => PrivacyApi(client: getIt()));
+  getIt.registerLazySingleton<PrivacyRepository>(
+    () => PrivacyRepository(api: getIt()),
   );
   getIt.registerLazySingleton<ProfileApi>(() => ProfileApi(client: getIt()));
   getIt.registerLazySingleton<ProfileRepository>(
@@ -381,6 +393,10 @@ void resetSessionScopedCaches() {
   // first screen the next account sees - carrying the previous one's count
   // over is the most visible possible stale-cache bug.
   getIt<InboxRepository>().clear();
+  // The privacy record belongs to one account and gates what this device emits
+  // on behalf of it. Carrying the previous account's copy over would have this
+  // handset applying a stranger's answer to "may I send a typing indicator".
+  getIt<PrivacyRepository>().clear();
   // Device registration is per account, not per install: the id this handset
   // registered for the previous user means nothing to the next one, and every
   // call/voice action would be rejected until it registers again.
@@ -420,6 +436,14 @@ void resetSessionScopedCaches() {
 /// device's certificate. It must never be a *required* parameter: the overwhelming
 /// majority of launches have no password and must not be degraded by that.
 Future<void> startAuthenticatedServices({String? password}) async {
+  // First, and awaited: until it lands, crash reports for this session are
+  // filed under the per-install pseudonym, which is the correct behaviour but
+  // also the behaviour a consenting user did not ask for. It is one small GET,
+  // and everything below it is slower.
+  //
+  // Detached from the failure path deliberately - `applyTelemetryConsent`
+  // swallows, because a privacy endpoint that is down must not stop a login.
+  await applyTelemetryConsent();
   await getIt<MlsSessionManager>().prepareIdentity();
   await getIt<DeviceRegistrationService>().ensureRegistered();
   await getIt<PushNotificationService>().start();
@@ -441,6 +465,28 @@ Future<void> startAuthenticatedServices({String? password}) async {
   unawaited(getIt<MlsSessionManager>().sync());
 }
 
+/// Reads the account's privacy record and tells [TelemetryConsent] what it
+/// says, so crash reports carry a real user id only where consent exists.
+///
+/// Never throws. A failure here leaves reports pseudonymous, which is the
+/// direction a failure must go: the alternative - assuming consent because the
+/// consent endpoint was unreachable - is the one outcome that cannot be undone
+/// after the fact.
+///
+/// Also called from the Privacy screen the moment the flag is toggled, so
+/// consent takes effect on the next report rather than on the next launch.
+Future<void> applyTelemetryConsent() async {
+  try {
+    final settings = await getIt<PrivacyRepository>().ensureLoaded();
+    await getIt<TelemetryConsent>().apply(
+      allowDataCollection: settings.allowDataCollection,
+      userId: getIt<AuthRepository>().currentUserId,
+    );
+  } catch (_) {
+    await getIt<TelemetryConsent>().apply(allowDataCollection: false);
+  }
+}
+
 /// Undoes the push half of [startAuthenticatedServices] while the session is
 /// still valid - both calls need a bearer token, so this has to run *before*
 /// `AuthRepository.logout()` clears it.
@@ -450,6 +496,11 @@ Future<void> startAuthenticatedServices({String? password}) async {
 /// this device" is the explicit action that removes it
 /// ([DeviceRegistrationService.forgetThisDevice]).
 Future<void> stopAuthenticatedServices() async {
+  // Back to the per-install pseudonym before the session goes. The next person
+  // to use this handset must not have their crashes filed under the last one's
+  // user id, and `resetSessionScopedCaches` clears the record this was read
+  // from - so it has to happen here, not there.
+  await getIt<TelemetryConsent>().signedOut();
   await getIt<PushNotificationService>().unregisterToken();
   await getIt<CallKitService>().unregisterVoipToken();
   await getIt<MlsRealtimeBridge>().stop();

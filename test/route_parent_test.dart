@@ -64,10 +64,26 @@ void main() {
         '/settings/appearance',
         '/settings/qr-login',
         '/settings/devices',
+        '/settings/privacy',
       ]) {
         expect(
           RoutePaths.parentOf(location),
           RoutePaths.settings,
+          reason: location,
+        );
+      }
+    });
+
+    test('privacy sub-screens go back to Privacy, not to the index', () {
+      for (final location in [
+        RoutePaths.blockedUsers,
+        RoutePaths.guildDmPrivacy,
+        RoutePaths.dataExport,
+        RoutePaths.legalDocuments,
+      ]) {
+        expect(
+          RoutePaths.parentOf(location),
+          RoutePaths.privacy,
           reason: location,
         );
       }

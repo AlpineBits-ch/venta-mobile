@@ -90,10 +90,12 @@ enum AuthStatus {
   failure,
   mfaRequired,
 
-  /// The account exists but its address isn't confirmed yet, so the code entry
-  /// takes over the form. Deliberately not [failure] after a registration:
-  /// registration worked, and telling somebody it didn't sends them round
-  /// again into a "username already taken" on an account they just made.
+  /// The next thing needed is the code from the email. Reached two ways, and
+  /// they mean subtly different things: after a sign-in it means "this account
+  /// exists and isn't confirmed yet", after a registration it means only "the
+  /// request was accepted" - the address may already have had an account, in
+  /// which case nothing was created and what landed in the inbox is a notice,
+  /// not a code. Deliberately not [failure] in either case.
   emailVerificationRequired,
 }
 
@@ -103,6 +105,7 @@ class AuthState extends Equatable {
     this.errorMessage,
     this.pendingVerificationEmail,
     this.infoMessage,
+    this.registrationErrors = const {},
   });
 
   final AuthStatus status;
@@ -115,11 +118,18 @@ class AuthState extends Equatable {
   /// Non-error feedback for the code step - "a new code is on its way".
   final String? infoMessage;
 
+  /// Per-field refusals from the registration form, so a taken username or an
+  /// unusable address is shown *on the field it's about* and the user stays on
+  /// the form. Anything the server couldn't attribute to a field lands in
+  /// [errorMessage] instead.
+  final Map<RegistrationField, String> registrationErrors;
+
   AuthState copyWith({
     AuthStatus? status,
     String? errorMessage,
     String? pendingVerificationEmail,
     String? infoMessage,
+    Map<RegistrationField, String>? registrationErrors,
   }) => AuthState(
     status: status ?? this.status,
     errorMessage: errorMessage,
@@ -129,6 +139,9 @@ class AuthState extends Equatable {
     pendingVerificationEmail:
         pendingVerificationEmail ?? this.pendingVerificationEmail,
     infoMessage: infoMessage,
+    // Cleared unless restated, like the messages - a resubmit shouldn't leave
+    // last attempt's field errors sitting under the inputs.
+    registrationErrors: registrationErrors ?? const {},
   );
 
   @override
@@ -137,6 +150,7 @@ class AuthState extends Equatable {
     errorMessage,
     pendingVerificationEmail,
     infoMessage,
+    registrationErrors,
   ];
 }
 
@@ -218,6 +232,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  /// Signup is a *request*, not a creation, and this reflects that.
+  ///
+  /// A success here says only that the server accepted the form. It doesn't say
+  /// an account was made - if the address already had one, none was, and the
+  /// response is identical - so nothing below signs anybody in or claims a
+  /// session exists. The next step is the same for all three outcomes (new
+  /// account, unfinished account, address already verified): the code screen.
   Future<void> _onRegisterSubmitted(
     RegisterSubmitted event,
     Emitter<AuthState> emit,
@@ -230,24 +251,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         password: event.password,
         birthdate: event.birthdate,
       );
-      sessionCubit.signedIn(authRepository.currentUserId ?? '');
-      unawaited(realtimeService.start());
-      unawaited(startAuthenticatedServices(password: event.password));
-      emit.ifOpen(state.copyWith(status: AuthStatus.success));
-    } on EmailNotVerifiedException {
-      // The account is created; only the sign-in that follows it was refused.
-      // Registration always knows the address, so this always gets a code.
-      _pending = (
-        login: event.username,
-        email: event.email,
-        password: event.password,
-      );
-      emit.ifOpen(
-        state.copyWith(
-          status: AuthStatus.emailVerificationRequired,
-          pendingVerificationEmail: event.email,
-        ),
-      );
+    } on RegistrationRejectedException catch (e) {
+      emit.ifOpen(_rejectedState(e));
+      return;
     } catch (e, stack) {
       emit.ifOpen(
         state.copyWith(
@@ -255,7 +261,51 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           errorMessage: _describeError(e, stack),
         ),
       );
+      return;
     }
+    // Held for the sign-in that follows verification, so confirming the address
+    // lands them in the app rather than back on a login form. If the address
+    // turned out to belong to somebody else's account these are simply never
+    // used - the code they'd need was never sent.
+    _pending = (
+      login: event.username,
+      email: event.email,
+      password: event.password,
+    );
+    emit.ifOpen(
+      state.copyWith(
+        status: AuthStatus.emailVerificationRequired,
+        pendingVerificationEmail: event.email,
+      ),
+    );
+  }
+
+  /// Splits a `400` into per-field messages and a leftover general one.
+  ///
+  /// The server's messages are used as-is. The one that matters is the taken
+  /// username - it's the only signup refusal still allowed to be specific, and
+  /// a user who isn't told to pick another name can't get past the form.
+  AuthState _rejectedState(RegistrationRejectedException error) {
+    final fieldErrors = <RegistrationField, String>{};
+    final general = <String>[];
+    for (final failure in error.failures) {
+      if (failure.field == RegistrationField.general) {
+        general.add(failure.message);
+      } else {
+        fieldErrors.putIfAbsent(failure.field, () => failure.message);
+      }
+    }
+    reportSwallowed('AuthBloc/register', error, StackTrace.current);
+    return state.copyWith(
+      status: AuthStatus.failure,
+      registrationErrors: fieldErrors,
+      // Null rather than a filler sentence when every message already sits on
+      // a field - otherwise the form shows the fault twice, once in place and
+      // once in a snackbar saying something vaguer.
+      errorMessage: general.isNotEmpty
+          ? general.join('\n')
+          : (fieldErrors.isEmpty ? 'That signup was refused.' : null),
+    );
   }
 
   Future<void> _onVerificationCodeSubmitted(
@@ -389,12 +439,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return data.trim();
       }
       final status = error.response?.statusCode;
+      // Registration's `400`s never reach here - they're a validation array
+      // handled as `RegistrationRejectedException` - so this is a sign-in.
       if (status == 400 || status == 401) {
         return 'Incorrect username or password.';
       }
-      if (status == 409) {
-        return 'That username or email is already taken.';
-      }
+      // There is no 409 branch. Signup used to answer one for a taken address
+      // and doesn't any more - it can't, that was the enumeration oracle - and
+      // guessing at "that email is already taken" from anything else is the
+      // exact reconstruction the change exists to prevent.
       if (error.response != null) {
         return 'The server refused that (error $status). Please try again.';
       }

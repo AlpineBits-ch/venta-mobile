@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/network/privacy_refusal.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
@@ -49,12 +50,18 @@ class _FriendsScreenState extends State<FriendsScreen> {
       if (context.mounted) {
         context.push(RoutePaths.conversationPath(conversation.id));
       }
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not start that conversation.')),
-        );
-      }
+    } catch (error) {
+      if (!context.mounted) return;
+      // A DM policy or a block reads as breakage under the generic wording,
+      // and the user keeps retrying something that will never succeed.
+      final refusal = privacyRefusalOf(error);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            refusal?.message ?? 'Could not start that conversation.',
+          ),
+        ),
+      );
     }
   }
 

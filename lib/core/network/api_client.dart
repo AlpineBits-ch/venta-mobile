@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../features/auth/data/auth_repository.dart';
 import 'auth_interceptor.dart';
 import 'device_id_interceptor.dart';
+import 'rate_limit_interceptor.dart';
 
 /// Shared authenticated HTTP client for every feature repository except
 /// [AuthRepository] itself. There's no static `baseUrl` on the underlying
@@ -25,6 +26,10 @@ class ApiClient {
            receiveTimeout: const Duration(seconds: 15),
          ),
        ) {
+    // Ahead of the others: a `429` wait can outlast the access token, and
+    // holding the request *before* `AuthInterceptor` stamps it means the token
+    // is read when the request actually goes out rather than when it queued.
+    dio.interceptors.add(RateLimitInterceptor());
     dio.interceptors.add(AuthInterceptor(authRepository));
     if (deviceId != null && registerDevice != null) {
       dio.interceptors.add(

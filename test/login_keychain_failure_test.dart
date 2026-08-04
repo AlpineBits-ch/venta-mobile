@@ -202,10 +202,13 @@ void main() {
     });
   });
 
-  group('register inherits the same protection', () {
-    test('a refused keychain during the implicit login does not fail it',
+  group('register no longer signs in', () {
+    test('the keychain is never reached, because no session is created',
         () async {
-      // `register` calls `login`, so it had exactly the same exposure.
+      // This used to call `login` and inherit its keychain exposure. It can't
+      // any more: registration answers `202` with no token and no user id, and
+      // the same `202` whether or not an account was created - so there is
+      // nothing to sign in with. See `registration_contract_test.dart`.
       when(
         () => api.register(
           baseUrl: any(named: 'baseUrl'),
@@ -215,12 +218,6 @@ void main() {
           birthdate: any(named: 'birthdate'),
         ),
       ).thenAnswer((_) async {});
-      when(
-        () => storage.writeTokens(
-          accessToken: any(named: 'accessToken'),
-          refreshToken: any(named: 'refreshToken'),
-        ),
-      ).thenThrow(_keychainRefused());
 
       await expectLater(
         repository.register(
@@ -231,8 +228,22 @@ void main() {
         ),
         completes,
       );
-      expect(repository.isAuthenticated, isTrue);
-      expect(repository.sessionPersisted.value, isFalse);
+      expect(repository.isAuthenticated, isFalse);
+      verifyNever(
+        () => api.passwordGrant(
+          baseUrl: any(named: 'baseUrl'),
+          username: any(named: 'username'),
+          password: any(named: 'password'),
+          mfaCode: any(named: 'mfaCode'),
+          deviceId: any(named: 'deviceId'),
+        ),
+      );
+      verifyNever(
+        () => storage.writeTokens(
+          accessToken: any(named: 'accessToken'),
+          refreshToken: any(named: 'refreshToken'),
+        ),
+      );
     });
   });
 

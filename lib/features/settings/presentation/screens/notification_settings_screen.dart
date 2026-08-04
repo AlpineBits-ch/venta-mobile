@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -106,11 +107,23 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     });
     try {
       await getIt<AccountRepository>().updateNotificationSettings(settings);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
+        // `413` is the settings blob being over its size cap. This screen only
+        // ever adds the `notifications` key, and re-fetches and merges before
+        // saving, so the bulk came from somewhere else - retrying the same
+        // toggle will meet the same wall, and the generic wording would have
+        // the user do exactly that.
+        final tooLarge =
+            error is DioException && error.response?.statusCode == 413;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save notification settings.'),
+          SnackBar(
+            content: Text(
+              tooLarge
+                  ? 'Your saved settings are too large for the server to '
+                        'store. Try again from the app that added them.'
+                  : 'Could not save notification settings.',
+            ),
           ),
         );
       }

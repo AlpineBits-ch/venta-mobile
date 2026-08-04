@@ -130,6 +130,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
         ),
         myUserId: myUserId,
         soundService: getIt(),
+        privacy: getIt(),
       ),
       child: ThreadView(
         title: _title(),

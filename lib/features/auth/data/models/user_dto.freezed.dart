@@ -15,7 +15,15 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$UserDto {
 
- String get id; UserStatus get status; DateTime? get deletionRequestedAt; DateTime? get purgeScheduledAt; bool get mfaEnabled;
+ String get id; UserStatus get status; DateTime? get deletionRequestedAt; DateTime? get purgeScheduledAt; bool get mfaEnabled;/// Legal documents whose current version this account has not accepted,
+/// each with the version, when it takes effect and where to read it.
+///
+/// Always present and never null server-side; `[]` is the normal case and
+/// means nothing to prompt for - as does the absent field on a backend that
+/// predates versioned consent. Registration records consent for the
+/// then-current versions, so a non-empty list only happens on a version
+/// bump. See `LegalDocumentsScreen`.
+ List<ConsentRequirementDto> get consentRequired;
 /// Create a copy of UserDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +36,16 @@ $UserDtoCopyWith<UserDto> get copyWith => _$UserDtoCopyWithImpl<UserDto>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.deletionRequestedAt, deletionRequestedAt) || other.deletionRequestedAt == deletionRequestedAt)&&(identical(other.purgeScheduledAt, purgeScheduledAt) || other.purgeScheduledAt == purgeScheduledAt)&&(identical(other.mfaEnabled, mfaEnabled) || other.mfaEnabled == mfaEnabled));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.deletionRequestedAt, deletionRequestedAt) || other.deletionRequestedAt == deletionRequestedAt)&&(identical(other.purgeScheduledAt, purgeScheduledAt) || other.purgeScheduledAt == purgeScheduledAt)&&(identical(other.mfaEnabled, mfaEnabled) || other.mfaEnabled == mfaEnabled)&&const DeepCollectionEquality().equals(other.consentRequired, consentRequired));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,status,deletionRequestedAt,purgeScheduledAt,mfaEnabled);
+int get hashCode => Object.hash(runtimeType,id,status,deletionRequestedAt,purgeScheduledAt,mfaEnabled,const DeepCollectionEquality().hash(consentRequired));
 
 @override
 String toString() {
-  return 'UserDto(id: $id, status: $status, deletionRequestedAt: $deletionRequestedAt, purgeScheduledAt: $purgeScheduledAt, mfaEnabled: $mfaEnabled)';
+  return 'UserDto(id: $id, status: $status, deletionRequestedAt: $deletionRequestedAt, purgeScheduledAt: $purgeScheduledAt, mfaEnabled: $mfaEnabled, consentRequired: $consentRequired)';
 }
 
 
@@ -48,7 +56,7 @@ abstract mixin class $UserDtoCopyWith<$Res>  {
   factory $UserDtoCopyWith(UserDto value, $Res Function(UserDto) _then) = _$UserDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, UserStatus status, DateTime? deletionRequestedAt, DateTime? purgeScheduledAt, bool mfaEnabled
+ String id, UserStatus status, DateTime? deletionRequestedAt, DateTime? purgeScheduledAt, bool mfaEnabled, List<ConsentRequirementDto> consentRequired
 });
 
 
@@ -65,14 +73,15 @@ class _$UserDtoCopyWithImpl<$Res>
 
 /// Create a copy of UserDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? status = null,Object? deletionRequestedAt = freezed,Object? purgeScheduledAt = freezed,Object? mfaEnabled = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? status = null,Object? deletionRequestedAt = freezed,Object? purgeScheduledAt = freezed,Object? mfaEnabled = null,Object? consentRequired = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as UserStatus,deletionRequestedAt: freezed == deletionRequestedAt ? _self.deletionRequestedAt : deletionRequestedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,purgeScheduledAt: freezed == purgeScheduledAt ? _self.purgeScheduledAt : purgeScheduledAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,mfaEnabled: null == mfaEnabled ? _self.mfaEnabled : mfaEnabled // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,consentRequired: null == consentRequired ? _self.consentRequired : consentRequired // ignore: cast_nullable_to_non_nullable
+as List<ConsentRequirementDto>,
   ));
 }
 
@@ -154,10 +163,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt,  bool mfaEnabled)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt,  bool mfaEnabled,  List<ConsentRequirementDto> consentRequired)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _UserDto() when $default != null:
-return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt,_that.mfaEnabled);case _:
+return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt,_that.mfaEnabled,_that.consentRequired);case _:
   return orElse();
 
 }
@@ -175,10 +184,10 @@ return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeSched
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt,  bool mfaEnabled)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt,  bool mfaEnabled,  List<ConsentRequirementDto> consentRequired)  $default,) {final _that = this;
 switch (_that) {
 case _UserDto():
-return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt,_that.mfaEnabled);}
+return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt,_that.mfaEnabled,_that.consentRequired);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -192,10 +201,10 @@ return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeSched
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt,  bool mfaEnabled)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  UserStatus status,  DateTime? deletionRequestedAt,  DateTime? purgeScheduledAt,  bool mfaEnabled,  List<ConsentRequirementDto> consentRequired)?  $default,) {final _that = this;
 switch (_that) {
 case _UserDto() when $default != null:
-return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt,_that.mfaEnabled);case _:
+return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeScheduledAt,_that.mfaEnabled,_that.consentRequired);case _:
   return null;
 
 }
@@ -207,7 +216,7 @@ return $default(_that.id,_that.status,_that.deletionRequestedAt,_that.purgeSched
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _UserDto implements UserDto {
-  const _UserDto({required this.id, required this.status, this.deletionRequestedAt, this.purgeScheduledAt, this.mfaEnabled = false});
+  const _UserDto({required this.id, required this.status, this.deletionRequestedAt, this.purgeScheduledAt, this.mfaEnabled = false, final  List<ConsentRequirementDto> consentRequired = const <ConsentRequirementDto>[]}): _consentRequired = consentRequired;
   factory _UserDto.fromJson(Map<String, dynamic> json) => _$UserDtoFromJson(json);
 
 @override final  String id;
@@ -215,6 +224,29 @@ class _UserDto implements UserDto {
 @override final  DateTime? deletionRequestedAt;
 @override final  DateTime? purgeScheduledAt;
 @override@JsonKey() final  bool mfaEnabled;
+/// Legal documents whose current version this account has not accepted,
+/// each with the version, when it takes effect and where to read it.
+///
+/// Always present and never null server-side; `[]` is the normal case and
+/// means nothing to prompt for - as does the absent field on a backend that
+/// predates versioned consent. Registration records consent for the
+/// then-current versions, so a non-empty list only happens on a version
+/// bump. See `LegalDocumentsScreen`.
+ final  List<ConsentRequirementDto> _consentRequired;
+/// Legal documents whose current version this account has not accepted,
+/// each with the version, when it takes effect and where to read it.
+///
+/// Always present and never null server-side; `[]` is the normal case and
+/// means nothing to prompt for - as does the absent field on a backend that
+/// predates versioned consent. Registration records consent for the
+/// then-current versions, so a non-empty list only happens on a version
+/// bump. See `LegalDocumentsScreen`.
+@override@JsonKey() List<ConsentRequirementDto> get consentRequired {
+  if (_consentRequired is EqualUnmodifiableListView) return _consentRequired;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_consentRequired);
+}
+
 
 /// Create a copy of UserDto
 /// with the given fields replaced by the non-null parameter values.
@@ -229,16 +261,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.deletionRequestedAt, deletionRequestedAt) || other.deletionRequestedAt == deletionRequestedAt)&&(identical(other.purgeScheduledAt, purgeScheduledAt) || other.purgeScheduledAt == purgeScheduledAt)&&(identical(other.mfaEnabled, mfaEnabled) || other.mfaEnabled == mfaEnabled));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserDto&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.deletionRequestedAt, deletionRequestedAt) || other.deletionRequestedAt == deletionRequestedAt)&&(identical(other.purgeScheduledAt, purgeScheduledAt) || other.purgeScheduledAt == purgeScheduledAt)&&(identical(other.mfaEnabled, mfaEnabled) || other.mfaEnabled == mfaEnabled)&&const DeepCollectionEquality().equals(other._consentRequired, _consentRequired));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,status,deletionRequestedAt,purgeScheduledAt,mfaEnabled);
+int get hashCode => Object.hash(runtimeType,id,status,deletionRequestedAt,purgeScheduledAt,mfaEnabled,const DeepCollectionEquality().hash(_consentRequired));
 
 @override
 String toString() {
-  return 'UserDto(id: $id, status: $status, deletionRequestedAt: $deletionRequestedAt, purgeScheduledAt: $purgeScheduledAt, mfaEnabled: $mfaEnabled)';
+  return 'UserDto(id: $id, status: $status, deletionRequestedAt: $deletionRequestedAt, purgeScheduledAt: $purgeScheduledAt, mfaEnabled: $mfaEnabled, consentRequired: $consentRequired)';
 }
 
 
@@ -249,7 +281,7 @@ abstract mixin class _$UserDtoCopyWith<$Res> implements $UserDtoCopyWith<$Res> {
   factory _$UserDtoCopyWith(_UserDto value, $Res Function(_UserDto) _then) = __$UserDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, UserStatus status, DateTime? deletionRequestedAt, DateTime? purgeScheduledAt, bool mfaEnabled
+ String id, UserStatus status, DateTime? deletionRequestedAt, DateTime? purgeScheduledAt, bool mfaEnabled, List<ConsentRequirementDto> consentRequired
 });
 
 
@@ -266,14 +298,15 @@ class __$UserDtoCopyWithImpl<$Res>
 
 /// Create a copy of UserDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? status = null,Object? deletionRequestedAt = freezed,Object? purgeScheduledAt = freezed,Object? mfaEnabled = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? status = null,Object? deletionRequestedAt = freezed,Object? purgeScheduledAt = freezed,Object? mfaEnabled = null,Object? consentRequired = null,}) {
   return _then(_UserDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as UserStatus,deletionRequestedAt: freezed == deletionRequestedAt ? _self.deletionRequestedAt : deletionRequestedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,purgeScheduledAt: freezed == purgeScheduledAt ? _self.purgeScheduledAt : purgeScheduledAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,mfaEnabled: null == mfaEnabled ? _self.mfaEnabled : mfaEnabled // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,consentRequired: null == consentRequired ? _self._consentRequired : consentRequired // ignore: cast_nullable_to_non_nullable
+as List<ConsentRequirementDto>,
   ));
 }
 

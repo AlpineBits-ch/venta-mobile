@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/privacy_refusal.dart';
 import 'models/attachment_dto.dart';
 import 'models/message_dto.dart';
 
@@ -101,6 +102,13 @@ class MessageApi {
           data['error'] == 'automod_blocked') {
         throw AutoModBlockedException(data['reason']?.toString() ?? '');
       }
+      // 1:1 DMs are gated here as of the privacy work - a send that has always
+      // succeeded in an open conversation can now be refused because the
+      // recipient narrowed their policy, or answer `503` because the policy
+      // couldn't be read at all. Group sends are not re-evaluated. Checked
+      // after automod because both are `403` and automod names itself.
+      final refusal = privacyRefusalOf(e);
+      if (refusal != null) throw refusal;
       if (e.response?.statusCode == 409 && data is Map) {
         throw MlsSendConflictException(
           contextId: data['contextId']?.toString() ?? '',

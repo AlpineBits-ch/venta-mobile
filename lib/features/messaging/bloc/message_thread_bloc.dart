@@ -4,7 +4,9 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/bloc/safe_emit.dart';
+import '../../../core/network/privacy_refusal.dart';
 import '../../../core/sound/sound_service.dart';
+import '../../privacy/data/privacy_repository.dart';
 import '../data/message_api.dart';
 import '../data/message_content_codec.dart';
 import '../data/message_repository.dart';
@@ -321,6 +323,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     required this.repository,
     required this.myUserId,
     required this.soundService,
+    required this.privacy,
   }) : super(const ThreadState()) {
     on<ThreadOpened>(_onOpened);
     on<ThreadLoadMoreRequested>(_onLoadMoreRequested);
@@ -397,6 +400,12 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   final MessageRepository repository;
   final String myUserId;
   final SoundService soundService;
+
+  /// Read for the typing-indicator setting only. The server is the enforcement
+  /// point for every privacy control in this thread; this is here so the
+  /// indicator stops the moment the switch is flipped rather than at whatever
+  /// point the socket next reconnects.
+  final PrivacyRepository privacy;
   late final StreamSubscription<MessageRepositoryEvent> _repoSub;
   final Map<String, Timer> _typingTimers = {};
   int _tempIdCounter = 0;
@@ -508,6 +517,24 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           error: e.message,
         ),
       );
+    } on PrivacyRefusalException catch (e) {
+      // The recipient's DM policy, or a block. Same treatment as automod when
+      // it is a decision - the send will never succeed and a retry affordance
+      // would be a lie. `lookupUnavailable` is the exception: nothing was
+      // decided, so the bubble stays as a failed send the user can retry.
+      emit.ifOpen(
+        state.copyWith(
+          messages: [
+            for (final m in state.messages)
+              if (e.isRetryable || m.id != tempId) m,
+          ],
+          pendingSendIds: {...state.pendingSendIds}..remove(tempId),
+          failedSendIds: e.isRetryable
+              ? {...state.failedSendIds, tempId}
+              : state.failedSendIds,
+          error: e.message,
+        ),
+      );
     } catch (_) {
       emit.ifOpen(
         state.copyWith(
@@ -522,6 +549,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     ThreadTypingNotified event,
     Emitter<ThreadState> emit,
   ) async {
+    if (!privacy.shouldSendTypingIndicators) return;
     await repository.sendTypingIndicator();
   }
 
@@ -967,6 +995,12 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
   void _onUserTypingRemote(_UserTypingRemote event, Emitter<ThreadState> emit) {
     if (event.userId == myUserId) return;
+    // Reciprocal: someone who withholds their own typing indicator does not get
+    // to watch everyone else's. Without that the setting is a way to take
+    // without giving, which is what makes it unusable in practice - and the
+    // server applies the same rule, so this only closes the gap for events
+    // already in flight when the switch was flipped.
+    if (!privacy.shouldRenderTypingIndicators) return;
     _typingTimers[event.userId]?.cancel();
     _typingTimers[event.userId] = Timer(
       const Duration(seconds: 5),

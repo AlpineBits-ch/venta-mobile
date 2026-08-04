@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/bloc/safe_emit.dart';
+import '../../../core/network/privacy_refusal.dart';
 import '../../friends/data/models/relationship_model.dart';
 import '../../friends/data/relationship_repository.dart';
 import '../data/models/profile_dto.dart';
@@ -14,6 +15,7 @@ class UserProfileState extends Equatable {
     this.status = UserProfileStatus.loading,
     this.profile,
     this.relationship,
+    this.isBlocked = false,
     this.isActionInProgress = false,
     this.errorMessage,
   });
@@ -23,6 +25,14 @@ class UserProfileState extends Equatable {
 
   /// Null means "no relationship yet" (never friended, never requested).
   final RelationshipModel? relationship;
+
+  /// Whether *this* user has blocked the profile being viewed.
+  ///
+  /// Never the other direction. Being blocked is deliberately indistinguishable
+  /// from not being friends, and there is no field on any response that would
+  /// let this screen know - which is the intended design, not a gap.
+  final bool isBlocked;
+
   final bool isActionInProgress;
   final String? errorMessage;
 
@@ -35,12 +45,14 @@ class UserProfileState extends Equatable {
     UserProfileStatus? status,
     ProfileDto? profile,
     RelationshipModel? relationship,
+    bool? isBlocked,
     bool? isActionInProgress,
     String? errorMessage,
   }) => UserProfileState(
     status: status ?? this.status,
     profile: profile ?? this.profile,
     relationship: relationship,
+    isBlocked: isBlocked ?? this.isBlocked,
     isActionInProgress: isActionInProgress ?? false,
     errorMessage: errorMessage,
   );
@@ -50,6 +62,7 @@ class UserProfileState extends Equatable {
     status,
     profile,
     relationship,
+    isBlocked,
     isActionInProgress,
     errorMessage,
   ];
@@ -80,15 +93,78 @@ class UserProfileCubit extends Cubit<UserProfileState>
     try {
       final profile = await profileRepository.getByUserId(userId);
       await relationshipRepository.fetch();
+      // Block state is its own list, not a relationship row - you can block
+      // someone you have no relationship with, so there is no row to read it
+      // off. Guarded separately from the two loads above: failing to read it
+      // costs the menu its correct Block/Unblock label, and must not cost the
+      // page its profile.
+      var blocked = false;
+      try {
+        blocked = await relationshipRepository.isBlocked(userId);
+      } catch (_) {
+        // Leaves the menu offering "Block", which a block already in place
+        // answers with a harmless idempotent write.
+      }
       emitIfOpen(
         state.copyWith(
           status: UserProfileStatus.loaded,
           profile: profile,
           relationship: _cachedRelationship,
+          isBlocked: blocked,
         ),
       );
     } catch (_) {
       emitIfOpen(state.copyWith(status: UserProfileStatus.error));
+    }
+  }
+
+  /// Blocks the profile being viewed. Confirmed at the call site - this is not
+  /// reversible into the friendship it removes.
+  Future<void> block() async {
+    emitIfOpen(state.copyWith(isActionInProgress: true));
+    try {
+      await relationshipRepository.block(userId);
+      emitIfOpen(
+        state.copyWith(
+          isActionInProgress: false,
+          // Cleared, not recomputed: the server drops the friendship and any
+          // pending request as part of the block, so whatever row the refetch
+          // inside `block` produced is not a relationship this screen should
+          // offer actions on.
+          relationship: null,
+          isBlocked: true,
+        ),
+      );
+    } catch (_) {
+      emitIfOpen(
+        state.copyWith(
+          isActionInProgress: false,
+          relationship: _cachedRelationship,
+          errorMessage: 'Could not block this account.',
+        ),
+      );
+    }
+  }
+
+  Future<void> unblock() async {
+    emitIfOpen(state.copyWith(isActionInProgress: true));
+    try {
+      await relationshipRepository.unblock(userId);
+      emitIfOpen(
+        state.copyWith(
+          isActionInProgress: false,
+          relationship: _cachedRelationship,
+          isBlocked: false,
+        ),
+      );
+    } catch (_) {
+      emitIfOpen(
+        state.copyWith(
+          isActionInProgress: false,
+          relationship: _cachedRelationship,
+          errorMessage: 'Could not unblock this account.',
+        ),
+      );
     }
   }
 
@@ -103,6 +179,12 @@ class UserProfileCubit extends Cubit<UserProfileState>
           isActionInProgress: false,
           relationship: _cachedRelationship,
         ),
+      );
+    } on PrivacyRefusalException catch (e) {
+      // The target's friend-request policy, or a block. Which of the two is
+      // deliberately not distinguishable here - see `PrivacyRefusal.message`.
+      emitIfOpen(
+        state.copyWith(isActionInProgress: false, errorMessage: e.message),
       );
     } catch (_) {
       emitIfOpen(

@@ -176,10 +176,27 @@ class AuthRepository {
   Future<void> verifyEmail({required String email, required String code}) =>
       api.verifyEmail(baseUrl: _baseUrl, email: email, code: code);
 
-  /// Re-sends the verification code. A `400` means it's already verified.
+  /// Re-sends the verification code. Always succeeds, for any address.
   Future<void> resendVerificationCode(String email) =>
       api.generateVerificationCode(baseUrl: _baseUrl, email: email);
 
+  /// Submits a signup and **does not sign in**.
+  ///
+  /// There is nothing to sign in with: the response is `202` with no user id
+  /// and no token, and it is the same response whether an account was created
+  /// or the address already had one - deliberately, so signup can't be used to
+  /// test which addresses are registered here.
+  ///
+  /// This used to call [login] straight after, and lean on the
+  /// `EmailNotVerifiedException` that came back to reach the code screen. That
+  /// no longer works and is no longer honest: for an address that already has
+  /// an account, the username just registered doesn't exist, so the grant
+  /// answers a flat `401` and the user would be told their brand-new password
+  /// was wrong. The flow is register -> verify -> sign in, and the caller shows
+  /// the code screen off the back of this returning.
+  ///
+  /// Throws [RegistrationRejectedException] on a `400` - the username is taken,
+  /// the address is unusable, or the age is under 13.
   Future<void> register({
     required String email,
     required String username,
@@ -197,8 +214,8 @@ class AuthRepository {
       password: password,
       birthdate: birthdate,
     );
+    // Held so the verify/resend calls that follow reach the same instance.
     _baseUrl = resolvedBaseUrl;
-    await login(username, password);
   }
 
   /// Returns a valid access token, refreshing first if needed. Concurrent

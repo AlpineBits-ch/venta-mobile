@@ -57,6 +57,17 @@ abstract final class RoutePaths {
   static const notificationSettings = '/settings/notifications';
   static const appearanceSettings = '/settings/appearance';
 
+  /// Who can reach you, what you share, and what may be done with your data.
+  static const privacy = '/settings/privacy';
+
+  /// Sub-pages of [privacy]. Nested under it rather than flat under
+  /// `/settings`, so `parentOf` sends the system back button to the Privacy
+  /// page these were opened from and not to the settings index.
+  static const blockedUsers = '/settings/privacy/blocked';
+  static const guildDmPrivacy = '/settings/privacy/servers';
+  static const dataExport = '/settings/privacy/data';
+  static const legalDocuments = '/settings/privacy/legal';
+
   /// Scanning a desktop/web client's login QR code. Nothing here is about
   /// *this* device's session - see `QrLoginScreen`.
   static const qrLogin = '/settings/qr-login';
@@ -104,6 +115,10 @@ abstract final class RoutePaths {
       ['me'] => home,
       ['me', ...] => selfProfile,
       ['settings'] => home,
+      // Declared before the catch-all below it: the privacy sub-pages are two
+      // levels deep and would otherwise back out past the page that opened them.
+      ['settings', 'privacy', ...final rest] =>
+        rest.isEmpty ? settings : privacy,
       ['settings', ...] => settings,
       ['user', ...] => home,
       _ => null,

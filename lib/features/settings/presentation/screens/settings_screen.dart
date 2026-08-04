@@ -11,6 +11,74 @@ import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/settings_tiles.dart';
 import '../../../auth/data/account_repository.dart';
 import '../../../auth/data/models/user_dto.dart';
+import '../../../privacy/data/models/legal_document_dto.dart';
+
+/// Shown when the server reports documents whose current version this account
+/// hasn't accepted (`consentRequired` on `GET /users/self`).
+///
+/// Deliberately not a modal gate. The published terms cover an account that
+/// already exists and keeps working; blocking the app behind an Accept button
+/// would be coercion dressed as consent, and the withdrawal path here is
+/// account deletion, which the user cannot reach if the app won't open.
+class _ConsentBanner extends StatelessWidget {
+  const _ConsentBanner({required this.documents});
+
+  /// A document type this client doesn't know about is still something the
+  /// user has to be told about, so `ConsentRequirementDto.label` falls back to
+  /// the wire name rather than the entry being dropped.
+  final List<ConsentRequirementDto> documents;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tint = theme.colorScheme.primary;
+    return InkWell(
+      onTap: () => context.push(RoutePaths.legalDocuments),
+      borderRadius: BorderRadius.circular(AppRadii.card),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.m),
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(AppRadii.card),
+          border: Border.all(color: tint.withValues(alpha: 0.30)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.description_outlined, size: 20, color: tint),
+            const SizedBox(width: AppSpacing.s),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    documents.length == 1
+                        ? '${documents.first.label} has been updated'
+                        : 'Terms and policies have been updated',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Review and accept when you get a moment.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.7,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// One row in the settings index. Declared as data rather than inline widgets
 /// so the search field can filter across sections without every page having to
@@ -83,9 +151,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final account = await getIt<AccountRepository>().getSelf();
       if (mounted) setState(() => _account = account);
     } catch (_) {
-      // Only costs the 2FA row its On/Off subtitle.
+      // Only costs the 2FA row its On/Off subtitle and the consent banner.
     }
   }
+
+  /// Documents whose current version this account hasn't accepted. Empty on a
+  /// backend that predates versioned consent, which is the same as nothing to
+  /// review - see `UserDto.consentRequired`.
+  List<ConsentRequirementDto> get _consentRequired =>
+      _account?.consentRequired ?? const [];
 
   Future<void> _confirmLogOut() async {
     final confirmed = await showDialog<bool>(
@@ -145,6 +219,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       path: RoutePaths.qrLogin,
       keywords: 'log in desktop web computer browser approve sign in camera',
     ),
+    _Entry(
+      section: 'Account Settings',
+      title: 'Privacy',
+      icon: Icons.lock_outline,
+      path: RoutePaths.privacy,
+      keywords:
+          'blocked block dm direct messages friend requests discoverable '
+          'visibility read receipts typing consent data export gdpr download '
+          'terms policy legal telemetry personalisation personalization',
+      trailing: _consentRequired.isEmpty
+          ? null
+          : '${_consentRequired.length} to review',
+    ),
     const _Entry(
       section: 'App Settings',
       title: 'Appearance',
@@ -202,6 +289,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           AppSpacing.xl,
         ),
         children: [
+          // Above the search field, and only while something is outstanding:
+          // an un-accepted policy is the one thing on this page the user is
+          // being asked for rather than offered.
+          if (_consentRequired.isNotEmpty && query.isEmpty) ...[
+            _ConsentBanner(documents: _consentRequired),
+            const SizedBox(height: AppSpacing.m),
+          ],
           TextField(
             controller: _searchController,
             onChanged: (value) => setState(() => _query = value),

@@ -23,6 +23,11 @@ import '../../features/guilds/presentation/screens/guild_members_screen.dart';
 import '../../features/guilds/presentation/screens/guild_settings/guild_settings_screen.dart';
 import '../../features/inbox/presentation/screens/inbox_screen.dart';
 import '../../features/messaging/presentation/screens/conversation_screen.dart';
+import '../../features/privacy/presentation/screens/blocked_users_screen.dart';
+import '../../features/privacy/presentation/screens/data_export_screen.dart';
+import '../../features/privacy/presentation/screens/guild_dm_privacy_screen.dart';
+import '../../features/privacy/presentation/screens/legal_documents_screen.dart';
+import '../../features/privacy/presentation/screens/privacy_settings_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_editor_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_history_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_home_screen.dart';
@@ -326,6 +331,23 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       _route(
         RoutePaths.appearanceSettings,
         (context, state) => const AppearanceSettingsScreen(),
+      ),
+      _route(
+        RoutePaths.privacy,
+        (context, state) => const PrivacySettingsScreen(),
+      ),
+      _route(
+        RoutePaths.blockedUsers,
+        (context, state) => const BlockedUsersScreen(),
+      ),
+      _route(
+        RoutePaths.guildDmPrivacy,
+        (context, state) => const GuildDmPrivacyScreen(),
+      ),
+      _route(RoutePaths.dataExport, (context, state) => const DataExportScreen()),
+      _route(
+        RoutePaths.legalDocuments,
+        (context, state) => const LegalDocumentsScreen(),
       ),
       _route(RoutePaths.qrLogin, (context, state) => const QrLoginScreen()),
       _route(RoutePaths.devices, (context, state) => const DevicesScreen()),

@@ -20,6 +20,19 @@ _ProfileDto _$ProfileDtoFromJson(Map<String, dynamic> json) => _ProfileDto(
   onlineStatus:
       $enumDecodeNullable(_$OnlineStatusEnumMap, json['onlineStatus']) ??
       OnlineStatus.offline,
+  mutualFriends: (json['mutualFriends'] as List<dynamic>?)
+      ?.map((e) => MutualEntry.fromJson(e as Map<String, dynamic>))
+      .toList(),
+  mutualServers: (json['mutualServers'] as List<dynamic>?)
+      ?.map((e) => MutualEntry.fromJson(e as Map<String, dynamic>))
+      .toList(),
+  connections: (json['connections'] as List<dynamic>?)
+      ?.map((e) => ProfileConnection.fromJson(e as Map<String, dynamic>))
+      .toList(),
+  birthday: json['birthday'] as String?,
+  activity: json['activity'] == null
+      ? null
+      : ProfileActivity.fromJson(json['activity'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$ProfileDtoToJson(_ProfileDto instance) =>
@@ -33,6 +46,11 @@ Map<String, dynamic> _$ProfileDtoToJson(_ProfileDto instance) =>
       'accentColor': instance.accentColor,
       'font': _$ProfileFontEnumMap[instance.font]!,
       'onlineStatus': _$OnlineStatusEnumMap[instance.onlineStatus]!,
+      'mutualFriends': instance.mutualFriends,
+      'mutualServers': instance.mutualServers,
+      'connections': instance.connections,
+      'birthday': instance.birthday,
+      'activity': instance.activity,
     };
 
 const _$ProfileFontEnumMap = {

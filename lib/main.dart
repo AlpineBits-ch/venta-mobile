@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'app.dart';
 import 'core/di/injector.dart';
 import 'core/device/device_id_service.dart';
+import 'core/diagnostics/telemetry_consent.dart';
 import 'core/push/push_notification_service.dart';
 import 'core/realtime/realtime_service.dart';
 import 'core/startup/app_bootstrap.dart';
@@ -68,6 +69,11 @@ Future<void> main() async {
   // `StateError` thrown from a build method, so it is guarded like the rest.
   await bootstrap.step('dependencies', configureDependencies);
 
+  // Before Sentry starts, so the very first report of the launch is already
+  // attributed to the per-install pseudonym rather than to nothing. Never
+  // throws - see `TelemetryConsent.init`.
+  await bootstrap.step('telemetry-consent', getIt<TelemetryConsent>().init);
+
   // Keychain, and the likeliest single point of iOS-only failure on this path:
   // an access-group mismatch, an item written under a different accessibility
   // class, or a read before first unlock all surface here as a
@@ -103,6 +109,14 @@ Future<void> main() async {
         // The sampling rate for profiling is relative to tracesSampleRate
         // Setting to 1.0 will profile 100% of sampled transactions:
         options.enableLogs = true;
+        // Explicit rather than relied upon: the default is already false, but
+        // a report carrying an email address is the failure this whole gate
+        // exists to prevent, and defaults change between majors.
+        options.sendDefaultPii = false;
+        // Runs on every event, consented or not. Consent decides whether a
+        // report is *attributable*; it is never permission to sweep an email
+        // address or a request body into one. See `TelemetryConsent`.
+        options.beforeSend = TelemetryConsent.scrubEvent;
       },
       appRunner: () => runApp(SentryWidget(child: const App())),
     );
