@@ -436,7 +436,16 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 'explicitContentFilter': v.name.pascal,
               }, optimistic: s.copyWith(explicitContentFilter: v)),
             ),
+            SettingsRow(
+              icon: Icons.flag_outlined,
+              title: 'Reports you\'ve filed',
+              onTap: () => context.push(RoutePaths.myReports),
+            ),
           ],
+        ),
+        const SettingsFootnote(
+          'A report is reviewed by the moderation team. Blocking someone works '
+          'immediately and needs nobody - the two are worth doing together.',
         ),
         const SizedBox(height: AppSpacing.l),
         SettingsSection(

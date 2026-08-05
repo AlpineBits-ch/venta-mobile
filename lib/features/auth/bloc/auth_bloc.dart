@@ -97,6 +97,11 @@ enum AuthStatus {
   /// which case nothing was created and what landed in the inbox is a notice,
   /// not a code. Deliberately not [failure] in either case.
   emailVerificationRequired,
+
+  /// The account exists, the password was right, and the server will not let it
+  /// in - a ban, a suspension, or one of the other non-signin states. Not
+  /// [failure]: a failure is something you try again, and this is not.
+  signinBlocked,
 }
 
 class AuthState extends Equatable {
@@ -106,10 +111,19 @@ class AuthState extends Equatable {
     this.pendingVerificationEmail,
     this.infoMessage,
     this.registrationErrors = const {},
+    this.supportUrl,
   });
 
   final AuthStatus status;
   final String? errorMessage;
+
+  /// Where the blocked-sign-in screen's Appeal and Contact links point.
+  ///
+  /// Derived from the instance the refused attempt was made against, not from
+  /// wherever this client happens to be pointed - a self-hosted account gets
+  /// its own server's support desk. Null when it couldn't be derived, and the
+  /// screen then renders no links rather than dead ones.
+  final String? supportUrl;
 
   /// The address the code was sent to, shown on the code form so people can
   /// see which inbox to check (and spot a typo in what they registered with).
@@ -130,9 +144,11 @@ class AuthState extends Equatable {
     String? pendingVerificationEmail,
     String? infoMessage,
     Map<RegistrationField, String>? registrationErrors,
+    String? supportUrl,
   }) => AuthState(
     status: status ?? this.status,
     errorMessage: errorMessage,
+    supportUrl: supportUrl ?? this.supportUrl,
     // Sticky, unlike the messages: it has to survive every re-emit of the
     // code step (wrong code, resend) or the form loses the address it's
     // verifying halfway through.
@@ -151,6 +167,7 @@ class AuthState extends Equatable {
     pendingVerificationEmail,
     infoMessage,
     registrationErrors,
+    supportUrl,
   ];
 }
 
@@ -209,6 +226,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         state.copyWith(
           status: AuthStatus.mfaRequired,
           errorMessage: 'Invalid code - try again.',
+        ),
+      );
+    } on SigninNotAllowedException catch (e) {
+      // Nothing local is touched here, and that is the point. A ban gets
+      // lifted, an appeal gets accepted, and when it does the account should
+      // come back to a working client rather than an empty one - so the message
+      // database, the MLS key material and the recovery state all stay exactly
+      // where they are. This is an expired token, not a sign-out.
+      //
+      // `_pending` is cleared instead: it holds a password, and there is no
+      // next step here that could spend it.
+      _pending = null;
+      emit.ifOpen(
+        AuthState(
+          status: AuthStatus.signinBlocked,
+          supportUrl: e.supportUrl,
         ),
       );
     } on EmailNotVerifiedException {

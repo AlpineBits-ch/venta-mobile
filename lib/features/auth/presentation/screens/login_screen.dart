@@ -7,6 +7,7 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../../../core/widgets/venta_logo_mark.dart';
 import '../../bloc/auth_bloc.dart';
+import '../widgets/blocked_signin_panel.dart';
 import '../widgets/verification_code_form.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -37,6 +38,17 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       ),
     );
+  }
+
+  /// Back to a blank credentials form from the blocked screen. The fields are
+  /// cleared rather than left populated: the point of the action is signing in
+  /// as somebody else, and leaving the restricted account's username sitting
+  /// there invites one more attempt at the thing that just failed.
+  void _useDifferentAccount() {
+    _usernameController.clear();
+    _passwordController.clear();
+    _mfaCodeController.clear();
+    context.read<AuthBloc>().add(const LoginCancelled());
   }
 
   void _submitMfaCode() {
@@ -88,84 +100,78 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                     const SizedBox(height: AppSpacing.l),
-                    Text('Welcome back', style: theme.textTheme.titleLarge),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'We\'re so excited to see you again.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.l),
                     BlocBuilder<AuthBloc, AuthState>(
                       builder: (context, state) {
                         final loading = state.status == AuthStatus.loading;
                         final email = state.pendingVerificationEmail;
-                        // Keyed off the pending address, not the status, so
-                        // the form survives the `loading` emit while a code
-                        // is being checked instead of flicking back to the
-                        // credentials it was already past.
-                        if (email != null) {
-                          return VerificationCodeForm(
-                            email: email,
-                            loading: loading,
-                            errorMessage: state.errorMessage,
-                            infoMessage: state.infoMessage,
-                            onCancel: () => context.read<AuthBloc>().add(
-                              const LoginCancelled(),
+                        // The whole lockup goes, welcome copy included. "We're
+                        // so excited to see you again" sitting above a ban
+                        // notice is the client failing to read the room, and
+                        // this screen is read by someone who is angry.
+                        if (state.status == AuthStatus.signinBlocked) {
+                          return BlockedSignInPanel(
+                            supportUrl: state.supportUrl,
+                            onUseDifferentAccount: _useDifferentAccount,
+                          );
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Welcome back',
+                              style: theme.textTheme.titleLarge,
                             ),
-                          );
-                        }
-                        if (state.status == AuthStatus.mfaRequired) {
-                          return _MfaCodeForm(
-                            controller: _mfaCodeController,
-                            loading: loading,
-                            errorMessage: state.errorMessage,
-                            onSubmit: _submitMfaCode,
-                            onCancel: () {
-                              _mfaCodeController.clear();
-                              context.read<AuthBloc>().add(
-                                const LoginCancelled(),
-                              );
-                            },
-                          );
-                        }
-                        return _CredentialsForm(
-                          usernameController: _usernameController,
-                          passwordController: _passwordController,
-                          obscurePassword: _obscurePassword,
-                          onToggleObscure: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                          loading: loading,
-                          onSubmit: _submit,
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              'We\'re so excited to see you again.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.l),
+                            _form(context, state, loading, email),
+                          ],
                         );
                       },
                     ),
                     const SizedBox(height: AppSpacing.m),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Need an account?',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                        // A `TextButton` rather than a bare tappable `Text` so
-                        // the link gets a full-height touch target and ink
-                        // feedback - as text alone it was a ~16px-tall hit box.
-                        TextButton(
-                          onPressed: () => context.push(RoutePaths.register),
-                          child: Text(
-                            'Register',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w600,
+                    BlocBuilder<AuthBloc, AuthState>(
+                      // Hidden while blocked: the way out of that screen is
+                      // "Try a different account", and a second, quieter route
+                      // to a sign-up form under a restriction notice reads as
+                      // the app suggesting a ban evasion.
+                      buildWhen: (a, b) => a.status != b.status,
+                      builder: (context, state) {
+                        if (state.status == AuthStatus.signinBlocked) {
+                          return const SizedBox.shrink();
+                        }
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Need an account?',
+                              style: theme.textTheme.bodySmall,
                             ),
-                          ),
-                        ),
-                      ],
+                            // A `TextButton` rather than a bare tappable `Text`
+                            // so the link gets a full-height touch target and
+                            // ink feedback - as text alone it was a ~16px-tall
+                            // hit box.
+                            TextButton(
+                              onPressed: () =>
+                                  context.push(RoutePaths.register),
+                              child: Text(
+                                'Register',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -174,6 +180,47 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _form(
+    BuildContext context,
+    AuthState state,
+    bool loading,
+    String? email,
+  ) {
+    // Keyed off the pending address, not the status, so the form survives the
+    // `loading` emit while a code is being checked instead of flicking back to
+    // the credentials it was already past.
+    if (email != null) {
+      return VerificationCodeForm(
+        email: email,
+        loading: loading,
+        errorMessage: state.errorMessage,
+        infoMessage: state.infoMessage,
+        onCancel: () => context.read<AuthBloc>().add(const LoginCancelled()),
+      );
+    }
+    if (state.status == AuthStatus.mfaRequired) {
+      return _MfaCodeForm(
+        controller: _mfaCodeController,
+        loading: loading,
+        errorMessage: state.errorMessage,
+        onSubmit: _submitMfaCode,
+        onCancel: () {
+          _mfaCodeController.clear();
+          context.read<AuthBloc>().add(const LoginCancelled());
+        },
+      );
+    }
+    return _CredentialsForm(
+      usernameController: _usernameController,
+      passwordController: _passwordController,
+      obscurePassword: _obscurePassword,
+      onToggleObscure: () =>
+          setState(() => _obscurePassword = !_obscurePassword),
+      loading: loading,
+      onSubmit: _submit,
     );
   }
 }

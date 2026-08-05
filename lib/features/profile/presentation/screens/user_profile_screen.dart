@@ -17,6 +17,8 @@ import '../../bloc/user_profile_cubit.dart';
 import '../../data/models/profile_dto.dart';
 import '../../data/models/profile_extras.dart';
 import '../../data/profile_repository.dart';
+import '../../../support/data/models/report_dto.dart';
+import '../../../support/presentation/widgets/report_sheet.dart';
 import '../widgets/status_label.dart';
 
 /// Read-only view of *another* user's profile - the counterpart to
@@ -119,6 +121,10 @@ class _UserProfileView extends StatelessWidget {
                 return PopupMenuButton<void>(
                   tooltip: 'More',
                   itemBuilder: (context) => [
+                    // Block sits above Report, always. Blocking works
+                    // immediately and needs nobody; a report is a queue. A menu
+                    // that leads with the queue leaves someone waiting on us
+                    // while they are still being messaged.
                     PopupMenuItem<void>(
                       enabled: !state.isActionInProgress,
                       onTap: state.isBlocked
@@ -132,6 +138,22 @@ class _UserProfileView extends StatelessWidget {
                                 color: Theme.of(context).colorScheme.error,
                               ),
                       ),
+                    ),
+                    PopupMenuItem<void>(
+                      onTap: () => showReportSheet(
+                        context,
+                        ReportTarget(
+                          targetUserId: userId,
+                          subjectKind: ReportSubjectKind.user,
+                          title: 'Report ${profile.userName}',
+                          displayName: profile.userName,
+                          // Nothing is attached from here. A profile report has
+                          // no conversation around it, and pulling one in
+                          // because we happen to have a DM open would upload
+                          // messages the user never chose to send.
+                        ),
+                      ),
+                      child: const Text('Report user'),
                     ),
                   ],
                 );

@@ -18,6 +18,8 @@ import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
 import '../../../household/presentation/widgets/home_status_board.dart';
 import '../../../inbox/data/inbox_repository.dart';
 import '../../../inbox/presentation/widgets/inbox_app_bar_action.dart';
+import '../../../support/data/models/report_dto.dart';
+import '../../../support/presentation/widgets/report_sheet.dart';
 import '../../data/forum_visits.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/category_dto.dart';
@@ -229,6 +231,28 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
           RoutePaths.serverChannelSettingsPath(widget.guildId, channel.id),
         );
     }
+  }
+
+  /// Reports the server itself.
+  ///
+  /// The account being reported is the owner - the server has no account of its
+  /// own, and `targetUserId` is required on every report. No snapshot goes with
+  /// it: there is no one conversation a server report is about, and attaching
+  /// an arbitrary channel's last ten messages would upload something the
+  /// reporter never chose. Blocking isn't offered afterwards either - blocking
+  /// whoever happens to own a server is not what someone reporting it is asking
+  /// for, and it wouldn't get them out of the server.
+  Future<void> _reportGuild(GuildDto guild) async {
+    await showReportSheet(
+      context,
+      ReportTarget(
+        targetUserId: guild.ownerId,
+        subjectKind: ReportSubjectKind.guild,
+        subjectId: guild.id,
+        title: 'Report ${guild.name}',
+        offerBlock: false,
+      ),
+    );
   }
 
   @override
@@ -642,6 +666,22 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
               onPressed: () =>
                   context.push(RoutePaths.serverSettingsPath(guild.id)),
             ),
+          // Reporting the server lives here rather than in Server Settings.
+          // Settings is gated on `ManageGuild`, so putting it there would hide
+          // it from every member except the people running the server - which
+          // is exactly backwards from who needs to report one.
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            onSelected: (value) {
+              if (value == 'report') _reportGuild(guild);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem<String>(
+                value: 'report',
+                child: Text('Report this server'),
+              ),
+            ],
+          ),
         ],
       ),
       body: AnimatedSwitcher(

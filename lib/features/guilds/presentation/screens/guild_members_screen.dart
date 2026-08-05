@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/realtime/realtime_event.dart';
@@ -12,7 +13,11 @@ import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/avatar_image.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/status_dot.dart';
+import '../../../auth/data/auth_repository.dart';
+import '../../../friends/data/relationship_repository.dart';
 import '../../../profile/data/models/profile_dto.dart';
+import '../../../support/data/models/report_dto.dart';
+import '../../../support/presentation/widgets/report_sheet.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/guild_member_dto.dart';
 import '../../data/models/role_dto.dart';
@@ -105,6 +110,141 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
       if (mounted) setState(() => _error = 'Could not load members.');
     }
   }
+
+  /// Tapping a member: their profile, blocking them, and reporting them.
+  ///
+  /// The tile did nothing on tap before this, so the sheet is also what makes
+  /// the roster useful - but the ordering inside it is the part that matters.
+  /// Block is above Report and is the destructive-coloured one: it works
+  /// immediately and needs nobody, where a report is a queue. A menu that only
+  /// offers the queue leaves someone waiting on us while they are still being
+  /// messaged.
+  Future<void> _showMemberActions(GuildMemberDto member) async {
+    final displayName =
+        member.nickname ?? member.profile?.userName ?? 'this member';
+    // Reporting or blocking yourself is not a thing; the server refuses the
+    // first and the second is nonsense.
+    final isSelf = member.userId == getIt<AuthRepository>().currentUserId;
+    final isBlocked = isSelf
+        ? false
+        : await getIt<RelationshipRepository>()
+              .isBlocked(member.userId)
+              .catchError((_) => false);
+    if (!mounted) return;
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('View profile'),
+              onTap: () => Navigator.pop(context, 'profile'),
+            ),
+            if (!isSelf) ...[
+              ListTile(
+                leading: Icon(
+                  Icons.block,
+                  color: isBlocked
+                      ? null
+                      : Theme.of(context).colorScheme.error,
+                ),
+                title: Text(
+                  isBlocked ? 'Unblock' : 'Block',
+                  style: isBlocked
+                      ? null
+                      : TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                ),
+                onTap: () => Navigator.pop(context, 'block'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: const Text('Report member'),
+                onTap: () => Navigator.pop(context, 'report'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+
+    switch (action) {
+      case 'profile':
+        context.push(RoutePaths.userProfilePath(member.userId));
+      case 'block':
+        await _toggleBlock(member.userId, displayName, isBlocked: isBlocked);
+      case 'report':
+        await showReportSheet(
+          context,
+          ReportTarget(
+            targetUserId: member.userId,
+            // A member report is a report on the account, not on the
+            // membership - there is no per-guild subject for it.
+            subjectKind: ReportSubjectKind.user,
+            title: 'Report $displayName',
+            displayName: displayName,
+          ),
+        );
+    }
+  }
+
+  Future<void> _toggleBlock(
+    String userId,
+    String displayName, {
+    required bool isBlocked,
+  }) async {
+    final relationships = getIt<RelationshipRepository>();
+    if (isBlocked) {
+      try {
+        await relationships.unblock(userId);
+        if (mounted) _toast('$displayName is unblocked.');
+      } catch (_) {
+        if (mounted) _toast('Could not unblock them.');
+      }
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Block $displayName?'),
+        content: const Text(
+          'They won\'t be able to message you, call you, add you as a friend '
+          'or mention you, and you won\'t see them either. They are not told.'
+          '\n\nIf you are friends, that ends - unblocking later does not bring '
+          'it back.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await relationships.block(userId);
+      if (mounted) _toast('$displayName is blocked.');
+    } catch (_) {
+      if (mounted) _toast('Could not block them.');
+    }
+  }
+
+  void _toast(String message) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(message)));
 
   static bool _isBot(GuildMemberDto member) => member.type == MemberType.bot;
 
@@ -221,7 +361,11 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
                 ),
               ),
               for (final member in section.members)
-                _MemberTile(member: member, dimmed: section.dimmed),
+                _MemberTile(
+                  member: member,
+                  dimmed: section.dimmed,
+                  onTap: () => _showMemberActions(member),
+                ),
             ],
           );
         },
@@ -251,10 +395,15 @@ class _MemberSection {
 }
 
 class _MemberTile extends StatelessWidget {
-  const _MemberTile({required this.member, required this.dimmed});
+  const _MemberTile({
+    required this.member,
+    required this.dimmed,
+    this.onTap,
+  });
 
   final GuildMemberDto member;
   final bool dimmed;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -268,6 +417,7 @@ class _MemberTile extends StatelessWidget {
         : null;
 
     return ListTile(
+      onTap: onTap,
       leading: Stack(
         clipBehavior: Clip.none,
         children: [

@@ -68,6 +68,11 @@ abstract final class RoutePaths {
   static const dataExport = '/settings/privacy/data';
   static const legalDocuments = '/settings/privacy/legal';
 
+  /// What this account reported and what became of it. Under Privacy because
+  /// that is where someone goes looking for it weeks later - it is deliberately
+  /// not reachable from anywhere else.
+  static const myReports = '/settings/privacy/reports';
+
   /// Scanning a desktop/web client's login QR code. Nothing here is about
   /// *this* device's session - see `QrLoginScreen`.
   static const qrLogin = '/settings/qr-login';

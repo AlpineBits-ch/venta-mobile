@@ -45,6 +45,9 @@ import 'message_search_screen.dart';
 import 'pinned_messages_screen.dart';
 import 'reaction_bar.dart';
 import 'reaction_picker_sheet.dart';
+import '../../../support/data/models/report_dto.dart';
+import '../../../support/data/models/report_evidence.dart';
+import '../../../support/presentation/widgets/report_sheet.dart';
 
 const _imageExtensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'bmp'};
 
@@ -373,6 +376,15 @@ class _ThreadViewState extends State<ThreadView> {
                 onTap: () => Navigator.pop(context, 'delete'),
               ),
             ],
+            // Last, and never on your own message - the server refuses a
+            // self-report, and offering it is the client promising something it
+            // knows will bounce.
+            if (!isMine)
+              ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: const Text('Report message'),
+                onTap: () => Navigator.pop(context, 'report'),
+              ),
           ],
         ),
       ),
@@ -393,7 +405,84 @@ class _ThreadViewState extends State<ThreadView> {
         _startEdit(message);
       case 'delete':
         await _confirmDelete(message);
+      case 'report':
+        await _reportMessage(message);
     }
+  }
+
+  /// Files a report on [message], with a snapshot of the conversation around it.
+  ///
+  /// The snapshot is built from what this screen already has rather than from a
+  /// fresh fetch, deliberately: it is meant to be what the *reporter saw*, and
+  /// re-reading the thread would attach a version of it edited or deleted since.
+  Future<void> _reportMessage(MessageDto message) async {
+    final repository = context.read<MessageThreadBloc>().repository;
+    // The bloc holds newest-first; the snapshot reads as a conversation.
+    final chronological = [
+      for (final m in context.read<MessageThreadBloc>().state.messages.reversed)
+        // Client-only synthetics were never on anybody's screen as messages.
+        if (!m.isBotCommandPlaceholder && !m.isPending)
+          EvidenceMessage(
+            id: m.id,
+            authorId: m.authorId,
+            // Never ciphertext. A message this device holds no keys for is
+            // unreadable to the moderator too, and sending the base64 would
+            // look like content.
+            content: m.isUndecryptable
+                ? null
+                : MessageContentCodec.decode(m.content),
+            sentAt: m.createdAt,
+            reported: m.id == message.id,
+            attachments: [
+              for (final a in m.attachments) _attachmentSummary(a),
+            ],
+          ),
+    ];
+
+    final evidenceMessages = ReportEvidence.window(chronological, message.id);
+    final evidence = ReportEvidence.build(
+      // The wire key is `conversationId` for a channel too - a channel report
+      // carries the message id as its subject, which is what the server
+      // resolves the context from.
+      conversationId: repository.contextId,
+      // Read from the context's actual state, never assumed. `_serverEncrypted`
+      // is what the server says rather than what this device can decrypt, and
+      // it is the flag that tells a moderator whether the stored message could
+      // corroborate any of this.
+      encrypted: _serverEncrypted,
+      capturedAt: DateTime.now().toUtc(),
+      messages: evidenceMessages,
+    );
+
+    if (!mounted) return;
+    await showReportSheet(
+      context,
+      ReportTarget(
+        targetUserId: message.authorId,
+        subjectKind: ReportSubjectKind.message,
+        subjectId: message.id,
+        title: 'Report message',
+        displayName: getIt<ProfileRepository>()
+            .cachedByUserId(message.authorId)
+            ?.userName,
+        evidence: evidence,
+        evidenceMessages: evidenceMessages,
+      ),
+    );
+  }
+
+  /// An attachment reduced to a line a moderator can read - never the bytes.
+  static String _attachmentSummary(AttachmentDto attachment) {
+    final size = attachment.sizeBytes;
+    // `sizeBytes` is absent on the shape embedded in a message (see
+    // `AttachmentDto`), so the type alone is the honest answer there rather
+    // than a fabricated "0 B".
+    if (size == null || size <= 0) return attachment.contentType;
+    final mb = size / (1024 * 1024);
+    final label = mb >= 1
+        ? '${mb.toStringAsFixed(1)} MB'
+        : '${(size / 1024).toStringAsFixed(1)} KB';
+    return '${attachment.contentType}, $label';
   }
 
   Future<void> _loadChannelPermissions() async {

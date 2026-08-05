@@ -225,7 +225,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       keywords:
           'blocked block dm direct messages friend requests discoverable '
           'visibility read receipts typing consent data export gdpr download '
-          'terms policy legal telemetry personalisation personalization',
+          'terms policy legal telemetry personalisation personalization '
+          'report reports safety moderation abuse harassment',
       trailing: _consentRequired.isEmpty
           ? null
           : '${_consentRequired.length} to review',

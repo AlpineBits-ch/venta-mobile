@@ -28,6 +28,7 @@ import '../../features/privacy/presentation/screens/data_export_screen.dart';
 import '../../features/privacy/presentation/screens/guild_dm_privacy_screen.dart';
 import '../../features/privacy/presentation/screens/legal_documents_screen.dart';
 import '../../features/privacy/presentation/screens/privacy_settings_screen.dart';
+import '../../features/support/presentation/screens/my_reports_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_editor_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_history_screen.dart';
 import '../../features/wiki/presentation/screens/wiki_home_screen.dart';
@@ -352,6 +353,7 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         RoutePaths.legalDocuments,
         (context, state) => const LegalDocumentsScreen(),
       ),
+      _route(RoutePaths.myReports, (context, state) => const MyReportsScreen()),
       _route(RoutePaths.qrLogin, (context, state) => const QrLoginScreen()),
       _route(RoutePaths.devices, (context, state) => const DevicesScreen()),
       _route(

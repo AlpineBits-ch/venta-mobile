@@ -26,6 +26,8 @@ import '../../features/mls/data/mls_api.dart';
 import '../../features/privacy/data/privacy_api.dart';
 import '../../features/privacy/data/privacy_repository.dart';
 import '../../features/profile/data/profile_api.dart';
+import '../../features/support/data/support_api.dart';
+import '../../features/support/data/support_repository.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/data/voice_api.dart';
@@ -132,6 +134,14 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   getIt.registerLazySingleton<PrivacyApi>(() => PrivacyApi(client: getIt()));
   getIt.registerLazySingleton<PrivacyRepository>(
     () => PrivacyRepository(api: getIt()),
+  );
+  getIt.registerLazySingleton<SupportApi>(() => SupportApi(client: getIt()));
+  // Not in `resetSessionScopedCaches` - it holds nothing. Reports are read
+  // through on every open and the support URL is derived from
+  // `AuthRepository.baseUrl` at call time, so there is no per-account state
+  // here to carry into the next session.
+  getIt.registerLazySingleton<SupportRepository>(
+    () => SupportRepository(api: getIt(), authRepository: getIt()),
   );
   getIt.registerLazySingleton<ProfileApi>(() => ProfileApi(client: getIt()));
   getIt.registerLazySingleton<ProfileRepository>(

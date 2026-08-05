@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/config/site_hosts.dart';
 import '../../../core/device/device_id_service.dart';
 import '../../../core/network/rate_limit_interceptor.dart';
 import 'models/server_configuration.dart';
@@ -25,6 +26,26 @@ class MfaInvalidException implements Exception {}
 /// the only signup-related refusal that's allowed to be precise, and it is
 /// precise on purpose - nothing is leaked to a caller who already authenticated.
 class EmailNotVerifiedException implements Exception {}
+
+/// Thrown by [AuthApi.passwordGrant] on the `403 User is not allowed to sign
+/// in` - the credentials were right and the account is restricted.
+///
+/// The response says *that* and nothing more. It does not say which state the
+/// account is in - `Banned`, `Inactive`, `PendingDeletion`, `PurgeInProgress`
+/// and `Deleted` all answer identically - and it does not carry the ban's
+/// reference code. So this exception carries neither, and nothing downstream
+/// may guess: the screen it drives says "restricted" and points at the support
+/// site, which is where the specifics actually live. When the server starts
+/// distinguishing them, that's a field on this class, not an inference.
+///
+/// [supportUrl] is derived from the instance the attempt was made against, so
+/// the link works for a self-hosted account whose server this client is not
+/// otherwise pointed at yet. Null only if the URL couldn't be derived.
+class SigninNotAllowedException implements Exception {
+  const SigninNotAllowedException({this.supportUrl});
+
+  final String? supportUrl;
+}
 
 /// Which field on the registration form a [RegistrationFailure] belongs to.
 enum RegistrationField { email, username, birthdate, general }
@@ -163,9 +184,20 @@ class AuthApi {
       }
       // The body is a bare string here (`Email not verified.`), not the
       // OAuth error/error_description shape the 401s use.
-      if (e.response?.statusCode == 403 &&
-          (marker?.toLowerCase().contains('email not verified') ?? false)) {
-        throw EmailNotVerifiedException();
+      if (e.response?.statusCode == 403) {
+        final text = marker?.toLowerCase() ?? '';
+        if (text.contains('email not verified')) {
+          throw EmailNotVerifiedException();
+        }
+        // Everything else the token endpoint answers `403` to is
+        // `IsSigninAllowed()` refusing. Deliberately the fallback rather than an
+        // exact string match on `User is not allowed to sign in`: a restricted
+        // account that fell through to "incorrect username or password" is the
+        // worst outcome here - it is the one message that is definitely a lie,
+        // and it sends someone into a password reset that cannot help them.
+        throw SigninNotAllowedException(
+          supportUrl: supportUrlOrNull(baseUrl),
+        );
       }
       rethrow;
     }
