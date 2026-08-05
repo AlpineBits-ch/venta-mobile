@@ -255,8 +255,34 @@ class _WikiMarkdownState extends State<WikiMarkdown> {
     }
     final index = _checkboxCursor++;
     final onToggle = widget.onToggleCheckbox;
-    final theme = Theme.of(context);
 
+    return Padding(
+      // Nudged down onto the first line's optical centre - the bullet slot is
+      // baseline-aligned against `p`'s 1.62 leading.
+      padding: const EdgeInsets.only(top: 3, right: AppSpacing.xs),
+      child: WikiCheckbox(
+        checked: checked,
+        onTap: onToggle == null
+            ? null
+            : () => onToggle(widget.checkboxIndexOffset + index, !checked),
+      ),
+    );
+  }
+}
+
+/// The wiki's task-list box, shared by the reader and the rich editor so a
+/// checklist looks identical whether you're reading it or writing it.
+class WikiCheckbox extends StatelessWidget {
+  const WikiCheckbox({super.key, required this.checked, this.onTap});
+
+  final bool checked;
+
+  /// Null renders the box read-only.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final box = Container(
       width: 19,
       height: 19,
@@ -274,19 +300,11 @@ class _WikiMarkdownState extends State<WikiMarkdown> {
           ? Icon(Icons.check, size: 14, color: theme.colorScheme.onPrimary)
           : null,
     );
-
-    return Padding(
-      // Nudged down onto the first line's optical centre - the bullet slot is
-      // baseline-aligned against `p`'s 1.62 leading.
-      padding: const EdgeInsets.only(top: 3, right: AppSpacing.xs),
-      child: onToggle == null
-          ? box
-          : GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () =>
-                  onToggle(widget.checkboxIndexOffset + index, !checked),
-              child: box,
-            ),
+    if (onTap == null) return box;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: box,
     );
   }
 }
