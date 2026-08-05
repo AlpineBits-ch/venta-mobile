@@ -132,6 +132,12 @@ class RealtimeService {
     // so a device never sees its own acks come back (see `InboxRepository`).
     'inbox.MentionAdded',
     'inbox.ReadStateChanged',
+    // Platform status. A latency improvement over `StatusRepository`'s 60s
+    // poll, never a replacement for it: the hub is authenticated, so a
+    // signed-out user - who is quite possibly signed out *because* of the
+    // incident - receives neither of these.
+    'status.SummaryChanged',
+    'status.IncidentUpdated',
     'call.IncomingCall',
     'call.ParticipantJoined',
     'call.ParticipantLeft',

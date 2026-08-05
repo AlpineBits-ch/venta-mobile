@@ -4,6 +4,7 @@ import '../../features/auth/data/auth_repository.dart';
 import 'auth_interceptor.dart';
 import 'device_id_interceptor.dart';
 import 'rate_limit_interceptor.dart';
+import 'status_probe_interceptor.dart';
 
 /// Shared authenticated HTTP client for every feature repository except
 /// [AuthRepository] itself. There's no static `baseUrl` on the underlying
@@ -20,6 +21,7 @@ class ApiClient {
     String? Function()? deviceId,
     Future<void> Function()? registerDevice,
     Dio Function()? retryClient,
+    void Function()? onUnreachable,
   }) : dio = Dio(
          BaseOptions(
            connectTimeout: const Duration(seconds: 15),
@@ -30,6 +32,11 @@ class ApiClient {
     // holding the request *before* `AuthInterceptor` stamps it means the token
     // is read when the request actually goes out rather than when it queued.
     dio.interceptors.add(RateLimitInterceptor());
+    // First in the error chain, before `AuthInterceptor` can swallow anything
+    // by retrying it. Observes only - it never resolves or rejects a request.
+    if (onUnreachable != null) {
+      dio.interceptors.add(StatusProbeInterceptor(onUnreachable));
+    }
     dio.interceptors.add(AuthInterceptor(authRepository));
     if (deviceId != null && registerDevice != null) {
       dio.interceptors.add(

@@ -10,6 +10,7 @@ import '../../../core/di/injector.dart';
 import '../../../core/diagnostics/secure_storage_fault.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/session/session_cubit.dart';
+import '../../status/data/status_repository.dart';
 import '../data/auth_api.dart';
 import '../data/auth_repository.dart';
 
@@ -256,12 +257,39 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         ),
       );
     } catch (e, stack) {
+      _probeStatusIfServerFailed(e);
       emit.ifOpen(
         state.copyWith(
           status: AuthStatus.failure,
           errorMessage: _describeError(e, stack),
         ),
       );
+    }
+  }
+
+  /// §3 of the platform-status spec: a sign-in that fails with a `5xx` is one
+  /// of the three moments a status check is worth firing off-schedule.
+  ///
+  /// Handled here rather than by `StatusProbeInterceptor`, which covers the
+  /// rest of the app: `AuthApi` deliberately builds its own `Dio` and never
+  /// passes through `ApiClient`, so sign-in is the one request the interceptor
+  /// cannot see. This is also the moment it matters most - the user is being
+  /// told their password is wrong by a server that is, in fact, down.
+  ///
+  /// Never awaited and never allowed to change what the user is told: the
+  /// message still comes from [_describeError], and the banner appears above it
+  /// if and only if the server says there is an incident.
+  void _probeStatusIfServerFailed(Object error) {
+    if (error is! DioException) return;
+    final status = error.response?.statusCode;
+    final serverFailed = status != null && status >= 500;
+    final unreachable = error.response == null;
+    if (!serverFailed && !unreachable) return;
+    try {
+      getIt<StatusRepository>().probeAfterFailure();
+    } catch (_) {
+      // Registration failed on this launch. A sign-in error is not the place
+      // to care.
     }
   }
 

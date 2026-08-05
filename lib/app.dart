@@ -19,6 +19,8 @@ import 'core/theme/theme_cubit.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/guild_voice/bloc/guild_voice_cubit.dart';
 import 'features/invites/presentation/widgets/invite_dialog.dart';
+import 'features/status/data/status_repository.dart';
+import 'features/status/presentation/widgets/platform_status_banner.dart';
 import 'features/voice/bloc/call_cubit.dart';
 
 class App extends StatefulWidget {
@@ -48,12 +50,21 @@ class _AppState extends State<App> {
     _notificationTapSub = getIt<PushNotificationService>().onNotificationTap
         .listen(_router.push);
 
+    // Started here rather than in `main()` so the poll's lifetime is the widget
+    // tree's: it is paused on background and stopped in `dispose`, per the
+    // status spec's "do not poll on a timer that survives backgrounding".
+    _startStatusPolling();
+
     // Decrypted message content is written behind a short debounce, and Android
     // kills backgrounded apps without warning. Losing that window is not a
     // dropped cache entry - MLS ratchets forward only, so a message that was
     // decrypted and not written is unreadable on this device forever.
     _lifecycle = AppLifecycleListener(
-      onPause: () => unawaited(getIt<MlsStore>().flush()),
+      onPause: () {
+        unawaited(getIt<MlsStore>().flush());
+        // "A million idle clients polling a status endpoint is its own outage."
+        _statusRepository?.pause();
+      },
       // Every group this device is added to burns one of its key packages. A
       // phone app stays resident for days, so waiting for the next cold start
       // to notice the supply is low - which is all the desktop client does -
@@ -71,6 +82,9 @@ class _AppState extends State<App> {
         // extension ran while this isolate did not, and what it recorded is the
         // only account of why a notification showed the placeholder.
         unawaited(_nseDiagnostics.drain());
+        // An incident can start and end while the app is away, so a resume
+        // needs an answer immediately rather than on the next 60s tick.
+        _statusRepository?.resume();
       },
     );
 
@@ -82,6 +96,19 @@ class _AppState extends State<App> {
   }
 
   final _nseDiagnostics = NseDiagnosticsReporter();
+
+  /// Null only if dependency registration failed on this launch - which is
+  /// exactly the kind of launch where nothing else should be made to depend on
+  /// status working. Every call site is null-aware for that reason.
+  StatusRepository? _statusRepository;
+
+  void _startStatusPolling() {
+    try {
+      _statusRepository = getIt<StatusRepository>()..resume();
+    } catch (e) {
+      debugPrint('status polling not started: $e');
+    }
+  }
 
   /// The launch URI, held only until the stream replays it.
   ///
@@ -144,6 +171,10 @@ class _AppState extends State<App> {
 
   @override
   void dispose() {
+    // The poll's lifetime is the widget tree's, not the process's. Without
+    // this, the repository is an app-lifetime singleton holding a periodic
+    // timer that nothing ever cancels.
+    _statusRepository?.pause();
     _lifecycle?.dispose();
     _linkSub?.cancel();
     _notificationTapSub?.cancel();
@@ -173,6 +204,11 @@ class _AppState extends State<App> {
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
             themeMode: themeMode,
+            // Above every route rather than inside `AppShell`, where the other
+            // app-wide banners live: an outage is most worth announcing to
+            // somebody stuck on the login screen, which is outside the shell.
+            builder: (context, child) =>
+                PlatformStatusScope(child: child ?? const SizedBox.shrink()),
             // Spelled out rather than passed as `routerConfig`, which is the
             // same four fields but hard-wires `GoRouter`'s own back button
             // dispatcher - and the one thing that needs changing is what

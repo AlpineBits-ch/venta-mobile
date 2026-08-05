@@ -12,6 +12,8 @@ import '../../../../core/widgets/settings_tiles.dart';
 import '../../../auth/data/account_repository.dart';
 import '../../../auth/data/models/user_dto.dart';
 import '../../../privacy/data/models/legal_document_dto.dart';
+import '../../../status/data/models/platform_status_dto.dart';
+import '../../../status/data/status_repository.dart';
 
 /// Shown when the server reports documents whose current version this account
 /// hasn't accepted (`consentRequired` on `GET /users/self`).
@@ -252,7 +254,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
       path: RoutePaths.editProfile,
       keywords: 'avatar banner bio status accent font',
     ),
+    _Entry(
+      section: 'App Settings',
+      title: 'Platform Status',
+      icon: Icons.monitor_heart_outlined,
+      path: RoutePaths.platformStatus,
+      keywords:
+          'outage incident down degraded maintenance uptime service health '
+          'server is it me is it them',
+      // Read rather than subscribed to: this index is rebuilt on every
+      // keystroke in the search field and on every open, the repository is
+      // polling in the background anyway, and a row that says "Degraded" a
+      // few seconds late is not worth a listener on a screen that has nothing
+      // else to do with status. `null` while operational, so the row stays
+      // quiet in the normal case.
+      trailing: _platformStatusTrailing,
+    ),
   ];
+
+  /// The overall indicator, or null when everything is fine, unknown, or not
+  /// yet read.
+  ///
+  /// Guarded: this runs inside `build` on the settings index, and a launch
+  /// where dependency registration failed must not lose the user the whole
+  /// settings screen over a decoration.
+  static String? get _platformStatusTrailing {
+    try {
+      final indicator =
+          getIt<StatusRepository>().snapshot.value.summary?.indicator;
+      if (indicator == null ||
+          indicator == StatusIndicator.operational ||
+          indicator == StatusIndicator.unknown) {
+        return null;
+      }
+      return indicator.label;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

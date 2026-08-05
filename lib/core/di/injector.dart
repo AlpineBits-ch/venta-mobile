@@ -29,6 +29,8 @@ import '../../features/profile/data/profile_api.dart';
 import '../../features/support/data/support_api.dart';
 import '../../features/support/data/support_repository.dart';
 import '../../features/profile/data/profile_repository.dart';
+import '../../features/status/data/status_api.dart';
+import '../../features/status/data/status_repository.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/data/voice_api.dart';
 import '../../features/voice/data/voice_repository.dart';
@@ -107,6 +109,11 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       // Resolved lazily on purpose: the registration service is built on top
       // of this very client, so taking it eagerly here would deadlock get_it.
       registerDevice: () => getIt<DeviceRegistrationService>().register(),
+      // Lazily for the same reason, and one step further: `StatusRepository`
+      // reaches `RealtimeService`, which is registered further down this
+      // function. It is also self-throttling, so an outage failing fifty
+      // requests at once still costs one status check.
+      onUnreachable: () => getIt<StatusRepository>().probeAfterFailure(),
     ),
   );
   getIt.registerLazySingleton<DeviceApi>(() => DeviceApi(client: getIt()));
@@ -129,6 +136,22 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       transport: getIt(),
       authRepository: getIt(),
       deviceIdService: getIt(),
+    ),
+  );
+  // Anonymous by construction - `StatusApi` builds its own bare `Dio` rather
+  // than taking `ApiClient`, so a status check never waits on a token. See the
+  // class for why that matters on the exact launch where it is needed.
+  getIt.registerLazySingleton<StatusApi>(
+    () => StatusApi(authRepository: getIt()),
+  );
+  // Not in `resetSessionScopedCaches`: platform status belongs to the instance,
+  // not to the account, and it is the one thing that must keep working across a
+  // sign-out - especially a sign-out the incident caused.
+  getIt.registerLazySingleton<StatusRepository>(
+    () => StatusRepository(
+      api: getIt(),
+      authRepository: getIt(),
+      realtimeService: getIt(),
     ),
   );
   getIt.registerLazySingleton<PrivacyApi>(() => PrivacyApi(client: getIt()));

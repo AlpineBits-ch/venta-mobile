@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:venta_mobile/app.dart';
 import 'package:venta_mobile/core/di/injector.dart';
+import 'package:venta_mobile/features/status/data/status_repository.dart';
 
 class _InMemoryStorage extends Mock implements Storage {}
 
@@ -36,6 +37,13 @@ void main() {
   testWidgets('unauthenticated launch lands on the themed login screen', (
     tester,
   ) async {
+    // `App` starts the platform-status poll on launch, and its 60-second
+    // periodic timer outlives this test's widget tree - the harness reports
+    // that as a pending timer rather than as anything to do with the login
+    // screen. Stopped explicitly so the failure mode is "the timer was left
+    // running", not a mystery in an unrelated assertion.
+    addTearDown(getIt<StatusRepository>().pause);
+
     await tester.pumpWidget(const App());
     await tester.pumpAndSettle();
 

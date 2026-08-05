@@ -44,6 +44,7 @@ import '../../features/settings/presentation/screens/devices_screen.dart';
 import '../../features/settings/presentation/screens/notification_settings_screen.dart';
 import '../../features/settings/presentation/screens/qr_login_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
+import '../../features/status/presentation/screens/platform_status_screen.dart';
 import '../di/injector.dart';
 import '../realtime/realtime_service.dart';
 import '../session/session_cubit.dart';
@@ -354,6 +355,10 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         (context, state) => const LegalDocumentsScreen(),
       ),
       _route(RoutePaths.myReports, (context, state) => const MyReportsScreen()),
+      _route(
+        RoutePaths.platformStatus,
+        (context, state) => const PlatformStatusScreen(),
+      ),
       _route(RoutePaths.qrLogin, (context, state) => const QrLoginScreen()),
       _route(RoutePaths.devices, (context, state) => const DevicesScreen()),
       _route(

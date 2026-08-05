@@ -73,6 +73,11 @@ abstract final class RoutePaths {
   /// not reachable from anywhere else.
   static const myReports = '/settings/privacy/reports';
 
+  /// Component-by-component platform health, and the way out to the public
+  /// status page. Under App Settings rather than Account: it is about the
+  /// instance, not about you.
+  static const platformStatus = '/settings/status';
+
   /// Scanning a desktop/web client's login QR code. Nothing here is about
   /// *this* device's session - see `QrLoginScreen`.
   static const qrLogin = '/settings/qr-login';

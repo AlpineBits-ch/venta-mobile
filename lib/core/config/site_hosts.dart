@@ -7,7 +7,13 @@
 enum SiteLabel {
   support,
   docs,
-  admin;
+  admin,
+
+  /// The public platform-status page. Same derivation as the rest - a
+  /// self-hosted instance on `api.example.org` publishes its own
+  /// `status.example.org` and this client links there rather than at
+  /// venta.gg's.
+  status;
 
   String get label => name;
 }
@@ -57,5 +63,15 @@ String siteHost(String apiUrl, SiteLabel label) {
 /// which is the signal to render no link at all rather than a dead one.
 String? supportUrlOrNull(String apiUrl) {
   final url = siteHost(apiUrl, SiteLabel.support);
+  return url.isEmpty ? null : url;
+}
+
+/// The same for the public status page.
+///
+/// Only ever a *fallback*: an incident's own `url` from the status API is the
+/// link that points at the specific incident, and this is where a banner that
+/// arrived without one - or the "Open status page" row - goes instead.
+String? statusUrlOrNull(String apiUrl) {
+  final url = siteHost(apiUrl, SiteLabel.status);
   return url.isEmpty ? null : url;
 }
