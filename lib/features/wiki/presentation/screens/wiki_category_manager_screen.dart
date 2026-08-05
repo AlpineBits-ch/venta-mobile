@@ -83,8 +83,9 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
       title: 'Rename category',
       initial: category.name,
     );
-    if (name == null || name.trim().isEmpty || name.trim() == category.name)
+    if (name == null || name.trim().isEmpty || name.trim() == category.name) {
       return;
+    }
     try {
       await getIt<WikiRepository>().updateCategory(
         widget.guildId,
@@ -164,43 +165,120 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final categories = _categories;
+    final names = {
+      for (final category in categories ?? const <WikiCategoryDto>[])
+        category.id: category.name,
+    };
+
     return Scaffold(
       appBar: AppBar(title: const Text('Categories')),
       body: categories == null
           ? const Center(child: CircularProgressIndicator())
           : categories.isEmpty
-          ? const Center(child: Text('No categories yet.'))
-          : ReorderableListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
-              itemCount: categories.length,
-              onReorderItem: _reorder,
-              itemBuilder: (context, index) {
-                final category = categories[index];
-                return ListTile(
-                  key: ValueKey(category.id),
-                  leading: const Icon(Icons.drag_handle),
-                  title: Text(category.name),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined),
-                        onPressed: () => _rename(category),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => _delete(category),
-                      ),
-                    ],
+          ? _EmptyCategories(onCreate: _create)
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.m,
+                    AppSpacing.m,
+                    AppSpacing.m,
+                    AppSpacing.s,
                   ),
-                );
-              },
+                  child: Text(
+                    'Drag to change the order pages are grouped in on the '
+                    'wiki index.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ReorderableListView.builder(
+                    padding: const EdgeInsets.only(bottom: 96),
+                    itemCount: categories.length,
+                    onReorderItem: _reorder,
+                    itemBuilder: (context, index) {
+                      final category = categories[index];
+                      final parent = names[category.parentCategoryId];
+                      return ListTile(
+                        key: ValueKey(category.id),
+                        leading: ReorderableDragStartListener(
+                          index: index,
+                          child: const Icon(Icons.drag_handle),
+                        ),
+                        title: Text(category.name),
+                        subtitle: parent == null ? null : Text('in $parent'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined),
+                              tooltip: 'Rename',
+                              onPressed: () => _rename(category),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: 'Delete',
+                              onPressed: () => _delete(category),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _create,
-        tooltip: 'New category',
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.create_new_folder_outlined),
+        label: const Text('New category'),
+      ),
+    );
+  }
+}
+
+class _EmptyCategories extends StatelessWidget {
+  const _EmptyCategories({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.l),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.folder_open_outlined,
+              size: 36,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Text('No categories yet', style: theme.textTheme.titleSmall),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Categories group pages on the wiki index. Without any, every '
+              'page is listed together.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.l),
+            FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.add),
+              label: const Text('New category'),
+            ),
+          ],
+        ),
       ),
     );
   }

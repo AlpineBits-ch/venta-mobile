@@ -1,24 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/routing/back_navigation.dart';
 import '../../../../core/routing/route_paths.dart';
+import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
-import '../../../../core/widgets/app_back_button.dart';
+import '../../../../core/widgets/load_failure_view.dart';
 import '../../../guilds/data/models/guild_permissions.dart';
-import '../../data/models/wiki_category_dto.dart';
 import '../../data/models/wiki_dto.dart';
 import '../../data/models/wiki_page_dto.dart';
 import '../../data/models/wiki_page_summary_dto.dart';
+import '../../data/wiki_content.dart';
 import '../../data/wiki_repository.dart';
 import '../wiki_permissions.dart';
 import '../widgets/markdown_toolbar.dart';
+import '../widgets/wiki_markdown.dart';
 
 /// Shared create/edit form - pass [pageId] to edit that page, omit it to
 /// create a new one. [pageId] (rather than a pre-loaded `WikiPageDto`) keeps
 /// this screen reachable by a plain go_router path - it fetches the page
 /// itself, the same way every other guild screen fetches its own data on
-/// open. Pops with `true` on a successful save so the caller refetches.
+/// open.
+///
+/// The writing surface owns the whole screen: everything that isn't the title
+/// or the text - category, parent, pinning, visibility, tags - lives in a
+/// sheet behind one button. The previous version stacked those controls under
+/// a 14-line text box, which on a phone with the keyboard up left about four
+/// visible lines to write a wiki page in.
 class WikiEditorScreen extends StatefulWidget {
   const WikiEditorScreen({super.key, required this.guildId, this.pageId});
 
@@ -34,13 +43,15 @@ class WikiEditorScreen extends StatefulWidget {
 class _WikiEditorScreenState extends State<WikiEditorScreen> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-  final _tagController = TextEditingController();
+  final _contentFocus = FocusNode();
 
   String? _categoryId;
   String? _parentPageId;
   bool _isPinned = false;
   WikiVisibility _visibility = WikiVisibility.private;
   List<String> _tags = [];
+
+  late _Snapshot _saved = _Snapshot.empty;
 
   WikiDto? _wiki;
   GuildPermissions _permissions = GuildPermissions.none;
@@ -49,9 +60,16 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
   bool _showPreview = false;
   bool _saving = false;
 
+  /// Previous content text, so an incoming change can be recognised as "a
+  /// newline was just typed" and continue the list the caret is sitting in.
+  String _previousContent = '';
+  bool _applyingEdit = false;
+
   @override
   void initState() {
     super.initState();
+    _contentController.addListener(_onContentChanged);
+    _titleController.addListener(_onDirtyMaybeChanged);
     _load();
   }
 
@@ -59,11 +77,15 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
-    _tagController.dispose();
+    _contentFocus.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final pageId = widget.pageId;
       final results = await Future.wait([
@@ -76,69 +98,123 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
       setState(() {
         _wiki = results[0] as WikiDto;
         _permissions = results[1] as GuildPermissions;
-        _loading = false;
         if (pageId != null) {
           final page = results[2] as WikiPageDto;
           _titleController.text = page.title;
-          _contentController.text = page.content;
+          // A page last saved by Alpine's WYSIWYG editor may still hold HTML.
+          // Editing here is a markdown editor, so convert once on open rather
+          // than showing the author a wall of tags they'd have to hand-edit.
+          _contentController.text = normalizeWikiContent(page.content);
           _categoryId = page.categoryId;
           _parentPageId = page.parentPageId;
           _isPinned = page.isPinned;
           _visibility = page.visibility;
           _tags = [...page.tags];
         }
+        _previousContent = _contentController.text;
+        _saved = _snapshot();
+        // Last, so the controller writes above don't wake the dirty-tracking
+        // listener while the form is still being populated.
+        _loading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loadError = 'Could not load this page.');
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = 'Could not load this page.';
+        });
+      }
     }
   }
 
-  void _addTag(String value) {
-    final tag = value.trim();
-    if (tag.isEmpty || _tags.contains(tag)) {
-      _tagController.clear();
-      return;
+  _Snapshot _snapshot() => _Snapshot(
+    title: _titleController.text,
+    content: _contentController.text,
+    categoryId: _categoryId,
+    parentPageId: _parentPageId,
+    isPinned: _isPinned,
+    visibility: _visibility,
+    tags: [..._tags],
+  );
+
+  bool get _dirty => _snapshot() != _saved;
+
+  void _onDirtyMaybeChanged() {
+    // `PopScope.canPop` is read at build time, so the unsaved-changes guard
+    // only arms itself if the screen rebuilds when the text changes.
+    if (!_loading && mounted) setState(() {});
+  }
+
+  void _onContentChanged() {
+    if (_applyingEdit) return;
+    final value = _contentController.value;
+    final continued = MarkdownEditingActions.continueList(
+      _previousContent,
+      value,
+    );
+    if (continued != null) {
+      _applyingEdit = true;
+      _contentController.value = continued;
+      _applyingEdit = false;
+      _previousContent = continued.text;
+    } else {
+      _previousContent = value.text;
     }
-    setState(() {
-      _tags.add(tag);
-      _tagController.clear();
-    });
+    _onDirtyMaybeChanged();
   }
 
-  Future<void> _pickCategory() async {
-    final categories = _wiki?.categories ?? const <WikiCategoryDto>[];
-    final selected = await showModalBottomSheet<String?>(
+  Future<void> _openSettings() async {
+    final wiki = _wiki;
+    if (wiki == null) return;
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (context) => _PickerSheet<String?>(
-        title: 'Category',
-        options: [
-          const _PickerOption(value: null, label: 'None'),
-          for (final category in categories)
-            _PickerOption(value: category.id, label: category.name),
-        ],
-        selected: _categoryId,
+      isScrollControlled: true,
+      showDragHandle: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+      ),
+      builder: (sheetContext) => _PageSettingsSheet(
+        wiki: wiki,
+        editingPageId: widget.pageId,
+        canPublish: _permissions.has('PublishWikiPublicly'),
+        categoryId: _categoryId,
+        parentPageId: _parentPageId,
+        isPinned: _isPinned,
+        visibility: _visibility,
+        tags: _tags,
+        onChanged:
+            ({
+              required String? categoryId,
+              required String? parentPageId,
+              required bool isPinned,
+              required WikiVisibility visibility,
+              required List<String> tags,
+            }) {
+              setState(() {
+                _categoryId = categoryId;
+                _parentPageId = parentPageId;
+                _isPinned = isPinned;
+                _visibility = visibility;
+                _tags = tags;
+              });
+            },
       ),
     );
-    if (selected != _categoryId) setState(() => _categoryId = selected);
   }
 
-  Future<void> _pickParentPage() async {
-    final roots = (_wiki?.pages ?? const <WikiPageSummaryDto>[])
-        .where((p) => p.parentPageId == null && p.id != widget.pageId)
-        .toList();
-    final selected = await showModalBottomSheet<String?>(
+  Future<void> _insertLink() async {
+    final actions = MarkdownEditingActions(_contentController);
+    final selection = _contentController.selection;
+    final selected = selection.isValid
+        ? selection.textInside(_contentController.text)
+        : '';
+
+    final result = await showDialog<({String text, String url})>(
       context: context,
-      builder: (context) => _PickerSheet<String?>(
-        title: 'Parent page',
-        options: [
-          const _PickerOption(value: null, label: 'None (top level)'),
-          for (final page in roots)
-            _PickerOption(value: page.id, label: page.title),
-        ],
-        selected: _parentPageId,
-      ),
+      builder: (context) => _LinkDialog(initialText: selected),
     );
-    if (selected != _parentPageId) setState(() => _parentPageId = selected);
+    if (result == null) return;
+    actions.replaceSelection('[${result.text}](${result.url})');
   }
 
   Future<void> _save() async {
@@ -154,7 +230,7 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
       final repository = getIt<WikiRepository>();
       final pageId = widget.pageId;
       if (pageId == null) {
-        await repository.createPage(
+        final created = await repository.createPage(
           widget.guildId,
           title: title,
           content: _contentController.text,
@@ -164,22 +240,32 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
           tags: _tags,
           isPinned: _isPinned,
         );
-      } else {
-        await repository.updatePage(
-          widget.guildId,
-          pageId,
-          title: title,
-          content: _contentController.text,
-          categoryId: _categoryId,
-          clearCategory: _categoryId == null,
-          parentPageId: _parentPageId,
-          clearParentPage: _parentPageId == null,
-          visibility: _visibility,
-          tags: _tags,
-          isPinned: _isPinned,
+        if (!mounted) return;
+        setState(() => _saved = _snapshot());
+        // Land on the page that was just written rather than back on the
+        // index - the next thing anyone wants is to see how it reads.
+        context.pushReplacement(
+          RoutePaths.serverWikiPagePath(widget.guildId, created.id),
         );
+        return;
       }
-      if (mounted) Navigator.of(context).pop(true);
+
+      await repository.updatePage(
+        widget.guildId,
+        pageId,
+        title: title,
+        content: _contentController.text,
+        categoryId: _categoryId,
+        clearCategory: _categoryId == null,
+        parentPageId: _parentPageId,
+        clearParentPage: _parentPageId == null,
+        visibility: _visibility,
+        tags: _tags,
+        isPinned: _isPinned,
+      );
+      if (!mounted) return;
+      setState(() => _saved = _snapshot());
+      Navigator.of(context).pop(true);
     } catch (e, st) {
       debugPrint('wiki save failed: $e\n$st');
       if (mounted) {
@@ -192,175 +278,336 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    if (_loading) {
-      return Scaffold(
-        appBar: AppBar(
-          leading: AppBackButton(
-            fallbackLocation: RoutePaths.serverWikiPath(widget.guildId),
-          ),
-          title: Text(widget.isEditing ? 'Edit page' : 'New page'),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_loadError != null) {
-      return Scaffold(
-        appBar: AppBar(
-          leading: AppBackButton(
-            fallbackLocation: RoutePaths.serverWikiPath(widget.guildId),
-          ),
-          title: Text(widget.isEditing ? 'Edit page' : 'New page'),
-        ),
-        body: Center(child: Text(_loadError!)),
-      );
-    }
-
-    final canPublish = _permissions.has('PublishWikiPublicly');
-    final categoryName =
-        _findLabel(
-          _wiki?.categories,
-          _categoryId,
-          (c) => c.id,
-          (c) => c.name,
-        ) ??
-        'None';
-    final parentTitle =
-        _findLabel(_wiki?.pages, _parentPageId, (p) => p.id, (p) => p.title) ??
-        'None (top level)';
-
-    return Scaffold(
-      appBar: AppBar(
-        leading: AppBackButton(
-          fallbackLocation: RoutePaths.serverWikiPath(widget.guildId),
-        ),
-        title: Text(widget.isEditing ? 'Edit page' : 'New page'),
+  Future<bool> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text("This page hasn't been saved yet."),
         actions: [
-          IconButton(
-            icon: Icon(
-              _showPreview ? Icons.edit_outlined : Icons.visibility_outlined,
-            ),
-            tooltip: _showPreview ? 'Edit' : 'Preview',
-            onPressed: () => setState(() => _showPreview = !_showPreview),
-          ),
           TextButton(
-            onPressed: _saving ? null : _save,
-            child: _saving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Save'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.m),
-        children: [
-          TextField(
-            controller: _titleController,
-            style: theme.textTheme.titleLarge,
-            decoration: const InputDecoration(
-              hintText: 'Page title',
-              border: InputBorder.none,
-            ),
+    );
+    return discard ?? false;
+  }
+
+  Future<void> _handleBack() async {
+    if (_dirty && !await _confirmDiscard()) return;
+    if (!mounted) return;
+    BackNavigation.goBack(
+      context,
+      RoutePaths.serverWikiPath(widget.guildId),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = widget.isEditing ? 'Edit page' : 'New page';
+
+    if (_loading || _loadError != null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back',
+            onPressed: _handleBack,
           ),
-          const Divider(height: AppSpacing.l),
-          if (_showPreview) ...[
-            if (_contentController.text.trim().isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.l),
-                child: Text(
-                  'Nothing to preview yet.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          title: Text(title),
+        ),
+        body: _loadError != null
+            ? LoadFailureView(message: _loadError!, onRetry: _load)
+            : const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return PopScope(
+      canPop: !_dirty || _saving,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        // `Navigator.pop` doesn't consult `PopScope`, so this is the escape
+        // hatch out of a guard that just declined the system back gesture.
+        final navigator = Navigator.of(context);
+        if (await _confirmDiscard()) navigator.pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back',
+            onPressed: _handleBack,
+          ),
+          title: Text(title),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.tune),
+              tooltip: 'Page settings',
+              onPressed: _openSettings,
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.s),
+              child: FilledButton(
+                onPressed: _saving ? null : _save,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.m,
+                    vertical: AppSpacing.s,
                   ),
+                  minimumSize: const Size(0, 36),
                 ),
-              )
-            else
-              MarkdownBody(data: _contentController.text, selectable: true),
-          ] else ...[
-            MarkdownToolbar(controller: _contentController),
-            const SizedBox(height: AppSpacing.xs),
-            TextField(
-              controller: _contentController,
-              maxLines: 14,
-              minLines: 8,
-              decoration: const InputDecoration(
-                hintText: 'Write in Markdown…',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
+                child: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save'),
               ),
             ),
           ],
-          const SizedBox(height: AppSpacing.l),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.folder_outlined),
-            title: const Text('Category'),
-            subtitle: Text(categoryName),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _pickCategory,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(44),
+            child: _EditorModeBar(
+              showPreview: _showPreview,
+              wordCount: _wordCount(_contentController.text),
+              onChanged: (preview) {
+                if (preview) FocusScope.of(context).unfocus();
+                setState(() => _showPreview = preview);
+              },
+            ),
           ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.subdirectory_arrow_right),
-            title: const Text('Parent page'),
-            subtitle: Text(parentTitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _pickParentPage,
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.push_pin_outlined),
-            title: const Text('Pinned'),
-            value: _isPinned,
-            onChanged: (value) => setState(() => _isPinned = value),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.public),
-            title: const Text('Visible to anyone with a share link'),
-            subtitle: canPublish
-                ? null
-                : const Text("You don't have permission to publish publicly"),
-            value: _visibility == WikiVisibility.public,
-            onChanged: canPublish
-                ? (value) => setState(
-                    () => _visibility = value
-                        ? WikiVisibility.public
-                        : WikiVisibility.private,
-                  )
-                : null,
-          ),
-          const SizedBox(height: AppSpacing.s),
-          Text('Tags', style: theme.textTheme.titleSmall),
-          const SizedBox(height: AppSpacing.xs),
-          Wrap(
-            spacing: AppSpacing.xs,
-            runSpacing: AppSpacing.xs,
-            children: [
-              for (final tag in _tags)
-                InputChip(
-                  label: Text(tag),
-                  onDeleted: () => setState(() => _tags.remove(tag)),
+        ),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.m,
+                AppSpacing.s,
+                AppSpacing.m,
+                0,
+              ),
+              child: TextField(
+                controller: _titleController,
+                readOnly: _showPreview,
+                textCapitalization: TextCapitalization.sentences,
+                maxLines: 2,
+                minLines: 1,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  height: 1.2,
                 ),
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  controller: _tagController,
-                  decoration: const InputDecoration(
-                    hintText: 'Add tag…',
-                    isDense: true,
+                decoration: InputDecoration(
+                  hintText: 'Page title',
+                  hintStyle: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    height: 1.2,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
                   ),
-                  onSubmitted: _addTag,
+                  filled: false,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
                 ),
               ),
-            ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: AppSpacing.m,
+                vertical: AppSpacing.s + 2,
+              ),
+              child: Divider(height: 1),
+            ),
+            Expanded(
+              child: _showPreview ? _buildPreview() : _buildWriter(),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _showPreview
+            ? null
+            : MarkdownToolbar(
+                controller: _contentController,
+                onInsertLink: _insertLink,
+              ),
+      ),
+    );
+  }
+
+  Widget _buildWriter() {
+    final theme = Theme.of(context);
+    return TextField(
+      controller: _contentController,
+      focusNode: _contentFocus,
+      expands: true,
+      maxLines: null,
+      minLines: null,
+      textAlignVertical: TextAlignVertical.top,
+      textCapitalization: TextCapitalization.sentences,
+      keyboardType: TextInputType.multiline,
+      style: theme.textTheme.bodyLarge?.copyWith(height: 1.55),
+      decoration: InputDecoration(
+        hintText: 'Write in Markdown…\n\n'
+            '# Heading\n'
+            '- [ ] a task\n'
+            '**bold**, `code`, [links](https://…)',
+        hintMaxLines: 6,
+        filled: false,
+        contentPadding: const EdgeInsets.fromLTRB(
+          AppSpacing.m,
+          0,
+          AppSpacing.m,
+          AppSpacing.m,
+        ),
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+      ),
+    );
+  }
+
+  Widget _buildPreview() {
+    final theme = Theme.of(context);
+    final content = _contentController.text.trim();
+    if (content.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.l),
+          child: Text(
+            'Nothing to preview yet.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+      );
+    }
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.m,
+        0,
+        AppSpacing.m,
+        AppSpacing.xl,
+      ),
+      child: WikiMarkdown(data: content, selectable: false),
+    );
+  }
+
+  static int _wordCount(String text) =>
+      text.trim().isEmpty ? 0 : text.trim().split(RegExp(r'\s+')).length;
+}
+
+/// Snapshot of everything the form owns, so "are there unsaved changes?" is
+/// one equality check rather than seven remembered fields.
+class _Snapshot {
+  const _Snapshot({
+    required this.title,
+    required this.content,
+    required this.categoryId,
+    required this.parentPageId,
+    required this.isPinned,
+    required this.visibility,
+    required this.tags,
+  });
+
+  static const empty = _Snapshot(
+    title: '',
+    content: '',
+    categoryId: null,
+    parentPageId: null,
+    isPinned: false,
+    visibility: WikiVisibility.private,
+    tags: <String>[],
+  );
+
+  final String title;
+  final String content;
+  final String? categoryId;
+  final String? parentPageId;
+  final bool isPinned;
+  final WikiVisibility visibility;
+  final List<String> tags;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _Snapshot &&
+      other.title == title &&
+      other.content == content &&
+      other.categoryId == categoryId &&
+      other.parentPageId == parentPageId &&
+      other.isPinned == isPinned &&
+      other.visibility == visibility &&
+      other.tags.length == tags.length &&
+      other.tags.every(tags.contains);
+
+  @override
+  int get hashCode => Object.hash(
+    title,
+    content,
+    categoryId,
+    parentPageId,
+    isPinned,
+    visibility,
+    tags.length,
+  );
+}
+
+class _EditorModeBar extends StatelessWidget {
+  const _EditorModeBar({
+    required this.showPreview,
+    required this.wordCount,
+    required this.onChanged,
+  });
+
+  final bool showPreview;
+  final int wordCount;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.m,
+        0,
+        AppSpacing.m,
+        AppSpacing.s,
+      ),
+      child: Row(
+        children: [
+          _ModeChip(
+            label: 'Write',
+            icon: Icons.edit_outlined,
+            selected: !showPreview,
+            onTap: () => onChanged(false),
+          ),
+          const SizedBox(width: AppSpacing.xs + 2),
+          _ModeChip(
+            label: 'Preview',
+            icon: Icons.visibility_outlined,
+            selected: showPreview,
+            onTap: () => onChanged(true),
+          ),
+          const Spacer(),
+          Text(
+            '$wordCount ${wordCount == 1 ? 'word' : 'words'}',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+            ),
           ),
         ],
       ),
@@ -368,63 +615,477 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
   }
 }
 
-String? _findLabel<T>(
-  List<T>? items,
-  String? id,
-  String Function(T) idOf,
-  String Function(T) labelOf,
-) {
-  if (items == null || id == null) return null;
-  for (final item in items) {
-    if (idOf(item) == id) return labelOf(item);
+class _ModeChip extends StatelessWidget {
+  const _ModeChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final foreground = selected
+        ? theme.colorScheme.onPrimary
+        : theme.colorScheme.onSurface.withValues(alpha: 0.7);
+    return Material(
+      color: selected ? theme.colorScheme.primary : context.statusColors.hover,
+      borderRadius: BorderRadius.circular(AppRadii.composerPill),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadii.composerPill),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: foreground),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: foreground,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
-  return null;
 }
 
-class _PickerOption<T> {
-  const _PickerOption({required this.value, required this.label});
+typedef _SettingsChanged =
+    void Function({
+      required String? categoryId,
+      required String? parentPageId,
+      required bool isPinned,
+      required WikiVisibility visibility,
+      required List<String> tags,
+    });
+
+class _PageSettingsSheet extends StatefulWidget {
+  const _PageSettingsSheet({
+    required this.wiki,
+    required this.editingPageId,
+    required this.canPublish,
+    required this.categoryId,
+    required this.parentPageId,
+    required this.isPinned,
+    required this.visibility,
+    required this.tags,
+    required this.onChanged,
+  });
+
+  final WikiDto wiki;
+  final String? editingPageId;
+  final bool canPublish;
+  final String? categoryId;
+  final String? parentPageId;
+  final bool isPinned;
+  final WikiVisibility visibility;
+  final List<String> tags;
+  final _SettingsChanged onChanged;
+
+  @override
+  State<_PageSettingsSheet> createState() => _PageSettingsSheetState();
+}
+
+class _PageSettingsSheetState extends State<_PageSettingsSheet> {
+  final _tagController = TextEditingController();
+
+  late String? _categoryId = widget.categoryId;
+  late String? _parentPageId = widget.parentPageId;
+  late bool _isPinned = widget.isPinned;
+  late WikiVisibility _visibility = widget.visibility;
+  late List<String> _tags = [...widget.tags];
+
+  @override
+  void dispose() {
+    _tagController.dispose();
+    super.dispose();
+  }
+
+  void _publish() {
+    widget.onChanged(
+      categoryId: _categoryId,
+      parentPageId: _parentPageId,
+      isPinned: _isPinned,
+      visibility: _visibility,
+      tags: [..._tags],
+    );
+  }
+
+  void _update(VoidCallback change) {
+    setState(change);
+    _publish();
+  }
+
+  void _addTag(String value) {
+    final tag = value.trim().replaceAll(',', '');
+    _tagController.clear();
+    if (tag.isEmpty || _tags.contains(tag)) return;
+    _update(() => _tags = [..._tags, tag]);
+  }
+
+  Future<void> _pickParent() async {
+    final candidates =
+        widget.wiki.pages
+            .where(
+              (page) =>
+                  page.id != widget.editingPageId && page.parentPageId == null,
+            )
+            .toList()
+          ..sort(
+            (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+          );
+
+    final selected = await showModalBottomSheet<_Selection<String?>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+      ),
+      builder: (context) => _SearchablePicker(
+        title: 'Parent page',
+        selected: _parentPageId,
+        options: [
+          const _Option<String?>(value: null, label: 'None (top level)'),
+          for (final page in candidates)
+            _Option<String?>(value: page.id, label: page.title),
+        ],
+      ),
+    );
+    if (selected != null) _update(() => _parentPageId = selected.value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final categories = [...widget.wiki.categories]
+      ..sort((a, b) => a.position.compareTo(b.position));
+    final parentTitle = _titleOfPage(widget.wiki.pages, _parentPageId);
+
+    return SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.m,
+          0,
+          AppSpacing.m,
+          AppSpacing.m,
+        ),
+        children: [
+          Text('Page settings', style: theme.textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.l),
+
+          _SettingLabel('Category', icon: Icons.folder_outlined),
+          const SizedBox(height: AppSpacing.s),
+          Wrap(
+            spacing: AppSpacing.xs + 2,
+            runSpacing: AppSpacing.xs + 2,
+            children: [
+              ChoiceChip(
+                label: const Text('None'),
+                selected: _categoryId == null,
+                onSelected: (_) => _update(() => _categoryId = null),
+              ),
+              for (final category in categories)
+                ChoiceChip(
+                  label: Text(category.name),
+                  selected: _categoryId == category.id,
+                  onSelected: (_) => _update(() => _categoryId = category.id),
+                ),
+            ],
+          ),
+          if (categories.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                'No categories yet - pages without one are listed under '
+                'Uncategorized.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+
+          const SizedBox(height: AppSpacing.l),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.subdirectory_arrow_right),
+            title: const Text('Parent page'),
+            subtitle: Text(parentTitle ?? 'None (top level)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _pickParent,
+          ),
+
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.push_pin_outlined),
+            title: const Text('Pinned'),
+            subtitle: const Text('Shown at the top of the wiki'),
+            value: _isPinned,
+            onChanged: (value) => _update(() => _isPinned = value),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.public),
+            title: const Text('Public'),
+            subtitle: Text(
+              widget.canPublish
+                  ? 'Visible to anyone with a share link'
+                  : "You don't have permission to publish publicly",
+            ),
+            value: _visibility == WikiVisibility.public,
+            onChanged: widget.canPublish
+                ? (value) => _update(
+                    () => _visibility = value
+                        ? WikiVisibility.public
+                        : WikiVisibility.private,
+                  )
+                : null,
+          ),
+
+          const SizedBox(height: AppSpacing.m),
+          _SettingLabel('Tags', icon: Icons.sell_outlined),
+          const SizedBox(height: AppSpacing.s),
+          Wrap(
+            spacing: AppSpacing.xs + 2,
+            runSpacing: AppSpacing.xs + 2,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final tag in _tags)
+                InputChip(
+                  label: Text(tag),
+                  onDeleted: () =>
+                      _update(() => _tags = [..._tags]..remove(tag)),
+                ),
+              SizedBox(
+                width: 150,
+                child: TextField(
+                  controller: _tagController,
+                  decoration: const InputDecoration(
+                    hintText: 'Add tag…',
+                    isDense: true,
+                  ),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: _addTag,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.l),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String? _titleOfPage(List<WikiPageSummaryDto> pages, String? id) {
+    if (id == null) return null;
+    for (final page in pages) {
+      if (page.id == id) return page.title;
+    }
+    return null;
+  }
+}
+
+class _SettingLabel extends StatelessWidget {
+  const _SettingLabel(this.label, {required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: AppSpacing.s),
+        Text(
+          label,
+          style: theme.textTheme.titleSmall?.copyWith(color: color),
+        ),
+      ],
+    );
+  }
+}
+
+class _Option<T> {
+  const _Option({required this.value, required this.label});
+
   final T value;
   final String label;
 }
 
-class _PickerSheet<T> extends StatelessWidget {
-  const _PickerSheet({
+/// Wraps the picked value so "dismissed" and "picked None" stay distinct
+/// across a nullable-valued sheet.
+class _Selection<T> {
+  const _Selection(this.value);
+
+  final T value;
+}
+
+class _SearchablePicker extends StatefulWidget {
+  const _SearchablePicker({
     required this.title,
     required this.options,
     required this.selected,
   });
 
   final String title;
-  final List<_PickerOption<T>> options;
-  final T selected;
+  final List<_Option<String?>> options;
+  final String? selected;
+
+  @override
+  State<_SearchablePicker> createState() => _SearchablePickerState();
+}
+
+class _SearchablePickerState extends State<_SearchablePicker> {
+  String _query = '';
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final query = _query.trim().toLowerCase();
+    final options = query.isEmpty
+        ? widget.options
+        : widget.options
+              .where((option) => option.label.toLowerCase().contains(query))
+              .toList();
+
     return SafeArea(
-      child: Column(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+              child: Text(widget.title, style: theme.textTheme.titleMedium),
+            ),
+            if (widget.options.length > 8)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.m,
+                  AppSpacing.s,
+                  AppSpacing.m,
+                  0,
+                ),
+                child: TextField(
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Search',
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search, size: 20),
+                  ),
+                  onChanged: (value) => setState(() => _query = value),
+                ),
+              ),
+            const SizedBox(height: AppSpacing.s),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final option = options[index];
+                  return ListTile(
+                    title: Text(option.label),
+                    trailing: option.value == widget.selected
+                        ? Icon(Icons.check, color: theme.colorScheme.primary)
+                        : null,
+                    onTap: () =>
+                        Navigator.of(context).pop(_Selection(option.value)),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LinkDialog extends StatefulWidget {
+  const _LinkDialog({required this.initialText});
+
+  final String initialText;
+
+  @override
+  State<_LinkDialog> createState() => _LinkDialogState();
+}
+
+class _LinkDialogState extends State<_LinkDialog> {
+  late final _textController = TextEditingController(text: widget.initialText);
+  final _urlController = TextEditingController();
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Insert link'),
+      content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.m),
-            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+          TextField(
+            controller: _textController,
+            autofocus: widget.initialText.isEmpty,
+            decoration: const InputDecoration(labelText: 'Text'),
           ),
-          Flexible(
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                for (final option in options)
-                  ListTile(
-                    title: Text(option.label),
-                    trailing: option.value == selected
-                        ? const Icon(Icons.check)
-                        : null,
-                    onTap: () => Navigator.of(context).pop(option.value),
-                  ),
-              ],
+          const SizedBox(height: AppSpacing.s),
+          TextField(
+            controller: _urlController,
+            autofocus: widget.initialText.isNotEmpty,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(
+              labelText: 'URL',
+              hintText: 'https://',
             ),
           ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final url = _urlController.text.trim();
+            if (url.isEmpty) return;
+            final text = _textController.text.trim();
+            Navigator.of(context).pop((
+              text: text.isEmpty ? url : text,
+              url: url,
+            ));
+          },
+          child: const Text('Insert'),
+        ),
+      ],
     );
   }
 }
