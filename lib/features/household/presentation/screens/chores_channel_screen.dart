@@ -80,7 +80,18 @@ class _ChoresChannelScreenState
     unawaited(ensureMembers());
     _eventsSub = household
         .channelEvents(widget.channelId, HouseholdEvents.chores)
-        .listen((_) => _load());
+        .listen((event) {
+          // Only ever sent to the assignee, so there's no "is this mine" test
+          // to make. It also arrives as a push, but a notification tray entry
+          // for the board you're already looking at is easy to miss.
+          if (event.name == HouseholdEvents.choreReminder && mounted) {
+            showMessage(
+              '${event.stringField('title') ?? 'A chore'} is due - it\'s '
+              'your turn.',
+            );
+          }
+          _load();
+        });
   }
 
   @override
@@ -887,13 +898,24 @@ class _ChoreSheetState extends State<_ChoreSheet> {
   void initState() {
     super.initState();
     _titleController.addListener(() => setState(() {}));
-    // Default the pool to the widest role available, which for a household is
-    // "everyone" - the answer nine times out of ten.
-    _rotationRoleId ??= widget.roles
-        .where((r) => r.type == RoleType.everyone)
-        .firstOrNull
-        ?.id;
+    // Flatmates first: a household is seeded with it, and holding it is the
+    // product's way of saying "this person lives here". Defaulting to
+    // @everyone would put the rota on the pet sitter, who joined by invite and
+    // holds nothing else. Falls back to @everyone for a house that has renamed
+    // or deleted the role.
+    _rotationRoleId ??=
+        widget.roles
+            .where(
+              (r) =>
+                  r.type != RoleType.everyone &&
+                  r.name.toLowerCase() == _flatmatesRoleName,
+            )
+            .firstOrNull
+            ?.id ??
+        widget.roles.where((r) => r.type == RoleType.everyone).firstOrNull?.id;
   }
+
+  static const _flatmatesRoleName = 'flatmates';
 
   @override
   void dispose() {

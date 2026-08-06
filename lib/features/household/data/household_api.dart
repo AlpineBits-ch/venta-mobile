@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
 import 'models/chore_dto.dart';
 import 'models/decision_dto.dart';
@@ -360,13 +362,19 @@ class HouseholdApi {
   /// eating" is a question about the house, not about one fridge. Results are
   /// filtered per channel by `ViewChannel`, so this can't be used to
   /// enumerate a pantry you're not in.
+  ///
+  /// [days] is an override for *every* pantry at once, and omitting it is the
+  /// right default: each pantry then uses its own `expiryWarningDays`, so a
+  /// freezer set to a fortnight and a fridge set to two days both behave
+  /// correctly in one response. Passing a number flattens that distinction,
+  /// which is only what you want for a deliberate "what goes off this month".
   Future<List<PantryItemDto>> getExpiringPantryItems(
     String guildId, {
-    int days = 3,
+    int? days,
   }) async {
     final response = await client.dio.get<List<dynamic>>(
       '$_base/guilds/$guildId/pantry/expiring',
-      queryParameters: {'days': days},
+      queryParameters: {if (days != null) 'days': days},
     );
     return response.data!
         .map((json) => PantryItemDto.fromJson(json as Map<String, dynamic>))
@@ -397,13 +405,38 @@ class HouseholdApi {
 
   // --------------------------------------------------------------- ledger
 
-  Future<List<ExpenseDto>> getExpenses(String channelId) async {
-    final response = await client.dio.get<List<dynamic>>(
+  /// One page of a ledger, newest first.
+  ///
+  /// Keyset-paged: pass the previous page's [ExpensePageDto.nextCursor] back as
+  /// [cursor], and a null cursor in the response means the end. [limit]
+  /// defaults to 50 server-side and caps at 200; a malformed cursor is a `400`
+  /// rather than a silent first page.
+  ///
+  /// The bare-array shape is still accepted here because it costs one `is`
+  /// check: this endpoint used to answer with a flat `Take(200)` array, and a
+  /// gateway that hasn't been redeployed yet should degrade to "one page, no
+  /// more" rather than to an unreadable ledger.
+  Future<ExpensePageDto> getExpenses(
+    String channelId, {
+    int? limit,
+    String? cursor,
+  }) async {
+    final response = await client.dio.get<dynamic>(
       '$_base/channels/$channelId/expenses',
+      queryParameters: {
+        if (limit != null) 'limit': limit,
+        if (cursor != null) 'cursor': cursor,
+      },
     );
-    return response.data!
-        .map((json) => ExpenseDto.fromJson(json as Map<String, dynamic>))
-        .toList();
+    final data = response.data;
+    if (data is List) {
+      return ExpensePageDto(
+        items: data
+            .map((json) => ExpenseDto.fromJson(json as Map<String, dynamic>))
+            .toList(),
+      );
+    }
+    return ExpensePageDto.fromJson(data as Map<String, dynamic>);
   }
 
   /// [amountMinor] is a whole number of cents/rappen. There is no code path
@@ -700,4 +733,74 @@ class HouseholdApi {
       '$_base/guilds/$guildId/members/$userId/roles/$roleId/temporary',
     );
   }
+
+  // ------------------------------------------------------------- moving out
+
+  /// Removes somebody who has moved out, and cleans up what they were
+  /// carrying: their unfinished chores, their name on list items, their
+  /// balance.
+  ///
+  /// This is the *only* way a household removes a member. The `Household`
+  /// preset leaves the Moderation module off, which strips `KickMembers` for
+  /// everybody including the owner - four people sharing a flat don't ban each
+  /// other. Needs `ManageGuild` plus the usual role-hierarchy rule, and the
+  /// owner can't be moved out at all (transfer ownership first).
+  ///
+  /// Throws [MoveOutBlocked] while they still owe money, unless
+  /// [writeOffBalances] is set. That refusal is the feature, not an obstacle:
+  /// it's the one moment the house is made to look at what the person leaving
+  /// owes. Writing it off records the settlements that zero them - it does not
+  /// pretend money moved, it's the house agreeing to stop counting the debt,
+  /// and the audit log says so.
+  Future<MoveOutSummaryDto> moveOut(
+    String guildId, {
+    required String userId,
+    bool writeOffBalances = false,
+  }) async {
+    try {
+      final response = await client.dio.post<dynamic>(
+        '$_base/guilds/$guildId/members/$userId/move-out',
+        data: {'writeOffBalances': writeOffBalances},
+      );
+      final data = response.data;
+      return data is Map<String, dynamic>
+          ? MoveOutSummaryDto.fromJson(data)
+          : MoveOutSummaryDto(userId: userId);
+    } on DioException catch (error) {
+      final blocked = MoveOutBlocked.tryParse(error);
+      if (blocked != null) throw blocked;
+      rethrow;
+    }
+  }
+}
+
+/// The `409` a move-out answers with while the member is still in the red.
+///
+/// Carries the balances rather than just a message because the useful screen
+/// is "Ben owes 240 CHF - settle up first, or write it off", and that needs the
+/// numbers.
+class MoveOutBlocked implements Exception {
+  const MoveOutBlocked({required this.message, required this.outstanding});
+
+  final String message;
+  final List<OutstandingBalanceDto> outstanding;
+
+  static MoveOutBlocked? tryParse(DioException error) {
+    if (error.response?.statusCode != 409) return null;
+    final data = error.response?.data;
+    if (data is! Map) return null;
+    final outstanding = data['outstanding'];
+    return MoveOutBlocked(
+      message: data['error'] as String? ?? 'This member is not settled up',
+      outstanding: [
+        if (outstanding is List)
+          for (final entry in outstanding)
+            if (entry is Map<String, dynamic>)
+              OutstandingBalanceDto.fromJson(entry),
+      ],
+    );
+  }
+
+  @override
+  String toString() => 'MoveOutBlocked($message)';
 }

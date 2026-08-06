@@ -57,6 +57,17 @@ class _LedgerChannelScreenState
   bool _loadFailed = false;
   StreamSubscription<void>? _eventsSub;
 
+  /// Keyset cursor for the next (older) page, or null once the ledger has been
+  /// read to its end. A house that has been running for years has more than a
+  /// screenful, and the history is the part people scroll back through when
+  /// they disagree about something.
+  String? _nextCursor;
+  bool _loadingMore = false;
+
+  /// The server's own default page size, mirrored so a refresh can ask for the
+  /// depth already on screen instead of one page.
+  static const _pageSize = 50;
+
   String get _currency => _config?.currency ?? 'CHF';
   bool get _canAdd => can('AddExpenses');
   bool get _canManage => can('ManageLedger');
@@ -88,17 +99,29 @@ class _LedgerChannelScreenState
     super.dispose();
   }
 
+  /// Re-reads the ledger from the top, as deep as it's currently scrolled.
+  ///
+  /// Every ledger event moves the balances, so nothing here is patched in
+  /// place - but re-reading only the first page would throw away pages
+  /// somebody had just paged in, which is what they were reading when the
+  /// event arrived. Capped at the server's own page maximum.
   Future<void> _load() async {
+    final loaded = _expenses?.length ?? 0;
     try {
       final results = await Future.wait([
-        api.getExpenses(widget.channelId),
+        api.getExpenses(
+          widget.channelId,
+          limit: loaded > _pageSize ? (loaded > 200 ? 200 : loaded) : null,
+        ),
         api.getLedgerBalances(widget.channelId),
         api.getSettleSuggestion(widget.channelId),
         api.getLedgerConfig(widget.channelId),
       ]);
       if (!mounted) return;
+      final page = results[0] as ExpensePageDto;
       setState(() {
-        _expenses = results[0] as List<ExpenseDto>;
+        _expenses = page.items;
+        _nextCursor = page.nextCursor;
         _balances = results[1] as List<LedgerBalanceDto>;
         _suggestions = results[2] as List<TransferSuggestionDto>;
         _config = results[3] as LedgerConfigDto;
@@ -106,6 +129,24 @@ class _LedgerChannelScreenState
       });
     } catch (_) {
       if (mounted && _expenses == null) setState(() => _loadFailed = true);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    final cursor = _nextCursor;
+    if (cursor == null || _loadingMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await api.getExpenses(widget.channelId, cursor: cursor);
+      if (!mounted) return;
+      setState(() {
+        _expenses = [...?_expenses, ...page.items];
+        _nextCursor = page.nextCursor;
+      });
+    } catch (error) {
+      showError(error, 'Could not load any more of the ledger.');
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -334,6 +375,26 @@ class _LedgerChannelScreenState
             myUserId: currentUserId,
             onTap: _canEdit(expense) ? () => _openExpenseEditor(expense) : null,
             onDelete: _canEdit(expense) ? () => _deleteExpense(expense) : null,
+          ),
+        ),
+      );
+    }
+
+    if (_nextCursor != null) {
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.s),
+          child: Center(
+            child: _loadingMore
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : TextButton(
+                    onPressed: _loadMore,
+                    child: const Text('Older expenses'),
+                  ),
           ),
         ),
       );
@@ -931,7 +992,14 @@ class _ExpenseSheetState extends State<_ExpenseSheet> {
           widget.existing!.id,
           description: _descriptionController.text.trim(),
           amountMinor: _amountMinor,
-          payerUserId: _payerUserId,
+          // Only when it actually moved. Reassigning the payer needs
+          // `ManageLedger` on the patch path too (create always required it,
+          // so create-then-patch used to walk around the check), and sending
+          // the payer it already has would turn every edit of your own expense
+          // into a 403.
+          payerUserId: _payerUserId == widget.existing!.payerUserId
+              ? null
+              : _payerUserId,
           occurredAt: _occurredAt,
           splitKind: _splitKind,
           shares: _buildShares(),

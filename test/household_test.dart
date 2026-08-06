@@ -1,5 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venta_mobile/core/push/household_push_payload.dart';
+import 'package:venta_mobile/core/realtime/realtime_service.dart';
+import 'package:venta_mobile/features/household/data/household_api.dart';
+import 'package:venta_mobile/features/household/data/household_repository.dart';
 import 'package:venta_mobile/features/household/data/models/house_dto.dart';
+import 'package:venta_mobile/features/household/data/models/ledger_dto.dart';
 import 'package:venta_mobile/features/household/data/money.dart';
 import 'package:venta_mobile/features/household/presentation/widgets/household_widgets.dart';
 
@@ -128,5 +134,128 @@ void main() {
       expect(formatListQuantity('5 Tab'), '5 Tab');
       expect(formatListQuantity('1.5 l'), '1.5 l');
     });
+  });
+
+  /// `GET /expenses` stopped answering with a bare array. A client that still
+  /// reads one gets nothing at all, which is why the paged shape is parsed
+  /// here and the old one is only tolerated.
+  group('expense paging', () {
+    test('reads the paged shape', () {
+      final page = ExpensePageDto.fromJson({
+        'items': [
+          {'id': 'e1', 'channelId': 'c1', 'amountMinor': 1234},
+        ],
+        'nextCursor': '2026-08-01T00:00:00.0000000+00:00|e1',
+      });
+      expect(page.items.single.amountMinor, 1234);
+      expect(page.nextCursor, isNotNull);
+    });
+
+    test('treats a missing cursor as the end of the ledger', () {
+      final page = ExpensePageDto.fromJson({'items': <dynamic>[]});
+      expect(page.items, isEmpty);
+      expect(page.nextCursor, isNull);
+    });
+  });
+
+  group('move-out', () {
+    test('reads the summary', () {
+      final summary = MoveOutSummaryDto.fromJson({
+        'userId': 'ben',
+        'choresReassigned': 2,
+        'choresPaused': 1,
+        'listItemsUnassigned': 3,
+        'balancesWrittenOff': [
+          {'fromUserId': 'ben', 'toUserId': 'anna', 'amountMinor': 24000},
+        ],
+      });
+      expect(summary.choresReassigned, 2);
+      // Dropped is absent from the payload when it's zero.
+      expect(summary.choresDropped, 0);
+      expect(summary.balancesWrittenOff.single.amountMinor, 24000);
+    });
+
+    /// The `409` is a decision to put in front of the house, so its balances
+    /// have to survive the trip out of Dio - a bare "request failed" is the one
+    /// rendering that can't be acted on.
+    test('unpacks the not-settled-up refusal', () {
+      final blocked = MoveOutBlocked.tryParse(
+        DioException(
+          requestOptions: RequestOptions(path: '/move-out'),
+          response: Response<dynamic>(
+            requestOptions: RequestOptions(path: '/move-out'),
+            statusCode: 409,
+            data: {
+              'error': 'This member is not settled up',
+              'outstanding': [
+                {'channelId': 'c1', 'currency': 'CHF', 'netMinor': -24000},
+              ],
+            },
+          ),
+        ),
+      );
+      expect(blocked, isNotNull);
+      expect(blocked!.outstanding.single.netMinor, -24000);
+      expect(blocked.outstanding.single.currency, 'CHF');
+    });
+
+    test('leaves other failures alone', () {
+      expect(
+        MoveOutBlocked.tryParse(
+          DioException(
+            requestOptions: RequestOptions(path: '/move-out'),
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/move-out'),
+              statusCode: 403,
+            ),
+          ),
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('household push', () {
+    test('routes a chore reminder at the board it came from', () {
+      final payload = HouseholdPushPayload.tryParse({
+        'type': 'household',
+        'kind': 'chore.due',
+        'guildId': 'g1',
+        'channelId': 'c1',
+        'targetId': 'o1',
+        'title': 'Bins',
+        'body': 'Your turn, and it\'s due now.',
+      });
+      expect(payload, isNotNull);
+      expect(payload!.route, '/server/g1/channel/c1');
+      expect(payload.targetId, 'o1');
+    });
+
+    test('falls back to the house when the module has no channel', () {
+      final payload = HouseholdPushPayload.tryParse({
+        'type': 'household',
+        'kind': 'something.new',
+        'guildId': 'g1',
+        'title': 'Home',
+      });
+      expect(payload!.route, '/server/g1');
+    });
+
+    test('ignores a message push', () {
+      expect(
+        HouseholdPushPayload.tryParse({'type': 'message', 'messageId': 'm1'}),
+        isNull,
+      );
+    });
+  });
+
+  /// A hub method the transport never registered is dropped before any
+  /// repository sees it, so a household event missing from the watch list turns
+  /// its board silently back into pull-to-refresh.
+  test('every household event is watched by the realtime transport', () {
+    expect(
+      HouseholdEvents.all.difference(RealtimeService.watchedEvents.toSet()),
+      isEmpty,
+    );
   });
 }

@@ -60,6 +60,7 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
                 'guild.MemberLeft',
                 'guild.MemberBanned',
                 'guild.MemberKicked',
+                'guild.MemberMovedOut',
                 'guild.MemberMuted',
                 'guild.MemberUnmuted',
               }.contains(e.name) &&
@@ -147,17 +148,13 @@ class _GuildMembersScreenState extends State<GuildMembersScreen> {
               ListTile(
                 leading: Icon(
                   Icons.block,
-                  color: isBlocked
-                      ? null
-                      : Theme.of(context).colorScheme.error,
+                  color: isBlocked ? null : Theme.of(context).colorScheme.error,
                 ),
                 title: Text(
                   isBlocked ? 'Unblock' : 'Block',
                   style: isBlocked
                       ? null
-                      : TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                      : TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
                 onTap: () => Navigator.pop(context, 'block'),
               ),
@@ -395,11 +392,7 @@ class _MemberSection {
 }
 
 class _MemberTile extends StatelessWidget {
-  const _MemberTile({
-    required this.member,
-    required this.dimmed,
-    this.onTap,
-  });
+  const _MemberTile({required this.member, required this.dimmed, this.onTap});
 
   final GuildMemberDto member;
   final bool dimmed;

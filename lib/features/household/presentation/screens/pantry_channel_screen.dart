@@ -176,12 +176,13 @@ class _PantryChannelScreenState
   }
 
   Future<void> _openExpiring() async {
+    // No `days`: each pantry then answers on its own `expiryWarningDays`, so a
+    // freezer set to a fortnight and a fridge set to two days are both right in
+    // the same list. Passing this channel's setting would impose the fridge's
+    // horizon on the freezer.
     await showHouseSheet<void>(
       context: context,
-      builder: (_) => _ExpiringSheet(
-        guildId: widget.guildId,
-        days: _config?.expiryWarningDays ?? 3,
-      ),
+      builder: (_) => _ExpiringSheet(guildId: widget.guildId),
     );
   }
 
@@ -872,10 +873,9 @@ class _PantryConfigSheetState extends State<_PantryConfigSheet> {
 /// about the house, not one fridge. The server filters by `ViewChannel`, so a
 /// guest with access to one pantry can't use this to enumerate a private one.
 class _ExpiringSheet extends StatefulWidget {
-  const _ExpiringSheet({required this.guildId, required this.days});
+  const _ExpiringSheet({required this.guildId});
 
   final String guildId;
-  final int days;
 
   @override
   State<_ExpiringSheet> createState() => _ExpiringSheetState();
@@ -884,7 +884,11 @@ class _ExpiringSheet extends StatefulWidget {
 class _ExpiringSheetState extends State<_ExpiringSheet> {
   List<PantryItemDto>? _items;
   bool _failed = false;
-  late int _days = widget.days;
+
+  /// Null means "each pantry's own warning window", which is the default and
+  /// the honest answer to "what needs eating". A number overrides every pantry
+  /// at once - only useful for a deliberate "what goes off this month".
+  int? _days;
 
   @override
   void initState() {
@@ -938,10 +942,11 @@ class _ExpiringSheetState extends State<_ExpiringSheet> {
             const SizedBox(height: AppSpacing.s),
             Wrap(
               spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
               children: [
-                for (final days in const [3, 7, 14, 30])
+                for (final days in const <int?>[null, 3, 7, 14, 30])
                   ChoiceChip(
-                    label: Text('$days days'),
+                    label: Text(days == null ? 'Each pantry' : '$days days'),
                     selected: _days == days,
                     onSelected: (_) {
                       setState(() {
@@ -976,7 +981,10 @@ class _ExpiringSheetState extends State<_ExpiringSheet> {
                         vertical: AppSpacing.l,
                       ),
                       child: Text(
-                        'Nothing is going off in the next $_days days.',
+                        _days == null
+                            ? 'Nothing is going off inside any pantry\'s '
+                                  'warning window.'
+                            : 'Nothing is going off in the next $_days days.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurface.withValues(
                             alpha: 0.6,

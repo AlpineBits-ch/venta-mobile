@@ -91,6 +91,23 @@ sealed class ExpenseDto with _$ExpenseDto {
       _$ExpenseDtoFromJson(json);
 }
 
+/// One page of a ledger's history, newest first.
+///
+/// `GET /expenses` used to answer with a bare array capped at 200, which
+/// quietly stopped showing history at an arbitrary point - a house that has
+/// been running for three years has more than that. Pass [nextCursor] back as
+/// `cursor` for the next page; null means you've reached the end.
+@freezed
+sealed class ExpensePageDto with _$ExpensePageDto {
+  const factory ExpensePageDto({
+    @Default(<ExpenseDto>[]) List<ExpenseDto> items,
+    String? nextCursor,
+  }) = _ExpensePageDto;
+
+  factory ExpensePageDto.fromJson(Map<String, dynamic> json) =>
+      _$ExpensePageDtoFromJson(json);
+}
+
 /// A member's net position. Positive means the house owes *them*.
 ///
 /// Balances always sum to zero, and members sitting at zero are omitted

@@ -79,6 +79,22 @@ Json? _$JsonConverterToJson<Json, Value>(
   Json? Function(Value value) toJson,
 ) => value == null ? null : toJson(value);
 
+_ExpensePageDto _$ExpensePageDtoFromJson(Map<String, dynamic> json) =>
+    _ExpensePageDto(
+      items:
+          (json['items'] as List<dynamic>?)
+              ?.map((e) => ExpenseDto.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const <ExpenseDto>[],
+      nextCursor: json['nextCursor'] as String?,
+    );
+
+Map<String, dynamic> _$ExpensePageDtoToJson(_ExpensePageDto instance) =>
+    <String, dynamic>{
+      'items': instance.items,
+      'nextCursor': instance.nextCursor,
+    };
+
 _LedgerBalanceDto _$LedgerBalanceDtoFromJson(Map<String, dynamic> json) =>
     _LedgerBalanceDto(
       userId: json['userId'] as String? ?? '',

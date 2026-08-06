@@ -62,6 +62,7 @@ class GuildRepository {
             'guild.MemberUpdated',
             'guild.MemberBanned',
             'guild.MemberKicked',
+            'guild.MemberMovedOut',
             'guild.MemberMuted',
             'guild.MemberUnmuted',
             'guild.BotInstalled',
@@ -80,15 +81,16 @@ class GuildRepository {
             return;
           }
           // Being removed from a guild has no guild left to refetch - drop it
-          // from the cache directly. Ban/kick land here too when they're
-          // aimed at us; for anyone else they just restructure the member
-          // list, which the refetch below picks up.
+          // from the cache directly. Ban/kick/move-out land here too when
+          // they're aimed at us; for anyone else they just restructure the
+          // member list, which the refetch below picks up.
           final isSelf = event.stringField('userId') == myUserId;
           if (isSelf &&
               const {
                 'guild.MemberLeft',
                 'guild.MemberBanned',
                 'guild.MemberKicked',
+                'guild.MemberMovedOut',
               }.contains(event.name)) {
             _guilds.removeWhere((g) => g.id == guildId);
             _guildsController.add(List.unmodifiable(_guilds));

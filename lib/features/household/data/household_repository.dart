@@ -24,7 +24,22 @@ abstract final class HouseholdEvents {
     'guild.ChoreDeleted',
     'guild.ChoreOccurrenceCreated',
     'guild.ChoreOccurrenceUpdated',
+    choreReminder,
   };
+
+  /// `{ guildId, channelId, occurrenceId, choreId, title, dueAt }`, sent to the
+  /// **assignee only** and at most once per occurrence.
+  ///
+  /// The one household event that is also a push (`kind: chore.due`). It is
+  /// held back inside the guild's quiet hours and never sent for a chore more
+  /// than 12 hours overdue - so its absence is normal and never means "still
+  /// pending", which is why nothing renders a waiting state for it.
+  static const choreReminder = 'guild.ChoreReminder';
+
+  /// `{ guildId, userId, choresReassigned, choresDropped, choresPaused }` -
+  /// guild-wide, because a member leaving changes the rota and the ledger for
+  /// everyone, not just for whoever pressed the button.
+  static const memberMovedOut = 'guild.MemberMovedOut';
 
   static const pantry = <String>{
     'guild.PantryItemCreated',
@@ -55,6 +70,7 @@ abstract final class HouseholdEvents {
     ...ledger,
     ...decisions,
     ...homeStatus,
+    memberMovedOut,
   };
 }
 

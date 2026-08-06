@@ -8,6 +8,8 @@ import '../device/device_id_service.dart';
 import '../mls/mls_store.dart';
 import '../routing/route_paths.dart';
 import 'call_kit_service.dart';
+import 'household_notifier.dart';
+import 'household_push_payload.dart';
 import 'message_notifier.dart';
 import 'message_push_decryptor.dart';
 import 'message_push_payload.dart';
@@ -30,6 +32,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await showCallKitFromPushData(message.data);
     return;
   }
+  // Household pushes carry a real notification block, so the OS has already
+  // drawn this one by the time the isolate runs. Anything shown here would be
+  // the second copy of it.
+  if (HouseholdPushPayload.matches(message.data)) return;
   await PushNotificationService.handleMessagePush(message);
 }
 
@@ -96,6 +102,13 @@ class PushNotificationService {
         showCallKitFromPushData(message.data);
         return;
       }
+      // A household alert that lands while the app is in front is shown by
+      // neither platform, so this is the only place it can come from.
+      final household = HouseholdPushPayload.tryParse(message.data);
+      if (household != null) {
+        unawaited(HouseholdNotifier.show(household));
+        return;
+      }
       unawaited(handleMessagePush(message, store: mlsStore));
     });
     _openedAppSub = FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
@@ -144,6 +157,14 @@ class PushNotificationService {
     final route = MessagePushPayload.tryParse(message.data)?.route;
     if (route != null) {
       _navigationController.add(route);
+      return;
+    }
+    // Routed on `kind`'s payload rather than on the kind itself: every
+    // household notification is about a row on a board, and the board is where
+    // you want to be regardless of which module sent it.
+    final household = HouseholdPushPayload.tryParse(message.data);
+    if (household != null) {
+      _navigationController.add(household.route);
       return;
     }
     // Pre-`type: message` payloads, and anything else that names a conversation.

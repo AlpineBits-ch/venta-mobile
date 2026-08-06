@@ -22,7 +22,11 @@ class RealtimeService {
   final DeviceIdService deviceIdService;
   bool _configured = false;
 
-  static const _watchedEvents = [
+  /// Every hub method registered on the transport. Public so a test can hold
+  /// it against the household event list - a name missing here is dropped
+  /// before any repository sees it, which looks exactly like a backend that
+  /// stopped broadcasting.
+  static const watchedEvents = [
     'conversation.MessageCreated',
     'conversation.MessageUpdated',
     'conversation.MessageDeleted',
@@ -105,6 +109,10 @@ class RealtimeService {
     'guild.MemberKicked',
     'guild.MemberMuted',
     'guild.MemberUnmuted',
+    // A household's only removal: the `Household` preset leaves Moderation
+    // off, so there is no kick to watch for instead. Guild-wide, because the
+    // leaver's chores and ledger balance were everyone's.
+    'guild.MemberMovedOut',
     // Nickname changes.
     'guild.MemberUpdated',
     'guild.BotInstalled',
@@ -172,6 +180,41 @@ class RealtimeService {
     'guild.voice.ScreenShareStopped',
     'guild.voice.MovedToChannel',
     'guild.voice.KickedByOtherDevice',
+    // Household modules (see `HouseholdEvents`, which mirrors this list and is
+    // what the screens actually filter on). Every mutation is broadcast to the
+    // online members holding `ViewChannel` on that channel, which is the whole
+    // design of these modules rather than a nicety: two people in the same shop
+    // with the same list open is the *normal* case, and a tick has to strike
+    // through on the other phone within the second or the milk gets bought
+    // twice. A hub method that isn't registered here is dropped by the
+    // transport, so leaving one out silently turns its board back into
+    // pull-to-refresh.
+    'guild.ListItemCreated',
+    'guild.ListItemUpdated',
+    'guild.ListItemChecked',
+    'guild.ListItemDeleted',
+    'guild.ListItemsReordered',
+    'guild.ListCleared',
+    'guild.ChoreCreated',
+    'guild.ChoreUpdated',
+    'guild.ChoreDeleted',
+    'guild.ChoreOccurrenceCreated',
+    'guild.ChoreOccurrenceUpdated',
+    // The one household event that is also a push. Assignee only, at most once
+    // per occurrence, held back inside the guild's quiet hours.
+    'guild.ChoreReminder',
+    'guild.PantryItemCreated',
+    'guild.PantryItemUpdated',
+    'guild.PantryItemDeleted',
+    'guild.ExpenseCreated',
+    'guild.ExpenseUpdated',
+    'guild.ExpenseDeleted',
+    'guild.SettlementRecorded',
+    'guild.DecisionCreated',
+    'guild.DecisionUpdated',
+    'guild.DecisionClosed',
+    'guild.DecisionCancelled',
+    'guild.HomeStatusChanged',
   ];
 
   final _eventsController = StreamController<RealtimeEvent>.broadcast();
@@ -192,7 +235,7 @@ class RealtimeService {
             '${authRepository.baseUrl}/api/v1/ws/hub?deviceId=${deviceIdService.deviceId}',
         accessTokenFactory: () => authRepository.ensureValidToken(),
       );
-      for (final event in _watchedEvents) {
+      for (final event in watchedEvents) {
         transport.on(
           event,
           (args) => _eventsController.add(RealtimeEvent(event, args)),

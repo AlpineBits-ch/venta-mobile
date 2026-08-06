@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../../../../core/format/api_date_time.dart';
+import 'ledger_dto.dart';
 
 part 'house_dto.freezed.dart';
 part 'house_dto.g.dart';
@@ -120,6 +121,60 @@ extension QuietHoursX on QuietHoursDto {
     final local = (now ?? DateTime.now()).toLocal();
     return containsMinute(local.hour * 60 + local.minute);
   }
+}
+
+/// A ledger channel a departing member isn't square in.
+///
+/// A move-out is **refused** while any of these exist, and that refusal is the
+/// point: a leaver whose balance is never resolved makes every future
+/// settle-suggestion wrong for everybody staying. Render it as a decision
+/// ("Ben owes 240 CHF - settle up first, or write it off"), not an error.
+@freezed
+sealed class OutstandingBalanceDto with _$OutstandingBalanceDto {
+  const factory OutstandingBalanceDto({
+    @Default('') String channelId,
+    @Default('CHF') String currency,
+
+    /// Minor units, signed the same way [LedgerBalanceDto.netMinor] is:
+    /// negative means they owe the house.
+    @Default(0) int netMinor,
+  }) = _OutstandingBalanceDto;
+
+  factory OutstandingBalanceDto.fromJson(Map<String, dynamic> json) =>
+      _$OutstandingBalanceDtoFromJson(json);
+}
+
+/// What a departing member left behind, and what became of it.
+///
+/// Their **completed** chore history is deliberately untouched - rewriting it
+/// would move everyone else's fairness balance on the day a flatmate leaves.
+/// Chores that named them personally are paused rather than reassigned, so the
+/// house decides who picks them up; those are worth surfacing as something to
+/// resolve rather than burying in a count.
+@freezed
+sealed class MoveOutSummaryDto with _$MoveOutSummaryDto {
+  const factory MoveOutSummaryDto({
+    @Default('') String userId,
+
+    /// Unfinished turns handed to the next lightest-loaded member.
+    @Default(0) int choresReassigned,
+
+    /// Unfinished turns deleted because the rota had nobody left.
+    @Default(0) int choresDropped,
+
+    /// Chores that named them as the fixed assignee, now paused.
+    @Default(0) int choresPaused,
+    @Default(0) int listItemsUnassigned,
+
+    /// The settlements recorded to zero them. Empty unless the house asked for
+    /// a write-off - and a write-off doesn't pretend money moved, it's the
+    /// house agreeing to stop counting the debt.
+    @Default(<TransferSuggestionDto>[])
+    List<TransferSuggestionDto> balancesWrittenOff,
+  }) = _MoveOutSummaryDto;
+
+  factory MoveOutSummaryDto.fromJson(Map<String, dynamic> json) =>
+      _$MoveOutSummaryDtoFromJson(json);
 }
 
 /// `1320` -> `22:00`. 24-hour, because a quiet-hours window is a schedule
