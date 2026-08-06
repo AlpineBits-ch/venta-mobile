@@ -11,6 +11,7 @@ import '../../../guilds/data/models/guild_member_dto.dart';
 import '../../../guilds/data/models/role_dto.dart';
 import '../../data/household_repository.dart';
 import '../../data/models/chore_dto.dart';
+import '../../data/models/household_alert.dart';
 import '../widgets/household_widgets.dart';
 import 'household_channel_base.dart';
 
@@ -80,18 +81,16 @@ class _ChoresChannelScreenState
     unawaited(ensureMembers());
     _eventsSub = household
         .channelEvents(widget.channelId, HouseholdEvents.chores)
-        .listen((event) {
-          // Only ever sent to the assignee, so there's no "is this mine" test
-          // to make. It also arrives as a push, but a notification tray entry
-          // for the board you're already looking at is easy to miss.
-          if (event.name == HouseholdEvents.choreReminder && mounted) {
-            showMessage(
-              '${event.stringField('title') ?? 'A chore'} is due - it\'s '
-              'your turn.',
-            );
-          }
-          _load();
-        });
+        .listen((_) => _load());
+  }
+
+  /// A `chore.due` reminder lands here (assignee only, once per occurrence).
+  /// The board it is about is the one on screen, so it is worth refetching -
+  /// the occurrence is now overdue-adjacent and nothing else says so.
+  @override
+  void onHouseholdAlert(HouseholdAlert alert) {
+    super.onHouseholdAlert(alert);
+    _load();
   }
 
   @override
@@ -578,7 +577,7 @@ class _OccurrenceCard extends StatelessWidget {
                       // due 3 days ago" overflows a narrow phone otherwise.
                       Flexible(
                         child: Text(
-                          ' · ${_dueLabel(occurrence.dueAt)}',
+                          ' · ${formatDueLabel(occurrence.dueAt)}',
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -661,26 +660,6 @@ class _OccurrenceCard extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  /// "today 18:00" / "tomorrow" / "Aug 5, 6:00 PM" - a chore board is read at
-  /// a glance and an absolute date for tonight's bins is needless work.
-  static String _dueLabel(DateTime dueAt) {
-    final now = DateTime.now();
-    final local = dueAt.toLocal();
-    final days = DateTime(
-      local.year,
-      local.month,
-      local.day,
-    ).difference(DateTime(now.year, now.month, now.day)).inDays;
-    return switch (days) {
-      0 => 'due today, ${formatTimeOfDay(local)}',
-      1 => 'due tomorrow',
-      -1 => 'was due yesterday',
-      < 0 => 'was due ${-days} days ago',
-      < 7 => 'due in $days days',
-      _ => 'due ${formatShortDateTime(local)}',
-    };
   }
 }
 

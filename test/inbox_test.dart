@@ -16,6 +16,7 @@ import 'package:venta_mobile/features/inbox/data/inbox_repository.dart';
 import 'package:venta_mobile/features/inbox/data/models/inbox_breadcrumb_dto.dart';
 import 'package:venta_mobile/features/inbox/data/models/inbox_mention_dto.dart';
 import 'package:venta_mobile/features/inbox/data/models/inbox_summary_dto.dart';
+import 'package:venta_mobile/features/inbox/data/models/inbox_task_dto.dart';
 
 /// The parts of the inbox where being wrong is silent.
 ///
@@ -335,6 +336,19 @@ void main() {
       );
     });
 
+    test('counts household rows waiting on you too', () {
+      expect(
+        const InboxSummaryDto(
+          unreadChannelCount: 1,
+          mentionCount: 1,
+          taskCount: 2,
+        ).badgeLabel,
+        '4',
+      );
+      // A house with a chore due and nothing else unread still badges.
+      expect(const InboxSummaryDto(taskCount: 2).hasAnything, isTrue);
+    });
+
     test('the tooltip keeps the two counts apart', () {
       expect(
         const InboxSummaryDto(
@@ -429,6 +443,122 @@ void main() {
 
       expect(repository.summary.value.unreadChannelCount, 0);
       expect(repository.summary.value.mentionCount, 0);
+    });
+
+    // Marking every channel read has nothing to do with the Waiting tab: a
+    // chore is still your turn afterwards. Zeroing it here would blank that
+    // badge until the next summary fetch put the same number straight back.
+    test('read-all keeps the things waiting on you', () async {
+      build(
+        (options, index) => index == 0
+            ? {
+                'unreadChannelCount': 4,
+                'mentionCount': 12,
+                'taskCount': 2,
+                'capped': false,
+              }
+            : null,
+      );
+      await repository.refreshSummary();
+
+      await repository.markAllRead();
+
+      expect(repository.summary.value.unreadChannelCount, 0);
+      expect(repository.summary.value.mentionCount, 0);
+      expect(repository.summary.value.taskCount, 2);
+    });
+  });
+
+  group('waiting on you', () {
+    // A list channel holds no message history and so can never be unread -
+    // these rows exist because that left the modules people most want
+    // reminding about with no inbox presence at all.
+    test('parses tasks and absolutises their breadcrumb', () async {
+      build(
+        (options, index) => {
+          'tasks': [
+            {
+              'kind': 'ChoreDue',
+              'targetId': 'choc_1',
+              'breadcrumb': _breadcrumb(),
+              'title': 'Bins',
+              'subtitle': 'Your turn',
+              'dueAt': '2026-08-06T18:00:00Z',
+              'isOverdue': false,
+            },
+          ],
+          'truncated': true,
+        },
+      );
+
+      final page = await repository.loadTasks();
+
+      expect(page.truncated, isTrue);
+      expect(page.tasks.single.kind, InboxTaskKind.choreDue);
+      expect(page.tasks.single.targetId, 'choc_1');
+      expect(
+        page.tasks.single.breadcrumb.guildIconThumbnailUrl,
+        '$_base/api/v1/guild/guilds/gild_1/icon/thumbnail',
+      );
+    });
+
+    // More kinds are coming. One this build has never heard of still has a
+    // title, a subtitle and somewhere to land, so it renders rather than
+    // being dropped or read as one of the kinds it isn't.
+    test('an unrecognised kind still renders', () async {
+      build(
+        (options, index) => {
+          'tasks': [
+            {
+              'kind': 'SomethingNew',
+              'targetId': 'xxxx_1',
+              'breadcrumb': _breadcrumb(),
+              'title': 'Something new',
+              'subtitle': 'Waiting on you',
+              'dueAt': null,
+              'isOverdue': false,
+            },
+          ],
+          'truncated': false,
+        },
+      );
+
+      final page = await repository.loadTasks();
+
+      expect(page.tasks.single.kind, InboxTaskKind.unknown);
+      expect(page.tasks.single.title, 'Something new');
+      expect(page.tasks.single.dueAt, isNull);
+    });
+
+    // `taskCount` moves when a chore falls due or a decision opens, and none
+    // of that arrives on an `inbox.*` event - the household alert is the only
+    // thing that would tell the badge.
+    test('a household alert refetches the summary', () async {
+      build(
+        (options, index) => index == 0
+            ? {'unreadChannelCount': 0, 'mentionCount': 0, 'taskCount': 0}
+            : {'unreadChannelCount': 0, 'mentionCount': 0, 'taskCount': 3},
+      );
+      await repository.refreshSummary();
+      expect(repository.summary.value.taskCount, 0);
+
+      events.add(
+        const RealtimeEvent('guild.HouseholdAlert', [
+          {
+            'guildId': 'gild_1',
+            'channelId': 'chan_1',
+            'kind': 'chore.due',
+            'targetId': 'choc_1',
+            'title': 'Bins',
+            'body': "It's your turn",
+          },
+        ]),
+      );
+      // The refetch is debounced behind a burst - a busy house would otherwise
+      // spend one round-trip per alert.
+      await Future<void>.delayed(const Duration(seconds: 4));
+
+      expect(repository.summary.value.taskCount, 3);
     });
   });
 }

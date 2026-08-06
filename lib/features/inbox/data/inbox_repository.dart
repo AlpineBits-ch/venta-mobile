@@ -11,6 +11,7 @@ import 'inbox_api.dart';
 import 'models/inbox_mention_dto.dart';
 import 'models/inbox_message_dto.dart';
 import 'models/inbox_summary_dto.dart';
+import 'models/inbox_task_dto.dart';
 import 'models/inbox_unread_dto.dart';
 
 /// One `inbox.MentionAdded` - somebody mentioned the caller somewhere.
@@ -67,6 +68,11 @@ class InboxRepository {
           (e) => const {
             'inbox.MentionAdded',
             'inbox.ReadStateChanged',
+            // Not an inbox event, but it moves `taskCount`: a chore falling
+            // due or a decision opening is exactly what puts a row in the
+            // Waiting tab, and nothing else would tell the badge about it
+            // until the next manual refresh.
+            'guild.HouseholdAlert',
           }.contains(e.name),
         )
         .listen(_handleRealtimeEvent);
@@ -101,6 +107,7 @@ class InboxRepository {
       StreamController<InboxMentionAdded>.broadcast();
   final _readStateController =
       StreamController<InboxReadStateChanged>.broadcast();
+  final _tasksChangedController = StreamController<void>.broadcast();
   Timer? _summaryRefreshTimer;
 
   /// The header badge's source of truth. Kept current from the hub between
@@ -111,6 +118,11 @@ class InboxRepository {
 
   Stream<InboxReadStateChanged> get readStateChanged =>
       _readStateController.stream;
+
+  /// Something happened that may have added or cleared a Waiting row. There is
+  /// no per-task event and no way to patch one row from here, so this is a
+  /// "refetch if you're showing them" signal rather than a payload.
+  Stream<void> get tasksChanged => _tasksChangedController.stream;
 
   // ---------------------------------------------------------------- reading
 
@@ -213,6 +225,14 @@ class InboxRepository {
     return counts;
   }
 
+  /// Household rows waiting on the caller.
+  ///
+  /// No cursor and no empty-page rule to apply - unlike the other two tabs
+  /// this is a bounded to-do list, so it is a straight pass-through and exists
+  /// here only so the cubit talks to one thing.
+  Future<InboxTaskPageDto> loadTasks({int limit = 25}) =>
+      api.getTasks(limit: limit);
+
   Future<InboxSummaryDto> refreshSummary() async {
     final summary = await api.getSummary();
     _summary.value = summary;
@@ -235,7 +255,7 @@ class InboxRepository {
   Future<void> markAllRead() async {
     await api.markAllRead();
     _summaryRefreshTimer?.cancel();
-    _summary.value = const InboxSummaryDto();
+    _summary.value = _readEverything(_summary.value);
   }
 
   Future<void> dismissMention(InboxMentionDto mention) async {
@@ -265,6 +285,7 @@ class InboxRepository {
     unawaited(_realtimeSub.cancel());
     unawaited(_mentionAddedController.close());
     unawaited(_readStateController.close());
+    unawaited(_tasksChangedController.close());
     _summary.dispose();
   }
 
@@ -300,7 +321,7 @@ class InboxRepository {
         final all = event.field('all') == true;
         if (all) {
           _summaryRefreshTimer?.cancel();
-          _summary.value = const InboxSummaryDto();
+          _summary.value = _readEverything(_summary.value);
         } else {
           _applyLocalRead(mentionCount: _asInt(event.field('mentionCount')));
           _scheduleSummaryRefresh();
@@ -309,8 +330,25 @@ class InboxRepository {
           channelId: event.stringField('channelId'),
           all: all,
         ));
+
+      case 'guild.HouseholdAlert':
+        // No optimistic bump: only some kinds put a row in the Waiting tab
+        // (a chore due does, an expense somebody added does not), and the
+        // event doesn't say which. The debounced refetch is cheap and is the
+        // only thing here that would be right.
+        _scheduleSummaryRefresh();
+        _tasksChangedController.add(null);
     }
   }
+
+  /// Every channel just went read.
+  ///
+  /// Keeps `taskCount`, which read-all has nothing to do with: a chore is
+  /// still your turn after you've cleared your unread channels, and zeroing it
+  /// here would blank the Waiting badge until the next summary fetch put it
+  /// straight back.
+  static InboxSummaryDto _readEverything(InboxSummaryDto current) =>
+      InboxSummaryDto(taskCount: current.taskCount);
 
   /// One channel left the unread set. [mentionCount] is how many mentions went
   /// with it.

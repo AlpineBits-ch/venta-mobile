@@ -38,6 +38,30 @@ String formatCompactAgo(DateTime dateTime, {DateTime? now}) {
   return formatShortDateTime(dateTime);
 }
 
+/// "due today, 6:00 PM" / "due tomorrow" / "was due 3 days ago" - deadlines as
+/// a household board and the inbox's Waiting tab read them, at a glance.
+///
+/// Says nothing about whether the row is *overdue*: a chore inside its grace
+/// period is late without being overdue, and only the server knows the grace.
+/// Render this next to the server's own flag, never in place of it.
+String formatDueLabel(DateTime dueAt, {DateTime? now}) {
+  final reference = (now ?? DateTime.now()).toLocal();
+  final local = dueAt.toLocal();
+  final days = DateTime(
+    local.year,
+    local.month,
+    local.day,
+  ).difference(DateTime(reference.year, reference.month, reference.day)).inDays;
+  return switch (days) {
+    0 => 'due today, ${formatTimeOfDay(local)}',
+    1 => 'due tomorrow',
+    -1 => 'was due yesterday',
+    < 0 => 'was due ${-days} days ago',
+    < 7 => 'due in $days days',
+    _ => 'due ${formatShortDateTime(local)}',
+  };
+}
+
 /// Same as [formatShortDateTime] but collapses to just the time for today's
 /// timestamps, so recent rows don't repeat today's date on every line.
 String formatRelativeDateTime(DateTime dateTime, {DateTime? now}) {

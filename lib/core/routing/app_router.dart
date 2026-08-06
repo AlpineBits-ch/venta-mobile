@@ -168,8 +168,20 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         (context, state) => const ForgotPasswordScreen(),
       ),
       ShellRoute(
-        builder: (context, state, child) =>
-            AppShell(currentLocation: state.matchedLocation, child: child),
+        // `pageBuilder`, not `builder`: the shell needs its own page in the
+        // root navigator to be an `appPage` like every other route. A
+        // `ShellRoute` with only a `builder` gets whatever page go_router
+        // picks for the app type - a plain `MaterialPage` under `MaterialApp`
+        // - which has no way to be handed a reverse transition. Backing out
+        // of a channel or conversation that was the only entry on the stack
+        // (cold-start restore, deep link, notification tap) therefore slid
+        // Home/the guild in from the right, as a push, on the one tap that
+        // meant "back". The `NoTransitionPage`s below govern the *inner*
+        // navigator and never covered this.
+        pageBuilder: (context, state, child) => appPage(
+          state,
+          AppShell(currentLocation: state.matchedLocation, child: child),
+        ),
         routes: [
           // These three routes are siblings toggled by the persistent server
           // rail (AppShell) rather than screens drilled into - the content

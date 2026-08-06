@@ -2,6 +2,9 @@ import 'dart:async';
 
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
+import 'household_api.dart';
+import 'models/digest_dto.dart';
+import 'models/household_alert.dart';
 
 /// The hub method names each household module broadcasts.
 ///
@@ -24,17 +27,15 @@ abstract final class HouseholdEvents {
     'guild.ChoreDeleted',
     'guild.ChoreOccurrenceCreated',
     'guild.ChoreOccurrenceUpdated',
-    choreReminder,
   };
 
-  /// `{ guildId, channelId, occurrenceId, choreId, title, dueAt }`, sent to the
-  /// **assignee only** and at most once per occurrence.
+  /// `{ guildId, channelId, kind, targetId, title, body, data }` - the one
+  /// envelope every household *alert* arrives in, whatever it is about.
   ///
-  /// The one household event that is also a push (`kind: chore.due`). It is
-  /// held back inside the guild's quiet hours and never sent for a chore more
-  /// than 12 hours overdue - so its absence is normal and never means "still
-  /// pending", which is why nothing renders a waiting state for it.
-  static const choreReminder = 'guild.ChoreReminder';
+  /// Replaces `guild.ChoreReminder`, which only ever carried one kind. New
+  /// kinds keep being added, and a per-kind event name would mean a client
+  /// silently stopped being told about each one - see [HouseholdAlert].
+  static const householdAlert = 'guild.HouseholdAlert';
 
   /// `{ guildId, userId, choresReassigned, choresDropped, choresPaused }` -
   /// guild-wide, because a member leaving changes the rota and the ledger for
@@ -71,6 +72,7 @@ abstract final class HouseholdEvents {
     ...decisions,
     ...homeStatus,
     memberMovedOut,
+    householdAlert,
   };
 }
 
@@ -85,17 +87,43 @@ abstract final class HouseholdEvents {
 /// to strike through on the other phone within the second or the milk gets
 /// bought twice.
 class HouseholdRepository {
-  HouseholdRepository({required RealtimeService realtimeService}) {
+  HouseholdRepository({
+    required this.api,
+    required RealtimeService realtimeService,
+  }) {
     _subscription = realtimeService.events
         .where((e) => HouseholdEvents.all.contains(e.name))
         .listen(_controller.add);
   }
 
+  final HouseholdApi api;
+
   late final StreamSubscription<RealtimeEvent> _subscription;
   final _controller = StreamController<RealtimeEvent>.broadcast();
 
+  /// The last digest per guild, with the `ETag` it came back with.
+  ///
+  /// Session-scoped, so [clear] is wired into `resetSessionScopedCaches()` -
+  /// `myNetMinor` and "your turn" are per-account, and the next account's house
+  /// card must not open showing this one's.
+  final _digests = <String, ({HouseholdDigestDto digest, String? etag})>{};
+
   /// Every household event, unfiltered.
   Stream<RealtimeEvent> get events => _controller.stream;
+
+  /// Household alerts, parsed. Malformed ones are dropped rather than passed
+  /// on as an alert with nowhere to go.
+  Stream<HouseholdAlert> get alerts => _controller.stream
+      .where((e) => e.name == HouseholdEvents.householdAlert)
+      .map(HouseholdAlert.tryParse)
+      .where((alert) => alert != null)
+      .cast<HouseholdAlert>();
+
+  /// Alerts about one module channel - what a board that is already open
+  /// shows inline, since a tray entry for the screen in front of you is easy
+  /// to miss.
+  Stream<HouseholdAlert> channelAlerts(String channelId) =>
+      alerts.where((alert) => alert.channelId == channelId);
 
   /// Events for one channel's module - what a `List`/`Chores`/`Ledger`/
   /// `Pantry`/`Decisions` screen listens to.
@@ -112,6 +140,35 @@ class HouseholdRepository {
       _controller.stream.where(
         (e) => names.contains(e.name) && e.stringField('guildId') == guildId,
       );
+
+  /// The house at a glance, revalidated against its `ETag`.
+  ///
+  /// The digest is assembled server-side either way - there is no single
+  /// timestamp that moves when any of six modules changes - so `If-None-Match`
+  /// saves the transfer, not the work. What it buys here is a card that
+  /// re-renders instantly from the last copy when the guild is reopened, and
+  /// that costs nothing to keep current after a module event.
+  ///
+  /// [cachedDigest] is what to draw immediately; this future is what replaces
+  /// it. A failure keeps the cached copy rather than blanking the card.
+  Future<HouseholdDigestDto> homeDigest(String guildId) async {
+    final cached = _digests[guildId];
+    final result = await api.getHomeDigest(guildId, etag: cached?.etag);
+    final digest = result.digest;
+    if (digest == null) {
+      // 304 - nothing changed. There is no body to parse and the cache is by
+      // definition still right.
+      return cached?.digest ?? const HouseholdDigestDto();
+    }
+    _digests[guildId] = (digest: digest, etag: result.etag ?? cached?.etag);
+    return digest;
+  }
+
+  HouseholdDigestDto? cachedDigest(String guildId) => _digests[guildId]?.digest;
+
+  /// Drops per-account state on a session change - see
+  /// `resetSessionScopedCaches()`.
+  void clear() => _digests.clear();
 
   void dispose() {
     unawaited(_subscription.cancel());

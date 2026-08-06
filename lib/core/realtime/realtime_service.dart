@@ -200,9 +200,11 @@ class RealtimeService {
     'guild.ChoreDeleted',
     'guild.ChoreOccurrenceCreated',
     'guild.ChoreOccurrenceUpdated',
-    // The one household event that is also a push. Assignee only, at most once
-    // per occurrence, held back inside the guild's quiet hours.
-    'guild.ChoreReminder',
+    // The one envelope every household *alert* arrives in - the events that
+    // are also a push, and the only household events that are. One method name
+    // for every kind on purpose: kinds keep being added, and a per-kind name
+    // would mean silently missing each new one. Replaces `guild.ChoreReminder`.
+    'guild.HouseholdAlert',
     'guild.PantryItemCreated',
     'guild.PantryItemUpdated',
     'guild.PantryItemDeleted',

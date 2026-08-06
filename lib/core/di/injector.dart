@@ -347,7 +347,7 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
     () => HouseholdApi(client: getIt()),
   );
   getIt.registerLazySingleton<HouseholdRepository>(
-    () => HouseholdRepository(realtimeService: getIt()),
+    () => HouseholdRepository(api: getIt(), realtimeService: getIt()),
   );
   getIt.registerLazySingleton<SoundService>(() => SoundService());
   getIt.registerLazySingleton<VoiceApi>(
@@ -428,6 +428,10 @@ void resetSessionScopedCaches() {
   // first screen the next account sees - carrying the previous one's count
   // over is the most visible possible stale-cache bug.
   getIt<InboxRepository>().clear();
+  // The home digest is per user, not per house - "your turn" and "the house
+  // owes you 24 CHF" are answers about the account that asked. The card would
+  // otherwise open the next session showing the previous member's position.
+  getIt<HouseholdRepository>().clear();
   // The privacy record belongs to one account and gates what this device emits
   // on behalf of it. Carrying the previous account's copy over would have this
   // handset applying a stranger's answer to "may I send a typing indicator".

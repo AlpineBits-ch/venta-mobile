@@ -3,8 +3,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'household_push_payload.dart';
 
-/// Draws the tray entry for a household push while the app is **foregrounded**,
-/// and only then.
+/// Draws the tray entry for a household alert push while the app is
+/// **foregrounded**, and only then.
 ///
 /// Unlike the message path, the server sends these as a plain alert - nothing
 /// is encrypted, so it already knows what the notification says. That means the
@@ -21,13 +21,13 @@ class HouseholdNotifier {
 
   static final _plugin = FlutterLocalNotificationsPlugin();
 
-  /// Separate from the messages channel so a house can silence chore reminders
-  /// without silencing their conversations - they're wanted at very different
-  /// times of day.
+  /// Separate from the messages channel so a house can silence its chores and
+  /// its ledger without silencing their conversations - they're wanted at very
+  /// different times of day.
   static const channel = AndroidNotificationChannel(
     'household',
     'Home',
-    description: 'Chore reminders and other household notifications',
+    description: 'Chores, expenses, decisions and everything else at home',
     importance: Importance.high,
   );
 

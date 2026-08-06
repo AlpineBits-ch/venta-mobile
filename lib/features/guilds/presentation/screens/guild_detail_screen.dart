@@ -15,6 +15,7 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
+import '../../../household/presentation/widgets/home_digest_card.dart';
 import '../../../household/presentation/widgets/home_status_board.dart';
 import '../../../inbox/data/inbox_repository.dart';
 import '../../../inbox/presentation/widgets/inbox_app_bar_action.dart';
@@ -699,6 +700,11 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
             // rather than to any one channel.
             if (guild.hasFeature(GuildFeature.presence))
               HomeStatusBoard(guild: guild),
+            // Under the board rather than above it: "who's home" is what a
+            // household opens the app to check, and this is a summary of the
+            // channels immediately below it. Draws nothing at all when there
+            // is nothing outstanding.
+            if (HomeDigestCard.appliesTo(guild)) HomeDigestCard(guild: guild),
             if (_hasSelfServePrompts)
               ListTile(
                 dense: true,

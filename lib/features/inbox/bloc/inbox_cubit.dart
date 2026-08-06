@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/bloc/safe_emit.dart';
 import '../data/inbox_repository.dart';
 import '../data/models/inbox_mention_dto.dart';
+import '../data/models/inbox_task_dto.dart';
 import '../data/models/inbox_unread_dto.dart';
 
 enum InboxTabStatus { loading, loaded, failed }
@@ -66,6 +67,9 @@ class InboxState extends Equatable {
     this.mentionCursor,
     this.loadingMoreMentions = false,
     this.filters = const InboxMentionFilters(),
+    this.taskStatus = InboxTabStatus.loading,
+    this.tasks = const [],
+    this.tasksTruncated = false,
     this.dismissing = const {},
     this.markingRead = const {},
     this.hasNewMentions = false,
@@ -90,6 +94,16 @@ class InboxState extends Equatable {
   final String? mentionCursor;
   final bool loadingMoreMentions;
   final InboxMentionFilters filters;
+
+  final InboxTabStatus taskStatus;
+
+  /// Household rows waiting on the caller, in the server's order: deadlines
+  /// first, soonest at the top, undated after.
+  final List<InboxTaskDto> tasks;
+
+  /// More were waiting than the limit allowed. There is no cursor to follow -
+  /// the module boards are where a whole one is read.
+  final bool tasksTruncated;
 
   /// Message ids with a dismiss in flight.
   final Set<String> dismissing;
@@ -119,6 +133,9 @@ class InboxState extends Equatable {
     bool clearMentionCursor = false,
     bool? loadingMoreMentions,
     InboxMentionFilters? filters,
+    InboxTabStatus? taskStatus,
+    List<InboxTaskDto>? tasks,
+    bool? tasksTruncated,
     Set<String>? dismissing,
     Set<String>? markingRead,
     bool? hasNewMentions,
@@ -138,6 +155,9 @@ class InboxState extends Equatable {
         : (mentionCursor ?? this.mentionCursor),
     loadingMoreMentions: loadingMoreMentions ?? this.loadingMoreMentions,
     filters: filters ?? this.filters,
+    taskStatus: taskStatus ?? this.taskStatus,
+    tasks: tasks ?? this.tasks,
+    tasksTruncated: tasksTruncated ?? this.tasksTruncated,
     dismissing: dismissing ?? this.dismissing,
     markingRead: markingRead ?? this.markingRead,
     hasNewMentions: hasNewMentions ?? this.hasNewMentions,
@@ -156,6 +176,9 @@ class InboxState extends Equatable {
     mentionCursor,
     loadingMoreMentions,
     filters,
+    taskStatus,
+    tasks,
+    tasksTruncated,
     dismissing,
     markingRead,
     hasNewMentions,
@@ -190,6 +213,12 @@ class InboxCubit extends Cubit<InboxState> with SafeEmit<InboxState> {
         ),
       );
     });
+    // A chore falling due or a decision opening puts a row in the Waiting tab
+    // with no event of its own to patch it from, so the list is refetched
+    // rather than spliced - it's bounded and server-ordered.
+    _tasksSub = repository.tasksChanged.listen((_) {
+      if (state.taskStatus != InboxTabStatus.loading) unawaited(_loadTasks());
+    });
     load();
   }
 
@@ -201,6 +230,7 @@ class InboxCubit extends Cubit<InboxState> with SafeEmit<InboxState> {
 
   late final StreamSubscription<InboxMentionAdded> _mentionSub;
   late final StreamSubscription<InboxReadStateChanged> _readSub;
+  late final StreamSubscription<void> _tasksSub;
   Timer? _previewRetryTimer;
 
   /// How many times previews are retried behind a rendered list before leaving
@@ -210,7 +240,7 @@ class InboxCubit extends Cubit<InboxState> with SafeEmit<InboxState> {
   static const _previewRetryDelay = Duration(seconds: 6);
   int _previewRetries = 0;
 
-  /// Both tabs in parallel - neither waits on the other.
+  /// All three tabs in parallel - none waits on the others.
   Future<void> load() async {
     _previewRetryTimer?.cancel();
     _previewRetries = 0;
@@ -218,16 +248,19 @@ class InboxCubit extends Cubit<InboxState> with SafeEmit<InboxState> {
       state.copyWith(
         unreadStatus: InboxTabStatus.loading,
         mentionStatus: InboxTabStatus.loading,
+        taskStatus: InboxTabStatus.loading,
         hasNewMentions: false,
       ),
     );
-    await Future.wait([_loadUnread(), _loadMentions()]);
+    await Future.wait([_loadUnread(), _loadMentions(), _loadTasks()]);
     unawaited(_refreshSummaryQuietly());
   }
 
   Future<void> refreshUnread() => _loadUnread();
 
   Future<void> refreshMentions() => _loadMentions();
+
+  Future<void> refreshTasks() => _loadTasks();
 
   Future<void> _loadUnread() async {
     try {
@@ -283,6 +316,21 @@ class InboxCubit extends Cubit<InboxState> with SafeEmit<InboxState> {
           loadingMoreMentions: false,
         ),
       );
+    }
+  }
+
+  Future<void> _loadTasks() async {
+    try {
+      final page = await repository.loadTasks();
+      emitIfOpen(
+        state.copyWith(
+          taskStatus: InboxTabStatus.loaded,
+          tasks: page.tasks,
+          tasksTruncated: page.truncated,
+        ),
+      );
+    } catch (_) {
+      emitIfOpen(state.copyWith(taskStatus: InboxTabStatus.failed));
     }
   }
 
@@ -482,6 +530,7 @@ class InboxCubit extends Cubit<InboxState> with SafeEmit<InboxState> {
     _previewRetryTimer?.cancel();
     unawaited(_mentionSub.cancel());
     unawaited(_readSub.cancel());
+    unawaited(_tasksSub.cancel());
     return super.close();
   }
 }

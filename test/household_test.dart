@@ -1,10 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venta_mobile/core/push/household_push_payload.dart';
+import 'package:venta_mobile/core/realtime/realtime_event.dart';
 import 'package:venta_mobile/core/realtime/realtime_service.dart';
 import 'package:venta_mobile/features/household/data/household_api.dart';
 import 'package:venta_mobile/features/household/data/household_repository.dart';
+import 'package:venta_mobile/features/household/data/models/digest_dto.dart';
 import 'package:venta_mobile/features/household/data/models/house_dto.dart';
+import 'package:venta_mobile/features/household/data/models/household_alert.dart';
 import 'package:venta_mobile/features/household/data/models/ledger_dto.dart';
 import 'package:venta_mobile/features/household/data/money.dart';
 import 'package:venta_mobile/features/household/presentation/widgets/household_widgets.dart';
@@ -245,6 +248,98 @@ void main() {
       expect(
         HouseholdPushPayload.tryParse({'type': 'message', 'messageId': 'm1'}),
         isNull,
+      );
+    });
+  });
+
+  group('household alert', () {
+    // One event name carries every kind on purpose: kinds keep being added,
+    // and a client that had to subscribe to `guild.SomethingNewAlert` would
+    // silently stop being told about whatever shipped next.
+    test('parses the unified envelope, whatever the kind', () {
+      final alert = HouseholdAlert.tryParse(
+        const RealtimeEvent('guild.HouseholdAlert', [
+          {
+            'guildId': 'g1',
+            'channelId': 'c1',
+            'kind': 'pantry.expiring',
+            'targetId': 'c1',
+            'title': 'Going off soon',
+            'body': 'Milk, Yoghurt and 2 more are about to go off',
+            'data': {
+              'items': ['Milk', 'Yoghurt'],
+            },
+          },
+        ]),
+      );
+
+      expect(alert, isNotNull);
+      expect(alert!.kind, HouseholdAlert.pantryExpiring);
+      expect(alert.targetId, 'c1');
+      expect(alert.route, '/server/g1/channel/c1');
+      expect(alert.data['items'], ['Milk', 'Yoghurt']);
+      // The server writes the copy so no client needs per-kind wording.
+      expect(alert.message, 'Milk, Yoghurt and 2 more are about to go off');
+    });
+
+    test('a kind this build has never seen still lands somewhere', () {
+      final alert = HouseholdAlert.tryParse(
+        const RealtimeEvent('guild.HouseholdAlert', [
+          {'guildId': 'g1', 'kind': 'something.new', 'title': 'Home'},
+        ]),
+      );
+
+      expect(alert!.route, '/server/g1');
+      expect(alert.message, 'Home');
+    });
+
+    test('drops an alert with nowhere to go', () {
+      expect(
+        HouseholdAlert.tryParse(
+          const RealtimeEvent('guild.HouseholdAlert', [
+            {'kind': 'chore.due'},
+          ]),
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('home digest', () {
+    // A null section means "render nothing" - it covers both "the module is
+    // off" and "you can see no channel of that type", and the two are
+    // deliberately indistinguishable. Neither is an empty frame worth drawing.
+    test('a house with nothing outstanding draws no card', () {
+      expect(const HouseholdDigestDto(guildId: 'g1').isEmpty, isTrue);
+      expect(
+        const HouseholdDigestDto(
+          guildId: 'g1',
+          lists: [HouseholdListDigestDto(channelId: 'c1', openCount: 0)],
+          ledger: [HouseholdLedgerDigestDto(channelId: 'c2')],
+          decisions: HouseholdDecisionsDigestDto(),
+        ).isEmpty,
+        isTrue,
+      );
+    });
+
+    test('anything outstanding draws it', () {
+      expect(
+        const HouseholdDigestDto(
+          guildId: 'g1',
+          lists: [HouseholdListDigestDto(channelId: 'c1', openCount: 3)],
+        ).isEmpty,
+        isFalse,
+      );
+      // Your own position in a ledger counts even when nothing else does -
+      // negative means you owe the house.
+      expect(
+        const HouseholdDigestDto(
+          guildId: 'g1',
+          ledger: [
+            HouseholdLedgerDigestDto(channelId: 'c2', myNetMinor: -2400),
+          ],
+        ).isEmpty,
+        isFalse,
       );
     });
   });

@@ -20,11 +20,19 @@ import 'route_paths.dart';
 abstract final class BackNavigation {
   /// Path of the location the next [appPage] should treat as a pop, if any.
   ///
-  /// Matched by location rather than cleared on a timer: only the page that
-  /// was actually navigated back to can claim it, so a target that never
-  /// builds one (`AppShell`'s routes use `NoTransitionPage`) can't leak the
-  /// reverse transition onto an unrelated screen later.
+  /// Matched by location and dropped on the very next build either way, so a
+  /// `go` that landed somewhere else can't leak the reverse transition onto an
+  /// unrelated screen later.
   static String? _target;
+
+  /// The page that claimed [_target], and the location it claimed it at.
+  ///
+  /// A claim has to outlive the *build* that made it: go_router rebuilds every
+  /// page on a `refreshListenable` notification, and a rebuild landing inside
+  /// the 300ms transition would otherwise hand the route a fresh page with the
+  /// forward builder and flip the reveal into a push mid-animation.
+  static ValueKey<String>? _claimedBy;
+  static String? _claimedAt;
 
   /// Pops when there's something to pop, otherwise goes to [location] with a
   /// backwards transition.
@@ -46,9 +54,28 @@ abstract final class BackNavigation {
   }
 
   static bool _isReturningTo(GoRouterState state) {
-    if (_target == null || _target != state.uri.path) return false;
-    _target = null;
-    return true;
+    final location = state.uri.path;
+    // Every page in one build gets the same `state.uri` - the whole location,
+    // not its own slice of it - so navigating anywhere else is visible from
+    // here, and the claim expires with the navigation that made it rather
+    // than outliving it as a stale reverse transition.
+    if (_claimedAt != location) {
+      _claimedAt = null;
+      _claimedBy = null;
+    }
+    if (_target != null) {
+      final claiming = _target == location;
+      // Cleared either way: a `go` that ended up somewhere else (a redirect,
+      // an expired session) must not leave the transition waiting for a
+      // location that some later forward navigation happens to reach.
+      _target = null;
+      if (claiming) {
+        _claimedAt = location;
+        _claimedBy = state.pageKey;
+        return true;
+      }
+    }
+    return _claimedBy == state.pageKey;
   }
 }
 
@@ -81,7 +108,7 @@ class UpBackButtonDispatcher extends RootBackButtonDispatcher {
   }
 }
 
-/// The page used by every route outside `AppShell`.
+/// The page used by every route, `AppShell` included.
 ///
 /// Deliberately not `MaterialPage`: the transition has to be chosen per
 /// navigation (see [BackNavigation]), and a page whose *type* changed between

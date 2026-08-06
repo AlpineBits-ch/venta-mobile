@@ -7,10 +7,13 @@ import '../routing/route_paths.dart';
 /// person's name. The two are told apart on the first key either parser reads,
 /// `type`.
 ///
-/// Today the only one sent is the chore reminder (`kind: chore.due`). [kind] is
-/// a stable slug and the list will grow, so nothing branches on it to decide
-/// whether to show the notification - an unrecognised kind still has a title, a
-/// body and somewhere to land.
+/// The push half of a household alert - the same `kind`, `targetId`, title and
+/// body the `guild.HouseholdAlert` hub event carries (see `HouseholdAlert`).
+/// A chore falling due, an expense you have a share in, a decision opened or
+/// blocked, a restock, a pantry about to go off: [kind] is a stable slug and
+/// the list keeps growing, so nothing branches on it to decide whether to show
+/// the notification - an unrecognised kind still has a title, a body and
+/// somewhere to land.
 class HouseholdPushPayload {
   const HouseholdPushPayload({
     required this.kind,

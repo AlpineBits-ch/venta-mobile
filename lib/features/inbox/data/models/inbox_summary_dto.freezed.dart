@@ -15,7 +15,10 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$InboxSummaryDto {
 
- int get unreadChannelCount; int get mentionCount;/// The real numbers are higher than reported. Counting further would be an
+ int get unreadChannelCount; int get mentionCount;/// Household rows waiting on the caller - the Waiting tab. Capped the same
+/// way the others are, and reported here so the header badge needs one
+/// request rather than two.
+ int get taskCount;/// The real numbers are higher than reported. Counting further would be an
 /// unbounded scan for a number that renders as `99+` either way.
  bool get capped;
 /// Create a copy of InboxSummaryDto
@@ -30,16 +33,16 @@ $InboxSummaryDtoCopyWith<InboxSummaryDto> get copyWith => _$InboxSummaryDtoCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is InboxSummaryDto&&(identical(other.unreadChannelCount, unreadChannelCount) || other.unreadChannelCount == unreadChannelCount)&&(identical(other.mentionCount, mentionCount) || other.mentionCount == mentionCount)&&(identical(other.capped, capped) || other.capped == capped));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is InboxSummaryDto&&(identical(other.unreadChannelCount, unreadChannelCount) || other.unreadChannelCount == unreadChannelCount)&&(identical(other.mentionCount, mentionCount) || other.mentionCount == mentionCount)&&(identical(other.taskCount, taskCount) || other.taskCount == taskCount)&&(identical(other.capped, capped) || other.capped == capped));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,unreadChannelCount,mentionCount,capped);
+int get hashCode => Object.hash(runtimeType,unreadChannelCount,mentionCount,taskCount,capped);
 
 @override
 String toString() {
-  return 'InboxSummaryDto(unreadChannelCount: $unreadChannelCount, mentionCount: $mentionCount, capped: $capped)';
+  return 'InboxSummaryDto(unreadChannelCount: $unreadChannelCount, mentionCount: $mentionCount, taskCount: $taskCount, capped: $capped)';
 }
 
 
@@ -50,7 +53,7 @@ abstract mixin class $InboxSummaryDtoCopyWith<$Res>  {
   factory $InboxSummaryDtoCopyWith(InboxSummaryDto value, $Res Function(InboxSummaryDto) _then) = _$InboxSummaryDtoCopyWithImpl;
 @useResult
 $Res call({
- int unreadChannelCount, int mentionCount, bool capped
+ int unreadChannelCount, int mentionCount, int taskCount, bool capped
 });
 
 
@@ -67,10 +70,11 @@ class _$InboxSummaryDtoCopyWithImpl<$Res>
 
 /// Create a copy of InboxSummaryDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? unreadChannelCount = null,Object? mentionCount = null,Object? capped = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? unreadChannelCount = null,Object? mentionCount = null,Object? taskCount = null,Object? capped = null,}) {
   return _then(_self.copyWith(
 unreadChannelCount: null == unreadChannelCount ? _self.unreadChannelCount : unreadChannelCount // ignore: cast_nullable_to_non_nullable
 as int,mentionCount: null == mentionCount ? _self.mentionCount : mentionCount // ignore: cast_nullable_to_non_nullable
+as int,taskCount: null == taskCount ? _self.taskCount : taskCount // ignore: cast_nullable_to_non_nullable
 as int,capped: null == capped ? _self.capped : capped // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
@@ -154,10 +158,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int unreadChannelCount,  int mentionCount,  bool capped)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int unreadChannelCount,  int mentionCount,  int taskCount,  bool capped)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _InboxSummaryDto() when $default != null:
-return $default(_that.unreadChannelCount,_that.mentionCount,_that.capped);case _:
+return $default(_that.unreadChannelCount,_that.mentionCount,_that.taskCount,_that.capped);case _:
   return orElse();
 
 }
@@ -175,10 +179,10 @@ return $default(_that.unreadChannelCount,_that.mentionCount,_that.capped);case _
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int unreadChannelCount,  int mentionCount,  bool capped)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int unreadChannelCount,  int mentionCount,  int taskCount,  bool capped)  $default,) {final _that = this;
 switch (_that) {
 case _InboxSummaryDto():
-return $default(_that.unreadChannelCount,_that.mentionCount,_that.capped);}
+return $default(_that.unreadChannelCount,_that.mentionCount,_that.taskCount,_that.capped);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -192,10 +196,10 @@ return $default(_that.unreadChannelCount,_that.mentionCount,_that.capped);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int unreadChannelCount,  int mentionCount,  bool capped)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int unreadChannelCount,  int mentionCount,  int taskCount,  bool capped)?  $default,) {final _that = this;
 switch (_that) {
 case _InboxSummaryDto() when $default != null:
-return $default(_that.unreadChannelCount,_that.mentionCount,_that.capped);case _:
+return $default(_that.unreadChannelCount,_that.mentionCount,_that.taskCount,_that.capped);case _:
   return null;
 
 }
@@ -207,11 +211,15 @@ return $default(_that.unreadChannelCount,_that.mentionCount,_that.capped);case _
 @JsonSerializable()
 
 class _InboxSummaryDto implements InboxSummaryDto {
-  const _InboxSummaryDto({this.unreadChannelCount = 0, this.mentionCount = 0, this.capped = false});
+  const _InboxSummaryDto({this.unreadChannelCount = 0, this.mentionCount = 0, this.taskCount = 0, this.capped = false});
   factory _InboxSummaryDto.fromJson(Map<String, dynamic> json) => _$InboxSummaryDtoFromJson(json);
 
 @override@JsonKey() final  int unreadChannelCount;
 @override@JsonKey() final  int mentionCount;
+/// Household rows waiting on the caller - the Waiting tab. Capped the same
+/// way the others are, and reported here so the header badge needs one
+/// request rather than two.
+@override@JsonKey() final  int taskCount;
 /// The real numbers are higher than reported. Counting further would be an
 /// unbounded scan for a number that renders as `99+` either way.
 @override@JsonKey() final  bool capped;
@@ -229,16 +237,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _InboxSummaryDto&&(identical(other.unreadChannelCount, unreadChannelCount) || other.unreadChannelCount == unreadChannelCount)&&(identical(other.mentionCount, mentionCount) || other.mentionCount == mentionCount)&&(identical(other.capped, capped) || other.capped == capped));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _InboxSummaryDto&&(identical(other.unreadChannelCount, unreadChannelCount) || other.unreadChannelCount == unreadChannelCount)&&(identical(other.mentionCount, mentionCount) || other.mentionCount == mentionCount)&&(identical(other.taskCount, taskCount) || other.taskCount == taskCount)&&(identical(other.capped, capped) || other.capped == capped));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,unreadChannelCount,mentionCount,capped);
+int get hashCode => Object.hash(runtimeType,unreadChannelCount,mentionCount,taskCount,capped);
 
 @override
 String toString() {
-  return 'InboxSummaryDto(unreadChannelCount: $unreadChannelCount, mentionCount: $mentionCount, capped: $capped)';
+  return 'InboxSummaryDto(unreadChannelCount: $unreadChannelCount, mentionCount: $mentionCount, taskCount: $taskCount, capped: $capped)';
 }
 
 
@@ -249,7 +257,7 @@ abstract mixin class _$InboxSummaryDtoCopyWith<$Res> implements $InboxSummaryDto
   factory _$InboxSummaryDtoCopyWith(_InboxSummaryDto value, $Res Function(_InboxSummaryDto) _then) = __$InboxSummaryDtoCopyWithImpl;
 @override @useResult
 $Res call({
- int unreadChannelCount, int mentionCount, bool capped
+ int unreadChannelCount, int mentionCount, int taskCount, bool capped
 });
 
 
@@ -266,10 +274,11 @@ class __$InboxSummaryDtoCopyWithImpl<$Res>
 
 /// Create a copy of InboxSummaryDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? unreadChannelCount = null,Object? mentionCount = null,Object? capped = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? unreadChannelCount = null,Object? mentionCount = null,Object? taskCount = null,Object? capped = null,}) {
   return _then(_InboxSummaryDto(
 unreadChannelCount: null == unreadChannelCount ? _self.unreadChannelCount : unreadChannelCount // ignore: cast_nullable_to_non_nullable
 as int,mentionCount: null == mentionCount ? _self.mentionCount : mentionCount // ignore: cast_nullable_to_non_nullable
+as int,taskCount: null == taskCount ? _self.taskCount : taskCount // ignore: cast_nullable_to_non_nullable
 as int,capped: null == capped ? _self.capped : capped // ignore: cast_nullable_to_non_nullable
 as bool,
   ));

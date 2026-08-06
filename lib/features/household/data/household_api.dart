@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../core/network/api_client.dart';
 import 'models/chore_dto.dart';
 import 'models/decision_dto.dart';
+import 'models/digest_dto.dart';
 import 'models/house_dto.dart';
 import 'models/ledger_dto.dart';
 import 'models/list_item_dto.dart';
@@ -22,6 +23,12 @@ import 'models/pantry_dto.dart';
 /// Callers must check `features` before rendering, not after failing: "your
 /// house doesn't do money" and "you're not allowed to see the money" are very
 /// different things to show somebody.
+/// One conditional digest fetch.
+///
+/// [digest] is null when the server answered `304` - the caller's copy is
+/// still current, which is a success and not a missing value.
+typedef HouseholdDigestResult = ({HouseholdDigestDto? digest, String? etag});
+
 class HouseholdApi {
   HouseholdApi({required this.client});
 
@@ -635,6 +642,44 @@ class HouseholdApi {
   /// Soft-cancel - the decision stays readable, it just stops being live.
   Future<void> cancelDecision(String decisionId) async {
     await client.dio.delete<void>('$_base/decisions/$decisionId');
+  }
+
+  // --------------------------------------------------------- home digest
+
+  /// The whole house in one request - what six separate calls used to fetch.
+  ///
+  /// Conditional: pass the previous [etag] back and an unchanged digest is a
+  /// `304` with no body, which arrives here as a null
+  /// [HouseholdDigestResult.digest] rather than as an error. Dio treats a `304`
+  /// as a failure by default, which is why this call widens `validateStatus` -
+  /// the whole point of sending `If-None-Match` is to *get* one.
+  ///
+  /// The response is `Cache-Control: private, no-cache` and per-user; it is
+  /// held only in `HouseholdRepository`'s session-scoped cache, never anywhere
+  /// shared.
+  Future<HouseholdDigestResult> getHomeDigest(
+    String guildId, {
+    String? etag,
+  }) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/home',
+      options: Options(
+        headers: {if (etag != null) 'If-None-Match': etag},
+        validateStatus: (status) =>
+            status != null &&
+            (status == 304 || (status >= 200 && status < 300)),
+      ),
+    );
+    if (response.statusCode == 304) {
+      return (digest: null, etag: etag);
+    }
+    final data = response.data;
+    return (
+      digest: data == null
+          ? const HouseholdDigestDto()
+          : HouseholdDigestDto.fromJson(data),
+      etag: response.headers.value('etag') ?? etag,
+    );
   }
 
   // ---------------------------------------------------------- home status

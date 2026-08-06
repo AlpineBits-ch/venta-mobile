@@ -2,6 +2,7 @@ import '../../../core/network/api_client.dart';
 import 'models/inbox_breadcrumb_dto.dart';
 import 'models/inbox_mention_dto.dart';
 import 'models/inbox_summary_dto.dart';
+import 'models/inbox_task_dto.dart';
 import 'models/inbox_unread_dto.dart';
 
 /// Unread channels and mentions across every guild the caller is in.
@@ -75,6 +76,29 @@ class InboxApi {
           mention.breadcrumb == null
               ? mention
               : mention.copyWith(breadcrumb: _absolutize(mention.breadcrumb!)),
+      ],
+    );
+  }
+
+  /// Household rows waiting on the caller, across every guild they're in.
+  ///
+  /// The other half of the inbox: `/unread` will never show a household
+  /// channel, because a list holds no message history and so can never be
+  /// unread. Deadlines first, soonest at the top; undated items after, oldest
+  /// first - the order is the server's and is not re-sorted here.
+  ///
+  /// No cursor - it's a to-do list. [InboxTaskPageDto.truncated] says more were
+  /// waiting. [limit] defaults to 25 server-side and caps at 50.
+  Future<InboxTaskPageDto> getTasks({int limit = 25}) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      '$_base/tasks',
+      queryParameters: {'limit': limit},
+    );
+    final page = InboxTaskPageDto.fromJson(response.data!);
+    return page.copyWith(
+      tasks: [
+        for (final task in page.tasks)
+          task.copyWith(breadcrumb: _absolutize(task.breadcrumb)),
       ],
     );
   }

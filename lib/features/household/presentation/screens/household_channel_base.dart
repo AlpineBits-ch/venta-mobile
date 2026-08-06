@@ -15,6 +15,7 @@ import '../../../guilds/data/models/guild_member_dto.dart';
 import '../../../guilds/data/models/guild_permissions.dart';
 import '../../data/household_api.dart';
 import '../../data/household_repository.dart';
+import '../../data/models/household_alert.dart';
 import '../widgets/household_widgets.dart';
 
 /// Everything the five household channel screens need before they can render
@@ -43,6 +44,7 @@ abstract class HouseholdChannelState<W extends StatefulWidget>
   GuildPermissions permissions = GuildPermissions.none;
 
   StreamSubscription<List<GuildDto>>? _guildsSub;
+  StreamSubscription<HouseholdAlert>? _alertsSub;
 
   HouseholdApi get api => getIt<HouseholdApi>();
   HouseholdRepository get household => getIt<HouseholdRepository>();
@@ -102,13 +104,30 @@ abstract class HouseholdChannelState<W extends StatefulWidget>
       final updated = guilds.where((g) => g.id == guildId).firstOrNull;
       if (updated != null && mounted) setState(() => guild = updated);
     });
+    _alertsSub = household.channelAlerts(channelId).listen((alert) {
+      if (mounted) onHouseholdAlert(alert);
+    });
   }
 
   @override
   void dispose() {
     unawaited(_guildsSub?.cancel());
+    unawaited(_alertsSub?.cancel());
     super.dispose();
   }
+
+  /// A household alert landed on this board while it was open.
+  ///
+  /// Handled here rather than per module because the kinds keep being added
+  /// and every one of them arrives on the same event: a screen that only knew
+  /// about its own would silently stop surfacing whatever shipped next. It
+  /// also arrives as a push, but a tray entry for the screen somebody is
+  /// already looking at is easy to miss.
+  ///
+  /// The copy is the server's - it writes [HouseholdAlert.title] and
+  /// [HouseholdAlert.body] precisely so a client needs none of its own.
+  /// Override to reload as well; call `super` to keep the message.
+  void onHouseholdAlert(HouseholdAlert alert) => showMessage(alert.message);
 
   Future<void> _loadGuildContext() async {
     final repository = getIt<GuildRepository>();

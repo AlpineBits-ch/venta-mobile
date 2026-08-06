@@ -13,16 +13,21 @@ import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../bloc/inbox_cubit.dart';
 import '../../data/models/inbox_mention_dto.dart';
+import '../../data/models/inbox_task_dto.dart';
 import '../../data/models/inbox_unread_dto.dart';
 import '../widgets/inbox_mention_tile.dart';
+import '../widgets/inbox_task_tile.dart';
 import '../widgets/inbox_unread_card.dart';
 
-/// Unread channels and mentions across every guild the caller is in - the
-/// mobile shape of Discord's inbox popout, as a pushed full-screen route
-/// rather than an anchored panel (there is nowhere on a phone to anchor one).
+/// Unread channels, mentions and household rows waiting on the caller, across
+/// every guild they're in - the mobile shape of Discord's inbox popout, as a
+/// pushed full-screen route rather than an anchored panel (there is nowhere on
+/// a phone to anchor one).
 ///
-/// Both tabs load in parallel and render whichever lands first; neither waits
-/// on the other.
+/// All three tabs load in parallel and render whichever lands first; none
+/// waits on the others. Waiting is its own tab rather than more rows under
+/// Unread because a household channel holds no message history and so can
+/// never *be* unread.
 class InboxScreen extends StatelessWidget {
   const InboxScreen({super.key, this.guildId});
 
@@ -60,7 +65,7 @@ class _InboxView extends StatefulWidget {
 
 class _InboxViewState extends State<_InboxView>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs = TabController(length: 3, vsync: this);
 
   @override
   void dispose() {
@@ -81,6 +86,10 @@ class _InboxViewState extends State<_InboxView>
           tabs: const [
             Tab(text: 'Unread'),
             Tab(text: 'Mentions'),
+            // "Waiting on you" in full is the product's name for it and is
+            // what the empty state says; the tab itself has to fit two others
+            // beside it on a phone.
+            Tab(text: 'Waiting'),
           ],
         ),
         actions: [
@@ -96,10 +105,18 @@ class _InboxViewState extends State<_InboxView>
                   )
                 : const SizedBox.shrink(),
           ),
-          IconButton(
-            icon: const Icon(Icons.done_all),
-            tooltip: 'Mark all as read',
-            onPressed: _confirmMarkAllRead,
+          // Marking everything read has nothing to do with the Waiting tab -
+          // a chore is still your turn afterwards - so it goes away there
+          // rather than sitting above a list it cannot clear.
+          AnimatedBuilder(
+            animation: _tabs,
+            builder: (context, _) => _tabs.index == 2
+                ? const SizedBox.shrink()
+                : IconButton(
+                    icon: const Icon(Icons.done_all),
+                    tooltip: 'Mark all as read',
+                    onPressed: _confirmMarkAllRead,
+                  ),
           ),
         ],
       ),
@@ -108,6 +125,7 @@ class _InboxViewState extends State<_InboxView>
         children: [
           _UnreadTab(onOpen: _openChannel),
           _MentionsTab(onOpen: _openMention),
+          _WaitingTab(onOpen: _openTask),
         ],
       ),
     );
@@ -139,6 +157,22 @@ class _InboxViewState extends State<_InboxView>
     }
     context.push(
       RoutePaths.serverChannelPath(breadcrumb.guildId, breadcrumb.channelId),
+    );
+  }
+
+  /// Household rows land on their module board rather than at the row itself:
+  /// a chore occurrence, a decision and a list item have no route of their own
+  /// on this client, and the board opens showing the thing anyway.
+  void _openTask(InboxTaskDto task) {
+    final breadcrumb = task.breadcrumb;
+    if (breadcrumb.guildId.isEmpty) return;
+    context.push(
+      breadcrumb.channelId.isEmpty
+          ? RoutePaths.serverPath(breadcrumb.guildId)
+          : RoutePaths.serverChannelPath(
+              breadcrumb.guildId,
+              breadcrumb.channelId,
+            ),
     );
   }
 
@@ -400,6 +434,96 @@ class _MentionsTab extends StatelessWidget {
     InboxMentionSince.week => '7 days',
     InboxMentionSince.month => '30 days',
   };
+}
+
+/// Household rows waiting on the caller, across every house they're in.
+///
+/// A separate tab rather than more entries under Unread, because it answers a
+/// different question: a list channel holds no message history and so can never
+/// *be* unread, which left the modules people most want reminding about with no
+/// inbox presence at all.
+class _WaitingTab extends StatelessWidget {
+  const _WaitingTab({required this.onOpen});
+
+  final void Function(InboxTaskDto task) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<InboxCubit, InboxState>(
+      buildWhen: (previous, current) =>
+          previous.taskStatus != current.taskStatus ||
+          previous.tasks != current.tasks ||
+          previous.tasksTruncated != current.tasksTruncated,
+      builder: (context, state) {
+        final cubit = context.read<InboxCubit>();
+        if (state.taskStatus == InboxTabStatus.loading) {
+          return const _LoadingList();
+        }
+        if (state.taskStatus == InboxTabStatus.failed) {
+          return LoadFailureView(
+            message: "Couldn't load what's waiting on you.",
+            onRetry: cubit.refreshTasks,
+          );
+        }
+        if (state.tasks.isEmpty) {
+          return RefreshIndicator(
+            onRefresh: cubit.refreshTasks,
+            child: const _EmptyState(
+              icon: Icons.home_outlined,
+              title: 'Nothing waiting on you',
+              message:
+                  'Chores, votes and list items with your name on them '
+                  'show up here.',
+            ),
+          );
+        }
+        return RefreshIndicator(
+          onRefresh: cubit.refreshTasks,
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+            physics: const AlwaysScrollableScrollPhysics(),
+            // No cursor to follow - this is a to-do list, and `truncated` is
+            // the whole of what the server will say about the rest.
+            itemCount: state.tasks.length + (state.tasksTruncated ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index >= state.tasks.length) {
+                return const _TruncatedNotice();
+              }
+              final task = state.tasks[index];
+              return InboxTaskTile(task: task, onOpen: () => onOpen(task));
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// More was waiting than the endpoint returns. Said plainly rather than as a
+/// "load more" that would do nothing - there is no cursor, and the boards
+/// themselves are where a whole one is read.
+class _TruncatedNotice extends StatelessWidget {
+  const _TruncatedNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.m,
+        AppSpacing.s,
+        AppSpacing.m,
+        AppSpacing.m,
+      ),
+      child: Text(
+        'More is waiting than fits here - open the board to see all of it.',
+        textAlign: TextAlign.center,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
+    );
+  }
 }
 
 /// A list that asks for the next page as its end comes into view, and can
