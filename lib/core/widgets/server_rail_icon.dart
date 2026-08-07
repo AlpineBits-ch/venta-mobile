@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/status_colors_extension.dart';
+import '../theme/widget_styles.dart';
 
 /// One circular icon in the Discord-style server rail (shown in the app's
 /// `startDrawer`). `selected` draws the short pill indicator on the left
@@ -16,6 +17,8 @@ class ServerRailIcon extends StatelessWidget {
     this.backgroundColor,
     this.imageUrl,
     this.child,
+    this.voiceParticipantCount = 0,
+    this.voiceHasStream = false,
   });
 
   final VoidCallback onTap;
@@ -23,6 +26,15 @@ class ServerRailIcon extends StatelessWidget {
   final IconData? icon;
   final String? label;
   final Color? backgroundColor;
+
+  /// How many people are in voice anywhere in this server right now. Zero
+  /// draws nothing - the badge is the whole signal, so an empty one would say
+  /// "something is happening here" when nothing is.
+  final int voiceParticipantCount;
+
+  /// Whether any of them is screen sharing, which reads as "live" rather than
+  /// merely "occupied" and gets the louder colour.
+  final bool voiceHasStream;
 
   /// Real server icon image, when the backend sends one. Falls back to
   /// [icon]/[label] while null - most guilds today, since the backend
@@ -57,36 +69,102 @@ class ServerRailIcon extends StatelessWidget {
             child: InkWell(
               onTap: onTap,
               borderRadius: BorderRadius.circular(selected ? 16 : 24),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                width: 48,
-                height: 48,
-                alignment: Alignment.center,
-                clipBehavior: imageUrl != null ? Clip.antiAlias : Clip.none,
-                decoration: BoxDecoration(
-                  color: backgroundColor ?? context.statusColors.hover,
-                  borderRadius: BorderRadius.circular(selected ? 16 : 24),
-                ),
-                child: imageUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: imageUrl!,
-                        fit: BoxFit.cover,
-                        width: 48,
-                        height: 48,
-                        fadeInDuration: const Duration(milliseconds: 200),
-                      )
-                    : child ??
-                          (icon != null
-                              ? Icon(
-                                  icon,
-                                  color: theme.colorScheme.onSurface,
-                                  size: 24,
-                                )
-                              : Text(
-                                  label ?? '',
-                                  style: theme.textTheme.titleSmall,
-                                )),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    clipBehavior: imageUrl != null ? Clip.antiAlias : Clip.none,
+                    decoration: BoxDecoration(
+                      color: backgroundColor ?? context.statusColors.hover,
+                      borderRadius: BorderRadius.circular(selected ? 16 : 24),
+                    ),
+                    child: imageUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: imageUrl!,
+                            fit: BoxFit.cover,
+                            width: 48,
+                            height: 48,
+                            fadeInDuration: const Duration(milliseconds: 200),
+                          )
+                        : child ??
+                              (icon != null
+                                  ? Icon(
+                                      icon,
+                                      color: theme.colorScheme.onSurface,
+                                      size: 24,
+                                    )
+                                  : Text(
+                                      label ?? '',
+                                      style: theme.textTheme.titleSmall,
+                                    )),
+                  ),
+                  if (voiceParticipantCount > 0)
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: _VoiceActivityBadge(
+                        count: voiceParticipantCount,
+                        hasStream: voiceHasStream,
+                      ),
+                    ),
+                ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Somebody is in voice in this server" - the rail's counterpart to the
+/// per-channel roster inside a guild.
+///
+/// It shows a count rather than a bare dot because occupancy is the useful
+/// fact from outside the server: a rail full of identical dots says only that
+/// several servers are busy. The louder colour is reserved for a live screen
+/// share, which is the thing worth switching servers for.
+class _VoiceActivityBadge extends StatelessWidget {
+  const _VoiceActivityBadge({required this.count, required this.hasStream});
+
+  final int count;
+  final bool hasStream;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final background = hasStream
+        ? theme.colorScheme.error
+        : context.statusColors.online;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      constraints: const BoxConstraints(minWidth: 18),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(AppRadii.badge + 5),
+        // Punched out of the rail rather than laid on top of it, so the badge
+        // reads as attached to the chip at any icon colour.
+        border: Border.all(color: context.statusColors.sidebar, width: 2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            hasStream ? Icons.screen_share : Icons.volume_up,
+            size: 10,
+            color: theme.colorScheme.onError,
+          ),
+          const SizedBox(width: 2),
+          Text(
+            '$count',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onError,
+              fontWeight: FontWeight.w700,
+              height: 1,
             ),
           ),
         ],

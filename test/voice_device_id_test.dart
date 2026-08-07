@@ -18,12 +18,12 @@ import 'package:venta_mobile/features/voice/data/voice_api.dart';
 /// call/{id}/accept` *and* `POST calls/{id}/session` - and compares the
 /// `X-Device-Id` header of one against the other, defaulting a missing header
 /// to the literal `"default"`. `VoiceApi` sent a real id on the lifecycle
-/// endpoints but nothing at all on the Cloudflare ones, so the server saw
+/// endpoints but nothing at all on the media ones, so the server saw
 /// `accept` from device `<real>` followed by `session` from device
 /// `"default"`, concluded the user had answered on a second device, fired
 /// `call.CallDeviceTakeover` at the device that had just joined, and nulled
-/// out its `CfSessionId`/`AudioTrackName` - which is what left the caller with
-/// no audio session to subscribe to.
+/// out its media session and audio track name - which is what left the caller
+/// with no audio session to subscribe to.
 ///
 /// It was never a race. Both requests are strictly ordered, so it reproduced
 /// on every single call. Angular is unaffected because it sends no device id
@@ -102,7 +102,8 @@ void main() {
     // DTOs require, since these tests only ever assert on the request side.
     adapter = _CapturingAdapter({
       ..._callBody,
-      'cfSessionId': 'cf-session-1',
+      'mediaSessionId': 'media-session-1',
+      'backend': 'cloudflare',
       'sessionDescription': <String, dynamic>{'type': 'answer', 'sdp': ''},
     });
     client.dio.httpClientAdapter = adapter;
@@ -114,10 +115,10 @@ void main() {
   });
 
   group('X-Device-Id', () {
-    test('the Cloudflare session request carries it', () async {
+    test('the media session request carries it', () async {
       // The regression itself: this endpoint runs ConnectDevice server-side
       // and was the one sending nothing.
-      await api.cfCreateSession('call-1');
+      await api.createSession('call-1');
       expect(deviceHeaderFor('/session'), _kDeviceId);
     });
 
@@ -125,7 +126,7 @@ void main() {
       // The comparison the backend actually makes. Equality here is what
       // decides between "same device, carry on" and "takeover, tear down".
       await api.acceptCall('call-1');
-      await api.cfCreateSession('call-1');
+      await api.createSession('call-1');
 
       expect(deviceHeaderFor('/accept'), isNotNull);
       expect(deviceHeaderFor('/accept'), deviceHeaderFor('/session'));
@@ -137,7 +138,7 @@ void main() {
         // Guards the specific value the server substitutes for a missing
         // header - a client that sent the literal string would collide with
         // every other device in that bucket.
-        await api.cfCreateSession('call-1');
+        await api.createSession('call-1');
         expect(deviceHeaderFor('/session'), isNot('default'));
       },
     );
@@ -146,7 +147,7 @@ void main() {
       // Call.Leave no-ops unless the header matches the ActiveDeviceId that
       // the session request stored, so a mismatch here leaves the user
       // connected server-side until the alone-timeout fires.
-      await api.cfCreateSession('call-1');
+      await api.createSession('call-1');
       await api.leaveCall('call-1');
       expect(deviceHeaderFor('/leave'), deviceHeaderFor('/session'));
     });
@@ -161,21 +162,21 @@ void main() {
       await api.leaveCall('call-1');
       await api.endCall('call-1');
       await api.getCall('call-1');
-      await api.cfCreateSession('call-1');
-      await api.cfTracksNew(
+      await api.createSession('call-1');
+      await api.negotiate(
         callId: 'call-1',
-        cfSessionId: 'cf-session-1',
+        mediaSessionId: 'media-session-1',
         sessionDescription: const {},
         tracks: const [],
       );
-      await api.cfRenegotiate(
+      await api.renegotiate(
         callId: 'call-1',
-        cfSessionId: 'cf-session-1',
+        mediaSessionId: 'media-session-1',
         sessionDescription: const {},
       );
-      await api.cfCloseTracks(
+      await api.closeTracks(
         callId: 'call-1',
-        cfSessionId: 'cf-session-1',
+        mediaSessionId: 'media-session-1',
         trackNames: const ['audio'],
       );
 
@@ -194,7 +195,7 @@ void main() {
       // This client publishes screen share on its mic peer connection, so it
       // only ever opens primary sessions - and must not accidentally opt out
       // of the device bookkeeping the rest of this suite depends on.
-      await api.cfCreateSession('call-1');
+      await api.createSession('call-1');
       expect(requestFor('/session').queryParameters['primary'], true);
     });
   });

@@ -50,6 +50,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _conversationsSub = repository.conversationsStream.listen((_) {
       if (mounted) setState(() {});
     });
+    // Catch-up for a call that started before this screen was opened.
+    // `conversation.CallStateChanged` keeps it current afterwards, but it is
+    // sent once and never replayed, so opening the screen late would otherwise
+    // show a plain "call" button for a call already in progress.
+    unawaited(
+      getIt<CallCubit>().refreshConversationCall(widget.conversationId),
+    );
   }
 
   @override
@@ -109,16 +116,32 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 BlocBuilder<CallCubit, CallState>(
                   bloc: getIt<CallCubit>(),
                   builder: (context, callState) {
+                    final cubit = getIt<CallCubit>();
                     final inThisCall =
                         callState.call?.conversationId ==
                             widget.conversationId &&
                         callState.phase != CallPhase.idle;
+                    // A call already running here is joined rather than
+                    // placed. Nothing else surfaces it to someone the ring
+                    // never addressed - a member who declined, who left, or
+                    // who was never invited.
+                    final ongoing = cubit.ongoingCallIn(widget.conversationId);
+                    if (!inThisCall &&
+                        ongoing != null &&
+                        callState.phase == CallPhase.idle) {
+                      return TextButton.icon(
+                        icon: const Icon(Icons.call),
+                        label: const Text('Join'),
+                        onPressed: () =>
+                            cubit.joinConversationCall(widget.conversationId),
+                      );
+                    }
                     return IconButton(
                       icon: Icon(inThisCall ? Icons.call_end : Icons.call),
                       onPressed: inThisCall
-                          ? getIt<CallCubit>().endCall
+                          ? cubit.endCall
                           : callState.phase == CallPhase.idle
-                          ? () => getIt<CallCubit>().startCall(
+                          ? () => cubit.startCall(
                               conversationId: widget.conversationId,
                               participantUserIds: otherMemberIds,
                             )

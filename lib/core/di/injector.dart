@@ -10,6 +10,7 @@ import '../../features/conversations/data/conversation_api.dart';
 import '../../features/conversations/data/conversation_repository.dart';
 import '../../features/friends/data/relationship_api.dart';
 import '../../features/friends/data/relationship_repository.dart';
+import '../../features/guild_voice/bloc/guild_voice_activity_cubit.dart';
 import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
 import '../../features/guild_voice/data/guild_voice_api.dart';
 import '../../features/guild_voice/data/guild_voice_repository.dart';
@@ -365,14 +366,10 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
     ),
   );
   getIt.registerLazySingleton<GuildVoiceApi>(
-    () => GuildVoiceApi(client: getIt()),
+    () => GuildVoiceApi(client: getIt(), deviceIdService: getIt()),
   );
   getIt.registerLazySingleton<GuildVoiceRepository>(
-    () => GuildVoiceRepository(
-      api: getIt(),
-      realtimeService: getIt(),
-      deviceIdService: getIt(),
-    ),
+    () => GuildVoiceRepository(api: getIt(), realtimeService: getIt()),
   );
   getIt.registerLazySingleton<GuildVoiceCubit>(
     () => GuildVoiceCubit(
@@ -381,6 +378,9 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       soundService: getIt(),
       webRtcServiceFactory: () => GuildVoiceWebRtcService(api: getIt()),
     ),
+  );
+  getIt.registerLazySingleton<GuildVoiceActivityCubit>(
+    () => GuildVoiceActivityCubit(repository: getIt()),
   );
   getIt.registerLazySingleton<WikiApi>(() => WikiApi(client: getIt()));
   getIt.registerLazySingleton<WikiRepository>(
@@ -436,6 +436,10 @@ void resetSessionScopedCaches() {
   // on behalf of it. Carrying the previous account's copy over would have this
   // handset applying a stranger's answer to "may I send a typing indicator".
   getIt<PrivacyRepository>().clear();
+  // Voice occupancy is per guild *membership*: the next account is in a
+  // different set of servers, and a rail badge left over from the previous one
+  // would sit on a server the new user cannot even see into.
+  getIt<GuildVoiceActivityCubit>().clear();
   // Device registration is per account, not per install: the id this handset
   // registered for the previous user means nothing to the next one, and every
   // call/voice action would be rejected until it registers again.
@@ -496,6 +500,10 @@ Future<void> startAuthenticatedServices({String? password}) async {
   // `connected` event it would have caught up on is long gone. Which is exactly
   // the case this covers: the app opened while the phone was already ringing.
   unawaited(getIt<CallCubit>().catchUpOnPendingCall());
+  // Detached for the same reason: the server rail's voice indicator is nice to
+  // have promptly and worth holding nothing up for. Live updates take over from
+  // the guild-wide presence events once this lands.
+  unawaited(getIt<GuildVoiceActivityCubit>().load());
   getIt<MlsRealtimeBridge>().start();
   // Detached, and after registration: publishing a certificate needs the device
   // row to exist, and none of it is worth holding a launch on. Failure here is

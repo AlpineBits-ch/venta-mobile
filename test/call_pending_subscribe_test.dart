@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:venta_mobile/core/webrtc/track_kind.dart';
+import 'package:venta_mobile/core/voice/track_naming.dart';
 import 'package:venta_mobile/features/voice/data/voice_api.dart';
 import 'package:venta_mobile/features/voice/webrtc/call_webrtc_service.dart';
 
@@ -15,7 +15,7 @@ import 'package:venta_mobile/features/voice/webrtc/call_webrtc_service.dart';
 /// first, hit the `_pc == null` guard in `_subscribeTrack`, and was dropped
 /// with no retry anywhere. The backfill in `CallCubit._connect` could not
 /// recover it either: it reads the accept response, serialized before the
-/// other side published, so it carries no `cfSessionId` for them.
+/// other side published, so it carries no `mediaSessionId` for them.
 ///
 /// Requests are now held and issued once `connect` finishes. The flush needs a
 /// live peer connection, so these tests cover the queueing half - that nothing
@@ -37,7 +37,7 @@ void main() {
     test('are held rather than dropped', () async {
       await service.subscribeToParticipant(
         userId: 'u2',
-        cfSessionId: 'cf-2',
+        mediaSessionId: 'cf-2',
         trackName: 'audio',
       );
 
@@ -51,7 +51,7 @@ void main() {
       // announce the same participant while connect is still in flight.
       Future<void> announce() => service.subscribeToParticipant(
         userId: 'u2',
-        cfSessionId: 'cf-2',
+        mediaSessionId: 'cf-2',
         trackName: 'audio',
       );
 
@@ -63,7 +63,7 @@ void main() {
     test('are dropped again if that participant leaves first', () async {
       await service.subscribeToParticipant(
         userId: 'u2',
-        cfSessionId: 'cf-2',
+        mediaSessionId: 'cf-2',
         trackName: 'audio',
       );
       expect(service.pendingSubscribeKeys, isNotEmpty);
@@ -78,12 +78,12 @@ void main() {
     test('keep audio and video for one participant apart', () async {
       await service.subscribeToParticipant(
         userId: 'u2',
-        cfSessionId: 'cf-2',
+        mediaSessionId: 'cf-2',
         trackName: 'audio',
       );
       await service.subscribeToTrack(
         userId: 'u2',
-        cfSessionId: 'cf-2',
+        mediaSessionId: 'cf-2',
         trackName: 'camera',
         kind: TrackKind.video,
       );
@@ -102,12 +102,12 @@ void main() {
     test('hold one entry per participant', () async {
       await service.subscribeToParticipant(
         userId: 'u2',
-        cfSessionId: 'cf-2',
+        mediaSessionId: 'cf-2',
         trackName: 'audio',
       );
       await service.subscribeToParticipant(
         userId: 'u3',
-        cfSessionId: 'cf-3',
+        mediaSessionId: 'cf-3',
         trackName: 'audio',
       );
 

@@ -46,7 +46,11 @@ _MessageDto _$MessageDtoFromJson(Map<String, dynamic> json) => _MessageDto(
       ) ??
       MessageEncryptionState.plain,
   type:
-      $enumDecodeNullable(_$MessageTypeEnumMap, json['type']) ??
+      $enumDecodeNullable(
+        _$MessageTypeEnumMap,
+        json['type'],
+        unknownValue: MessageType.unknown,
+      ) ??
       MessageType.message,
   authorIdType:
       $enumDecodeNullable(
@@ -139,6 +143,9 @@ const _$MessageTypeEnumMap = {
   MessageType.invite: 'Invite',
   MessageType.guildMemberJoin: 'GuildMemberJoin',
   MessageType.guildMemberLeave: 'GuildMemberLeave',
+  MessageType.callEnded: 'CallEnded',
+  MessageType.callMissed: 'CallMissed',
+  MessageType.unknown: 'unknown',
 };
 
 const _$MessageAuthorTypeEnumMap = {

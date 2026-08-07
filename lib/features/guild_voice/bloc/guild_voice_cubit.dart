@@ -5,55 +5,17 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
 
 import '../../../core/bloc/safe_emit.dart';
+import '../../../core/realtime/realtime_transport.dart';
 import '../../../core/sound/sound_service.dart';
-import '../../../core/webrtc/track_kind.dart';
+import '../../../core/voice/track_naming.dart';
+import '../../../core/voice/voice_heartbeat.dart';
+import '../../../core/voice/voice_participant_state.dart';
+import '../../../core/voice/voice_snapshot_dto.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/guild_voice_repository.dart';
-import '../data/models/guild_voice_dto.dart';
 import '../webrtc/guild_voice_webrtc_service.dart';
 
 enum GuildVoicePhase { idle, connecting, active }
-
-class VoiceParticipantState extends Equatable {
-  const VoiceParticipantState({
-    required this.userId,
-    this.isMuted = false,
-    this.isDeafened = false,
-    this.isStreaming = false,
-    this.hasCamera = false,
-  });
-
-  final String userId;
-  final bool isMuted;
-  final bool isDeafened;
-
-  /// Screen sharing - kept as `isStreaming` for backward compatibility with
-  /// existing UI/roster code; [hasCamera] is the separate camera-on flag.
-  final bool isStreaming;
-  final bool hasCamera;
-
-  VoiceParticipantState copyWith({
-    bool? isMuted,
-    bool? isDeafened,
-    bool? isStreaming,
-    bool? hasCamera,
-  }) => VoiceParticipantState(
-    userId: userId,
-    isMuted: isMuted ?? this.isMuted,
-    isDeafened: isDeafened ?? this.isDeafened,
-    isStreaming: isStreaming ?? this.isStreaming,
-    hasCamera: hasCamera ?? this.hasCamera,
-  );
-
-  @override
-  List<Object?> get props => [
-    userId,
-    isMuted,
-    isDeafened,
-    isStreaming,
-    hasCamera,
-  ];
-}
 
 class GuildVoiceState extends Equatable {
   const GuildVoiceState({
@@ -85,16 +47,22 @@ class GuildVoiceState extends Equatable {
   /// with no way to switch, unlike every other calling app.
   final bool isSpeakerOn;
 
-  /// Set once, the moment the channel join reaches [GuildVoicePhase.active]
-  /// - drives the elapsed-time display. Never touched again until the next
-  /// join (leave/error reset to a fresh [GuildVoiceState] with this null).
+  /// Set once, the moment the channel join reaches [GuildVoicePhase.active] -
+  /// drives the elapsed-time display. Never touched again until the next join.
   final DateTime? connectedAt;
 
-  /// Every voice channel's roster, keyed by channelId - not just the one
-  /// the local user has joined. This is what lets the sidebar show live
-  /// participant avatars for channels the user hasn't joined, like Discord.
+  /// Every voice channel's roster, keyed by channelId - not just the one the
+  /// local user has joined. This is what lets the sidebar show live
+  /// participant avatars for channels the user hasn't joined.
   final Map<String, List<VoiceParticipantState>> rosters;
   final String? errorMessage;
+
+  /// Bumped on every local/remote camera or screen-share track add/remove -
+  /// `MediaStreamTrack`s themselves can't live in this `Equatable` state (not
+  /// comparable/immutable-safe), so `VideoParticipantTile`/`ScreenShareView`
+  /// instead pull the current track imperatively from the webrtc service and
+  /// rely on this counter changing to know when to re-pull and rebuild.
+  final int videoRevision;
 
   bool get isInVoice => phase != GuildVoicePhase.idle;
 
@@ -132,13 +100,6 @@ class GuildVoiceState extends Equatable {
     videoRevision: videoRevision ?? this.videoRevision,
   );
 
-  /// Bumped on every local/remote camera or screen-share track add/remove -
-  /// `MediaStreamTrack`s themselves can't live in this `Equatable` state (not
-  /// comparable/immutable-safe), so `VideoParticipantTile`/`ScreenShareView`
-  /// instead pull the current track imperatively from the webrtc service and
-  /// rely on this counter changing to know when to re-pull and rebuild.
-  final int videoRevision;
-
   @override
   List<Object?> get props => [
     phase,
@@ -158,10 +119,11 @@ class GuildVoiceState extends Equatable {
 
 /// App-lifetime singleton owning the one guild voice channel the app can be
 /// joined to at a time, plus live rosters for every voice channel visible in
-/// the sidebar - the guild-voice counterpart to `CallCubit`. Joining a
-/// channel does not force any particular screen; unlike 1:1 calling, guild
-/// voice deliberately keeps the user free to browse other text channels
-/// while connected (mirrors Alpine's persistent `voice-status-bar`).
+/// the sidebar - the guild-voice counterpart to `CallCubit`, and deliberately
+/// the same shape, because the server runs one voice implementation for both.
+///
+/// Joining a channel does not force any particular screen; unlike 1:1 calling,
+/// guild voice keeps the user free to browse other channels while connected.
 class GuildVoiceCubit extends Cubit<GuildVoiceState>
     with SafeEmit<GuildVoiceState> {
   GuildVoiceCubit({
@@ -172,6 +134,10 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   }) : _webRtcServiceFactory = webRtcServiceFactory,
        super(const GuildVoiceState()) {
     _sub = repository.events.listen(_handleEvent);
+    _connectionSub = repository.connectionStatus.listen(
+      _handleConnectionStatus,
+    );
+    _heartbeat = VoiceHeartbeat(send: _sendHeartbeat);
   }
 
   final GuildVoiceRepository repository;
@@ -179,25 +145,45 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   final SoundService soundService;
   final GuildVoiceWebRtcService Function() _webRtcServiceFactory;
   late final StreamSubscription<GuildVoiceEvent> _sub;
+  late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
+  late final VoiceHeartbeat _heartbeat;
   GuildVoiceWebRtcService? _webRtc;
-  Timer? _heartbeatTimer;
+
+  /// Whether the joined channel's screen shares are on screen. Viewer claims
+  /// and the subscriptions behind them are only held while they are - guild
+  /// voice is explicitly a background activity, so this is false far more
+  /// often than it is true, and paying for a stream nobody is looking at is
+  /// exactly what the watch protocol exists to prevent.
+  bool _sharesVisible = false;
+
+  /// Share ids this device holds a viewer claim on. Re-posted on the heartbeat
+  /// timer, because a claim expires after 90 seconds.
+  final Set<String> _watchedShares = {};
 
   String get _myUserId => authRepository.currentUserId ?? '';
 
-  /// Populates the roster for one voice channel without joining it - used
-  /// when a guild's channel list loads, so sidebar participant counts show
-  /// up even for channels the user hasn't entered.
+  // ── Rosters ───────────────────────────────────────────────────────────────
+
+  /// Populates the roster for one voice channel without joining it - used when
+  /// a guild's channel list loads, so sidebar participant avatars show up even
+  /// for channels the user hasn't entered.
+  ///
+  /// Safe for a channel this user is not in: the snapshot withholds session
+  /// ids and track names for anyone not actually publishing, so a roster read
+  /// hands out nothing subscribable.
   Future<void> hydrateChannelRoster(String guildId, String channelId) async {
     try {
-      final voiceState = await repository.getState(guildId, channelId);
-      _setRoster(
-        channelId,
-        voiceState.participants.map(_toParticipantState).toList(),
-      );
+      final snapshot = await repository.getSnapshot(guildId, channelId);
+      _setRoster(channelId, [
+        for (final p in snapshot.participants)
+          VoiceParticipantState.fromSnapshot(p),
+      ]);
     } catch (_) {
-      // Best-effort - realtime events will keep it eventually consistent.
+      // Best-effort - realtime events keep it eventually consistent.
     }
   }
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   Future<void> join({
     required String guildId,
@@ -219,9 +205,12 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       ),
     );
     try {
-      final voiceState = await repository.join(guildId, channelId);
-      await _connect(guildId, channelId, voiceState);
+      // Join first: it puts this user in the roster before any media work, and
+      // hands back the authoritative snapshot.
+      final snapshot = await repository.join(guildId, channelId);
+      await _connect(guildId, channelId, snapshot);
     } catch (_) {
+      repository.exitChannel();
       emitIfOpen(
         GuildVoiceState(
           rosters: state.rosters,
@@ -236,9 +225,8 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     final channelId = state.channelId;
     if (guildId == null || channelId == null) return;
     unawaited(soundService.playLeaveCall());
-    _stopHeartbeat();
-    final webRtc = _webRtc;
-    _webRtc = null;
+    final webRtc = await _teardown();
+
     final rosters = Map<String, List<VoiceParticipantState>>.from(
       state.rosters,
     );
@@ -246,6 +234,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
         .where((p) => p.userId != _myUserId)
         .toList();
     emitIfOpen(GuildVoiceState(rosters: rosters));
+
     await webRtc?.disconnect();
     try {
       await repository.leave(guildId, channelId);
@@ -254,24 +243,240 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     }
   }
 
+  /// Releases everything local about the joined channel, returning the WebRTC
+  /// service so the caller can dispose it after emitting. Viewer claims go
+  /// first: they outlive this client by 90 seconds otherwise, and a phantom
+  /// viewer keeps a publisher's egress alive for nothing.
+  Future<GuildVoiceWebRtcService?> _teardown() async {
+    _heartbeat.stop();
+    await _releaseAllShareClaims();
+    repository.exitChannel();
+    final webRtc = _webRtc;
+    _webRtc = null;
+    return webRtc;
+  }
+
+  Future<void> _connect(
+    String guildId,
+    String channelId,
+    VoiceRoomSnapshotDto snapshot,
+  ) async {
+    final webRtc = _webRtcServiceFactory();
+    _webRtc = webRtc;
+    repository.enterChannel(guildId: guildId, channelId: channelId);
+    repository.adoptSnapshot(snapshot);
+
+    emitIfOpen(
+      state.copyWith(
+        phase: GuildVoicePhase.active,
+        connectedAt: DateTime.now(),
+      ),
+    );
+    _applySnapshot(snapshot);
+    unawaited(soundService.playJoinCall());
+
+    try {
+      // Publish before pulling anything: Cloudflare rejects a pull on a
+      // session that has not completed its own negotiation. Subscribes that
+      // raced ahead of this were held by the transport, not dropped.
+      await webRtc.connect(guildId, channelId);
+      webRtc.setMuted(state.isMuted);
+      webRtc.setDeafened(state.isDeafened);
+      await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
+    } catch (_) {
+      emitIfOpen(state.copyWith(errorMessage: 'Could not connect audio.'));
+    }
+
+    // Re-read after publishing: anyone who started publishing while we were
+    // behind the microphone prompt is only in this second snapshot.
+    await repository.refetchSnapshot();
+    _heartbeat.start();
+  }
+
+  // ── Snapshot ──────────────────────────────────────────────────────────────
+
+  /// Adopts an authoritative snapshot wholesale and reconciles the transport
+  /// with it. Camera and speaking state are carried forward rather than read
+  /// from it: the server does not store either, so a snapshot that took them
+  /// literally would blank every camera badge on every resync.
+  void _applySnapshot(VoiceRoomSnapshotDto snapshot) {
+    final channelId = snapshot.roomId;
+    final isJoinedChannel = channelId == state.channelId;
+    final previous = {for (final p in state.rosterFor(channelId)) p.userId: p};
+
+    final participants = [
+      for (final p in snapshot.participants)
+        VoiceParticipantState.fromSnapshot(
+          p,
+          hasCamera: previous[p.userId]?.hasCamera ?? false,
+          isSpeaking: previous[p.userId]?.isSpeaking ?? false,
+        ),
+    ];
+    _setRoster(channelId, participants);
+
+    if (!isJoinedChannel) return;
+    final webRtc = _webRtc;
+    if (webRtc == null) return;
+
+    final present = participants.map((p) => p.userId).toSet();
+    for (final gone in previous.keys.where((id) => !present.contains(id))) {
+      webRtc.unsubscribeParticipant(gone);
+    }
+
+    for (final p in snapshot.publishersExcept(_myUserId)) {
+      unawaited(
+        webRtc.subscribeToParticipant(
+          userId: p.userId,
+          mediaSessionId: p.mediaSessionId!,
+          trackName: p.audioTrackName!,
+        ),
+      );
+    }
+    unawaited(_reconcileShares(snapshot));
+  }
+
+  /// Brings viewer claims and share subscriptions in line with the snapshot
+  /// and with whether the shares are on screen at all.
+  Future<void> _reconcileShares(VoiceRoomSnapshotDto snapshot) async {
+    final webRtc = _webRtc;
+    final guildId = state.guildId;
+    final channelId = state.channelId;
+    if (webRtc == null || guildId == null || channelId == null) return;
+
+    final live = <String, VoiceParticipantSnapshotDto>{};
+    for (final p in snapshot.participants) {
+      if (p.userId == _myUserId) continue;
+      for (final share in p.shares) {
+        live[share.shareId] = p;
+      }
+    }
+
+    for (final shareId in _watchedShares.toList()) {
+      if (live.containsKey(shareId) && _sharesVisible) continue;
+      await _stopWatching(shareId, ownerUserId: live[shareId]?.userId);
+    }
+
+    if (!_sharesVisible) return;
+
+    for (final entry in live.entries) {
+      final publisher = entry.value;
+      if (!publisher.isPublishing) continue;
+      final share = publisher.shares.firstWhere((s) => s.shareId == entry.key);
+      if (_watchedShares.add(entry.key)) unawaited(_claimShare(entry.key));
+      await webRtc.subscribeToShare(
+        userId: publisher.userId,
+        mediaSessionId: publisher.mediaSessionId!,
+        shareId: share.shareId,
+        trackNames: share.trackNames,
+      );
+    }
+  }
+
+  Future<void> _claimShare(String shareId) async {
+    final guildId = state.guildId;
+    final channelId = state.channelId;
+    if (guildId == null || channelId == null) return;
+    try {
+      await repository.watchShare(
+        guildId: guildId,
+        channelId: channelId,
+        shareId: shareId,
+      );
+    } catch (_) {
+      // A lost claim only understates a viewer count; the heartbeat re-posts.
+    }
+  }
+
+  Future<void> _stopWatching(String shareId, {String? ownerUserId}) async {
+    _watchedShares.remove(shareId);
+    if (ownerUserId != null) {
+      _webRtc?.unsubscribeShare(userId: ownerUserId, shareId: shareId);
+    }
+    final guildId = state.guildId;
+    final channelId = state.channelId;
+    if (guildId == null || channelId == null) return;
+    try {
+      await repository.unwatchShare(
+        guildId: guildId,
+        channelId: channelId,
+        shareId: shareId,
+      );
+    } catch (_) {
+      // Best-effort - the claim expires on its own within 90 seconds.
+    }
+  }
+
+  Future<void> _releaseAllShareClaims() async {
+    final guildId = state.guildId;
+    final channelId = state.channelId;
+    final shareIds = _watchedShares.toList();
+    _watchedShares.clear();
+    if (guildId == null || channelId == null) return;
+    for (final shareId in shareIds) {
+      try {
+        await repository.unwatchShare(
+          guildId: guildId,
+          channelId: channelId,
+          shareId: shareId,
+        );
+      } catch (_) {
+        // Best-effort.
+      }
+    }
+  }
+
+  /// Called by the voice screen as it appears and disappears.
+  void setSharesVisible(bool visible) {
+    if (_sharesVisible == visible) return;
+    _sharesVisible = visible;
+    if (state.phase == GuildVoicePhase.active) {
+      unawaited(repository.refetchSnapshot());
+    }
+  }
+
+  // ── Heartbeat ─────────────────────────────────────────────────────────────
+
+  Future<void> _sendHeartbeat() async {
+    final channelId = state.channelId;
+    if (channelId == null || state.phase != GuildVoicePhase.active) return;
+    final webRtc = _webRtc;
+    await repository.invokeHeartbeat(
+      channelId: channelId,
+      state: VoiceHeartbeatState(
+        knownInstanceId: repository.knownInstanceId,
+        knownVersion: repository.knownVersion,
+        mediaSessionId: webRtc?.mediaSessionId,
+        audioTrackName: webRtc?.publishedAudioTrackName,
+      ),
+    );
+    for (final shareId in _watchedShares) {
+      unawaited(_claimShare(shareId));
+    }
+  }
+
+  /// A reconnect is the signal that events broadcast during the gap were
+  /// dropped. One snapshot refetch puts this client back in sync.
+  void _handleConnectionStatus(RealtimeConnectionStatus status) {
+    if (status != RealtimeConnectionStatus.connected) return;
+    if (state.phase != GuildVoicePhase.active) return;
+    unawaited(repository.refetchSnapshot());
+  }
+
+  // ── Local controls ────────────────────────────────────────────────────────
+
   Future<void> toggleMute() async {
     if (state.phase != GuildVoicePhase.active) return;
     final isMuted = !state.isMuted;
     final channelId = state.channelId;
     _webRtc?.setMuted(isMuted);
-    if (channelId != null)
-      _updateParticipant(
-        channelId,
-        _myUserId,
-        (p) => p.copyWith(isMuted: isMuted),
-      );
     emitIfOpen(state.copyWith(isMuted: isMuted));
-    if (channelId != null) {
-      await repository.invokeMuteChanged(
-        channelId: channelId,
-        isMuted: isMuted,
-      );
-    }
+    if (channelId == null) return;
+    _updateParticipant(
+      channelId,
+      _myUserId,
+      (p) => p.copyWith(isMuted: isMuted),
+    );
+    await repository.invokeMuteChanged(channelId: channelId, isMuted: isMuted);
   }
 
   Future<void> toggleDeafen() async {
@@ -279,20 +484,17 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     final isDeafened = !state.isDeafened;
     final channelId = state.channelId;
     _webRtc?.setDeafened(isDeafened);
-    if (channelId != null) {
-      _updateParticipant(
-        channelId,
-        _myUserId,
-        (p) => p.copyWith(isDeafened: isDeafened),
-      );
-    }
     emitIfOpen(state.copyWith(isDeafened: isDeafened));
-    if (channelId != null) {
-      await repository.invokeDeafenChanged(
-        channelId: channelId,
-        isDeafened: isDeafened,
-      );
-    }
+    if (channelId == null) return;
+    _updateParticipant(
+      channelId,
+      _myUserId,
+      (p) => p.copyWith(isDeafened: isDeafened),
+    );
+    await repository.invokeDeafenChanged(
+      channelId: channelId,
+      isDeafened: isDeafened,
+    );
   }
 
   Future<void> toggleSpeaker() async {
@@ -302,19 +504,10 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     await _webRtc?.setSpeakerphoneOn(isSpeakerOn);
   }
 
-  /// Current local camera state - read from the roster rather than a
-  /// separate field, since the self-tile in [state.rosters] is already the
-  /// source of truth other participants' badges read from.
-  bool get isCameraOn {
-    final channelId = state.channelId;
-    if (channelId == null) return false;
-    return state
-            .rosterFor(channelId)
-            .where((p) => p.userId == _myUserId)
-            .firstOrNull
-            ?.hasCamera ??
-        false;
-  }
+  /// Current local camera state - read from the roster rather than a separate
+  /// field, since the self-tile is already the source of truth other
+  /// participants' badges read from.
+  bool get isCameraOn => _self?.hasCamera ?? false;
 
   Future<void> toggleCamera() async {
     if (state.phase != GuildVoicePhase.active) return;
@@ -343,18 +536,8 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     );
   }
 
-  /// Mirrors [isCameraOn] for screen sharing - Android only (see
-  /// `toggleScreenShare` callers, which gate the button by platform).
-  bool get isScreenSharing {
-    final channelId = state.channelId;
-    if (channelId == null) return false;
-    return state
-            .rosterFor(channelId)
-            .where((p) => p.userId == _myUserId)
-            .firstOrNull
-            ?.isStreaming ??
-        false;
-  }
+  /// Whether this device is live - screen sharing.
+  bool get isScreenSharing => _self?.isStreaming ?? false;
 
   String? _myShareId;
 
@@ -363,6 +546,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     final channelId = state.channelId;
     final webRtc = _webRtc;
     if (channelId == null || webRtc == null) return;
+
     if (isScreenSharing) {
       final shareId = _myShareId;
       _myShareId = null;
@@ -371,108 +555,72 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       } catch (_) {
         // Best-effort - fall through to update local state regardless.
       }
-      _updateParticipant(
-        channelId,
-        _myUserId,
-        (p) => p.copyWith(isStreaming: false),
-      );
-      _bumpVideoRevision();
       if (shareId != null) {
+        _updateParticipant(
+          channelId,
+          _myUserId,
+          (p) => p.withoutShare(shareId),
+        );
+        _bumpVideoRevision();
         await repository.invokeScreenShareStopped(
           channelId: channelId,
           shareId: shareId,
         );
       }
-    } else {
-      final shareId =
-          '${DateTime.now().microsecondsSinceEpoch}-${identityHashCode(this)}';
-      try {
-        await webRtc.startScreenShare(shareId);
-      } catch (_) {
-        return; // Permission denied/cancelled the system picker - bail.
-      }
-      _myShareId = shareId;
-      _updateParticipant(
-        channelId,
-        _myUserId,
-        (p) => p.copyWith(isStreaming: true),
-      );
-      _bumpVideoRevision();
-      await repository.invokeScreenShareStarted(
-        channelId: channelId,
-        shareId: shareId,
-        trackName: 'screen-$shareId',
-      );
+      return;
     }
+
+    final shareId =
+        '${DateTime.now().microsecondsSinceEpoch}-${identityHashCode(this)}';
+    try {
+      await webRtc.startScreenShare(shareId);
+    } catch (_) {
+      return; // Permission denied/cancelled the system picker - bail.
+    }
+    _myShareId = shareId;
+    _updateParticipant(
+      channelId,
+      _myUserId,
+      (p) => p.withShare(shareId, trackName: TrackNaming.screenTrack(shareId)),
+    );
+    _bumpVideoRevision();
+    await repository.invokeScreenShareStarted(
+      channelId: channelId,
+      shareId: shareId,
+    );
   }
 
   void _bumpVideoRevision() =>
       emitIfOpen(state.copyWith(videoRevision: state.videoRevision + 1));
 
-  /// Track getters for the UI - read imperatively (see [GuildVoiceState.videoRevision]
-  /// doc comment for why `MediaStreamTrack`s can't live in cubit state itself).
+  /// Track getters for the UI - read imperatively (see
+  /// [GuildVoiceState.videoRevision] for why `MediaStreamTrack`s can't live in
+  /// cubit state itself).
   MediaStreamTrack? get localVideoTrack => _webRtc?.localVideoTrack;
   MediaStreamTrack? get localScreenTrack => _webRtc?.localScreenTrack;
   MediaStreamTrack? remoteVideoTrackFor(String userId) =>
       _webRtc?.remoteVideoTrackFor(userId);
   MediaStreamTrack? remoteScreenTrackFor(String userId) =>
       _webRtc?.remoteScreenTrackFor(userId);
+  MediaStreamTrack? remoteScreenTrackForShare(String shareId) =>
+      _webRtc?.remoteScreenTrackForShare(shareId);
 
-  Future<void> _connect(
-    String guildId,
-    String channelId,
-    VoiceStateDto voiceState,
-  ) async {
-    final webRtc = _webRtcServiceFactory();
-    _webRtc = webRtc;
-
-    final rosters = Map<String, List<VoiceParticipantState>>.from(
-      state.rosters,
-    );
-    rosters[channelId] = [
-      VoiceParticipantState(
-        userId: _myUserId,
-        isMuted: state.isMuted,
-        isDeafened: state.isDeafened,
-      ),
-      for (final p in voiceState.participants)
-        if (p.userId != _myUserId) _toParticipantState(p),
-    ];
-    emitIfOpen(
-      state.copyWith(
-        phase: GuildVoicePhase.active,
-        rosters: rosters,
-        connectedAt: DateTime.now(),
-      ),
-    );
-    unawaited(soundService.playJoinCall());
-    _startHeartbeat();
-
-    try {
-      await webRtc.connect(guildId, channelId);
-      webRtc.setMuted(state.isMuted);
-      webRtc.setDeafened(state.isDeafened);
-      await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
-      for (final p in voiceState.participants) {
-        final cfSessionId = p.cfSessionId;
-        final trackName = p.audioTrackName;
-        if (p.userId != _myUserId && cfSessionId != null && trackName != null) {
-          unawaited(
-            webRtc.subscribeToParticipant(
-              userId: p.userId,
-              cfSessionId: cfSessionId,
-              trackName: trackName,
-            ),
-          );
-        }
-      }
-    } catch (_) {
-      emitIfOpen(state.copyWith(errorMessage: 'Could not connect audio.'));
-    }
-  }
+  // ── Events ────────────────────────────────────────────────────────────────
 
   void _handleEvent(GuildVoiceEvent event) {
     switch (event) {
+      case VoiceSnapshotReceived(:final snapshot):
+        _applySnapshot(snapshot);
+
+      case VoiceResyncRequested():
+        // Everything but roomGone was already answered by a refetch in the
+        // repository. roomGone means the room no longer exists: rejoining has
+        // to go back through the authorised join path, so this device tears
+        // down rather than re-asserting itself.
+        if (event.isRoomGone && event.channelId == state.channelId) {
+          unawaited(_handleRoomGone());
+        }
+
       case UserJoinedVoiceChannel(:final userId, :final channelId):
         if (userId == _myUserId) return;
         if (channelId == state.channelId) {
@@ -485,25 +633,30 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
           unawaited(soundService.playLeaveCall());
         }
         _removeFromRoster(channelId, userId);
-        if (channelId == state.channelId)
+        if (channelId == state.channelId) {
           _webRtc?.unsubscribeParticipant(userId);
+        }
 
       case VoiceParticipantJoined(
         :final userId,
         :final channelId,
-        :final cfSessionId,
+        :final mediaSessionId,
         :final audioTrackName,
       ):
-        if (userId == _myUserId ||
-            channelId != state.channelId ||
+        if (userId == _myUserId) return;
+        _upsertParticipant(
+          channelId,
+          userId,
+          (p) => p.copyWith(isPublishing: true),
+        );
+        if (channelId != state.channelId ||
             state.phase != GuildVoicePhase.active) {
           return;
         }
-        _addToRoster(channelId, VoiceParticipantState(userId: userId));
         unawaited(
           _webRtc?.subscribeToParticipant(
             userId: userId,
-            cfSessionId: cfSessionId,
+            mediaSessionId: mediaSessionId,
             trackName: audioTrackName,
           ),
         );
@@ -511,49 +664,32 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       case VoiceTrackPublished(
         :final userId,
         :final channelId,
-        :final cfSessionId,
+        :final mediaSessionId,
         :final trackName,
         :final kind,
+        :final shareId,
       ):
         if (userId == _myUserId) return;
-        final trackKind = trackKindFromWire(kind);
-        if (trackKind == null) return; // screenAudio or unknown - ignored
-        if (channelId == state.channelId) {
-          unawaited(
-            _webRtc?.subscribeToTrack(
-              userId: userId,
-              cfSessionId: cfSessionId,
-              trackName: trackName,
-              kind: trackKind,
-            ),
-          );
-          _bumpVideoRevision();
-        }
-        _updateParticipant(
-          channelId,
-          userId,
-          trackKind == TrackKind.screen
-              ? (p) => p.copyWith(isStreaming: true)
-              : (p) => p.copyWith(hasCamera: true),
+        _handleTrackPublished(
+          userId: userId,
+          channelId: channelId,
+          mediaSessionId: mediaSessionId,
+          trackName: trackName,
+          kind: trackKindFromWire(kind),
+          shareId: shareId,
         );
 
-      case VoiceTrackClosed(:final userId, :final channelId, :final trackName):
-        final trackKind = trackName == 'camera'
-            ? TrackKind.video
-            : trackName.startsWith('screen-')
-            ? TrackKind.screen
-            : null;
-        if (trackKind == null) return;
-        if (channelId == state.channelId) {
-          _webRtc?.unsubscribeTrack(userId: userId, kind: trackKind);
-          _bumpVideoRevision();
-        }
-        _updateParticipant(
-          channelId,
-          userId,
-          trackKind == TrackKind.screen
-              ? (p) => p.copyWith(isStreaming: false)
-              : (p) => p.copyWith(hasCamera: false),
+      case VoiceTrackClosed(
+        :final userId,
+        :final channelId,
+        :final trackName,
+        :final shareId,
+      ):
+        _handleTrackClosed(
+          userId: userId,
+          channelId: channelId,
+          trackName: trackName,
+          shareId: shareId,
         );
 
       case VoiceMuteChanged(:final userId, :final channelId, :final isMuted):
@@ -592,15 +728,50 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
           (p) => p.copyWith(hasCamera: isCameraOn),
         );
 
-      case VoiceScreenShareStarted(:final userId, :final channelId):
+      case VoiceSpeakingChanged(
+        :final userId,
+        :final channelId,
+        :final isSpeaking,
+      ):
         _updateParticipant(
           channelId,
           userId,
-          (p) => p.copyWith(isStreaming: true),
+          (p) => p.copyWith(isSpeaking: isSpeaking),
         );
 
-      case VoiceScreenShareStopped():
-        break; // Teardown rides on VoiceTrackClosed, same as Alpine.
+      case VoiceScreenShareStarted(
+        :final userId,
+        :final channelId,
+        :final shareId,
+      ):
+        _upsertParticipant(channelId, userId, (p) => p.withShare(shareId));
+
+      case VoiceScreenShareStopped(
+        :final userId,
+        :final channelId,
+        :final shareId,
+      ):
+        _updateParticipant(channelId, userId, (p) => p.withoutShare(shareId));
+        if (channelId != state.channelId) return;
+        _webRtc?.unsubscribeShare(userId: userId, shareId: shareId);
+        _bumpVideoRevision();
+        if (_watchedShares.contains(shareId)) {
+          unawaited(_stopWatching(shareId));
+        }
+
+      case VoiceShareViewersChanged(
+        :final channelId,
+        :final shareId,
+        :final viewerIds,
+      ):
+        final roster = state.rosters[channelId];
+        if (roster == null) return;
+        _setRoster(channelId, [
+          for (final p in roster)
+            p.shareById(shareId) == null
+                ? p
+                : p.withShareViewers(shareId, viewerIds),
+        ]);
 
       case VoiceMovedToChannel(:final channelId, :final guildId):
         if (channelId != state.channelId) {
@@ -616,32 +787,143 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
 
       case VoiceKickedByOtherDevice(:final channelId):
         if (channelId != state.channelId) return;
-        _stopHeartbeat();
-        final webRtc = _webRtc;
-        _webRtc = null;
-        final rosters = Map<String, List<VoiceParticipantState>>.from(
-          state.rosters,
+        unawaited(
+          _tearDownLocally('You joined this channel from another device.'),
         );
-        rosters[channelId] = (rosters[channelId] ?? const [])
-            .where((p) => p.userId != _myUserId)
-            .toList();
-        emitIfOpen(
-          GuildVoiceState(
-            rosters: rosters,
-            errorMessage: 'You joined this channel from another device.',
-          ),
-        );
-        unawaited(webRtc?.disconnect());
     }
   }
 
-  VoiceParticipantState _toParticipantState(VoiceParticipantDto p) =>
-      VoiceParticipantState(
-        userId: p.userId,
-        isMuted: p.isSelfMuted || p.isServerMuted,
-        isDeafened: p.isSelfDeafened || p.isServerDeafened,
-        isStreaming: p.isStreaming,
-      );
+  Future<void> _handleRoomGone() =>
+      _tearDownLocally('Voice channel is no longer available.');
+
+  Future<void> _tearDownLocally(String message) async {
+    final channelId = state.channelId;
+    final webRtc = await _teardown();
+    final rosters = Map<String, List<VoiceParticipantState>>.from(
+      state.rosters,
+    );
+    if (channelId != null) {
+      rosters[channelId] = (rosters[channelId] ?? const [])
+          .where((p) => p.userId != _myUserId)
+          .toList();
+    }
+    emitIfOpen(GuildVoiceState(rosters: rosters, errorMessage: message));
+    await webRtc?.disconnect();
+  }
+
+  void _handleTrackPublished({
+    required String userId,
+    required String channelId,
+    required String mediaSessionId,
+    required String trackName,
+    required TrackKind kind,
+    required String? shareId,
+  }) {
+    final isJoinedChannel = channelId == state.channelId;
+    switch (kind) {
+      case TrackKind.audio:
+        // The microphone is subscribed via ParticipantJoined, the event that
+        // guarantees the track exists.
+        break;
+      case TrackKind.video:
+        _updateParticipant(
+          channelId,
+          userId,
+          (p) => p.copyWith(hasCamera: true),
+        );
+        if (!isJoinedChannel) return;
+        unawaited(
+          _webRtc?.subscribeToTrack(
+            userId: userId,
+            mediaSessionId: mediaSessionId,
+            trackName: trackName,
+            kind: kind,
+          ),
+        );
+        _bumpVideoRevision();
+      case TrackKind.screen:
+      case TrackKind.screenAudio:
+        if (shareId == null) return;
+        _upsertParticipant(
+          channelId,
+          userId,
+          (p) => p.withShare(shareId, trackName: trackName),
+        );
+        if (!isJoinedChannel || !_sharesVisible) return;
+        if (_watchedShares.add(shareId)) unawaited(_claimShare(shareId));
+        unawaited(
+          _webRtc?.subscribeToTrack(
+            userId: userId,
+            mediaSessionId: mediaSessionId,
+            trackName: trackName,
+            kind: kind,
+            shareId: shareId,
+          ),
+        );
+        _bumpVideoRevision();
+    }
+  }
+
+  void _handleTrackClosed({
+    required String userId,
+    required String channelId,
+    required String trackName,
+    required String? shareId,
+  }) {
+    final descriptor = TrackNaming.describe(trackName);
+    final resolvedShareId = shareId ?? descriptor.shareId;
+    final isJoinedChannel = channelId == state.channelId;
+    switch (descriptor.kind) {
+      case TrackKind.audio:
+        _updateParticipant(
+          channelId,
+          userId,
+          (p) => p.copyWith(isPublishing: false),
+        );
+        if (isJoinedChannel) {
+          _webRtc?.unsubscribeTrack(userId: userId, kind: TrackKind.audio);
+        }
+      case TrackKind.video:
+        _updateParticipant(
+          channelId,
+          userId,
+          (p) => p.copyWith(hasCamera: false),
+        );
+        if (!isJoinedChannel) return;
+        _webRtc?.unsubscribeTrack(userId: userId, kind: TrackKind.video);
+        _bumpVideoRevision();
+      case TrackKind.screen:
+      case TrackKind.screenAudio:
+        if (resolvedShareId == null) return;
+        if (isJoinedChannel) {
+          _webRtc?.unsubscribeTrack(
+            userId: userId,
+            kind: descriptor.kind,
+            shareId: resolvedShareId,
+          );
+        }
+        // Only the video half ending retires the share; a share can lose its
+        // audio track and keep running.
+        if (descriptor.kind != TrackKind.screen) return;
+        _updateParticipant(
+          channelId,
+          userId,
+          (p) => p.withoutShare(resolvedShareId),
+        );
+        if (isJoinedChannel) _bumpVideoRevision();
+    }
+  }
+
+  // ── Roster helpers ────────────────────────────────────────────────────────
+
+  VoiceParticipantState? get _self {
+    final channelId = state.channelId;
+    if (channelId == null) return null;
+    return state
+        .rosterFor(channelId)
+        .where((p) => p.userId == _myUserId)
+        .firstOrNull;
+  }
 
   void _addToRoster(String channelId, VoiceParticipantState participant) {
     final list = List<VoiceParticipantState>.from(
@@ -671,6 +953,26 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     ]);
   }
 
+  /// Updates a participant, adding them when the roster has not heard of them
+  /// yet - a live event can name someone the last snapshot did not.
+  void _upsertParticipant(
+    String channelId,
+    String userId,
+    VoiceParticipantState Function(VoiceParticipantState) update,
+  ) {
+    final list = state.rosters[channelId] ?? const <VoiceParticipantState>[];
+    if (!list.any((p) => p.userId == userId)) {
+      _setRoster(channelId, [
+        ...list,
+        update(VoiceParticipantState(userId: userId)),
+      ]);
+      return;
+    }
+    _setRoster(channelId, [
+      for (final p in list) p.userId == userId ? update(p) : p,
+    ]);
+  }
+
   void _setRoster(String channelId, List<VoiceParticipantState> list) {
     final rosters = Map<String, List<VoiceParticipantState>>.from(
       state.rosters,
@@ -679,23 +981,11 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     emitIfOpen(state.copyWith(rosters: rosters));
   }
 
-  void _startHeartbeat() {
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => repository.invokeHeartbeat(),
-    );
-  }
-
-  void _stopHeartbeat() {
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = null;
-  }
-
   @override
   Future<void> close() {
-    _stopHeartbeat();
+    _heartbeat.stop();
     unawaited(_sub.cancel());
+    unawaited(_connectionSub.cancel());
     return super.close();
   }
 }

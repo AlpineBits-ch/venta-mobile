@@ -27,6 +27,26 @@ enum MessageType {
   guildMemberJoin,
   @JsonValue('GuildMemberLeave')
   guildMemberLeave,
+
+  /// A call somebody answered. [MessageDto.content] is the duration in whole
+  /// seconds as plain text, e.g. `"184"`; the author is whoever placed it.
+  @JsonValue('CallEnded')
+  callEnded,
+
+  /// A call that ended with nobody but the caller ever connecting - a ring
+  /// timeout, a decline, or an unanswered cancel. Content is empty, and the
+  /// author being the caller is what lets "you missed a call from X" render
+  /// without a second lookup.
+  @JsonValue('CallMissed')
+  callMissed,
+
+  /// A type this build has never heard of.
+  ///
+  /// Not decoration: without it, one unrecognised value throws out of
+  /// `fromJson` and takes the *whole message list* with it, so a server that
+  /// adds a type turns every channel blank. That is exactly how the call
+  /// history types above would have landed.
+  unknown,
 }
 
 /// Mirrors `MemberType` - bots and humans are both just users, distinguished
@@ -64,7 +84,9 @@ sealed class MessageDto with _$MessageDto {
     @Default(<MessageReactionDto>[]) List<MessageReactionDto> reactions,
     @Default(MessageEncryptionState.plain)
     MessageEncryptionState encryptionState,
-    @Default(MessageType.message) MessageType type,
+    @Default(MessageType.message)
+    @JsonKey(unknownEnumValue: MessageType.unknown)
+    MessageType type,
     @Default(MessageAuthorType.standard)
     @JsonKey(unknownEnumValue: MessageAuthorType.standard)
     MessageAuthorType authorIdType,

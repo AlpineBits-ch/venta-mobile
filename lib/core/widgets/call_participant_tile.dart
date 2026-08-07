@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'live_badge.dart';
 import 'profile_resolver.dart';
 import 'user_avatar.dart';
 
@@ -13,6 +14,8 @@ class CallParticipantTile extends StatelessWidget {
     required this.userId,
     required this.isMuted,
     this.isSpeaking = false,
+    this.isStreaming = false,
+    this.viewerCount = 0,
   });
 
   final String userId;
@@ -21,6 +24,14 @@ class CallParticipantTile extends StatelessWidget {
   /// Draws the talking ring. Defaults to false so the guild-voice roster,
   /// which has no speaking events of its own yet, is unaffected.
   final bool isSpeaking;
+
+  /// Draws the "LIVE" flag - this participant has at least one screen share
+  /// running.
+  final bool isStreaming;
+
+  /// Watchers across this participant's shares, shown inside the LIVE flag.
+  /// Ignored unless [isStreaming].
+  final int viewerCount;
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +72,14 @@ class CallParticipantTile extends StatelessWidget {
                     color: Colors.white,
                   ),
                 ),
+              ),
+            // Bottom-left, because bottom-right already belongs to the mute
+            // badge and the two can be true at once.
+            if (isStreaming)
+              Positioned(
+                left: -2,
+                bottom: -2,
+                child: LiveBadge(viewerCount: viewerCount),
               ),
           ],
         ),

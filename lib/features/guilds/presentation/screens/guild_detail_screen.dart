@@ -9,6 +9,7 @@ import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/live_badge.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -1124,6 +1125,12 @@ class _VoiceChannelTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // No viewer count here - the row is already narrow enough
+                    // that a long name is ellipsised.
+                    if (participant.isStreaming) ...[
+                      const LiveBadge(),
+                      const SizedBox(width: AppSpacing.xs),
+                    ],
                     if (participant.isMuted)
                       Icon(
                         Icons.mic_off,

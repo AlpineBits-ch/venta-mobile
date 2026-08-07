@@ -22,8 +22,30 @@ import '../../bloc/guild_voice_cubit.dart';
 ///
 /// Deliberately always-dark regardless of the app's light/dark theme
 /// setting - see the matching note in `CallScreen`.
-class GuildVoiceScreen extends StatelessWidget {
+class GuildVoiceScreen extends StatefulWidget {
   const GuildVoiceScreen({super.key});
+
+  @override
+  State<GuildVoiceScreen> createState() => _GuildVoiceScreenState();
+}
+
+class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
+  /// Screen shares are watched only while this screen is on top. Guild voice
+  /// is explicitly a background activity - the user is expected to browse away
+  /// and stay connected - so the viewer claim and the subscription behind it
+  /// are held for the moments the stream is actually being looked at, and
+  /// released the rest of the time.
+  @override
+  void initState() {
+    super.initState();
+    getIt<GuildVoiceCubit>().setSharesVisible(true);
+  }
+
+  @override
+  void dispose() {
+    getIt<GuildVoiceCubit>().setSharesVisible(false);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,6 +140,11 @@ class GuildVoiceScreen extends StatelessWidget {
                                     CallParticipantTile(
                                       userId: participant.userId,
                                       isMuted: participant.isMuted,
+                                      isStreaming: participant.isStreaming,
+                                      viewerCount: participant.shares.fold(
+                                        0,
+                                        (n, s) => n + s.viewerCount,
+                                      ),
                                     ),
                               ],
                             ),

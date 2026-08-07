@@ -7,6 +7,7 @@ import '../../features/guilds/data/guild_repository.dart';
 import '../../features/guilds/data/models/guild_dto.dart';
 import '../../features/guilds/data/models/guild_template_dto.dart';
 import '../../features/guilds/presentation/screens/create_guild_screen.dart';
+import '../../features/guild_voice/bloc/guild_voice_activity_cubit.dart';
 import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
 import '../../features/guild_voice/presentation/widgets/voice_status_bar.dart';
 import '../../features/mls/presentation/widgets/recovery_code_banner.dart';
@@ -320,28 +321,47 @@ class _AppShellState extends State<AppShell> {
                   ),
                 ),
                 Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.only(bottom: bannerInset),
-                    children: [
-                      for (final guild in _guilds)
-                        ServerRailIcon(
-                          selected: guild.id == currentGuildId,
-                          label: guild.name.isNotEmpty
-                              ? guild.name[0].toUpperCase()
-                              : '?',
-                          imageUrl: guild.iconUrl,
-                          backgroundColor: guild.id == currentGuildId
-                              ? theme.colorScheme.primary
-                              : null,
-                          onTap: () =>
-                              context.go(RoutePaths.serverPath(guild.id)),
+                  // Rebuilt on voice activity so a server someone joins voice
+                  // in lights up without the user opening it - the events
+                  // behind this reach every member of a guild, not just the
+                  // room, which is what makes it possible from out here.
+                  child:
+                      BlocBuilder<
+                        GuildVoiceActivityCubit,
+                        GuildVoiceActivityState
+                      >(
+                        bloc: getIt<GuildVoiceActivityCubit>(),
+                        builder: (context, voice) => ListView(
+                          padding: EdgeInsets.only(bottom: bannerInset),
+                          children: [
+                            for (final guild in _guilds)
+                              ServerRailIcon(
+                                selected: guild.id == currentGuildId,
+                                label: guild.name.isNotEmpty
+                                    ? guild.name[0].toUpperCase()
+                                    : '?',
+                                imageUrl: guild.iconUrl,
+                                backgroundColor: guild.id == currentGuildId
+                                    ? theme.colorScheme.primary
+                                    : null,
+                                voiceParticipantCount:
+                                    voice
+                                        .forGuild(guild.id)
+                                        ?.participantCount ??
+                                    0,
+                                voiceHasStream:
+                                    voice.forGuild(guild.id)?.hasStream ??
+                                    false,
+                                onTap: () =>
+                                    context.go(RoutePaths.serverPath(guild.id)),
+                              ),
+                            ServerRailIcon(
+                              icon: Icons.add,
+                              onTap: _showAddServerSheet,
+                            ),
+                          ],
                         ),
-                      ServerRailIcon(
-                        icon: Icons.add,
-                        onTap: _showAddServerSheet,
                       ),
-                    ],
-                  ),
                 ),
                 // No self-avatar down here any more - it moved into the
                 // full-width `UserBanner` floating over the bottom of the

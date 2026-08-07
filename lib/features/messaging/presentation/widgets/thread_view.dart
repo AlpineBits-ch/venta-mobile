@@ -433,9 +433,7 @@ class _ThreadViewState extends State<ThreadView> {
                 : MessageContentCodec.decode(m.content),
             sentAt: m.createdAt,
             reported: m.id == message.id,
-            attachments: [
-              for (final a in m.attachments) _attachmentSummary(a),
-            ],
+            attachments: [for (final a in m.attachments) _attachmentSummary(a)],
           ),
     ];
 
@@ -1241,8 +1239,13 @@ class _ThreadViewState extends State<ThreadView> {
 
                         if (message.type == MessageType.system ||
                             message.type == MessageType.guildMemberJoin ||
-                            message.type == MessageType.guildMemberLeave) {
-                          return _SystemMessageRow(message: message);
+                            message.type == MessageType.guildMemberLeave ||
+                            message.type == MessageType.callEnded ||
+                            message.type == MessageType.callMissed) {
+                          return _SystemMessageRow(
+                            message: message,
+                            myUserId: widget.myUserId,
+                          );
                         }
 
                         final isMe = message.authorId == widget.myUserId;
@@ -2355,13 +2358,21 @@ class _ReplyQuoteRow extends StatelessWidget {
   }
 }
 
-/// Centered flavor-text row for join/leave/generic system events - no
+/// Centered flavor-text row for join/leave/call/generic system events - no
 /// avatar, no reactions, no long-press actions, matching desktop's
 /// visually-distinct `SystemMessageComponent`.
 class _SystemMessageRow extends StatelessWidget {
-  const _SystemMessageRow({required this.message});
+  const _SystemMessageRow({required this.message, required this.myUserId});
 
   final MessageDto message;
+
+  /// Only the call rows use it, to say "you called" rather than naming the
+  /// person reading the line.
+  final String myUserId;
+
+  bool get _isCall =>
+      message.type == MessageType.callEnded ||
+      message.type == MessageType.callMissed;
 
   @override
   Widget build(BuildContext context) {
@@ -2370,29 +2381,87 @@ class _SystemMessageRow extends StatelessWidget {
       color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
       fontStyle: FontStyle.italic,
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Center(
-        child: message.type == MessageType.system
-            ? Text(
-                MessageContentCodec.decode(message.content),
-                style: style,
-                textAlign: TextAlign.center,
-              )
-            : ProfileResolver(
-                userId: message.authorId,
-                builder: (context, profile) => Text(
-                  systemJoinLeaveText(
-                    leaving: message.type == MessageType.guildMemberLeave,
-                    variant: message.systemMessageVariant,
-                    userName: profile?.userName ?? '…',
-                  ),
+
+    if (message.type == MessageType.system) {
+      return _centered(
+        Text(
+          MessageContentCodec.decode(message.content),
+          style: style,
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return _centered(
+      ProfileResolver(
+        userId: message.authorId,
+        builder: (context, profile) {
+          final userName = profile?.userName ?? '…';
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_isCall) ...[
+                Icon(
+                  message.type == MessageType.callMissed
+                      ? Icons.phone_missed
+                      : Icons.call,
+                  size: 14,
+                  color: message.type == MessageType.callMissed
+                      ? theme.colorScheme.error
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+              ],
+              Flexible(
+                child: Text(
+                  _isCall
+                      ? _callText(userName)
+                      : systemJoinLeaveText(
+                          leaving: message.type == MessageType.guildMemberLeave,
+                          variant: message.systemMessageVariant,
+                          userName: userName,
+                        ),
                   style: style,
                   textAlign: TextAlign.center,
                 ),
               ),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  Widget _centered(Widget child) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Center(child: child),
+  );
+
+  /// The author of a call row is always whoever *placed* the call, which is
+  /// what makes "you missed a call from X" answerable without a second lookup.
+  String _callText(String userName) {
+    final caller = message.authorId == myUserId ? 'You' : userName;
+    if (message.type == MessageType.callMissed) {
+      return message.authorId == myUserId
+          ? 'You called - no answer'
+          : 'Missed call from $userName';
+    }
+    final duration = _formatDuration(
+      MessageContentCodec.decode(message.content),
+    );
+    return duration == null ? '$caller called' : '$caller called - $duration';
+  }
+
+  /// Content is whole seconds as plain text. Anything else - an empty body, a
+  /// value from a server that changed the format - renders as a bare "called"
+  /// rather than as a broken duration.
+  String? _formatDuration(String raw) {
+    final seconds = int.tryParse(raw.trim());
+    if (seconds == null || seconds < 0) return null;
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    if (minutes == 0) return '${remainder}s';
+    return '${minutes}m ${remainder}s';
   }
 }
 

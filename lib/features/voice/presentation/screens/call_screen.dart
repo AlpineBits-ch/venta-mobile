@@ -28,8 +28,35 @@ import '../../bloc/call_cubit.dart';
 /// full-screen image viewer) - text/icon colors below are the named
 /// `AppColors` dark-surface tokens rather than `colorScheme.onSurface`,
 /// which would invert unreadably if the app theme were light.
-class CallScreen extends StatelessWidget {
+class CallScreen extends StatefulWidget {
   const CallScreen({super.key});
+
+  @override
+  State<CallScreen> createState() => _CallScreenState();
+}
+
+class _CallScreenState extends State<CallScreen> {
+  CallCubit? _cubit;
+
+  /// Screen shares are watched only while this screen is mounted. Watching is
+  /// announced explicitly rather than inferred from the subscription, because
+  /// a subscribe has no teardown a client is obliged to send - and an
+  /// unwatched stream that stays pulled costs the publisher egress for a
+  /// picture nobody is looking at.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final cubit = context.read<CallCubit>();
+    if (identical(cubit, _cubit)) return;
+    _cubit?.setSharesVisible(false);
+    _cubit = cubit..setSharesVisible(true);
+  }
+
+  @override
+  void dispose() {
+    _cubit?.setSharesVisible(false);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -218,6 +245,11 @@ class _ActiveCallView extends StatelessWidget {
                           userId: participant.userId,
                           isMuted: participant.isMuted,
                           isSpeaking: participant.isSpeaking,
+                          isStreaming: participant.isStreaming,
+                          viewerCount: participant.shares.fold(
+                            0,
+                            (n, s) => n + s.viewerCount,
+                          ),
                         ),
                 ],
               ),
