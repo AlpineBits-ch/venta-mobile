@@ -459,6 +459,7 @@ class HouseholdApi {
     required String payerUserId,
     required DateTime occurredAt,
     SplitKind splitKind = SplitKind.equal,
+    ExpenseCategory category = ExpenseCategory.uncategorized,
     List<({String userId, int shareValue})> shares = const [],
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
@@ -469,6 +470,7 @@ class HouseholdApi {
         'payerUserId': payerUserId,
         'occurredAt': _iso(occurredAt),
         'splitKind': splitKind.wireValue,
+        'category': category.wireValue,
         'shares': [
           for (final share in shares)
             {'userId': share.userId, 'shareValue': share.shareValue},
@@ -485,6 +487,7 @@ class HouseholdApi {
     String? payerUserId,
     DateTime? occurredAt,
     SplitKind? splitKind,
+    ExpenseCategory? category,
     List<({String userId, int shareValue})>? shares,
   }) async {
     final response = await client.dio.patch<Map<String, dynamic>>(
@@ -495,6 +498,7 @@ class HouseholdApi {
         if (payerUserId != null) 'payerUserId': payerUserId,
         if (occurredAt != null) 'occurredAt': _iso(occurredAt),
         if (splitKind != null) 'splitKind': splitKind.wireValue,
+        if (category != null) 'category': category.wireValue,
         if (shares != null)
           'shares': [
             for (final share in shares)

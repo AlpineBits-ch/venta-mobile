@@ -320,7 +320,16 @@ mixin _$ChoreOccurrenceDto {
  String get id; String get choreId; String get channelId;/// Denormalized off the chore so a board can render without joining.
  String get title; DateTime get dueAt; String get assignedUserId;/// Snapshot at generation time - editing the chore's weight doesn't
 /// retroactively repay past turns.
- int get effortMinutes; DateTime? get completedAt; String? get completedByUserId; DateTime? get skippedAt; bool get isOverdue;
+ int get effortMinutes; DateTime? get completedAt; String? get completedByUserId; DateTime? get skippedAt; bool get isOverdue;/// When somebody last nudged about this, or null if nobody has.
+///
+/// **It never says who**, here or anywhere downstream, and that is the
+/// design rather than an omission: the whole value of a nudge is that the
+/// app does the asking so nobody in the house has to be the one who nags.
+/// Attributing it puts the social cost straight back.
+///
+/// Read it to grey the button. A second nudge inside 12 hours is a `409`,
+/// and offering an action that cannot work is worse than not offering it.
+ DateTime? get nudgedAt;
 /// Create a copy of ChoreOccurrenceDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -333,16 +342,16 @@ $ChoreOccurrenceDtoCopyWith<ChoreOccurrenceDto> get copyWith => _$ChoreOccurrenc
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChoreOccurrenceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.choreId, choreId) || other.choreId == choreId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.title, title) || other.title == title)&&(identical(other.dueAt, dueAt) || other.dueAt == dueAt)&&(identical(other.assignedUserId, assignedUserId) || other.assignedUserId == assignedUserId)&&(identical(other.effortMinutes, effortMinutes) || other.effortMinutes == effortMinutes)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt)&&(identical(other.completedByUserId, completedByUserId) || other.completedByUserId == completedByUserId)&&(identical(other.skippedAt, skippedAt) || other.skippedAt == skippedAt)&&(identical(other.isOverdue, isOverdue) || other.isOverdue == isOverdue));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChoreOccurrenceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.choreId, choreId) || other.choreId == choreId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.title, title) || other.title == title)&&(identical(other.dueAt, dueAt) || other.dueAt == dueAt)&&(identical(other.assignedUserId, assignedUserId) || other.assignedUserId == assignedUserId)&&(identical(other.effortMinutes, effortMinutes) || other.effortMinutes == effortMinutes)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt)&&(identical(other.completedByUserId, completedByUserId) || other.completedByUserId == completedByUserId)&&(identical(other.skippedAt, skippedAt) || other.skippedAt == skippedAt)&&(identical(other.isOverdue, isOverdue) || other.isOverdue == isOverdue)&&(identical(other.nudgedAt, nudgedAt) || other.nudgedAt == nudgedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,choreId,channelId,title,dueAt,assignedUserId,effortMinutes,completedAt,completedByUserId,skippedAt,isOverdue);
+int get hashCode => Object.hash(runtimeType,id,choreId,channelId,title,dueAt,assignedUserId,effortMinutes,completedAt,completedByUserId,skippedAt,isOverdue,nudgedAt);
 
 @override
 String toString() {
-  return 'ChoreOccurrenceDto(id: $id, choreId: $choreId, channelId: $channelId, title: $title, dueAt: $dueAt, assignedUserId: $assignedUserId, effortMinutes: $effortMinutes, completedAt: $completedAt, completedByUserId: $completedByUserId, skippedAt: $skippedAt, isOverdue: $isOverdue)';
+  return 'ChoreOccurrenceDto(id: $id, choreId: $choreId, channelId: $channelId, title: $title, dueAt: $dueAt, assignedUserId: $assignedUserId, effortMinutes: $effortMinutes, completedAt: $completedAt, completedByUserId: $completedByUserId, skippedAt: $skippedAt, isOverdue: $isOverdue, nudgedAt: $nudgedAt)';
 }
 
 
@@ -353,7 +362,7 @@ abstract mixin class $ChoreOccurrenceDtoCopyWith<$Res>  {
   factory $ChoreOccurrenceDtoCopyWith(ChoreOccurrenceDto value, $Res Function(ChoreOccurrenceDto) _then) = _$ChoreOccurrenceDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String choreId, String channelId, String title, DateTime dueAt, String assignedUserId, int effortMinutes, DateTime? completedAt, String? completedByUserId, DateTime? skippedAt, bool isOverdue
+ String id, String choreId, String channelId, String title, DateTime dueAt, String assignedUserId, int effortMinutes, DateTime? completedAt, String? completedByUserId, DateTime? skippedAt, bool isOverdue, DateTime? nudgedAt
 });
 
 
@@ -370,7 +379,7 @@ class _$ChoreOccurrenceDtoCopyWithImpl<$Res>
 
 /// Create a copy of ChoreOccurrenceDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? choreId = null,Object? channelId = null,Object? title = null,Object? dueAt = null,Object? assignedUserId = null,Object? effortMinutes = null,Object? completedAt = freezed,Object? completedByUserId = freezed,Object? skippedAt = freezed,Object? isOverdue = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? choreId = null,Object? channelId = null,Object? title = null,Object? dueAt = null,Object? assignedUserId = null,Object? effortMinutes = null,Object? completedAt = freezed,Object? completedByUserId = freezed,Object? skippedAt = freezed,Object? isOverdue = null,Object? nudgedAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,choreId: null == choreId ? _self.choreId : choreId // ignore: cast_nullable_to_non_nullable
@@ -383,7 +392,8 @@ as int,completedAt: freezed == completedAt ? _self.completedAt : completedAt // 
 as DateTime?,completedByUserId: freezed == completedByUserId ? _self.completedByUserId : completedByUserId // ignore: cast_nullable_to_non_nullable
 as String?,skippedAt: freezed == skippedAt ? _self.skippedAt : skippedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,isOverdue: null == isOverdue ? _self.isOverdue : isOverdue // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,nudgedAt: freezed == nudgedAt ? _self.nudgedAt : nudgedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 
@@ -465,10 +475,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String choreId,  String channelId,  String title,  DateTime dueAt,  String assignedUserId,  int effortMinutes,  DateTime? completedAt,  String? completedByUserId,  DateTime? skippedAt,  bool isOverdue)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String choreId,  String channelId,  String title,  DateTime dueAt,  String assignedUserId,  int effortMinutes,  DateTime? completedAt,  String? completedByUserId,  DateTime? skippedAt,  bool isOverdue,  DateTime? nudgedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ChoreOccurrenceDto() when $default != null:
-return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_that.assignedUserId,_that.effortMinutes,_that.completedAt,_that.completedByUserId,_that.skippedAt,_that.isOverdue);case _:
+return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_that.assignedUserId,_that.effortMinutes,_that.completedAt,_that.completedByUserId,_that.skippedAt,_that.isOverdue,_that.nudgedAt);case _:
   return orElse();
 
 }
@@ -486,10 +496,10 @@ return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String choreId,  String channelId,  String title,  DateTime dueAt,  String assignedUserId,  int effortMinutes,  DateTime? completedAt,  String? completedByUserId,  DateTime? skippedAt,  bool isOverdue)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String choreId,  String channelId,  String title,  DateTime dueAt,  String assignedUserId,  int effortMinutes,  DateTime? completedAt,  String? completedByUserId,  DateTime? skippedAt,  bool isOverdue,  DateTime? nudgedAt)  $default,) {final _that = this;
 switch (_that) {
 case _ChoreOccurrenceDto():
-return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_that.assignedUserId,_that.effortMinutes,_that.completedAt,_that.completedByUserId,_that.skippedAt,_that.isOverdue);}
+return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_that.assignedUserId,_that.effortMinutes,_that.completedAt,_that.completedByUserId,_that.skippedAt,_that.isOverdue,_that.nudgedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -503,10 +513,10 @@ return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String choreId,  String channelId,  String title,  DateTime dueAt,  String assignedUserId,  int effortMinutes,  DateTime? completedAt,  String? completedByUserId,  DateTime? skippedAt,  bool isOverdue)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String choreId,  String channelId,  String title,  DateTime dueAt,  String assignedUserId,  int effortMinutes,  DateTime? completedAt,  String? completedByUserId,  DateTime? skippedAt,  bool isOverdue,  DateTime? nudgedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _ChoreOccurrenceDto() when $default != null:
-return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_that.assignedUserId,_that.effortMinutes,_that.completedAt,_that.completedByUserId,_that.skippedAt,_that.isOverdue);case _:
+return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_that.assignedUserId,_that.effortMinutes,_that.completedAt,_that.completedByUserId,_that.skippedAt,_that.isOverdue,_that.nudgedAt);case _:
   return null;
 
 }
@@ -518,7 +528,7 @@ return $default(_that.id,_that.choreId,_that.channelId,_that.title,_that.dueAt,_
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _ChoreOccurrenceDto implements ChoreOccurrenceDto {
-  const _ChoreOccurrenceDto({required this.id, required this.choreId, required this.channelId, this.title = '', required this.dueAt, this.assignedUserId = '', this.effortMinutes = 0, this.completedAt, this.completedByUserId, this.skippedAt, this.isOverdue = false});
+  const _ChoreOccurrenceDto({required this.id, required this.choreId, required this.channelId, this.title = '', required this.dueAt, this.assignedUserId = '', this.effortMinutes = 0, this.completedAt, this.completedByUserId, this.skippedAt, this.isOverdue = false, this.nudgedAt});
   factory _ChoreOccurrenceDto.fromJson(Map<String, dynamic> json) => _$ChoreOccurrenceDtoFromJson(json);
 
 @override final  String id;
@@ -535,6 +545,16 @@ class _ChoreOccurrenceDto implements ChoreOccurrenceDto {
 @override final  String? completedByUserId;
 @override final  DateTime? skippedAt;
 @override@JsonKey() final  bool isOverdue;
+/// When somebody last nudged about this, or null if nobody has.
+///
+/// **It never says who**, here or anywhere downstream, and that is the
+/// design rather than an omission: the whole value of a nudge is that the
+/// app does the asking so nobody in the house has to be the one who nags.
+/// Attributing it puts the social cost straight back.
+///
+/// Read it to grey the button. A second nudge inside 12 hours is a `409`,
+/// and offering an action that cannot work is worse than not offering it.
+@override final  DateTime? nudgedAt;
 
 /// Create a copy of ChoreOccurrenceDto
 /// with the given fields replaced by the non-null parameter values.
@@ -549,16 +569,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChoreOccurrenceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.choreId, choreId) || other.choreId == choreId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.title, title) || other.title == title)&&(identical(other.dueAt, dueAt) || other.dueAt == dueAt)&&(identical(other.assignedUserId, assignedUserId) || other.assignedUserId == assignedUserId)&&(identical(other.effortMinutes, effortMinutes) || other.effortMinutes == effortMinutes)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt)&&(identical(other.completedByUserId, completedByUserId) || other.completedByUserId == completedByUserId)&&(identical(other.skippedAt, skippedAt) || other.skippedAt == skippedAt)&&(identical(other.isOverdue, isOverdue) || other.isOverdue == isOverdue));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChoreOccurrenceDto&&(identical(other.id, id) || other.id == id)&&(identical(other.choreId, choreId) || other.choreId == choreId)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.title, title) || other.title == title)&&(identical(other.dueAt, dueAt) || other.dueAt == dueAt)&&(identical(other.assignedUserId, assignedUserId) || other.assignedUserId == assignedUserId)&&(identical(other.effortMinutes, effortMinutes) || other.effortMinutes == effortMinutes)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt)&&(identical(other.completedByUserId, completedByUserId) || other.completedByUserId == completedByUserId)&&(identical(other.skippedAt, skippedAt) || other.skippedAt == skippedAt)&&(identical(other.isOverdue, isOverdue) || other.isOverdue == isOverdue)&&(identical(other.nudgedAt, nudgedAt) || other.nudgedAt == nudgedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,choreId,channelId,title,dueAt,assignedUserId,effortMinutes,completedAt,completedByUserId,skippedAt,isOverdue);
+int get hashCode => Object.hash(runtimeType,id,choreId,channelId,title,dueAt,assignedUserId,effortMinutes,completedAt,completedByUserId,skippedAt,isOverdue,nudgedAt);
 
 @override
 String toString() {
-  return 'ChoreOccurrenceDto(id: $id, choreId: $choreId, channelId: $channelId, title: $title, dueAt: $dueAt, assignedUserId: $assignedUserId, effortMinutes: $effortMinutes, completedAt: $completedAt, completedByUserId: $completedByUserId, skippedAt: $skippedAt, isOverdue: $isOverdue)';
+  return 'ChoreOccurrenceDto(id: $id, choreId: $choreId, channelId: $channelId, title: $title, dueAt: $dueAt, assignedUserId: $assignedUserId, effortMinutes: $effortMinutes, completedAt: $completedAt, completedByUserId: $completedByUserId, skippedAt: $skippedAt, isOverdue: $isOverdue, nudgedAt: $nudgedAt)';
 }
 
 
@@ -569,7 +589,7 @@ abstract mixin class _$ChoreOccurrenceDtoCopyWith<$Res> implements $ChoreOccurre
   factory _$ChoreOccurrenceDtoCopyWith(_ChoreOccurrenceDto value, $Res Function(_ChoreOccurrenceDto) _then) = __$ChoreOccurrenceDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String choreId, String channelId, String title, DateTime dueAt, String assignedUserId, int effortMinutes, DateTime? completedAt, String? completedByUserId, DateTime? skippedAt, bool isOverdue
+ String id, String choreId, String channelId, String title, DateTime dueAt, String assignedUserId, int effortMinutes, DateTime? completedAt, String? completedByUserId, DateTime? skippedAt, bool isOverdue, DateTime? nudgedAt
 });
 
 
@@ -586,7 +606,7 @@ class __$ChoreOccurrenceDtoCopyWithImpl<$Res>
 
 /// Create a copy of ChoreOccurrenceDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? choreId = null,Object? channelId = null,Object? title = null,Object? dueAt = null,Object? assignedUserId = null,Object? effortMinutes = null,Object? completedAt = freezed,Object? completedByUserId = freezed,Object? skippedAt = freezed,Object? isOverdue = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? choreId = null,Object? channelId = null,Object? title = null,Object? dueAt = null,Object? assignedUserId = null,Object? effortMinutes = null,Object? completedAt = freezed,Object? completedByUserId = freezed,Object? skippedAt = freezed,Object? isOverdue = null,Object? nudgedAt = freezed,}) {
   return _then(_ChoreOccurrenceDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,choreId: null == choreId ? _self.choreId : choreId // ignore: cast_nullable_to_non_nullable
@@ -599,7 +619,8 @@ as int,completedAt: freezed == completedAt ? _self.completedAt : completedAt // 
 as DateTime?,completedByUserId: freezed == completedByUserId ? _self.completedByUserId : completedByUserId // ignore: cast_nullable_to_non_nullable
 as String?,skippedAt: freezed == skippedAt ? _self.skippedAt : skippedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,isOverdue: null == isOverdue ? _self.isOverdue : isOverdue // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,nudgedAt: freezed == nudgedAt ? _self.nudgedAt : nudgedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 
@@ -610,7 +631,14 @@ as bool,
 /// @nodoc
 mixin _$ChoreBalanceEntryDto {
 
- String get userId; int get completedMinutes; int get completedCount; int get balanceMinutes;
+ String get userId; int get completedMinutes; int get completedCount; int get balanceMinutes;/// How many days of the window this member was actually here for.
+///
+/// The balance is weighted by it, so being away no longer reads as being
+/// behind. Worth surfacing rather than hiding, because it lets the board
+/// *explain* the number: "40 minutes light over the 16 days you were here"
+/// is a sentence people accept, where the bare number is the thing they
+/// argue with.
+ int get presentDays;
 /// Create a copy of ChoreBalanceEntryDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -623,16 +651,16 @@ $ChoreBalanceEntryDtoCopyWith<ChoreBalanceEntryDto> get copyWith => _$ChoreBalan
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChoreBalanceEntryDto&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.completedMinutes, completedMinutes) || other.completedMinutes == completedMinutes)&&(identical(other.completedCount, completedCount) || other.completedCount == completedCount)&&(identical(other.balanceMinutes, balanceMinutes) || other.balanceMinutes == balanceMinutes));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChoreBalanceEntryDto&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.completedMinutes, completedMinutes) || other.completedMinutes == completedMinutes)&&(identical(other.completedCount, completedCount) || other.completedCount == completedCount)&&(identical(other.balanceMinutes, balanceMinutes) || other.balanceMinutes == balanceMinutes)&&(identical(other.presentDays, presentDays) || other.presentDays == presentDays));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,userId,completedMinutes,completedCount,balanceMinutes);
+int get hashCode => Object.hash(runtimeType,userId,completedMinutes,completedCount,balanceMinutes,presentDays);
 
 @override
 String toString() {
-  return 'ChoreBalanceEntryDto(userId: $userId, completedMinutes: $completedMinutes, completedCount: $completedCount, balanceMinutes: $balanceMinutes)';
+  return 'ChoreBalanceEntryDto(userId: $userId, completedMinutes: $completedMinutes, completedCount: $completedCount, balanceMinutes: $balanceMinutes, presentDays: $presentDays)';
 }
 
 
@@ -643,7 +671,7 @@ abstract mixin class $ChoreBalanceEntryDtoCopyWith<$Res>  {
   factory $ChoreBalanceEntryDtoCopyWith(ChoreBalanceEntryDto value, $Res Function(ChoreBalanceEntryDto) _then) = _$ChoreBalanceEntryDtoCopyWithImpl;
 @useResult
 $Res call({
- String userId, int completedMinutes, int completedCount, int balanceMinutes
+ String userId, int completedMinutes, int completedCount, int balanceMinutes, int presentDays
 });
 
 
@@ -660,12 +688,13 @@ class _$ChoreBalanceEntryDtoCopyWithImpl<$Res>
 
 /// Create a copy of ChoreBalanceEntryDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? userId = null,Object? completedMinutes = null,Object? completedCount = null,Object? balanceMinutes = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? userId = null,Object? completedMinutes = null,Object? completedCount = null,Object? balanceMinutes = null,Object? presentDays = null,}) {
   return _then(_self.copyWith(
 userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
 as String,completedMinutes: null == completedMinutes ? _self.completedMinutes : completedMinutes // ignore: cast_nullable_to_non_nullable
 as int,completedCount: null == completedCount ? _self.completedCount : completedCount // ignore: cast_nullable_to_non_nullable
 as int,balanceMinutes: null == balanceMinutes ? _self.balanceMinutes : balanceMinutes // ignore: cast_nullable_to_non_nullable
+as int,presentDays: null == presentDays ? _self.presentDays : presentDays // ignore: cast_nullable_to_non_nullable
 as int,
   ));
 }
@@ -748,10 +777,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String userId,  int completedMinutes,  int completedCount,  int balanceMinutes)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String userId,  int completedMinutes,  int completedCount,  int balanceMinutes,  int presentDays)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ChoreBalanceEntryDto() when $default != null:
-return $default(_that.userId,_that.completedMinutes,_that.completedCount,_that.balanceMinutes);case _:
+return $default(_that.userId,_that.completedMinutes,_that.completedCount,_that.balanceMinutes,_that.presentDays);case _:
   return orElse();
 
 }
@@ -769,10 +798,10 @@ return $default(_that.userId,_that.completedMinutes,_that.completedCount,_that.b
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String userId,  int completedMinutes,  int completedCount,  int balanceMinutes)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String userId,  int completedMinutes,  int completedCount,  int balanceMinutes,  int presentDays)  $default,) {final _that = this;
 switch (_that) {
 case _ChoreBalanceEntryDto():
-return $default(_that.userId,_that.completedMinutes,_that.completedCount,_that.balanceMinutes);}
+return $default(_that.userId,_that.completedMinutes,_that.completedCount,_that.balanceMinutes,_that.presentDays);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -786,10 +815,10 @@ return $default(_that.userId,_that.completedMinutes,_that.completedCount,_that.b
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String userId,  int completedMinutes,  int completedCount,  int balanceMinutes)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String userId,  int completedMinutes,  int completedCount,  int balanceMinutes,  int presentDays)?  $default,) {final _that = this;
 switch (_that) {
 case _ChoreBalanceEntryDto() when $default != null:
-return $default(_that.userId,_that.completedMinutes,_that.completedCount,_that.balanceMinutes);case _:
+return $default(_that.userId,_that.completedMinutes,_that.completedCount,_that.balanceMinutes,_that.presentDays);case _:
   return null;
 
 }
@@ -801,13 +830,21 @@ return $default(_that.userId,_that.completedMinutes,_that.completedCount,_that.b
 @JsonSerializable()
 
 class _ChoreBalanceEntryDto implements ChoreBalanceEntryDto {
-  const _ChoreBalanceEntryDto({this.userId = '', this.completedMinutes = 0, this.completedCount = 0, this.balanceMinutes = 0});
+  const _ChoreBalanceEntryDto({this.userId = '', this.completedMinutes = 0, this.completedCount = 0, this.balanceMinutes = 0, this.presentDays = 0});
   factory _ChoreBalanceEntryDto.fromJson(Map<String, dynamic> json) => _$ChoreBalanceEntryDtoFromJson(json);
 
 @override@JsonKey() final  String userId;
 @override@JsonKey() final  int completedMinutes;
 @override@JsonKey() final  int completedCount;
 @override@JsonKey() final  int balanceMinutes;
+/// How many days of the window this member was actually here for.
+///
+/// The balance is weighted by it, so being away no longer reads as being
+/// behind. Worth surfacing rather than hiding, because it lets the board
+/// *explain* the number: "40 minutes light over the 16 days you were here"
+/// is a sentence people accept, where the bare number is the thing they
+/// argue with.
+@override@JsonKey() final  int presentDays;
 
 /// Create a copy of ChoreBalanceEntryDto
 /// with the given fields replaced by the non-null parameter values.
@@ -822,16 +859,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChoreBalanceEntryDto&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.completedMinutes, completedMinutes) || other.completedMinutes == completedMinutes)&&(identical(other.completedCount, completedCount) || other.completedCount == completedCount)&&(identical(other.balanceMinutes, balanceMinutes) || other.balanceMinutes == balanceMinutes));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChoreBalanceEntryDto&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.completedMinutes, completedMinutes) || other.completedMinutes == completedMinutes)&&(identical(other.completedCount, completedCount) || other.completedCount == completedCount)&&(identical(other.balanceMinutes, balanceMinutes) || other.balanceMinutes == balanceMinutes)&&(identical(other.presentDays, presentDays) || other.presentDays == presentDays));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,userId,completedMinutes,completedCount,balanceMinutes);
+int get hashCode => Object.hash(runtimeType,userId,completedMinutes,completedCount,balanceMinutes,presentDays);
 
 @override
 String toString() {
-  return 'ChoreBalanceEntryDto(userId: $userId, completedMinutes: $completedMinutes, completedCount: $completedCount, balanceMinutes: $balanceMinutes)';
+  return 'ChoreBalanceEntryDto(userId: $userId, completedMinutes: $completedMinutes, completedCount: $completedCount, balanceMinutes: $balanceMinutes, presentDays: $presentDays)';
 }
 
 
@@ -842,7 +879,7 @@ abstract mixin class _$ChoreBalanceEntryDtoCopyWith<$Res> implements $ChoreBalan
   factory _$ChoreBalanceEntryDtoCopyWith(_ChoreBalanceEntryDto value, $Res Function(_ChoreBalanceEntryDto) _then) = __$ChoreBalanceEntryDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String userId, int completedMinutes, int completedCount, int balanceMinutes
+ String userId, int completedMinutes, int completedCount, int balanceMinutes, int presentDays
 });
 
 
@@ -859,12 +896,13 @@ class __$ChoreBalanceEntryDtoCopyWithImpl<$Res>
 
 /// Create a copy of ChoreBalanceEntryDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? userId = null,Object? completedMinutes = null,Object? completedCount = null,Object? balanceMinutes = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? userId = null,Object? completedMinutes = null,Object? completedCount = null,Object? balanceMinutes = null,Object? presentDays = null,}) {
   return _then(_ChoreBalanceEntryDto(
 userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
 as String,completedMinutes: null == completedMinutes ? _self.completedMinutes : completedMinutes // ignore: cast_nullable_to_non_nullable
 as int,completedCount: null == completedCount ? _self.completedCount : completedCount // ignore: cast_nullable_to_non_nullable
 as int,balanceMinutes: null == balanceMinutes ? _self.balanceMinutes : balanceMinutes // ignore: cast_nullable_to_non_nullable
+as int,presentDays: null == presentDays ? _self.presentDays : presentDays // ignore: cast_nullable_to_non_nullable
 as int,
   ));
 }

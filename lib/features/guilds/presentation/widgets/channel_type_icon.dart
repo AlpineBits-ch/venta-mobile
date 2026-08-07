@@ -20,6 +20,8 @@ IconData channelTypeIcon(ChannelType type) => switch (type) {
   ChannelType.ledger => Icons.account_balance_wallet_outlined,
   ChannelType.pantry => Icons.kitchen_outlined,
   ChannelType.decisions => Icons.how_to_vote_outlined,
+  ChannelType.meals => Icons.restaurant_outlined,
+  ChannelType.maintenance => Icons.handyman_outlined,
   ChannelType.unknown => Icons.help_outline_rounded,
   // Text and Thread.
   _ => Icons.tag,

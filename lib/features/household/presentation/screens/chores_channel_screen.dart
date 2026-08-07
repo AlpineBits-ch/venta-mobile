@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/format/date_time_format.dart';
+import '../../../../core/routing/household_deep_link.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../guilds/data/models/guild_features.dart';
 import '../../../guilds/data/models/guild_member_dto.dart';
 import '../../../guilds/data/models/role_dto.dart';
+import '../../data/household_api_wave2.dart';
 import '../../data/household_repository.dart';
 import '../../data/models/chore_dto.dart';
 import '../../data/models/household_alert.dart';
@@ -42,10 +44,15 @@ class ChoresChannelScreen extends StatefulWidget {
     super.key,
     required this.guildId,
     required this.channelId,
+    this.focus,
   });
 
   final String guildId;
   final String channelId;
+
+  /// The row a notification opened this board at, if any. See
+  /// [HouseholdChannelState.focus].
+  final HouseholdFocus? focus;
 
   @override
   State<ChoresChannelScreen> createState() => _ChoresChannelScreenState();
@@ -74,8 +81,13 @@ class _ChoresChannelScreenState
   bool get _canComplete => can('CompleteChores');
   bool get _canManage => can('ManageChores');
 
+  /// The server's own default balance window, mirrored so the copy can say how
+  /// many days `presentDays` is a fraction of.
+  static const _balanceWindowDays = 30;
+
   @override
   void initState() {
+    focus = widget.focus;
     super.initState();
     _load();
     unawaited(ensureMembers());
@@ -112,7 +124,7 @@ class _ChoresChannelScreenState
           to: now.add(const Duration(days: 28)),
         ),
         api.getChores(widget.channelId),
-        api.getChoreBalance(widget.channelId),
+        api.getChoreBalance(widget.channelId, days: _balanceWindowDays),
       ]);
       if (!mounted) return;
       setState(() {
@@ -162,7 +174,7 @@ class _ChoresChannelScreenState
 
   Future<void> _refreshBalance() async {
     try {
-      final balance = await api.getChoreBalance(widget.channelId);
+      final balance = await api.getChoreBalance(widget.channelId, days: _balanceWindowDays);
       if (mounted) setState(() => _balance = balance);
     } catch (_) {
       // The board is still correct; the bars just lag until the next load.
@@ -203,6 +215,66 @@ class _ChoresChannelScreenState
       showError(error, 'Could not skip that chore.');
     }
   }
+
+  /// Asks the house about an overdue chore, **without saying who asked**.
+  ///
+  /// One tap, optimistic, no confirmation dialog. It is already rate-limited
+  /// server-side to once per occurrence per 12 hours, and a modal asking
+  /// whether you are sure you want to nudge makes an ordinary act feel like an
+  /// accusation - which is precisely the social cost this feature exists to
+  /// remove. The nudger is never named here or anywhere downstream.
+  Future<void> _nudge(ChoreOccurrenceDto occurrence) async {
+    if (!_canComplete) return;
+    houseHaptic();
+    _patchOccurrence(
+      occurrence.id,
+      occurrence.copyWith(nudgedAt: DateTime.now().toUtc()),
+    );
+    try {
+      final nudgedAt = await api.nudgeOccurrence(occurrence.id);
+      if (nudgedAt != null) {
+        _patchOccurrence(occurrence.id, occurrence.copyWith(nudgedAt: nudgedAt));
+      }
+      if (mounted) showMessage('The house has been asked.');
+    } on NudgeRejected catch (rejection) {
+      // Both `409`s are answerable with a time rather than an apology.
+      final quietUntil = rejection.quietUntil;
+      if (quietUntil != null) {
+        // Rejected inside quiet hours, not deferred: a nudge held until
+        // morning is last night's impulse arriving as though it were fresh.
+        _patchOccurrence(occurrence.id, occurrence);
+        showMessage(
+          'The house is in quiet hours until '
+          '${formatTimeOfDay(quietUntil.toLocal())}.',
+        );
+        return;
+      }
+      // Somebody already nudged - which may not have been this person. The
+      // cooldown is per occurrence rather than per sender exactly so that
+      // nobody can be identified by elimination, so the copy names nobody.
+      _patchOccurrence(
+        occurrence.id,
+        occurrence.copyWith(
+          nudgedAt:
+              rejection.nextNudgeAt?.subtract(ChoreOccurrenceX.nudgeCooldown) ??
+              DateTime.now().toUtc(),
+        ),
+      );
+      showMessage('Already asked about recently.');
+    } catch (error) {
+      _patchOccurrence(occurrence.id, occurrence);
+      showError(error, 'Could not send that.');
+    }
+  }
+
+  /// The grace period lives on the chore, not on the occurrence, and it decides
+  /// whether a nudge is even legal yet.
+  int _graceHoursFor(ChoreOccurrenceDto occurrence) =>
+      (_chores ?? const <ChoreDto>[])
+          .where((c) => c.id == occurrence.choreId)
+          .firstOrNull
+          ?.graceHours ??
+      0;
 
   Future<void> _swap(ChoreOccurrenceDto occurrence) async {
     try {
@@ -370,12 +442,33 @@ class _ChoresChannelScreenState
       for (final occurrence in occurrences)
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.s),
-          child: _OccurrenceCard(
-            occurrence: occurrence,
-            canComplete: _canComplete,
-            onToggle: () => _setCompleted(occurrence, !occurrence.isCompleted),
-            onSkip: () => _skip(occurrence),
-            onSwap: () => _swap(occurrence),
+          child: focusRow(
+            HouseholdFocusKind.choreOccurrence,
+            occurrence.id,
+            label: 'The chore you were told about',
+            _OccurrenceCard(
+              occurrence: occurrence,
+              canComplete: _canComplete,
+              onToggle: () =>
+                  _setCompleted(occurrence, !occurrence.isCompleted),
+              onSkip: () => _skip(occurrence),
+              onSwap: () => _swap(occurrence),
+              onNudge:
+                  _canComplete &&
+                      occurrence.canNudge(
+                        currentUserId,
+                        graceHours: _graceHoursFor(occurrence),
+                      )
+                  ? () => unawaited(_nudge(occurrence))
+                  : null,
+              // Greyed rather than hidden once it has been used: the button
+              // disappearing on the tap that worked reads as the tap having
+              // failed.
+              nudgeSpent:
+                  occurrence.nudgedAt != null &&
+                  occurrence.isOpen &&
+                  occurrence.assignedUserId != currentUserId,
+            ),
           ),
         ),
     ];
@@ -471,14 +564,21 @@ class _ChoresChannelScreenState
           for (final entry in entries)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.m),
-              child: _BalanceRow(entry: entry, maxMinutes: maxMinutes),
+              child: _BalanceRow(
+                entry: entry,
+                maxMinutes: maxMinutes,
+                windowDays: _balanceWindowDays,
+              ),
             ),
           const SizedBox(height: AppSpacing.s),
           Text(
-            'Measured against the house average over the last 30 days, not as '
-            'a running total - so "behind" means behind your share, not behind '
-            'everyone. Skipped chores credit nothing, and a chore done for '
-            'someone else credits the person whose turn it was.',
+            'Measured against the house average over the last '
+            '$_balanceWindowDays days, not as a running total - so "behind" '
+            'means behind your share, not behind everyone. It is weighted by '
+            'how much of that window each person was actually here, so being '
+            'away doesn\'t read as being behind. Skipped chores credit '
+            'nothing, and a chore done for someone else credits the person '
+            'whose turn it was.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               height: 1.4,
@@ -497,6 +597,8 @@ class _OccurrenceCard extends StatelessWidget {
     required this.onToggle,
     required this.onSkip,
     required this.onSwap,
+    this.onNudge,
+    this.nudgeSpent = false,
   });
 
   final ChoreOccurrenceDto occurrence;
@@ -504,6 +606,15 @@ class _OccurrenceCard extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onSkip;
   final VoidCallback onSwap;
+
+  /// Null when a nudge would be refused - it is your own chore, it is settled,
+  /// it is not late yet, or somebody already asked in the last 12 hours.
+  final VoidCallback? onNudge;
+
+  /// Somebody has asked about this one recently. The button stays visible and
+  /// goes quiet, because a button that vanishes on the tap that worked reads
+  /// as the tap having failed.
+  final bool nudgeSpent;
 
   @override
   Widget build(BuildContext context) {
@@ -628,6 +739,27 @@ class _OccurrenceCard extends StatelessWidget {
               ],
             ),
           ),
+          // One tap, in the row, on the chores that are actually late. Not in
+          // the overflow menu: asking is meant to feel light, and the whole
+          // point is that the app does it so nobody in the house has to be the
+          // person who nags.
+          if (onNudge != null || nudgeSpent)
+            IconButton(
+              onPressed: onNudge,
+              visualDensity: VisualDensity.compact,
+              tooltip: nudgeSpent
+                  ? 'Already asked about recently'
+                  : 'Ask the house about this',
+              icon: Icon(
+                nudgeSpent
+                    ? Icons.notifications_active_outlined
+                    : Icons.notifications_none_rounded,
+                size: 20,
+                color: nudgeSpent
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
+                    : theme.colorScheme.tertiary,
+              ),
+            ),
           if (occurrence.isOpen && canComplete)
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert, size: 20, color: muted),
@@ -760,10 +892,18 @@ class _ChoreCard extends StatelessWidget {
 }
 
 class _BalanceRow extends StatelessWidget {
-  const _BalanceRow({required this.entry, required this.maxMinutes});
+  const _BalanceRow({
+    required this.entry,
+    required this.maxMinutes,
+    required this.windowDays,
+  });
 
   final ChoreBalanceEntryDto entry;
   final int maxMinutes;
+
+  /// The window the balance was measured over, so `presentDays` can be said as
+  /// a fraction of something rather than as a bare number.
+  final int windowDays;
 
   @override
   Widget build(BuildContext context) {
@@ -820,6 +960,21 @@ class _BalanceRow extends StatelessWidget {
           '${entry.completedCount == 1 ? 'chore' : 'chores'}',
           style: theme.textTheme.labelSmall?.copyWith(color: muted),
         ),
+        // The balance is weighted by how much of the window somebody was here
+        // for, so the board can explain the number instead of only showing it:
+        // "40 minutes light over the 16 days you were here" is a sentence
+        // people accept, where the bare number is the thing they argue with.
+        // Only said when it actually changed the sum - "here all 30 days" on
+        // every row is noise.
+        if (entry.presentDays > 0 && entry.presentDays < windowDays) ...[
+          const SizedBox(height: 2),
+          Text(
+            'measured over the ${entry.presentDays} '
+            '${entry.presentDays == 1 ? 'day' : 'days'} '
+            'of $windowDays they were here',
+            style: theme.textTheme.labelSmall?.copyWith(color: muted),
+          ),
+        ],
       ],
     );
   }

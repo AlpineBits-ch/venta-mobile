@@ -160,18 +160,31 @@ class _InboxViewState extends State<_InboxView>
     );
   }
 
-  /// Household rows land on their module board rather than at the row itself:
-  /// a chore occurrence, a decision and a list item have no route of their own
-  /// on this client, and the board opens showing the thing anyway.
+  /// Household rows land on their module board, opened at the row itself.
+  ///
+  /// A chore occurrence or a bill has no route of its own - it is a row on a
+  /// board - so the board is told which row brought somebody there. A kind this
+  /// build has never heard of has no such token and simply opens the board,
+  /// which is the same graceful degradation the tile's copy relies on.
   void _openTask(InboxTaskDto task) {
     final breadcrumb = task.breadcrumb;
     if (breadcrumb.guildId.isEmpty) return;
+    if (breadcrumb.channelId.isEmpty) {
+      context.push(RoutePaths.serverPath(breadcrumb.guildId));
+      return;
+    }
+    final focusKind = task.kind.focusKind;
     context.push(
-      breadcrumb.channelId.isEmpty
-          ? RoutePaths.serverPath(breadcrumb.guildId)
-          : RoutePaths.serverChannelPath(
+      focusKind == null || task.targetId.isEmpty
+          ? RoutePaths.serverChannelPath(
               breadcrumb.guildId,
               breadcrumb.channelId,
+            )
+          : RoutePaths.serverChannelFocusPath(
+              breadcrumb.guildId,
+              breadcrumb.channelId,
+              focusKind: focusKind,
+              focusId: task.targetId,
             ),
     );
   }

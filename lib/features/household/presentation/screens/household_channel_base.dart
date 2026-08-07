@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/network/api_error.dart';
+import '../../../../core/routing/household_deep_link.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../auth/data/auth_repository.dart';
@@ -39,6 +40,59 @@ abstract class HouseholdChannelState<W extends StatefulWidget>
 
   /// The `GuildFeature` flag this screen's endpoints are gated on.
   String get requiredFeature;
+
+  /// The row a notification brought somebody here for, if any.
+  ///
+  /// Set from the route on open and **cleared once the board has shown it**:
+  /// it describes an arrival, not a selection, and a highlight that survives a
+  /// pull-to-refresh half an hour later is a mark nobody can explain. Screens
+  /// call [clearFocus] after the row has been scrolled to.
+  HouseholdFocus? focus;
+
+  /// Whether [focus] names [id] as a row of [kind].
+  bool isFocused(String kind, String? id) =>
+      focus?.matches(kind, id) ?? false;
+
+  void clearFocus() {
+    if (focus == null) return;
+    if (mounted) setState(() => focus = null);
+  }
+
+  /// Points the board at a new row, and re-arms the scroll.
+  void moveFocusTo(HouseholdFocus? target) {
+    if (target == null || !mounted) return;
+    setState(() {
+      focus = target;
+      _focusRevealed = false;
+    });
+  }
+
+  final _focusKeys = <String, GlobalKey>{};
+  bool _focusRevealed = false;
+
+  /// Marks and scrolls to [child] when it is the row the route or an alert
+  /// named, and does nothing at all otherwise.
+  ///
+  /// The mark is deliberately temporary. It says "this is the one you were
+  /// told about", which stops being true within seconds - an outline still
+  /// sitting there after a pull-to-refresh is a state nobody can account for.
+  Widget focusRow(String kind, String id, Widget child, {String? label}) {
+    if (!isFocused(kind, id)) return child;
+    final key = _focusKeys.putIfAbsent(id, GlobalKey.new);
+    if (!_focusRevealed) {
+      _focusRevealed = true;
+      // The row only exists once the board has loaded, so this runs from the
+      // build that first contains it rather than from `initState`.
+      revealHouseholdRow(key);
+      Future.delayed(const Duration(seconds: 4), clearFocus);
+    }
+    return HouseFocusMark(
+      key: key,
+      focused: true,
+      label: label ?? 'The one you were told about',
+      child: child,
+    );
+  }
 
   GuildDto? guild;
   GuildPermissions permissions = GuildPermissions.none;
@@ -127,7 +181,16 @@ abstract class HouseholdChannelState<W extends StatefulWidget>
   /// The copy is the server's - it writes [HouseholdAlert.title] and
   /// [HouseholdAlert.body] precisely so a client needs none of its own.
   /// Override to reload as well; call `super` to keep the message.
-  void onHouseholdAlert(HouseholdAlert alert) => showMessage(alert.message);
+  ///
+  /// It also points the board at the row, when the kind names one. An alert
+  /// about a row somebody is looking at should move the board to it rather
+  /// than leave a sentence in a snackbar to be matched up by hand - and a kind
+  /// this build has never heard of simply names no row and shows the sentence,
+  /// which is the whole contract.
+  void onHouseholdAlert(HouseholdAlert alert) {
+    moveFocusTo(alert.focus);
+    showMessage(alert.message);
+  }
 
   Future<void> _loadGuildContext() async {
     final repository = getIt<GuildRepository>();

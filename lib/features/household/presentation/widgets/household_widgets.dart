@@ -5,15 +5,20 @@
 /// rendered, the same section headers.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/profile_resolver.dart';
+import '../../../../core/widgets/shimmer_box.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../guilds/data/models/guild_features.dart';
 import '../../data/household_api.dart';
+import '../../data/money.dart';
 
 /// For the editor sheets, which live outside a [HouseholdChannelState] and so
 /// can't reach its `api` getter.
@@ -451,6 +456,382 @@ class HouseSheet extends StatelessWidget {
     );
   }
 }
+
+/// A money amount, set in tabular figures.
+///
+/// Proportional digits make a column of amounts wobble, and a wobbling column
+/// of money is the first thing that makes a ledger look approximate. Inter has
+/// real tabular figures, so this costs nothing but the font feature.
+///
+/// **There is no loading state here on purpose.** A number that changes after
+/// somebody has read it is how a ledger stops being believed, so a caller with
+/// no amount yet renders [HouseAmountPending] instead of a placeholder digit.
+class HouseAmount extends StatelessWidget {
+  const HouseAmount({
+    super.key,
+    required this.amountMinor,
+    required this.currency,
+    this.style,
+    this.signed = false,
+    this.showCurrency = true,
+    this.color,
+  });
+
+  final int amountMinor;
+  final String currency;
+  final TextStyle? style;
+
+  /// Prefix a `+` on positive amounts - for balances, where the sign is the
+  /// information.
+  final bool signed;
+  final bool showCurrency;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = style ?? Theme.of(context).textTheme.titleSmall;
+    return Text(
+      formatMinor(
+        amountMinor,
+        currency,
+        signed: signed,
+        showCurrency: showCurrency,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: base?.copyWith(
+        color: color,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+      semanticsLabel: formatMinor(amountMinor, currency, signed: signed),
+    );
+  }
+}
+
+/// Where an amount would be, when there isn't one yet.
+///
+/// Used for a variable bill nobody has read off the letter, and while a figure
+/// is in flight. Deliberately not a zero and not a shimmering digit: both read
+/// as an amount, and this has to read as a question.
+class HouseAmountPending extends StatelessWidget {
+  const HouseAmountPending({super.key, this.label = 'Amount unknown'});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return HousePill(
+      label: label,
+      icon: Icons.help_outline_rounded,
+      color: theme.colorScheme.tertiary,
+    );
+  }
+}
+
+/// A loading list shaped like the cards that will replace it.
+///
+/// A centred spinner tells somebody the app is busy; a skeleton tells them what
+/// is coming and stops the whole screen jumping when it does.
+class HouseCardSkeleton extends StatelessWidget {
+  const HouseCardSkeleton({super.key, this.count = 4, this.lines = 2});
+
+  final int count;
+  final int lines;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.m,
+        AppSpacing.m,
+        AppSpacing.m,
+        AppSpacing.xl,
+      ),
+      itemCount: count,
+      itemBuilder: (context, index) => Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.s),
+        child: ExcludeSemantics(
+          child: HouseCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ShimmerBox(
+                  width: 160,
+                  height: 15,
+                  borderRadius: AppRadii.badge,
+                ),
+                for (var line = 1; line < lines; line++) ...[
+                  const SizedBox(height: AppSpacing.s),
+                  ShimmerBox(
+                    width: 90.0 + (index % 3) * 30,
+                    height: 12,
+                    borderRadius: AppRadii.badge,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The row a notification brought somebody to, marked and scrolled into view.
+///
+/// A deep link that opens a board of forty rows and highlights none of them has
+/// not really arrived anywhere. This outlines the row once and fades the
+/// outline out, so the mark is gone by the time it would start being noise.
+///
+/// The fade is skipped under `MediaQuery.disableAnimations` - the outline is
+/// still drawn, then removed, because the *information* is not decorative even
+/// when the animation is.
+class HouseFocusMark extends StatefulWidget {
+  const HouseFocusMark({
+    super.key,
+    required this.focused,
+    required this.child,
+    this.label,
+  });
+
+  final bool focused;
+  final Widget child;
+
+  /// Announced to a screen reader when the row is the one that was linked to.
+  final String? label;
+
+  @override
+  State<HouseFocusMark> createState() => _HouseFocusMarkState();
+}
+
+class _HouseFocusMarkState extends State<HouseFocusMark>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2600),
+    value: widget.focused ? 1 : 0,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focused) _run();
+  }
+
+  @override
+  void didUpdateWidget(HouseFocusMark oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focused && !oldWidget.focused) _run();
+  }
+
+  void _run() {
+    _controller.value = 1;
+    _controller.reverse();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.focused) return widget.child;
+    final theme = Theme.of(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      label: widget.label,
+      container: widget.label != null,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final strength = reduceMotion
+              ? (_controller.isAnimating ? 1.0 : _controller.value)
+              : Curves.easeOut.transform(_controller.value);
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadii.card),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(
+                  alpha: 0.9 * strength,
+                ),
+                width: 2,
+              ),
+            ),
+            child: child,
+          );
+        },
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Scrolls [key]'s row into view once the board has laid out.
+///
+/// Deferred to the end of the frame because the row does not exist yet when a
+/// deep link arrives - the board is still fetching. Callers call this from the
+/// build that first contains the row.
+void revealHouseholdRow(GlobalKey key) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final context = key.currentContext;
+    if (context == null) return;
+    unawaitedEnsureVisible(context);
+  });
+}
+
+void unawaitedEnsureVisible(BuildContext context) {
+  Scrollable.ensureVisible(
+    context,
+    duration: const Duration(milliseconds: 320),
+    curve: Curves.easeOutCubic,
+    alignment: 0.25,
+  );
+}
+
+/// The primary action, parked in thumb reach.
+///
+/// These screens are used standing up and one-handed - in a shop, at an open
+/// fridge - so the action that matters sits at the bottom of the screen rather
+/// than in an app-bar corner nobody can reach without shifting their grip. It
+/// floats over the list rather than pushing it, and the list pads for it.
+class HouseActionBar extends StatelessWidget {
+  const HouseActionBar({
+    super.key,
+    required this.child,
+    this.secondary,
+  });
+
+  final Widget child;
+
+  /// Sits above the primary action - a summary line, a warning.
+  final Widget? secondary;
+
+  /// What a scrolling list underneath one of these has to reserve at the
+  /// bottom, so the last row is not permanently hidden behind it. Generous
+  /// rather than exact, because [HousePrimaryButton] grows with the reader's
+  /// text size.
+  static const reservedHeight = 120.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.m,
+            AppSpacing.s,
+            AppSpacing.m,
+            AppSpacing.s,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (secondary != null) ...[
+                secondary!,
+                const SizedBox(height: AppSpacing.s),
+              ],
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A full-width primary button sized for cold hands in a moving tram.
+///
+/// Material's default 40pt is fine at a desk and not fine here, so every
+/// household primary action is 52pt with a generous label.
+class HousePrimaryButton extends StatelessWidget {
+  const HousePrimaryButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.busy = false,
+    this.destructive = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool busy;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Grows with the reader's text size instead of clipping the label into an
+    // ellipsis. Capped, because past about half again the button stops being a
+    // button and starts being a panel.
+    final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.7);
+    return SizedBox(
+      width: double.infinity,
+      height: 52 * scale,
+      child: FilledButton(
+        onPressed: busy ? null : onPressed,
+        style: destructive
+            ? FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.error,
+                foregroundColor: theme.colorScheme.onError,
+              )
+            : null,
+        child: busy
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 20),
+                    const SizedBox(width: AppSpacing.s),
+                  ],
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: destructive
+                            ? theme.colorScheme.onError
+                            : theme.colorScheme.onPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+/// The confirmation buzz for something that worked.
+///
+/// Deliberately only ever on success. A phone that buzzes at a failure teaches
+/// people that the buzz means nothing, and these screens lean on it as the
+/// confirmation - a batch scan says "got it" by feel, not by a dialog.
+void houseHaptic() => unawaited(HapticFeedback.selectionClick());
+
+/// A weightier one, for the actions there is no undoing in one tap.
+void houseHapticHeavy() => unawaited(HapticFeedback.mediumImpact());
 
 /// Sheets are opened on the root navigator throughout this app - the shell's
 /// nav rail lives in a sibling of the content pane's own Navigator, so a

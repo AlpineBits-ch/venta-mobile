@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/routing/household_deep_link.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
@@ -29,10 +30,15 @@ class ListChannelScreen extends StatefulWidget {
     super.key,
     required this.guildId,
     required this.channelId,
+    this.focus,
   });
 
   final String guildId;
   final String channelId;
+
+  /// The line a notification opened this list at, if any - see
+  /// [HouseholdChannelState.focus].
+  final HouseholdFocus? focus;
 
   @override
   State<ListChannelScreen> createState() => _ListChannelScreenState();
@@ -73,6 +79,7 @@ class _ListChannelScreenState extends HouseholdChannelState<ListChannelScreen> {
 
   @override
   void initState() {
+    focus = widget.focus;
     super.initState();
     _load();
     unawaited(ensureMembers());

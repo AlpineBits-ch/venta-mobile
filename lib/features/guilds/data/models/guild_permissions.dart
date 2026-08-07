@@ -71,6 +71,10 @@ class GuildPermissions {
     'CreateDecisions': 47,
     'VoteDecisions': 48,
     'ManageGuests': 49,
+    'PlanMeals': 50,
+    'ManageMeals': 51,
+    'LogMaintenance': 52,
+    'ManageMaintenance': 53,
     'Superadmin': 63,
   };
 
@@ -115,6 +119,10 @@ class GuildPermissions {
     'CreateDecisions': GuildFeature.decisions,
     'VoteDecisions': GuildFeature.decisions,
     'ManageGuests': GuildFeature.guestAccess,
+    'PlanMeals': GuildFeature.meals,
+    'ManageMeals': GuildFeature.meals,
+    'LogMaintenance': GuildFeature.maintenance,
+    'ManageMaintenance': GuildFeature.maintenance,
   };
 
   /// Plain-language labels for the role editor - `CheckOffListItems` is a
@@ -132,6 +140,13 @@ class GuildPermissions {
     'CreateDecisions': 'Open decisions',
     'VoteDecisions': 'Vote on decisions',
     'ManageGuests': 'Give guests temporary access',
+    'PlanMeals': 'Plan meals',
+    'ManageMeals': 'Manage recipes and the plan',
+    // Deliberately the low bar. Whoever discovers the washing machine is dead
+    // is whoever tried to use it, and needing a manage bit to say so is how a
+    // house ends up with a broken machine nobody has recorded.
+    'LogMaintenance': 'Log services and report faults',
+    'ManageMaintenance': 'Manage appliances',
   };
 
   static final GuildPermissions none = GuildPermissions(BigInt.zero);

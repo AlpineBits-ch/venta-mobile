@@ -65,15 +65,22 @@ abstract final class GuildFeature {
   static const wiki = 'Wiki';
   static const events = 'Events';
 
-  // Household modules. Five of them are channel types (`List`, `Chores`,
-  // `Ledger`, `Pantry`, `Decisions`); the other three are guild-scoped -
-  // who's home, quiet hours, and time-boxed guest access. Every endpoint
-  // behind them answers `403` when the module is off, for the owner too.
+  // Household modules. Seven of them are channel types (`List`, `Chores`,
+  // `Ledger`, `Pantry`, `Decisions`, `Meals`, `Maintenance`); the other three
+  // are guild-scoped - who's home, quiet hours, and time-boxed guest access.
+  // Every endpoint behind them answers `403` when the module is off, for the
+  // owner too.
   static const lists = 'Lists';
   static const chores = 'Chores';
   static const ledger = 'Ledger';
   static const pantry = 'Pantry';
   static const decisions = 'Decisions';
+
+  /// Recipes, the week's plan, and the plan-to-shopping-list hand-off.
+  static const meals = 'Meals';
+
+  /// The house's appliances, their service history and their warranties.
+  static const maintenance = 'Maintenance';
   static const presence = 'Presence';
   static const quietHours = 'QuietHours';
   static const guestAccess = 'GuestAccess';
@@ -99,6 +106,8 @@ abstract final class GuildFeature {
     ledger,
     pantry,
     decisions,
+    meals,
+    maintenance,
     presence,
     quietHours,
     guestAccess,
@@ -123,6 +132,8 @@ abstract final class GuildFeature {
     ledger: 'Shared ledger',
     pantry: 'Pantry',
     decisions: 'Decisions',
+    meals: 'Meals',
+    maintenance: 'Upkeep',
     presence: 'Presence',
     quietHours: 'Quiet hours',
     guestAccess: 'Guest access',
@@ -146,6 +157,8 @@ abstract final class GuildFeature {
     ledger: 'Shared expenses, who owes who, and settling up',
     pantry: 'What\'s in stock, what\'s running out, what\'s going off',
     decisions: 'House decisions where one reasoned objection stops it',
+    meals: 'Recipes, the week\'s plan, and the shop it turns into',
+    maintenance: 'Appliances, when they were last serviced, what\'s broken',
     presence: 'Who\'s actually in the flat right now',
     quietHours: 'A nightly window that holds back chore reminders',
     guestAccess: 'Roles that hand themselves back when they run out',
@@ -160,5 +173,7 @@ abstract final class GuildFeature {
     ledger,
     pantry,
     decisions,
+    meals,
+    maintenance,
   ];
 }

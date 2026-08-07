@@ -2,6 +2,8 @@
 
 /* Chores */
 "household_chore_due_body" = "Du bist dran, und es ist jetzt fällig.";
+"household_chore_nudge_body" = "Das ist zu Hause immer noch offen.";
+"household_chore_reassigned_body" = "Von jemandem übernommen, der gerade nicht zu Hause ist.";
 
 /* Ledger */
 "household_expense_share_body" = "Dein Anteil beträgt %1$@.";
@@ -10,6 +12,21 @@
 "household_settlement_received_body" = "%1$@ wurde als an dich gezahlt erfasst.";
 "household_settlement_recorded_title" = "Zahlung erfasst";
 "household_settlement_recorded_body" = "%1$@ wurde als von dir gezahlt erfasst.";
+
+/* Bills */
+"household_bill_due_body" = "Heute fällig. Dein Anteil beträgt %1$@.";
+"household_bill_due_soon_body" = "Fällig in %1$@. Dein Anteil beträgt %2$@.";
+"household_bill_posted_body" = "Zum Haushaltsbuch hinzugefügt. Dein Anteil beträgt %1$@.";
+"household_bill_needs_amount_body" = "Eine Rechnung braucht einen Betrag, bevor sie geteilt werden kann.";
+
+/* Meals */
+"household_meal_cooking_today_title" = "Du kochst heute";
+"household_meal_cooking_today_body" = "Das kochst du heute.";
+
+/* Maintenance */
+"household_maintenance_due_body" = "Das ist zur Wartung fällig.";
+"household_maintenance_warranty_body" = "Die Garantie läuft in %1$@ ab.";
+"household_maintenance_broken_body" = "Als defekt markiert. Bitte vorerst nicht benutzen.";
 
 /* Decisions */
 "household_decision_opened_body" = "Eine Entscheidung im Haushalt braucht deine Stimme.";

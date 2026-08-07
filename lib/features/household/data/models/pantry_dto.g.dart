@@ -24,6 +24,7 @@ _PantryItemDto _$PantryItemDtoFromJson(Map<String, dynamic> json) =>
         const ApiDateTimeConverter().fromJson,
       ),
       addedByUserId: json['addedByUserId'] as String? ?? '',
+      barcode: json['barcode'] as String?,
     );
 
 Map<String, dynamic> _$PantryItemDtoToJson(_PantryItemDto instance) =>
@@ -44,6 +45,7 @@ Map<String, dynamic> _$PantryItemDtoToJson(_PantryItemDto instance) =>
         const ApiDateTimeConverter().toJson,
       ),
       'addedByUserId': instance.addedByUserId,
+      'barcode': instance.barcode,
     };
 
 Value? _$JsonConverterFromJson<Json, Value>(
@@ -55,6 +57,48 @@ Json? _$JsonConverterToJson<Json, Value>(
   Value? value,
   Json? Function(Value value) toJson,
 ) => value == null ? null : toJson(value);
+
+_ScanResultDto _$ScanResultDtoFromJson(Map<String, dynamic> json) =>
+    _ScanResultDto(
+      item: PantryItemDto.fromJson(json['item'] as Map<String, dynamic>),
+      created: json['created'] as bool? ?? false,
+      learned: json['learned'] as bool? ?? false,
+    );
+
+Map<String, dynamic> _$ScanResultDtoToJson(_ScanResultDto instance) =>
+    <String, dynamic>{
+      'item': instance.item,
+      'created': instance.created,
+      'learned': instance.learned,
+    };
+
+_PantryBarcodeDto _$PantryBarcodeDtoFromJson(Map<String, dynamic> json) =>
+    _PantryBarcodeDto(
+      barcode: json['barcode'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      unit: json['unit'] as String?,
+      defaultQuantity: (json['defaultQuantity'] as num?)?.toDouble() ?? 1,
+      lowThreshold: (json['lowThreshold'] as num?)?.toDouble(),
+      timesSeen: (json['timesSeen'] as num?)?.toInt() ?? 0,
+      lastUsedAt: _$JsonConverterFromJson<String, DateTime>(
+        json['lastUsedAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
+    );
+
+Map<String, dynamic> _$PantryBarcodeDtoToJson(_PantryBarcodeDto instance) =>
+    <String, dynamic>{
+      'barcode': instance.barcode,
+      'name': instance.name,
+      'unit': instance.unit,
+      'defaultQuantity': instance.defaultQuantity,
+      'lowThreshold': instance.lowThreshold,
+      'timesSeen': instance.timesSeen,
+      'lastUsedAt': _$JsonConverterToJson<String, DateTime>(
+        instance.lastUsedAt,
+        const ApiDateTimeConverter().toJson,
+      ),
+    };
 
 _PantryConfigDto _$PantryConfigDtoFromJson(Map<String, dynamic> json) =>
     _PantryConfigDto(

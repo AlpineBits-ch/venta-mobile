@@ -48,6 +48,9 @@ const _$InboxTaskKindEnumMap = {
   InboxTaskKind.choreDue: 'ChoreDue',
   InboxTaskKind.decisionVote: 'DecisionVote',
   InboxTaskKind.listAssignment: 'ListAssignment',
+  InboxTaskKind.billDue: 'BillDue',
+  InboxTaskKind.cookingToday: 'CookingToday',
+  InboxTaskKind.maintenanceDue: 'MaintenanceDue',
   InboxTaskKind.unknown: 'unknown',
 };
 

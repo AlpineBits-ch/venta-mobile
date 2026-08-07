@@ -3,6 +3,8 @@
 <resources>
     <!-- Chores -->
     <string name="household_chore_due_body">Du bist dran, und es ist jetzt fällig.</string>
+    <string name="household_chore_nudge_body">Das ist zu Hause immer noch offen.</string>
+    <string name="household_chore_reassigned_body">Von jemandem übernommen, der gerade nicht zu Hause ist.</string>
 
     <!-- Ledger -->
     <string name="household_expense_share_body">Dein Anteil beträgt %1$s.</string>
@@ -11,6 +13,21 @@
     <string name="household_settlement_received_body">%1$s wurde als an dich gezahlt erfasst.</string>
     <string name="household_settlement_recorded_title">Zahlung erfasst</string>
     <string name="household_settlement_recorded_body">%1$s wurde als von dir gezahlt erfasst.</string>
+
+    <!-- Bills -->
+    <string name="household_bill_due_body">Heute fällig. Dein Anteil beträgt %1$s.</string>
+    <string name="household_bill_due_soon_body">Fällig in %1$s. Dein Anteil beträgt %2$s.</string>
+    <string name="household_bill_posted_body">Zum Haushaltsbuch hinzugefügt. Dein Anteil beträgt %1$s.</string>
+    <string name="household_bill_needs_amount_body">Eine Rechnung braucht einen Betrag, bevor sie geteilt werden kann.</string>
+
+    <!-- Meals -->
+    <string name="household_meal_cooking_today_title">Du kochst heute</string>
+    <string name="household_meal_cooking_today_body">Das kochst du heute.</string>
+
+    <!-- Maintenance -->
+    <string name="household_maintenance_due_body">Das ist zur Wartung fällig.</string>
+    <string name="household_maintenance_warranty_body">Die Garantie läuft in %1$s ab.</string>
+    <string name="household_maintenance_broken_body">Als defekt markiert. Bitte vorerst nicht benutzen.</string>
 
     <!-- Decisions -->
     <string name="household_decision_opened_body">Eine Entscheidung im Haushalt braucht deine Stimme.</string>

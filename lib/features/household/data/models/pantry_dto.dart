@@ -31,10 +31,54 @@ sealed class PantryItemDto with _$PantryItemDto {
     /// or the list line is bought/cleared.
     DateTime? restockedAt,
     @Default('') String addedByUserId,
+
+    /// The code scanned off the packet, once the house has learned it.
+    ///
+    /// There is **no third-party barcode lookup and there must not be one**:
+    /// the guild learns its own products. The first scan of an unknown code
+    /// asks for a name; every scan after that autofills from what this house
+    /// decided to call it.
+    String? barcode,
   }) = _PantryItemDto;
 
   factory PantryItemDto.fromJson(Map<String, dynamic> json) =>
       _$PantryItemDtoFromJson(json);
+}
+
+/// What a scan did, which the item alone cannot say.
+///
+/// [created] separates "topped up the jar you already had" from "added a new
+/// row". [learned] says the house had never seen this code and has just
+/// recorded what it is called - **the one moment worth interrupting somebody
+/// for**, and the reason every scan after it can be silent.
+@freezed
+sealed class ScanResultDto with _$ScanResultDto {
+  const factory ScanResultDto({
+    required PantryItemDto item,
+    @Default(false) bool created,
+    @Default(false) bool learned,
+  }) = _ScanResultDto;
+
+  factory ScanResultDto.fromJson(Map<String, dynamic> json) =>
+      _$ScanResultDtoFromJson(json);
+}
+
+/// One barcode this house has learned, for completions.
+@freezed
+sealed class PantryBarcodeDto with _$PantryBarcodeDto {
+  @ApiDateTimeConverter()
+  const factory PantryBarcodeDto({
+    @Default('') String barcode,
+    @Default('') String name,
+    String? unit,
+    @Default(1) double defaultQuantity,
+    double? lowThreshold,
+    @Default(0) int timesSeen,
+    DateTime? lastUsedAt,
+  }) = _PantryBarcodeDto;
+
+  factory PantryBarcodeDto.fromJson(Map<String, dynamic> json) =>
+      _$PantryBarcodeDtoFromJson(json);
 }
 
 extension PantryItemX on PantryItemDto {

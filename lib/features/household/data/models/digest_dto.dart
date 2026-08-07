@@ -1,9 +1,12 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../../../../core/format/api_date_time.dart';
+import 'bill_dto.dart';
 import 'chore_dto.dart';
 import 'house_dto.dart';
 import 'list_item_dto.dart';
+import 'maintenance_dto.dart';
+import 'meal_dto.dart';
 import 'pantry_dto.dart';
 
 part 'digest_dto.freezed.dart';
@@ -34,6 +37,20 @@ sealed class HouseholdDigestDto with _$HouseholdDigestDto {
     /// own rather than reading these - it also needs quiet hours, and it is an
     /// editor rather than a glance - so the digest card ignores this section.
     List<HomeStatusDto>? homeStatus,
+
+    /// What the house owes and when, from the ledger channels the caller can
+    /// see.
+    HouseholdBillsDigestDto? bills,
+    HouseholdMealsDigestDto? meals,
+    HouseholdMaintenanceDigestDto? maintenance,
+
+    /// Who is away right now, and until when.
+    ///
+    /// Beside [homeStatus] and deliberately not folded into it. Home status is
+    /// a decaying assertion about this minute; an absence is a dated plan the
+    /// rota reads. Merging them would give a fortnight in Lisbon an expiry it
+    /// does not have, or "back in an hour" a permanence it must not have.
+    List<HouseholdAbsenceDigestDto>? away,
   }) = _HouseholdDigestDto;
 
   factory HouseholdDigestDto.fromJson(Map<String, dynamic> json) =>
@@ -122,6 +139,141 @@ sealed class HouseholdDecisionDigestEntryDto
       _$HouseholdDecisionDigestEntryDtoFromJson(json);
 }
 
+/// Bills the house owes, from every ledger channel the caller can see.
+@freezed
+sealed class HouseholdBillsDigestDto with _$HouseholdBillsDigestDto {
+  const factory HouseholdBillsDigestDto({
+    /// Pending bills due inside the next fortnight, soonest first, with
+    /// anything already late at the top - an overdue bill is still a bill that
+    /// is due, and pulling it out to count separately would leave the most
+    /// urgent row off the glance.
+    @Default(<HouseholdBillDigestEntryDto>[])
+    List<HouseholdBillDigestEntryDto> dueSoon,
+    @Default(0) int overdueCount,
+
+    /// Variable bills that came due with nobody having said what they cost.
+    /// Counted apart from [overdueCount] because the action is different: one
+    /// needs money moved, the other needs somebody to open the post.
+    @Default(0) int needsAmountCount,
+  }) = _HouseholdBillsDigestDto;
+
+  factory HouseholdBillsDigestDto.fromJson(Map<String, dynamic> json) =>
+      _$HouseholdBillsDigestDtoFromJson(json);
+}
+
+@freezed
+sealed class HouseholdBillDigestEntryDto with _$HouseholdBillDigestEntryDto {
+  @ApiDateTimeConverter()
+  const factory HouseholdBillDigestEntryDto({
+    @Default('') String id,
+    @Default('') String channelId,
+    @Default('') String description,
+    DateTime? dueAt,
+    int? amountMinor,
+    @Default('CHF') String currency,
+
+    /// What this period costs the caller specifically. Null when there is no
+    /// total to divide yet, and also when the split no longer resolves - a
+    /// wrong share is worse than a missing one, because it is the number
+    /// somebody transfers.
+    int? myShareMinor,
+    @Default(BillStatus.pending)
+    @JsonKey(unknownEnumValue: BillStatus.pending)
+    BillStatus status,
+  }) = _HouseholdBillDigestEntryDto;
+
+  factory HouseholdBillDigestEntryDto.fromJson(Map<String, dynamic> json) =>
+      _$HouseholdBillDigestEntryDtoFromJson(json);
+}
+
+@freezed
+sealed class HouseholdMealsDigestDto with _$HouseholdMealsDigestDto {
+  const factory HouseholdMealsDigestDto({
+    @Default(<HouseholdMealDigestEntryDto>[])
+    List<HouseholdMealDigestEntryDto> today,
+
+    /// Computed over the whole day rather than over the capped [today] list, so
+    /// a busy day cannot quietly answer "no" for somebody who is in fact
+    /// cooking.
+    @Default(false) bool imCookingToday,
+  }) = _HouseholdMealsDigestDto;
+
+  factory HouseholdMealsDigestDto.fromJson(Map<String, dynamic> json) =>
+      _$HouseholdMealsDigestDtoFromJson(json);
+}
+
+@freezed
+sealed class HouseholdMealDigestEntryDto with _$HouseholdMealDigestEntryDto {
+  const factory HouseholdMealDigestEntryDto({
+    @Default('') String id,
+    @Default('') String channelId,
+    @Default(MealSlot.dinner)
+    @JsonKey(unknownEnumValue: MealSlot.dinner)
+    MealSlot slot,
+
+    /// The recipe's title or the entry's free text, flattened - a glance
+    /// renders one line either way, and most of a real week is "leftovers".
+    @Default('') String title,
+    String? cookUserId,
+  }) = _HouseholdMealDigestEntryDto;
+
+  factory HouseholdMealDigestEntryDto.fromJson(Map<String, dynamic> json) =>
+      _$HouseholdMealDigestEntryDtoFromJson(json);
+}
+
+@freezed
+sealed class HouseholdMaintenanceDigestDto
+    with _$HouseholdMaintenanceDigestDto {
+  const factory HouseholdMaintenanceDigestDto({
+    @Default(0) int brokenCount,
+    @Default(0) int serviceOverdueCount,
+
+    /// Warranties lapsing soon. Already-lapsed ones are not counted - there is
+    /// nothing left to do about them.
+    @Default(0) int warrantyExpiringCount,
+    @Default(<HouseholdAssetDigestEntryDto>[])
+    List<HouseholdAssetDigestEntryDto> attention,
+  }) = _HouseholdMaintenanceDigestDto;
+
+  factory HouseholdMaintenanceDigestDto.fromJson(Map<String, dynamic> json) =>
+      _$HouseholdMaintenanceDigestDtoFromJson(json);
+}
+
+@freezed
+sealed class HouseholdAssetDigestEntryDto with _$HouseholdAssetDigestEntryDto {
+  const factory HouseholdAssetDigestEntryDto({
+    @Default('') String id,
+    @Default('') String channelId,
+    @Default('') String name,
+    @Default(AssetStatus.ok)
+    @JsonKey(unknownEnumValue: AssetStatus.ok)
+    AssetStatus status,
+
+    /// The single most urgent of the attention board's tokens. One where the
+    /// board carries all of them: a board has room to say a machine is both
+    /// broken and out of warranty, a glance has room for the word that decides
+    /// whether anybody gets up.
+    @Default('') String reason,
+  }) = _HouseholdAssetDigestEntryDto;
+
+  factory HouseholdAssetDigestEntryDto.fromJson(Map<String, dynamic> json) =>
+      _$HouseholdAssetDigestEntryDtoFromJson(json);
+}
+
+@freezed
+sealed class HouseholdAbsenceDigestDto with _$HouseholdAbsenceDigestDto {
+  @ApiDateTimeConverter()
+  const factory HouseholdAbsenceDigestDto({
+    @Default('') String userId,
+    DateTime? startAt,
+    DateTime? endAt,
+    String? note,
+  }) = _HouseholdAbsenceDigestDto;
+
+  factory HouseholdAbsenceDigestDto.fromJson(Map<String, dynamic> json) =>
+      _$HouseholdAbsenceDigestDtoFromJson(json);
+}
+
 extension HouseholdDigestDtoX on HouseholdDigestDto {
   /// Whether there is anything at all to draw. Every section being null or
   /// empty is the ordinary state of a house that is on top of things, and the
@@ -133,5 +285,10 @@ extension HouseholdDigestDtoX on HouseholdDigestDto {
       (pantry?.expiringCount ?? 0) == 0 &&
       (ledger?.every((l) => l.myNetMinor == 0) ?? true) &&
       (decisions?.awaitingMyVote.isEmpty ?? true) &&
-      (decisions?.openCount ?? 0) == 0;
+      (decisions?.openCount ?? 0) == 0 &&
+      (bills?.dueSoon.isEmpty ?? true) &&
+      (bills?.needsAmountCount ?? 0) == 0 &&
+      (meals?.today.isEmpty ?? true) &&
+      (maintenance?.attention.isEmpty ?? true) &&
+      (away?.isEmpty ?? true);
 }

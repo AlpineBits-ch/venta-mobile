@@ -4,15 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/format/date_time_format.dart';
+import '../../../../core/routing/household_deep_link.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../guilds/data/models/guild_features.dart';
 import '../../../guilds/data/models/guild_member_dto.dart';
 import '../../data/household_repository.dart';
+import '../../data/models/household_alert.dart';
 import '../../data/models/ledger_dto.dart';
 import '../../data/money.dart';
 import '../widgets/household_widgets.dart';
+import 'bills_view.dart';
 import 'household_channel_base.dart';
 
 /// A `Ledger` channel: shared expenses, who owes who, and settling up.
@@ -27,10 +30,15 @@ class LedgerChannelScreen extends StatefulWidget {
     super.key,
     required this.guildId,
     required this.channelId,
+    this.focus,
   });
 
   final String guildId;
   final String channelId;
+
+  /// The row a notification opened this ledger at - an expense, or a bill on
+  /// the Bills tab. See [HouseholdChannelState.focus].
+  final HouseholdFocus? focus;
 
   @override
   State<LedgerChannelScreen> createState() => _LedgerChannelScreenState();
@@ -48,7 +56,10 @@ class _LedgerChannelScreenState
   @override
   String get fallbackTitle => 'Ledger';
 
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs = TabController(length: 3, vsync: this);
+
+  /// Which tab index the Bills board sits on.
+  static const _billsTab = 1;
 
   List<ExpenseDto>? _expenses;
   List<LedgerBalanceDto>? _balances;
@@ -82,7 +93,15 @@ class _LedgerChannelScreenState
 
   @override
   void initState() {
+    focus = widget.focus;
     super.initState();
+    // A `ledger.bill_due` notification names a bill, which lives on a
+    // different tab from the expense a `ledger.expense` one names. Landing on
+    // the wrong tab and leaving somebody to find the right one is the deep
+    // link only half arriving.
+    if (isFocused(HouseholdFocusKind.bill, focus?.id)) {
+      _tabs.index = _billsTab;
+    }
     _load();
     unawaited(ensureMembers());
     _eventsSub = household
@@ -90,6 +109,15 @@ class _LedgerChannelScreenState
         // Every one of these moves the balances, so nothing here is
         // incremental - refetch the lot.
         .listen((_) => _load());
+  }
+
+  @override
+  void onHouseholdAlert(HouseholdAlert alert) {
+    super.onHouseholdAlert(alert);
+    if (isFocused(HouseholdFocusKind.bill, focus?.id)) {
+      _tabs.index = _billsTab;
+    }
+    unawaited(_load());
   }
 
   @override
@@ -207,6 +235,23 @@ class _LedgerChannelScreenState
     }
   }
 
+  /// Records that somebody paid somebody. It does not move money and never
+  /// will, which is also where the payments work attaches.
+  ///
+  /// **Seam for encrypted payment handles and the Swiss QR bill.** When that
+  /// lands, this dialog is where "how do I actually pay Anna" belongs: the
+  /// creditor's IBAN decrypted on *this* device, a QR generated locally from
+  /// it, and a launch button for whichever wallet the payer picked once in
+  /// settings. Nothing about the flow below changes - it stays the explicit
+  /// "mark as paid" that every one of those paths has to end in, because no
+  /// payment app returns a result and a settlement is therefore a claim rather
+  /// than a fact. The copy here already says so and must keep saying so.
+  ///
+  /// Deliberately not started here: the crypto and the QR payload are being
+  /// built web-first, TWINT cannot be deep-linked or prefilled at all, and the
+  /// phone-number half lives in Identity behind a per-household opt-in that is
+  /// still cross-service work. If a number ever surfaces on this screen it must
+  /// never be labelled verified - nothing SMS-verifies it.
   Future<void> _recordSettlement(TransferSuggestionDto transfer) async {
     final isMine = transfer.fromUserId == currentUserId;
     if (!isMine && !_canManage) return;
@@ -304,6 +349,11 @@ class _LedgerChannelScreenState
                 controller: _tabs,
                 tabs: const [
                   Tab(text: 'Expenses'),
+                  // Not "Expenses" with a filter on it: what is owed and what
+                  // has been spent are different questions, and folding the
+                  // first into the second is exactly what the ledger could not
+                  // say before.
+                  Tab(text: 'Due'),
                   Tab(text: 'Who owes who'),
                 ],
               )
@@ -317,20 +367,45 @@ class _LedgerChannelScreenState
               onRetry: _load,
             )
           : _expenses == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const HouseCardSkeleton(lines: 3)
           : TabBarView(
               controller: _tabs,
-              children: [_buildExpenses(), _buildBalances()],
+              children: [
+                _buildExpenses(),
+                BillsView(
+                  channelId: widget.channelId,
+                  currency: _currency,
+                  currentUserId: currentUserId,
+                  members: members ?? const [],
+                  canManage: _canManage,
+                  canAdd: _canAdd,
+                  onLedgerChanged: () => unawaited(_load()),
+                  focusBillId: isFocused(HouseholdFocusKind.bill, _focusId)
+                      ? _focusId
+                      : null,
+                ),
+                _buildBalances(),
+              ],
             ),
       floatingActionButton: moduleEnabled && _canAdd
-          ? FloatingActionButton.extended(
-              onPressed: () => _openExpenseEditor(),
-              icon: const Icon(Icons.add),
-              label: const Text('Expense'),
+          ? AnimatedBuilder(
+              animation: _tabs,
+              // The Bills tab has its own actions on each row, and a "+ Expense"
+              // button floating over a list of obligations invites exactly the
+              // confusion this tab exists to remove.
+              builder: (context, _) => _tabs.index == 0
+                  ? FloatingActionButton.extended(
+                      onPressed: () => _openExpenseEditor(),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Expense'),
+                    )
+                  : const SizedBox.shrink(),
             )
           : null,
     );
   }
+
+  String? get _focusId => focus?.id;
 
   Widget _buildExpenses() {
     final expenses = [..._expenses ?? const <ExpenseDto>[]]
@@ -369,12 +444,24 @@ class _LedgerChannelScreenState
       rows.add(
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.s),
-          child: _ExpenseCard(
-            expense: expense,
-            currency: _currency,
-            myUserId: currentUserId,
-            onTap: _canEdit(expense) ? () => _openExpenseEditor(expense) : null,
-            onDelete: _canEdit(expense) ? () => _deleteExpense(expense) : null,
+          // A `ledger.bill_posted` alert names the **expense** the bill became,
+          // not the occurrence it came from - the one trap in the alert table,
+          // and why this lands here rather than on the Due tab.
+          child: focusRow(
+            HouseholdFocusKind.expense,
+            expense.id,
+            label: 'The expense you were told about',
+            _ExpenseCard(
+              expense: expense,
+              currency: _currency,
+              myUserId: currentUserId,
+              onTap: _canEdit(expense)
+                  ? () => _openExpenseEditor(expense)
+                  : null,
+              onDelete: _canEdit(expense)
+                  ? () => _deleteExpense(expense)
+                  : null,
+            ),
           ),
         ),
       );
@@ -592,6 +679,10 @@ class _ExpenseCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (expense.category != ExpenseCategory.uncategorized) ...[
+                Icon(expense.category.icon, size: 16, color: muted),
+                const SizedBox(width: 6),
+              ],
               Expanded(
                 child: Text(
                   expense.description,
@@ -599,8 +690,11 @@ class _ExpenseCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.s),
-              Text(
-                formatMinor(expense.amountMinor, currency),
+              // Tabular figures so a month of these lines up as a column
+              // rather than wobbling with the digits.
+              HouseAmount(
+                amountMinor: expense.amountMinor,
+                currency: currency,
                 style: theme.textTheme.titleSmall,
               ),
             ],
@@ -836,6 +930,12 @@ class _ExpenseSheetState extends State<_ExpenseSheet> {
   late DateTime _occurredAt = widget.existing?.occurredAt ?? DateTime.now();
   late SplitKind _splitKind = widget.existing?.splitKind ?? SplitKind.equal;
 
+  /// Coarse on purpose - see [ExpenseCategory]. Anything from before the field
+  /// existed arrives as `Uncategorized`, which is a real bucket rather than a
+  /// polite word for "Other".
+  late ExpenseCategory _category =
+      widget.existing?.category ?? ExpenseCategory.uncategorized;
+
   /// Empty means "everyone in the guild" for an equal split - the common case,
   /// and the server's own default.
   late Set<String> _included = {
@@ -985,6 +1085,7 @@ class _ExpenseSheetState extends State<_ExpenseSheet> {
           payerUserId: _payerUserId,
           occurredAt: _occurredAt,
           splitKind: _splitKind,
+          category: _category,
           shares: _buildShares(),
         );
       } else {
@@ -1002,6 +1103,7 @@ class _ExpenseSheetState extends State<_ExpenseSheet> {
               : _payerUserId,
           occurredAt: _occurredAt,
           splitKind: _splitKind,
+          category: _category,
           shares: _buildShares(),
         );
       }
@@ -1123,6 +1225,23 @@ class _ExpenseSheetState extends State<_ExpenseSheet> {
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.m),
+        SheetField(
+          label: 'What kind of thing',
+          child: Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: [
+              for (final category in ExpenseCategory.values)
+                ChoiceChip(
+                  avatar: Icon(category.icon, size: 16),
+                  label: Text(category.label),
+                  selected: _category == category,
+                  onSelected: (_) => setState(() => _category = category),
+                ),
             ],
           ),
         ),

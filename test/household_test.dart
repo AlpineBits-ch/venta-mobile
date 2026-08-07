@@ -2,9 +2,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venta_mobile/core/push/household_push_payload.dart';
 import 'package:venta_mobile/core/realtime/realtime_event.dart';
+import 'package:venta_mobile/core/format/plain_date.dart';
 import 'package:venta_mobile/core/realtime/realtime_service.dart';
 import 'package:venta_mobile/features/household/data/household_api.dart';
+import 'package:venta_mobile/features/household/data/household_api_wave2.dart';
 import 'package:venta_mobile/features/household/data/household_repository.dart';
+import 'package:venta_mobile/features/household/data/models/chore_dto.dart';
 import 'package:venta_mobile/features/household/data/models/digest_dto.dart';
 import 'package:venta_mobile/features/household/data/models/house_dto.dart';
 import 'package:venta_mobile/features/household/data/models/household_alert.dart';
@@ -219,7 +222,7 @@ void main() {
   });
 
   group('household push', () {
-    test('routes a chore reminder at the board it came from', () {
+    test('routes a chore reminder at the occurrence, not just the board', () {
       final payload = HouseholdPushPayload.tryParse({
         'type': 'household',
         'kind': 'chore.due',
@@ -230,7 +233,10 @@ void main() {
         'body': 'Your turn, and it\'s due now.',
       });
       expect(payload, isNotNull);
-      expect(payload!.route, '/server/g1/channel/c1');
+      expect(
+        payload!.route,
+        '/server/g1/channel/c1?focusKind=chore-occurrence&focus=o1',
+      );
       expect(payload.targetId, 'o1');
     });
 
@@ -242,6 +248,95 @@ void main() {
         'title': 'Home',
       });
       expect(payload!.route, '/server/g1');
+    });
+
+    test('a bill alert lands on the bill itself', () {
+      final payload = HouseholdPushPayload.tryParse({
+        'type': 'household',
+        'kind': 'ledger.bill_due',
+        'guildId': 'g1',
+        'channelId': 'c-ledger',
+        'targetId': 'bill-occ-1',
+        'title': 'Rent',
+        'body': 'Due today. Your share is CHF 450.00.',
+        'bodyLocKey': 'household_bill_due_body',
+        'bodyLocArgs': '["CHF 450.00"]',
+      });
+
+      expect(
+        payload!.route,
+        '/server/g1/channel/c-ledger?focusKind=bill&focus=bill-occ-1',
+      );
+      expect(payload.targetId, 'bill-occ-1');
+      expect(payload.localizedBody, 'Due today. Your share is CHF 450.00.');
+    });
+
+    /// The one trap in the alert table: every other `ledger.bill_*` kind names
+    /// the occurrence, but a bill that posted itself names the **expense** it
+    /// became. Routing it to the bills board would highlight nothing, because
+    /// the occurrence it came from is no longer pending.
+    test('a posted bill lands on the expense, not on the occurrence', () {
+      final payload = HouseholdPushPayload.tryParse({
+        'type': 'household',
+        'kind': 'ledger.bill_posted',
+        'guildId': 'g1',
+        'channelId': 'c-ledger',
+        'targetId': 'expense-9',
+        'title': 'Rent',
+        'body': 'Added to the ledger. Your share is CHF 450.00.',
+      });
+
+      expect(
+        payload!.route,
+        '/server/g1/channel/c-ledger?focusKind=expense&focus=expense-9',
+      );
+    });
+
+    /// `targetId` is a channel for these two, so there is no row to point at
+    /// and the board itself is the subject.
+    test('a channel-targeted kind opens the board and stops there', () {
+      final payload = HouseholdPushPayload.tryParse({
+        'type': 'household',
+        'kind': 'pantry.expiring',
+        'guildId': 'g1',
+        'channelId': 'c-pantry',
+        'targetId': 'c-pantry',
+        'title': 'Going off soon',
+      });
+
+      expect(payload!.route, '/server/g1/channel/c-pantry');
+    });
+
+    /// The contract every surface here relies on: kinds keep being added, and
+    /// one this build has never heard of still has a title, a body and
+    /// somewhere to land.
+    test('an unrecognised kind still opens its board, with no row', () {
+      final payload = HouseholdPushPayload.tryParse({
+        'type': 'household',
+        'kind': 'something.new',
+        'guildId': 'g1',
+        'channelId': 'c1',
+        'targetId': 'row-1',
+        'title': 'Home',
+      });
+
+      expect(payload!.route, '/server/g1/channel/c1');
+    });
+
+    test('a maintenance alert with no channel lands on the house', () {
+      final payload = HouseholdPushPayload.tryParse({
+        'type': 'household',
+        'kind': 'maintenance.warranty',
+        'guildId': 'g1',
+        'targetId': 'asset-1',
+        'title': 'Dishwasher',
+        'body': 'The warranty runs out in 3 weeks.',
+        'bodyLocKey': 'household_maintenance_warranty_body',
+        'bodyLocArgs': '["3 weeks"]',
+      });
+
+      expect(payload!.route, '/server/g1');
+      expect(payload.localizedBody, 'The warranty runs out in 3 weeks.');
     });
 
     test('ignores a message push', () {
@@ -276,7 +371,9 @@ void main() {
       expect(alert, isNotNull);
       expect(alert!.kind, HouseholdAlert.pantryExpiring);
       expect(alert.targetId, 'c1');
+      // A channel target names no row, so the board is the destination.
       expect(alert.route, '/server/g1/channel/c1');
+      expect(alert.focus, isNull);
       expect(alert.data['items'], ['Milk', 'Yoghurt']);
       // The server writes the copy so no client needs per-kind wording.
       expect(alert.message, 'Milk, Yoghurt and 2 more are about to go off');
@@ -293,6 +390,74 @@ void main() {
       expect(alert.message, 'Home');
     });
 
+    /// Declared as constants so callers stop hand-spelling slugs, not so that
+    /// anything may branch on them: the class contract is that an unrecognised
+    /// kind renders exactly like a recognised one.
+    ///
+    /// Every second-wave kind names a row, and the board it lands on has to be
+    /// told which - the nine new kinds are close to useless without it, because
+    /// "your chore is due" opening a board of forty chores has not really
+    /// arrived anywhere.
+    test('carries the second-wave kinds to the row they are about', () {
+      const expected = <String, String>{
+        HouseholdAlert.choreNudge: 'chore-occurrence',
+        HouseholdAlert.choreReassigned: 'chore-occurrence',
+        HouseholdAlert.ledgerBillDue: 'bill',
+        HouseholdAlert.ledgerBillDueSoon: 'bill',
+        HouseholdAlert.ledgerBillNeedsAmount: 'bill',
+        // The trap: an expense, not the occurrence it came from.
+        HouseholdAlert.ledgerBillPosted: 'expense',
+        HouseholdAlert.mealsCookingToday: 'meal-plan-entry',
+        HouseholdAlert.maintenanceDue: 'maintenance-asset',
+        HouseholdAlert.maintenanceWarranty: 'maintenance-asset',
+        HouseholdAlert.maintenanceBroken: 'maintenance-asset',
+      };
+
+      for (final entry in expected.entries) {
+        final alert = HouseholdAlert.tryParse(
+          RealtimeEvent('guild.HouseholdAlert', [
+            {
+              'guildId': 'g1',
+              'channelId': 'c1',
+              'kind': entry.key,
+              'targetId': 't1',
+              'title': 'Home',
+            },
+          ]),
+        );
+
+        expect(alert!.kind, entry.key);
+        expect(alert.focus?.kind, entry.value, reason: entry.key);
+        expect(alert.focus?.id, 't1', reason: entry.key);
+        expect(
+          alert.route,
+          '/server/g1/channel/c1?focusKind=${entry.value}&focus=t1',
+          reason: entry.key,
+        );
+      }
+    });
+
+    /// The graceful-degradation path, kept explicitly: a kind added server-side
+    /// before this build shipped is the normal state of things, not an error.
+    test('an unrecognised kind lands on the board with no row', () {
+      final alert = HouseholdAlert.tryParse(
+        const RealtimeEvent('guild.HouseholdAlert', [
+          {
+            'guildId': 'g1',
+            'channelId': 'c1',
+            'kind': 'something.new',
+            'targetId': 'row-1',
+            'title': 'Home',
+            'body': 'Something happened at home.',
+          },
+        ]),
+      );
+
+      expect(alert!.focus, isNull);
+      expect(alert.route, '/server/g1/channel/c1');
+      expect(alert.message, 'Something happened at home.');
+    });
+
     test('drops an alert with nowhere to go', () {
       expect(
         HouseholdAlert.tryParse(
@@ -302,6 +467,126 @@ void main() {
         ),
         isNull,
       );
+    });
+  });
+
+  /// The nudge is the one household action whose *absence* is the design: it
+  /// is rate-limited per occurrence rather than per sender precisely so that
+  /// nobody can be identified by elimination, and the button has to be hidden
+  /// in every case the server would refuse rather than offering an action that
+  /// will 409.
+  group('chore nudge', () {
+    final overdue = ChoreOccurrenceDto(
+      id: 'o1',
+      choreId: 'c1',
+      channelId: 'ch1',
+      dueAt: DateTime.utc(2026, 8, 1),
+      assignedUserId: 'anna',
+    );
+    final now = DateTime.utc(2026, 8, 3);
+
+    test('is offered on somebody else\'s overdue chore', () {
+      expect(overdue.canNudge('ben', now: now), isTrue);
+    });
+
+    test('is never offered on your own', () {
+      expect(overdue.canNudge('anna', now: now), isFalse);
+    });
+
+    test('waits for the grace period, not just the due date', () {
+      expect(overdue.canNudge('ben', now: now, graceHours: 72), isFalse);
+      expect(overdue.canNudge('ben', now: now, graceHours: 24), isTrue);
+    });
+
+    test('is not offered on a chore that is settled', () {
+      expect(
+        overdue.copyWith(completedAt: now).canNudge('ben', now: now),
+        isFalse,
+      );
+      expect(
+        overdue.copyWith(skippedAt: now).canNudge('ben', now: now),
+        isFalse,
+      );
+    });
+
+    /// Per occurrence, not per sender: somebody *else* having asked an hour ago
+    /// is exactly as blocking as having asked yourself.
+    test('goes quiet for twelve hours after anyone has asked', () {
+      final nudged = overdue.copyWith(
+        nudgedAt: now.subtract(const Duration(hours: 2)),
+      );
+      expect(nudged.canNudge('ben', now: now), isFalse);
+      expect(
+        nudged.canNudge('ben', now: now.add(const Duration(hours: 11))),
+        isTrue,
+      );
+    });
+
+    test('reads the two refusals apart', () {
+      DioException conflict(Map<String, dynamic> body) => DioException(
+        requestOptions: RequestOptions(path: '/nudge'),
+        response: Response<dynamic>(
+          requestOptions: RequestOptions(path: '/nudge'),
+          statusCode: 409,
+          data: body,
+        ),
+      );
+
+      final quiet = NudgeRejected.tryParse(
+        conflict({
+          'error': 'The house is in quiet hours',
+          'quietUntil': '2026-08-03T07:00:00Z',
+        }),
+      );
+      expect(quiet, isNotNull);
+      expect(quiet!.isQuietHours, isTrue);
+
+      final cooldown = NudgeRejected.tryParse(
+        conflict({
+          'error': 'Somebody already nudged about this recently',
+          'nextNudgeAt': '2026-08-03T18:00:00Z',
+        }),
+      );
+      expect(cooldown!.isQuietHours, isFalse);
+      expect(cooldown.nextNudgeAt, DateTime.utc(2026, 8, 3, 18));
+
+      expect(
+        NudgeRejected.tryParse(
+          DioException(
+            requestOptions: RequestOptions(path: '/nudge'),
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/nudge'),
+              statusCode: 400,
+            ),
+          ),
+        ),
+        isNull,
+      );
+    });
+  });
+
+  /// Thursday dinner is Thursday dinner wherever the phone is, which is the
+  /// whole reason a meal plan carries dates rather than instants.
+  group('plain date', () {
+    test('round-trips the wire format', () {
+      expect(PlainDate.parse('2026-08-07').toIso(), '2026-08-07');
+      expect(PlainDate.parse('2026-08-07T22:30:00Z').day, 7);
+    });
+
+    test('steps across a month boundary', () {
+      expect(PlainDate(2026, 8, 30).addDays(3).toIso(), '2026-09-02');
+      expect(
+        PlainDate(2026, 9, 2).differenceInDays(PlainDate(2026, 8, 30)),
+        3,
+      );
+    });
+
+    /// A date built as midnight UTC renders as the previous evening west of
+    /// Greenwich, which would silently shift a whole week's plan by a day.
+    test('does not drift when turned into a DateTime', () {
+      final date = PlainDate(2026, 8, 7);
+      expect(date.toLocalDateTime().day, 7);
+      expect(PlainDate.fromDateTime(date.toLocalDateTime()), date);
     });
   });
 

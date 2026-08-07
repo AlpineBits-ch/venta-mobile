@@ -16,6 +16,7 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
+import '../../../household/presentation/widgets/away_board.dart';
 import '../../../household/presentation/widgets/home_digest_card.dart';
 import '../../../household/presentation/widgets/home_status_board.dart';
 import '../../../inbox/data/inbox_repository.dart';
@@ -701,6 +702,11 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
             // rather than to any one channel.
             if (guild.hasFeature(GuildFeature.presence))
               HomeStatusBoard(guild: guild),
+            // Directly under it and drawn as dates rather than faces, because
+            // the two answer different questions: "who is in the flat right
+            // now" decays within hours, "who is in Lisbon for a fortnight" is
+            // a plan the rota reads. Renders nothing when nothing is planned.
+            if (AwayBoard.appliesTo(guild)) AwayBoard(guild: guild),
             // Under the board rather than above it: "who's home" is what a
             // household opens the app to check, and this is a summary of the
             // channels immediately below it. Draws nothing at all when there
@@ -1213,6 +1219,18 @@ class _CreateChannelDialogState extends State<_CreateChannelDialog> {
       icon: Icons.how_to_vote_outlined,
       title: 'Decisions',
       subtitle: 'House questions anyone can stop with a reason',
+    ),
+    (
+      type: ChannelType.meals,
+      icon: Icons.restaurant_outlined,
+      title: 'Meals',
+      subtitle: 'Recipes and the week\'s plan, turned into one shop',
+    ),
+    (
+      type: ChannelType.maintenance,
+      icon: Icons.handyman_outlined,
+      title: 'Upkeep',
+      subtitle: 'Appliances, services and warranties',
     ),
   ];
 

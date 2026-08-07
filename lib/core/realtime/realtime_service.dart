@@ -217,6 +217,36 @@ class RealtimeService {
     'guild.DecisionClosed',
     'guild.DecisionCancelled',
     'guild.HomeStatusChanged',
+    // Bills: the schedules and the obligations they generate. State
+    // replication only - a bill falling due reaches a phone as a
+    // `guild.HouseholdAlert`, never as one of these.
+    'guild.RecurringExpenseCreated',
+    'guild.RecurringExpenseUpdated',
+    'guild.RecurringExpenseDeleted',
+    'guild.BillOccurrenceCreated',
+    'guild.BillOccurrenceUpdated',
+    'guild.ExpenseReceiptAdded',
+    'guild.ExpenseReceiptDeleted',
+    // Carries `{ occurrenceId, nudgedAt }` and **no sender**, by design - see
+    // `HouseholdApiWave2.nudgeOccurrence`.
+    'guild.ChoreOccurrenceNudged',
+    // Guild-scoped, like home status: an absence belongs to a person rather
+    // than to a channel.
+    'guild.AbsenceCreated',
+    'guild.AbsenceUpdated',
+    'guild.AbsenceDeleted',
+    'guild.RecipeCreated',
+    'guild.RecipeUpdated',
+    'guild.RecipeDeleted',
+    'guild.MealPlanEntryCreated',
+    'guild.MealPlanEntryUpdated',
+    'guild.MealPlanEntryDeleted',
+    'guild.MaintenanceAssetCreated',
+    'guild.MaintenanceAssetUpdated',
+    'guild.MaintenanceAssetDeleted',
+    'guild.MaintenanceRecordCreated',
+    'guild.MaintenanceRecordUpdated',
+    'guild.MaintenanceRecordDeleted',
   ];
 
   final _eventsController = StreamController<RealtimeEvent>.broadcast();

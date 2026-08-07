@@ -5,15 +5,18 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/format/date_time_format.dart';
+import '../../../../core/routing/household_deep_link.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/channel_dto.dart';
 import '../../../guilds/data/models/guild_features.dart';
+import '../../data/household_api_wave2.dart';
 import '../../data/household_repository.dart';
 import '../../data/models/pantry_dto.dart';
 import '../widgets/household_widgets.dart';
 import 'household_channel_base.dart';
+import 'pantry_scanner_screen.dart';
 
 /// A `Pantry` channel - one location: the fridge, the freezer, the cellar.
 ///
@@ -29,10 +32,15 @@ class PantryChannelScreen extends StatefulWidget {
     super.key,
     required this.guildId,
     required this.channelId,
+    this.focus,
   });
 
   final String guildId;
   final String channelId;
+
+  /// The item a notification opened this pantry at, if any - see
+  /// [HouseholdChannelState.focus].
+  final HouseholdFocus? focus;
 
   @override
   State<PantryChannelScreen> createState() => _PantryChannelScreenState();
@@ -68,6 +76,7 @@ class _PantryChannelScreenState
 
   @override
   void initState() {
+    focus = widget.focus;
     super.initState();
     _load();
     _eventsSub = household
@@ -186,6 +195,120 @@ class _PantryChannelScreenState
     );
   }
 
+  /// Unpacking a bag, by camera, without leaving the camera between items.
+  Future<void> _openScanner() async {
+    final added = await Navigator.of(context, rootNavigator: true).push<int>(
+      MaterialPageRoute<int>(
+        builder: (_) => PantryScannerScreen(
+          channelId: widget.channelId,
+          channelName: channelTitle,
+        ),
+      ),
+    );
+    await _load();
+    if (!mounted || added == null || added == 0) return;
+    showMessage(
+      added == 1 ? 'One thing put away.' : '$added things put away.',
+    );
+  }
+
+  /// The one-tap "used it up".
+  ///
+  /// No confirm dialog, deliberately: this is a swipe at an open fridge with
+  /// one hand, and a modal asking whether you really drank the milk is the
+  /// interaction that gets a pantry abandoned. The undo is in the snackbar
+  /// afterwards, where it costs nothing to ignore.
+  Future<void> _consume(PantryItemDto item, {required bool all}) async {
+    if (!_canManage) return;
+    final before = item.quantity;
+    final predicted = all ? 0.0 : (item.quantity - 1).clamp(0.0, 999999.0);
+    setState(() {
+      _items = [
+        for (final i in _items ?? const <PantryItemDto>[])
+          if (i.id == item.id)
+            i.copyWith(
+              quantity: predicted.toDouble(),
+              isLow: i.lowThreshold != null && predicted <= i.lowThreshold!,
+            )
+          else
+            i,
+      ];
+    });
+    houseHaptic();
+    try {
+      final updated = await householdApi.consumePantryItem(
+        item.id,
+        all: all,
+        amount: all ? null : 1,
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = [
+          for (final i in _items ?? const <PantryItemDto>[])
+            if (i.id == item.id) updated else i,
+        ];
+      });
+      _offerUndo(item, before);
+    } catch (error) {
+      await _load();
+      showError(error, 'Could not update that item.');
+    }
+  }
+
+  void _offerUndo(PantryItemDto item, double before) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Used ${item.name}'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => unawaited(_restoreQuantity(item.id, before)),
+          ),
+        ),
+      );
+  }
+
+  Future<void> _restoreQuantity(String itemId, double quantity) async {
+    try {
+      final updated = await householdApi.updatePantryItem(
+        itemId,
+        quantity: quantity,
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = [
+          for (final i in _items ?? const <PantryItemDto>[])
+            if (i.id == itemId) updated else i,
+        ];
+      });
+    } catch (error) {
+      await _load();
+      showError(error, 'Could not put that back.');
+    }
+  }
+
+  /// Bought more of something the pantry had put on the shopping list. Also
+  /// ticks that line off, which is what re-arms the restock loop.
+  Future<void> _restock(PantryItemDto item) async {
+    if (!_canManage) return;
+    houseHaptic();
+    try {
+      final updated = await householdApi.restockPantryItem(item.id);
+      if (!mounted) return;
+      setState(() {
+        _items = [
+          for (final i in _items ?? const <PantryItemDto>[])
+            if (i.id == item.id) updated else i,
+        ];
+      });
+    } catch (error) {
+      await _load();
+      showError(error, 'Could not restock that.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _items;
@@ -219,30 +342,57 @@ class _PantryChannelScreenState
               onRetry: _load,
             )
           : items == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const HouseCardSkeleton()
           : items.isEmpty
           ? HouseEmptyState(
               icon: Icons.kitchen_outlined,
               title: 'Nothing in here yet',
               body: _canManage
-                  ? 'Add what you keep stocked. Give something a "running '
-                        'low" level and it puts itself on the shopping list '
-                        'when it gets there.'
+                  ? 'Scan a shopping bag in one item after another, or add '
+                        'things by hand. Give something a "running low" level '
+                        'and it puts itself on the shopping list when it gets '
+                        'there.'
                   : 'Nobody has added anything to this pantry yet.',
               action: _canManage
-                  ? FilledButton(
-                      onPressed: () => _openItemEditor(),
-                      child: const Text('Add something'),
+                  ? FilledButton.icon(
+                      onPressed: _openScanner,
+                      icon: const Icon(Icons.qr_code_scanner_rounded),
+                      label: const Text('Scan things in'),
                     )
                   : null,
             )
           : _buildList(items, warningDays),
-      floatingActionButton:
-          moduleEnabled && _canManage && (items?.isNotEmpty ?? false)
-          ? FloatingActionButton(
-              onPressed: () => _openItemEditor(),
-              tooltip: 'Add to the pantry',
-              child: const Icon(Icons.add),
+      // In the bottom third rather than in an app-bar corner: this screen is
+      // used at an open fridge with one hand, and the top of a phone is where
+      // a thumb cannot go.
+      bottomNavigationBar: moduleEnabled && _canManage && (items?.isNotEmpty ?? false)
+          ? HouseActionBar(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: HousePrimaryButton(
+                      label: 'Scan things in',
+                      icon: Icons.qr_code_scanner_rounded,
+                      onPressed: _openScanner,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  Tooltip(
+                    message: 'Add by hand',
+                    child: SizedBox(
+                      height: 52,
+                      width: 52,
+                      child: OutlinedButton(
+                        onPressed: () => _openItemEditor(),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                        ),
+                        child: const Icon(Icons.add_rounded),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             )
           : null,
     );
@@ -336,12 +486,26 @@ class _PantryChannelScreenState
       for (final item in items)
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.s),
-          child: _PantryRow(
-            item: item,
-            warningDays: warningDays,
-            canManage: _canManage,
-            onAdjust: (delta) => _adjustQuantity(item, delta),
-            onOpen: _canManage ? () => _openItemEditor(item) : null,
+          child: focusRow(
+            HouseholdFocusKind.pantryItem,
+            item.id,
+            label: 'The item you were told about',
+            _PantryRow(
+              item: item,
+              warningDays: warningDays,
+              canManage: _canManage,
+              onAdjust: (delta) => _adjustQuantity(item, delta),
+              onOpen: _canManage ? () => _openItemEditor(item) : null,
+              onUsedOne: _canManage
+                  ? () => unawaited(_consume(item, all: false))
+                  : null,
+              onUsedUp: _canManage
+                  ? () => unawaited(_consume(item, all: true))
+                  : null,
+              onRestock: _canManage && item.isAwaitingRestock
+                  ? () => unawaited(_restock(item))
+                  : null,
+            ),
           ),
         ),
     ];
@@ -355,6 +519,9 @@ class _PantryRow extends StatelessWidget {
     required this.canManage,
     required this.onAdjust,
     this.onOpen,
+    this.onUsedOne,
+    this.onUsedUp,
+    this.onRestock,
   });
 
   final PantryItemDto item;
@@ -363,8 +530,50 @@ class _PantryRow extends StatelessWidget {
   final ValueChanged<double> onAdjust;
   final VoidCallback? onOpen;
 
+  /// Swipe left: took one. Swipe right: that was the last of it.
+  final VoidCallback? onUsedOne;
+  final VoidCallback? onUsedUp;
+
+  /// Only offered while the pantry has this on the shopping list - restocking
+  /// is what ticks that line off and re-arms the loop.
+  final VoidCallback? onRestock;
+
   @override
   Widget build(BuildContext context) {
+    final card = _card(context);
+    if (onUsedOne == null && onUsedUp == null) return card;
+
+    // A swipe rather than a menu because the gesture happens at an open fridge
+    // with one hand and something else in the other. `confirmDismiss` returning
+    // false is what keeps the row on screen: nothing is being deleted, the
+    // quantity is being changed, and the row has to stay to show the new one.
+    return Dismissible(
+      key: ValueKey('pantry-swipe-${item.id}'),
+      background: _SwipeBackground(
+        alignment: Alignment.centerLeft,
+        icon: Icons.shopping_bag_outlined,
+        label: 'Used it up',
+        color: Theme.of(context).colorScheme.error,
+      ),
+      secondaryBackground: _SwipeBackground(
+        alignment: Alignment.centerRight,
+        icon: Icons.remove_rounded,
+        label: 'Took one',
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.endToStart) {
+          onUsedOne?.call();
+        } else {
+          onUsedUp?.call();
+        }
+        return false;
+      },
+      child: card,
+    );
+  }
+
+  Widget _card(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final unit = item.unit?.trim();
@@ -424,6 +633,16 @@ class _PantryRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.s),
+          // Bought again, and the shopping-list line goes with it. Offered only
+          // while the pantry actually put it there, so it never appears as a
+          // button that quietly does nothing.
+          if (onRestock != null)
+            IconButton(
+              onPressed: onRestock,
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Bought ${item.name}',
+              icon: const Icon(Icons.shopping_cart_checkout_rounded, size: 20),
+            ),
           if (canManage)
             _QuantityStepper(
               quantity: item.quantity,
@@ -457,6 +676,52 @@ class _PantryRow extends StatelessWidget {
       < 14 => 'in $days days',
       _ => formatShortDateTime(local).split(',').first,
     };
+  }
+}
+
+/// What sits behind a swiping row.
+///
+/// Labelled rather than icon-only: the two directions do different things and
+/// one of them empties the jar, so which is which has to be readable before the
+/// finger lifts.
+class _SwipeBackground extends StatelessWidget {
+  const _SwipeBackground({
+    required this.alignment,
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final Alignment alignment;
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.l),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppRadii.card),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

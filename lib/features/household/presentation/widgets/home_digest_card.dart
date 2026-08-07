@@ -5,12 +5,15 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/format/date_time_format.dart';
+import '../../../../core/routing/household_deep_link.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../guilds/data/models/guild_dto.dart';
 import '../../../guilds/data/models/guild_features.dart';
 import '../../data/household_repository.dart';
 import '../../data/models/digest_dto.dart';
+import '../../data/models/maintenance_dto.dart';
+import '../../data/models/meal_dto.dart';
 import '../../data/money.dart';
 import 'household_widgets.dart';
 
@@ -34,8 +37,13 @@ class HomeDigestCard extends StatefulWidget {
   /// Whether this guild could have a digest worth drawing. The endpoint is
   /// harmless on a Community guild - every section comes back null - but there
   /// is no reason to spend a request finding that out.
+  ///
+  /// [GuildFeature.presence] is in the list because the digest's `away` section
+  /// belongs to it, and a house that has only turned Presence on still has
+  /// something to say.
   static bool appliesTo(GuildDto guild) =>
-      GuildFeature.householdChannelModules.any(guild.hasFeature);
+      GuildFeature.householdChannelModules.any(guild.hasFeature) ||
+      guild.hasFeature(GuildFeature.presence);
 
   @override
   State<HomeDigestCard> createState() => _HomeDigestCardState();
@@ -108,8 +116,14 @@ class _HomeDigestCardState extends State<HomeDigestCard> {
     if (digest == null || digest.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
 
+    // Roughly in order of "would somebody get up for this": something broken,
+    // money with a date on it, tonight's dinner, then the standing state of the
+    // house.
     final rows = <Widget>[
+      ..._maintenanceRows(digest.maintenance),
+      ..._billRows(digest.bills),
       ..._choreRows(digest.chores),
+      ..._mealRows(digest.meals),
       ..._listRows(digest.lists),
       ..._pantryRows(digest.pantry),
       ..._decisionRows(digest.decisions),
@@ -229,6 +243,112 @@ class _HomeDigestCardState extends State<HomeDigestCard> {
           onTap: () => _openChannel(decision.channelId),
         ),
     ];
+  }
+
+  /// Bills, which are obligations rather than history - the amount shown is
+  /// the caller's own share, computed server-side. It is **null** when there is
+  /// no total to divide yet or when the split no longer resolves, and in that
+  /// case nothing numeric is drawn at all: a wrong share on a glance is worse
+  /// than a missing one, because it is the figure somebody transfers.
+  List<Widget> _billRows(HouseholdBillsDigestDto? bills) {
+    if (bills == null) return const [];
+    final rows = <Widget>[
+      for (final bill in bills.dueSoon)
+        _DigestRow(
+          icon: Icons.receipt_long_outlined,
+          title: bill.myShareMinor == null
+              ? bill.description
+              : '${bill.description} · '
+                    '${formatMinor(bill.myShareMinor!, bill.currency)}',
+          subtitle: bill.dueAt == null
+              ? 'Coming up'
+              : formatDueLabel(bill.dueAt!),
+          urgent:
+              bill.dueAt != null && bill.dueAt!.isBefore(DateTime.now()),
+          onTap: () => _openBill(bill),
+        ),
+    ];
+    // Counted apart from the overdue ones because the action is different: one
+    // needs money moved, the other needs somebody to open the post.
+    if (bills.needsAmountCount > 0) {
+      rows.add(
+        _DigestRow(
+          icon: Icons.help_outline_rounded,
+          title: bills.needsAmountCount == 1
+              ? 'A bill needs an amount'
+              : '${bills.needsAmountCount} bills need an amount',
+          subtitle: 'Nobody has said what they came to',
+        ),
+      );
+    }
+    return rows;
+  }
+
+  void _openBill(HouseholdBillDigestEntryDto bill) {
+    if (bill.channelId.isEmpty) return;
+    context.push(
+      bill.id.isEmpty
+          ? RoutePaths.serverChannelPath(widget.guild.id, bill.channelId)
+          : RoutePaths.serverChannelFocusPath(
+              widget.guild.id,
+              bill.channelId,
+              focusKind: HouseholdFocusKind.bill,
+              focusId: bill.id,
+            ),
+    );
+  }
+
+  /// "What are we eating and am I cooking", which is the only meals question a
+  /// glance can usefully answer.
+  List<Widget> _mealRows(HouseholdMealsDigestDto? meals) {
+    if (meals == null || meals.today.isEmpty) return const [];
+    return [
+      for (final meal in meals.today)
+        _DigestRow(
+          icon: meal.slot.icon,
+          title: meal.title,
+          subtitle: meal.cookUserId == null
+              ? '${meal.slot.label} · nobody down to cook'
+              : meals.imCookingToday && MemberName.isSelf(meal.cookUserId!)
+              ? '${meal.slot.label} · you\'re cooking'
+              : meal.slot.label,
+          onTap: () => _openChannel(meal.channelId),
+        ),
+    ];
+  }
+
+  /// Broken things first. `Broken` and `OutOfService` are not synonyms and only
+  /// the first is urgent, which is why the tint follows the reason rather than
+  /// the mere fact that something is not `Ok`.
+  List<Widget> _maintenanceRows(HouseholdMaintenanceDigestDto? maintenance) {
+    if (maintenance == null) return const [];
+    return [
+      for (final asset in maintenance.attention)
+        _DigestRow(
+          icon: asset.status == AssetStatus.broken
+              ? Icons.report_gmailerrorred_rounded
+              : Icons.handyman_outlined,
+          title: asset.name,
+          subtitle:
+              maintenanceReasonLabel(asset.reason) ?? asset.status.label,
+          urgent: asset.reason == 'broken',
+          onTap: () => _openAsset(asset),
+        ),
+    ];
+  }
+
+  void _openAsset(HouseholdAssetDigestEntryDto asset) {
+    if (asset.channelId.isEmpty) return;
+    context.push(
+      asset.id.isEmpty
+          ? RoutePaths.serverChannelPath(widget.guild.id, asset.channelId)
+          : RoutePaths.serverChannelFocusPath(
+              widget.guild.id,
+              asset.channelId,
+              focusKind: HouseholdFocusKind.maintenanceAsset,
+              focusId: asset.id,
+            ),
+    );
   }
 
   List<Widget> _ledgerRows(List<HouseholdLedgerDigestDto>? ledger) {

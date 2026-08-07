@@ -37,12 +37,25 @@ class HouseholdStrings {
 
   static const _en = <String, String>{
     'household_chore_due_body': "Your turn, and it's due now.",
+    'household_chore_nudge_body': 'Still waiting on this one at home.',
+    'household_chore_reassigned_body': "Picked up from a flatmate who's away.",
     'household_expense_share_body': r'Your share is %1$s.',
     'household_expense_paid_body': r'Recorded as paid by you: %1$s.',
     'household_settlement_received_title': 'Payment received',
     'household_settlement_received_body': r'%1$s was recorded as paid to you.',
     'household_settlement_recorded_title': 'Payment recorded',
     'household_settlement_recorded_body': r'%1$s was recorded as paid by you.',
+    'household_bill_due_body': r'Due today. Your share is %1$s.',
+    'household_bill_due_soon_body': r'Due in %1$s. Your share is %2$s.',
+    'household_bill_posted_body': r'Added to the ledger. Your share is %1$s.',
+    'household_bill_needs_amount_body':
+        'A bill needs an amount before it can be split.',
+    'household_meal_cooking_today_title': "You're down to cook",
+    'household_meal_cooking_today_body': "You're down to cook this today.",
+    'household_maintenance_due_body': 'This is due for a service.',
+    'household_maintenance_warranty_body': r'The warranty runs out in %1$s.',
+    'household_maintenance_broken_body':
+        "Marked as broken. Don't use it for now.",
     'household_decision_opened_body': 'A house decision needs your vote.',
     'household_decision_opened_closing_body':
         'A house decision needs your vote before it closes.',
@@ -69,6 +82,9 @@ class HouseholdStrings {
 
   static const _de = <String, String>{
     'household_chore_due_body': 'Du bist dran, und es ist jetzt fällig.',
+    'household_chore_nudge_body': 'Das ist zu Hause immer noch offen.',
+    'household_chore_reassigned_body':
+        'Von jemandem übernommen, der gerade nicht zu Hause ist.',
     'household_expense_share_body': r'Dein Anteil beträgt %1$s.',
     'household_expense_paid_body': r'Als von dir bezahlt erfasst: %1$s.',
     'household_settlement_received_title': 'Zahlung erhalten',
@@ -77,6 +93,19 @@ class HouseholdStrings {
     'household_settlement_recorded_title': 'Zahlung erfasst',
     'household_settlement_recorded_body':
         r'%1$s wurde als von dir gezahlt erfasst.',
+    'household_bill_due_body': r'Heute fällig. Dein Anteil beträgt %1$s.',
+    'household_bill_due_soon_body':
+        r'Fällig in %1$s. Dein Anteil beträgt %2$s.',
+    'household_bill_posted_body':
+        r'Zum Haushaltsbuch hinzugefügt. Dein Anteil beträgt %1$s.',
+    'household_bill_needs_amount_body':
+        'Eine Rechnung braucht einen Betrag, bevor sie geteilt werden kann.',
+    'household_meal_cooking_today_title': 'Du kochst heute',
+    'household_meal_cooking_today_body': 'Das kochst du heute.',
+    'household_maintenance_due_body': 'Das ist zur Wartung fällig.',
+    'household_maintenance_warranty_body': r'Die Garantie läuft in %1$s ab.',
+    'household_maintenance_broken_body':
+        'Als defekt markiert. Bitte vorerst nicht benutzen.',
     'household_decision_opened_body':
         'Eine Entscheidung im Haushalt braucht deine Stimme.',
     'household_decision_opened_closing_body':

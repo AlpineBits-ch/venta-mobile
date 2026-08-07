@@ -77,6 +77,10 @@ _ChoreOccurrenceDto _$ChoreOccurrenceDtoFromJson(Map<String, dynamic> json) =>
         const ApiDateTimeConverter().fromJson,
       ),
       isOverdue: json['isOverdue'] as bool? ?? false,
+      nudgedAt: _$JsonConverterFromJson<String, DateTime>(
+        json['nudgedAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
     );
 
 Map<String, dynamic> _$ChoreOccurrenceDtoToJson(_ChoreOccurrenceDto instance) =>
@@ -98,6 +102,10 @@ Map<String, dynamic> _$ChoreOccurrenceDtoToJson(_ChoreOccurrenceDto instance) =>
         const ApiDateTimeConverter().toJson,
       ),
       'isOverdue': instance.isOverdue,
+      'nudgedAt': _$JsonConverterToJson<String, DateTime>(
+        instance.nudgedAt,
+        const ApiDateTimeConverter().toJson,
+      ),
     };
 
 _ChoreBalanceEntryDto _$ChoreBalanceEntryDtoFromJson(
@@ -107,6 +115,7 @@ _ChoreBalanceEntryDto _$ChoreBalanceEntryDtoFromJson(
   completedMinutes: (json['completedMinutes'] as num?)?.toInt() ?? 0,
   completedCount: (json['completedCount'] as num?)?.toInt() ?? 0,
   balanceMinutes: (json['balanceMinutes'] as num?)?.toInt() ?? 0,
+  presentDays: (json['presentDays'] as num?)?.toInt() ?? 0,
 );
 
 Map<String, dynamic> _$ChoreBalanceEntryDtoToJson(
@@ -116,4 +125,5 @@ Map<String, dynamic> _$ChoreBalanceEntryDtoToJson(
   'completedMinutes': instance.completedMinutes,
   'completedCount': instance.completedCount,
   'balanceMinutes': instance.balanceMinutes,
+  'presentDays': instance.presentDays,
 };

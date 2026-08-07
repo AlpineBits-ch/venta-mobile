@@ -71,6 +71,17 @@ sealed class ChoreOccurrenceDto with _$ChoreOccurrenceDto {
     String? completedByUserId,
     DateTime? skippedAt,
     @Default(false) bool isOverdue,
+
+    /// When somebody last nudged about this, or null if nobody has.
+    ///
+    /// **It never says who**, here or anywhere downstream, and that is the
+    /// design rather than an omission: the whole value of a nudge is that the
+    /// app does the asking so nobody in the house has to be the one who nags.
+    /// Attributing it puts the social cost straight back.
+    ///
+    /// Read it to grey the button. A second nudge inside 12 hours is a `409`,
+    /// and offering an action that cannot work is worse than not offering it.
+    DateTime? nudgedAt,
   }) = _ChoreOccurrenceDto;
 
   factory ChoreOccurrenceDto.fromJson(Map<String, dynamic> json) =>
@@ -91,6 +102,29 @@ extension ChoreOccurrenceX on ChoreOccurrenceDto {
       completedByUserId != null &&
       completedByUserId!.isNotEmpty &&
       completedByUserId != assignedUserId;
+
+  /// Whether a nudge would be accepted, as far as this client can tell.
+  ///
+  /// The server owns the real answer and refuses for reasons no board can see -
+  /// the guild's quiet hours, chiefly, which reject rather than defer. This
+  /// only hides the button in the cases that are certain: it is your own chore,
+  /// it is settled, it is not late yet, or the cooldown is still running.
+  bool canNudge(String viewerUserId, {DateTime? now, int graceHours = 0}) {
+    if (!isOpen) return false;
+    if (viewerUserId.isEmpty || viewerUserId == assignedUserId) return false;
+    final at = now ?? DateTime.now();
+    if (!dueAt.toUtc().add(Duration(hours: graceHours)).isBefore(at.toUtc())) {
+      return false;
+    }
+    return nextNudgeAt == null || !nextNudgeAt!.isAfter(at.toUtc());
+  }
+
+  /// The 12-hour cooldown is per occurrence, not per sender - so somebody else
+  /// having nudged an hour ago is exactly as blocking as having nudged
+  /// yourself.
+  static const nudgeCooldown = Duration(hours: 12);
+
+  DateTime? get nextNudgeAt => nudgedAt?.toUtc().add(nudgeCooldown);
 }
 
 /// One member's standing in the fairness ledger.
@@ -104,6 +138,15 @@ sealed class ChoreBalanceEntryDto with _$ChoreBalanceEntryDto {
     @Default(0) int completedMinutes,
     @Default(0) int completedCount,
     @Default(0) int balanceMinutes,
+
+    /// How many days of the window this member was actually here for.
+    ///
+    /// The balance is weighted by it, so being away no longer reads as being
+    /// behind. Worth surfacing rather than hiding, because it lets the board
+    /// *explain* the number: "40 minutes light over the 16 days you were here"
+    /// is a sentence people accept, where the bare number is the thing they
+    /// argue with.
+    @Default(0) int presentDays,
   }) = _ChoreBalanceEntryDto;
 
   factory ChoreBalanceEntryDto.fromJson(Map<String, dynamic> json) =>

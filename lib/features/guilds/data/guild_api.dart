@@ -758,6 +758,8 @@ class GuildApi {
     ChannelType.ledger => 'Ledger',
     ChannelType.pantry => 'Pantry',
     ChannelType.decisions => 'Decisions',
+    ChannelType.meals => 'Meals',
+    ChannelType.maintenance => 'Maintenance',
     // Only ever produced by *decoding* a type this build doesn't know; it's
     // never offered as something to create. Loud rather than silently posting
     // a bogus type the server would reject anyway.

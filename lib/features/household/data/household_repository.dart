@@ -27,6 +27,10 @@ abstract final class HouseholdEvents {
     'guild.ChoreDeleted',
     'guild.ChoreOccurrenceCreated',
     'guild.ChoreOccurrenceUpdated',
+    // `{ guildId, channelId, occurrenceId, nudgedAt }`. Carries no sender, and
+    // there is nothing downstream that could reconstruct one - see
+    // `HouseholdApiWave2.nudgeOccurrence`.
+    'guild.ChoreOccurrenceNudged',
   };
 
   /// `{ guildId, channelId, kind, targetId, title, body, data }` - the one
@@ -53,6 +57,45 @@ abstract final class HouseholdEvents {
     'guild.ExpenseUpdated',
     'guild.ExpenseDeleted',
     'guild.SettlementRecorded',
+    'guild.ExpenseReceiptAdded',
+    'guild.ExpenseReceiptDeleted',
+  };
+
+  /// The bills half of a ledger channel: the schedules and the obligations they
+  /// generate. Grouped apart from [ledger] because the two boards are separate
+  /// tabs - a bill falling due changes nothing about what has been spent.
+  static const bills = <String>{
+    'guild.RecurringExpenseCreated',
+    'guild.RecurringExpenseUpdated',
+    'guild.RecurringExpenseDeleted',
+    'guild.BillOccurrenceCreated',
+    'guild.BillOccurrenceUpdated',
+  };
+
+  static const meals = <String>{
+    'guild.RecipeCreated',
+    'guild.RecipeUpdated',
+    'guild.RecipeDeleted',
+    'guild.MealPlanEntryCreated',
+    'guild.MealPlanEntryUpdated',
+    'guild.MealPlanEntryDeleted',
+  };
+
+  static const maintenance = <String>{
+    'guild.MaintenanceAssetCreated',
+    'guild.MaintenanceAssetUpdated',
+    'guild.MaintenanceAssetDeleted',
+    'guild.MaintenanceRecordCreated',
+    'guild.MaintenanceRecordUpdated',
+    'guild.MaintenanceRecordDeleted',
+  };
+
+  /// Guild-scoped, like home status - an absence belongs to a person, not to a
+  /// channel.
+  static const absences = <String>{
+    'guild.AbsenceCreated',
+    'guild.AbsenceUpdated',
+    'guild.AbsenceDeleted',
   };
 
   static const decisions = <String>{
@@ -69,7 +112,11 @@ abstract final class HouseholdEvents {
     ...chores,
     ...pantry,
     ...ledger,
+    ...bills,
     ...decisions,
+    ...meals,
+    ...maintenance,
+    ...absences,
     ...homeStatus,
     memberMovedOut,
     householdAlert,

@@ -1,9 +1,97 @@
+import 'package:flutter/material.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../../../../core/format/api_date_time.dart';
 
 part 'ledger_dto.freezed.dart';
 part 'ledger_dto.g.dart';
+
+/// What an expense was for.
+///
+/// Coarse on purpose: the question it answers is "what does this flat cost per
+/// month, roughly", and a taxonomy fine enough to argue about is a taxonomy
+/// nobody fills in. [uncategorized] is a real bucket rather than a synonym for
+/// [other] - a rollup that hides the size of its own gap is worse than none.
+enum ExpenseCategory {
+  @JsonValue('Uncategorized')
+  uncategorized,
+  @JsonValue('Groceries')
+  groceries,
+  @JsonValue('Rent')
+  rent,
+  @JsonValue('Utilities')
+  utilities,
+  @JsonValue('Internet')
+  internet,
+  @JsonValue('Household')
+  household,
+  @JsonValue('Transport')
+  transport,
+  @JsonValue('EatingOut')
+  eatingOut,
+  @JsonValue('Entertainment')
+  entertainment,
+  @JsonValue('Health')
+  health,
+  @JsonValue('Pets')
+  pets,
+  @JsonValue('Repairs')
+  repairs,
+  @JsonValue('Other')
+  other,
+}
+
+extension ExpenseCategoryX on ExpenseCategory {
+  String get wireValue => switch (this) {
+    ExpenseCategory.uncategorized => 'Uncategorized',
+    ExpenseCategory.groceries => 'Groceries',
+    ExpenseCategory.rent => 'Rent',
+    ExpenseCategory.utilities => 'Utilities',
+    ExpenseCategory.internet => 'Internet',
+    ExpenseCategory.household => 'Household',
+    ExpenseCategory.transport => 'Transport',
+    ExpenseCategory.eatingOut => 'EatingOut',
+    ExpenseCategory.entertainment => 'Entertainment',
+    ExpenseCategory.health => 'Health',
+    ExpenseCategory.pets => 'Pets',
+    ExpenseCategory.repairs => 'Repairs',
+    ExpenseCategory.other => 'Other',
+  };
+
+  String get label => switch (this) {
+    // Names the gap plainly rather than dressing it as a category somebody
+    // chose.
+    ExpenseCategory.uncategorized => 'Not sorted',
+    ExpenseCategory.groceries => 'Groceries',
+    ExpenseCategory.rent => 'Rent',
+    ExpenseCategory.utilities => 'Utilities',
+    ExpenseCategory.internet => 'Internet',
+    ExpenseCategory.household => 'Household',
+    ExpenseCategory.transport => 'Transport',
+    ExpenseCategory.eatingOut => 'Eating out',
+    ExpenseCategory.entertainment => 'Entertainment',
+    ExpenseCategory.health => 'Health',
+    ExpenseCategory.pets => 'Pets',
+    ExpenseCategory.repairs => 'Repairs',
+    ExpenseCategory.other => 'Other',
+  };
+
+  IconData get icon => switch (this) {
+    ExpenseCategory.uncategorized => Icons.help_outline_rounded,
+    ExpenseCategory.groceries => Icons.shopping_basket_outlined,
+    ExpenseCategory.rent => Icons.home_outlined,
+    ExpenseCategory.utilities => Icons.bolt_outlined,
+    ExpenseCategory.internet => Icons.wifi_rounded,
+    ExpenseCategory.household => Icons.chair_outlined,
+    ExpenseCategory.transport => Icons.directions_bus_outlined,
+    ExpenseCategory.eatingOut => Icons.restaurant_outlined,
+    ExpenseCategory.entertainment => Icons.movie_outlined,
+    ExpenseCategory.health => Icons.medical_services_outlined,
+    ExpenseCategory.pets => Icons.pets_outlined,
+    ExpenseCategory.repairs => Icons.build_outlined,
+    ExpenseCategory.other => Icons.more_horiz_rounded,
+  };
+}
 
 /// How an expense is divided.
 enum SplitKind {
@@ -85,6 +173,13 @@ sealed class ExpenseDto with _$ExpenseDto {
     SplitKind splitKind,
     @Default('') String createdByUserId,
     @Default(<ExpenseShareDto>[]) List<ExpenseShareDto> shares,
+
+    /// What it was for. Coarse on purpose - see [ExpenseCategory]. Expenses
+    /// that predate the field arrive as `Uncategorized`, which is a real
+    /// bucket in the rollup rather than a synonym for "Other".
+    @Default(ExpenseCategory.uncategorized)
+    @JsonKey(unknownEnumValue: ExpenseCategory.uncategorized)
+    ExpenseCategory category,
   }) = _ExpenseDto;
 
   factory ExpenseDto.fromJson(Map<String, dynamic> json) =>
@@ -136,6 +231,111 @@ sealed class TransferSuggestionDto with _$TransferSuggestionDto {
 
   factory TransferSuggestionDto.fromJson(Map<String, dynamic> json) =>
       _$TransferSuggestionDtoFromJson(json);
+}
+
+/// What the house spent over a window, and how much of it was the caller's.
+///
+/// This answers "what does this flat cost per month", which is the first thing
+/// anybody asks and about the only number that changes behaviour. Everything is
+/// whole minor units, so the buckets sum back to [totalMinor] exactly.
+@freezed
+sealed class LedgerSummaryDto with _$LedgerSummaryDto {
+  @ApiDateTimeConverter()
+  const factory LedgerSummaryDto({
+    @Default('') String channelId,
+    @Default('CHF') String currency,
+    DateTime? from,
+    DateTime? to,
+    @Default(0) int totalMinor,
+
+    /// The caller's own share of everything in the window - their half of the
+    /// shop, not what they happened to pay for. This is the number people
+    /// actually want.
+    @Default(0) int myShareMinor,
+    @Default(<LedgerCategoryTotalDto>[]) List<LedgerCategoryTotalDto> byCategory,
+
+    /// **Not zero-filled.** A month with no spending is absent rather than
+    /// present as a zero, so a chart must not draw the gap as a data point.
+    @Default(<LedgerPeriodTotalDto>[]) List<LedgerPeriodTotalDto> byPeriod,
+    @Default(<LedgerPayerTotalDto>[]) List<LedgerPayerTotalDto> byPayer,
+
+    /// The requested window was longer than the cap and was shortened. Shown
+    /// rather than silently applied: a total that quietly covers less than what
+    /// was asked for is a number somebody will act on and be wrong about.
+    @Default(false) bool clamped,
+  }) = _LedgerSummaryDto;
+
+  factory LedgerSummaryDto.fromJson(Map<String, dynamic> json) =>
+      _$LedgerSummaryDtoFromJson(json);
+}
+
+@freezed
+sealed class LedgerCategoryTotalDto with _$LedgerCategoryTotalDto {
+  const factory LedgerCategoryTotalDto({
+    @Default(ExpenseCategory.uncategorized)
+    @JsonKey(unknownEnumValue: ExpenseCategory.uncategorized)
+    ExpenseCategory category,
+    @Default(0) int totalMinor,
+    @Default(0) int myShareMinor,
+    @Default(0) int count,
+  }) = _LedgerCategoryTotalDto;
+
+  factory LedgerCategoryTotalDto.fromJson(Map<String, dynamic> json) =>
+      _$LedgerCategoryTotalDtoFromJson(json);
+}
+
+@freezed
+sealed class LedgerPeriodTotalDto with _$LedgerPeriodTotalDto {
+  const factory LedgerPeriodTotalDto({
+    /// `2026-07`. A month, because that is the unit rent, salaries and every
+    /// other household comparison already run on.
+    @Default('') String period,
+    @Default(0) int totalMinor,
+    @Default(0) int myShareMinor,
+    @Default(0) int count,
+  }) = _LedgerPeriodTotalDto;
+
+  factory LedgerPeriodTotalDto.fromJson(Map<String, dynamic> json) =>
+      _$LedgerPeriodTotalDtoFromJson(json);
+}
+
+/// What each member fronted over the window.
+///
+/// Deliberately **not** a balance: it says who has been carrying the cash flow,
+/// which is a different question from who owes whom.
+@freezed
+sealed class LedgerPayerTotalDto with _$LedgerPayerTotalDto {
+  const factory LedgerPayerTotalDto({
+    @Default('') String userId,
+    @Default(0) int paidMinor,
+  }) = _LedgerPayerTotalDto;
+
+  factory LedgerPayerTotalDto.fromJson(Map<String, dynamic> json) =>
+      _$LedgerPayerTotalDtoFromJson(json);
+}
+
+/// A receipt photo attached to an expense. Max 4 per expense, images and PDF.
+///
+/// [url] is **presigned and minted per request**, which is why it must never be
+/// cached: persisting the URL persists its expiry, and the first symptom of
+/// that is a receipt that renders for ten minutes after upload and then 403s
+/// forever.
+@freezed
+sealed class ExpenseReceiptDto with _$ExpenseReceiptDto {
+  @ApiDateTimeConverter()
+  const factory ExpenseReceiptDto({
+    required String id,
+    @Default('') String expenseId,
+    @Default('') String fileName,
+    @Default('') String contentType,
+    @Default(0) int sizeBytes,
+    @Default('') String uploadedByUserId,
+    DateTime? uploadedAt,
+    String? url,
+  }) = _ExpenseReceiptDto;
+
+  factory ExpenseReceiptDto.fromJson(Map<String, dynamic> json) =>
+      _$ExpenseReceiptDtoFromJson(json);
 }
 
 /// One currency per ledger channel. Changing it **relabels** existing

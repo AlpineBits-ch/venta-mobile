@@ -109,6 +109,8 @@ const _$ChannelTypeEnumMap = {
   ChannelType.ledger: 'Ledger',
   ChannelType.pantry: 'Pantry',
   ChannelType.decisions: 'Decisions',
+  ChannelType.meals: 'Meals',
+  ChannelType.maintenance: 'Maintenance',
   ChannelType.unknown: 'unknown',
 };
 

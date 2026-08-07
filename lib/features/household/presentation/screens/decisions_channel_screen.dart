@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/format/date_time_format.dart';
+import '../../../../core/routing/household_deep_link.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -26,10 +27,15 @@ class DecisionsChannelScreen extends StatefulWidget {
     super.key,
     required this.guildId,
     required this.channelId,
+    this.focus,
   });
 
   final String guildId;
   final String channelId;
+
+  /// The decision a notification opened this board at, if any - see
+  /// [HouseholdChannelState.focus].
+  final HouseholdFocus? focus;
 
   @override
   State<DecisionsChannelScreen> createState() => _DecisionsChannelScreenState();
@@ -55,6 +61,7 @@ class _DecisionsChannelScreenState
 
   @override
   void initState() {
+    focus = widget.focus;
     super.initState();
     _load();
     _eventsSub = household

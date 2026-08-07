@@ -41,6 +41,13 @@ enum ChannelType {
   pantry,
   @JsonValue('Decisions')
   decisions,
+  @JsonValue('Meals')
+  meals,
+
+  /// The house's appliances and their service history - `# upkeep` on a
+  /// seeded household.
+  @JsonValue('Maintenance')
+  maintenance,
 
   /// A type this build has never heard of - a household channel seen by a
   /// client that predates them, or whatever gets appended next.
@@ -65,6 +72,8 @@ extension ChannelTypeX on ChannelType {
     ChannelType.ledger,
     ChannelType.pantry,
     ChannelType.decisions,
+    ChannelType.meals,
+    ChannelType.maintenance,
   }.contains(this);
 
   /// Whether this channel has message history and a composer at all.
@@ -85,6 +94,8 @@ extension ChannelTypeX on ChannelType {
     ChannelType.ledger => GuildFeature.ledger,
     ChannelType.pantry => GuildFeature.pantry,
     ChannelType.decisions => GuildFeature.decisions,
+    ChannelType.meals => GuildFeature.meals,
+    ChannelType.maintenance => GuildFeature.maintenance,
     _ => null,
   };
 }

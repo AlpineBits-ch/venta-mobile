@@ -47,6 +47,7 @@ import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/status/presentation/screens/platform_status_screen.dart';
 import '../di/injector.dart';
 import '../realtime/realtime_service.dart';
+import 'household_deep_link.dart';
 import '../session/session_cubit.dart';
 import '../session/session_state.dart';
 import '../theme/widget_styles.dart';
@@ -233,6 +234,15 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         (context, state) => ChannelHostScreen(
           guildId: state.pathParameters['guildId']!,
           channelId: state.pathParameters['channelId']!,
+          // Only household boards read this. It names the row a notification
+          // was about, because a chore occurrence or a bill has no screen of
+          // its own to route to - it is a row on a board that opens scrolled
+          // to it. Absent for every other channel type, and for a channel
+          // opened from the sidebar.
+          focus: HouseholdFocus.tryParse(
+            state.uri.queryParameters['focusKind'],
+            state.uri.queryParameters['focus'],
+          ),
         ),
       ),
       _route(

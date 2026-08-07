@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/routing/household_deep_link.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
@@ -11,6 +12,8 @@ import '../../../household/presentation/screens/chores_channel_screen.dart';
 import '../../../household/presentation/screens/decisions_channel_screen.dart';
 import '../../../household/presentation/screens/ledger_channel_screen.dart';
 import '../../../household/presentation/screens/list_channel_screen.dart';
+import '../../../household/presentation/screens/maintenance_channel_screen.dart';
+import '../../../household/presentation/screens/meals_channel_screen.dart';
 import '../../../household/presentation/screens/pantry_channel_screen.dart';
 import '../../data/guild_repository.dart';
 import '../../data/models/channel_dto.dart';
@@ -34,10 +37,16 @@ class ChannelHostScreen extends StatefulWidget {
     super.key,
     required this.guildId,
     required this.channelId,
+    this.focus,
   });
 
   final String guildId;
   final String channelId;
+
+  /// The row a household notification was about, when the channel was opened
+  /// from one. Null everywhere else, and ignored by every channel type that
+  /// has messages - a message already has a route of its own.
+  final HouseholdFocus? focus;
 
   @override
   State<ChannelHostScreen> createState() => _ChannelHostScreenState();
@@ -109,22 +118,37 @@ class _ChannelHostScreenState extends State<ChannelHostScreen> {
       ChannelType.list => ListChannelScreen(
         guildId: widget.guildId,
         channelId: widget.channelId,
+        focus: widget.focus,
       ),
       ChannelType.chores => ChoresChannelScreen(
         guildId: widget.guildId,
         channelId: widget.channelId,
+        focus: widget.focus,
       ),
       ChannelType.ledger => LedgerChannelScreen(
         guildId: widget.guildId,
         channelId: widget.channelId,
+        focus: widget.focus,
       ),
       ChannelType.pantry => PantryChannelScreen(
         guildId: widget.guildId,
         channelId: widget.channelId,
+        focus: widget.focus,
       ),
       ChannelType.decisions => DecisionsChannelScreen(
         guildId: widget.guildId,
         channelId: widget.channelId,
+        focus: widget.focus,
+      ),
+      ChannelType.meals => MealsChannelScreen(
+        guildId: widget.guildId,
+        channelId: widget.channelId,
+        focus: widget.focus,
+      ),
+      ChannelType.maintenance => MaintenanceChannelScreen(
+        guildId: widget.guildId,
+        channelId: widget.channelId,
+        focus: widget.focus,
       ),
       // Forum and Media are both post lists, not message threads.
       ChannelType.forum || ChannelType.media => ForumChannelScreen(

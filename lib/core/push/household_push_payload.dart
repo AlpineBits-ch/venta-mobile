@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../routing/route_paths.dart';
+import '../routing/household_deep_link.dart';
 import 'household_strings.dart';
 
 /// A household-module push, as the backend's `HouseholdPushService` builds it.
@@ -78,11 +78,20 @@ class HouseholdPushPayload {
   /// because a client that renders its own richer copy must not.
   final bool hidden;
 
-  /// Where tapping this should land: the board it happened on, or the house
-  /// itself when the module isn't a channel.
-  String get route => channelId == null
-      ? RoutePaths.serverPath(guildId)
-      : RoutePaths.serverChannelPath(guildId, channelId!);
+  /// Where tapping this should land: the row it is about, the board it
+  /// happened on when the kind names no row, or the house itself when the
+  /// module isn't a channel.
+  ///
+  /// Deliberately the same function `HouseholdAlert.route` calls. The two
+  /// envelopes carry the same alert and differ only in whether the app was
+  /// running when it arrived, so a chore reminder tapped from the tray and one
+  /// tapped in-app have to reach the same row.
+  String get route => householdAlertRoute(
+    guildId: guildId,
+    kind: kind,
+    channelId: channelId,
+    targetId: targetId,
+  );
 
   /// What to actually show, in the reader's language where there is one.
   ///

@@ -148,6 +148,26 @@ abstract final class RoutePaths {
   static String serverChannelPath(String guildId, String channelId) =>
       '/server/$guildId/channel/$channelId';
 
+  /// A household board opened at one of its rows.
+  ///
+  /// A query string rather than a deeper path because the destination is the
+  /// same screen either way: a chore occurrence has no screen of its own, it is
+  /// a row on a board that is opened scrolled to it. Keeping it in the query
+  /// also leaves [parentOf] alone, which reads path segments only, so the back
+  /// arrow from a deep-linked board still goes to the guild.
+  ///
+  /// [focusKind] is a [HouseholdFocusKind] token; see `household_deep_link.dart`
+  /// for why the alert's own `kind` is not what travels here.
+  static String serverChannelFocusPath(
+    String guildId,
+    String channelId, {
+    required String focusKind,
+    required String focusId,
+  }) =>
+      '${serverChannelPath(guildId, channelId)}'
+      '?focusKind=${Uri.encodeQueryComponent(focusKind)}'
+      '&focus=${Uri.encodeQueryComponent(focusId)}';
+
   static String serverChannelSettingsPath(String guildId, String channelId) =>
       '/server/$guildId/channel/$channelId/settings';
 

@@ -27,6 +27,8 @@
 <resources>
     <!-- Chores -->
     <string name="household_chore_due_body">Your turn, and it\'s due now.</string>
+    <string name="household_chore_nudge_body">Still waiting on this one at home.</string>
+    <string name="household_chore_reassigned_body">Picked up from a flatmate who\'s away.</string>
 
     <!-- Ledger -->
     <string name="household_expense_share_body">Your share is %1$s.</string>
@@ -35,6 +37,21 @@
     <string name="household_settlement_received_body">%1$s was recorded as paid to you.</string>
     <string name="household_settlement_recorded_title">Payment recorded</string>
     <string name="household_settlement_recorded_body">%1$s was recorded as paid by you.</string>
+
+    <!-- Bills -->
+    <string name="household_bill_due_body">Due today. Your share is %1$s.</string>
+    <string name="household_bill_due_soon_body">Due in %1$s. Your share is %2$s.</string>
+    <string name="household_bill_posted_body">Added to the ledger. Your share is %1$s.</string>
+    <string name="household_bill_needs_amount_body">A bill needs an amount before it can be split.</string>
+
+    <!-- Meals -->
+    <string name="household_meal_cooking_today_title">You\'re down to cook</string>
+    <string name="household_meal_cooking_today_body">You\'re down to cook this today.</string>
+
+    <!-- Maintenance -->
+    <string name="household_maintenance_due_body">This is due for a service.</string>
+    <string name="household_maintenance_warranty_body">The warranty runs out in %1$s.</string>
+    <string name="household_maintenance_broken_body">Marked as broken. Don\'t use it for now.</string>
 
     <!-- Decisions -->
     <string name="household_decision_opened_body">A house decision needs your vote.</string>
