@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- German household notification copy. See values/strings.xml for the rules. -->
+<resources>
+    <!-- Chores -->
+    <string name="household_chore_due_body">Du bist dran, und es ist jetzt fällig.</string>
+
+    <!-- Ledger -->
+    <string name="household_expense_share_body">Dein Anteil beträgt %1$s.</string>
+    <string name="household_expense_paid_body">Als von dir bezahlt erfasst: %1$s.</string>
+    <string name="household_settlement_received_title">Zahlung erhalten</string>
+    <string name="household_settlement_received_body">%1$s wurde als an dich gezahlt erfasst.</string>
+    <string name="household_settlement_recorded_title">Zahlung erfasst</string>
+    <string name="household_settlement_recorded_body">%1$s wurde als von dir gezahlt erfasst.</string>
+
+    <!-- Decisions -->
+    <string name="household_decision_opened_body">Eine Entscheidung im Haushalt braucht deine Stimme.</string>
+    <string name="household_decision_opened_closing_body">Eine Entscheidung im Haushalt braucht deine Stimme, bevor sie schließt.</string>
+    <string name="household_decision_blocked_body">Blockiert: %1$s</string>
+
+    <!-- Shopping lists -->
+    <string name="household_list_item_added_body">Steht jetzt auf %1$s - kannst du es unterwegs mitnehmen?</string>
+    <string name="household_list_item_assigned_body">Du sollst das von %1$s mitbringen.</string>
+    <string name="household_list_completed_body">Alles darauf ist abgehakt.</string>
+
+    <!-- Pantry -->
+    <string name="household_pantry_low_body">Zu Hause geht es zur Neige.</string>
+    <string name="household_pantry_low_listed_body">Geht zur Neige und steht jetzt auf %1$s.</string>
+    <string name="household_pantry_restock_body">Ist zu Hause ausgegangen und steht auf der Liste - kannst du es unterwegs mitnehmen?</string>
+    <string name="household_pantry_expiring_title">Aufbrauchen oder wegwerfen</string>
+    <string name="household_pantry_expiring_one_body">%1$s läuft bald ab.</string>
+    <string name="household_pantry_expiring_two_body">%1$s und %2$s laufen bald ab.</string>
+    <string name="household_pantry_expiring_many_body">%1$s, %2$s und %3$s weitere laufen bald ab.</string>
+
+    <!-- Hidden content (privacy spec T2-23) -->
+    <string name="household_hidden_title">Zuhause</string>
+    <string name="household_hidden_body">Zu Hause braucht etwas deine Aufmerksamkeit</string>
+</resources>

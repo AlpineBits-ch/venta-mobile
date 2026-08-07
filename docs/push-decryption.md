@@ -250,6 +250,48 @@ Successes are not written. The app already knows a notification it decrypted
 went well, and a breadcrumb per delivered message would be the file's whole
 budget.
 
+### The same question on Android
+
+Android had none of this, and needed it just as much. `MessagePushDecryptor`
+returns null on every failure path by design — a notification that says the wrong
+thing beats one that never arrives — so "I always see *You have a new encrypted
+message*" described a dozen distinct causes, and none of them left a trace: the
+FCM background isolate is a fresh isolate that never runs `main()`, so **Sentry
+is not initialised in it**, and `debugPrint` reaches a console nobody is attached
+to in production.
+
+Same answer, same shape. `MessagePushDecryptor.attempt` returns a
+`PushDecryptResult` carrying a `PushDecryptOutcome` alongside the text;
+`PushDecryptDiagnostics` appends it to `push-decrypt-diagnostics.json` in
+Application Support (no App Group needed — Android has one process), and
+`app.dart` drains it to Sentry beside the iOS one, on launch and on resume.
+
+Two deliberate differences from the iOS file:
+
+- **Successes *are* written.** `decrypted` and `servedFromCache` are not
+  reported, but they are recorded, because the diagnosis is usually a ratio: "it
+  works for DMs and not for channels" and "it never works at all" are different
+  faults with the same bug report. The file is capped at 50 entries and drops the
+  oldest.
+- **The outcome names are shared with `NseOutcome`** wherever both platforms can
+  produce them, so a report reads the same whichever handset it came from.
+  `push_decrypt_diagnostics_test.dart` asserts the shared names stay aligned.
+
+Behaviour is otherwise unchanged: the outcome is recorded on the way past, never
+acted on.
+
+**Reading a report.** The Sentry tag is `push_outcome` on Android and
+`nse_outcome` on iOS. What the common answers mean:
+
+| Outcome | What it means |
+|---|---|
+| `noGroupForGeneration` | This device holds no group for that generation. Correct if it was never admitted; a dropped Welcome if the conversation reads fine in the app. |
+| `noCiphertext` | The server sent `truncated: 1` — the ciphertext did not fit in FCM's 4KB budget. The placeholder is the honest answer. |
+| `stateKeyUnavailable` | The keystore would not give up the state key. Usually a background isolate reaching it before first unlock. |
+| `notEncrypted` | `encrypted` was not `"1"`, so `body` was taken as the real text. A run of these on a conversation you believe is encrypted means the server is not setting the flag. |
+| `processMessageFailed` | openmls refused it, most often because the ratchet already moved past this message — the websocket won the race and the plaintext should be in the cache. |
+| `senderMismatch` | Sealed by someone other than the author the server named. Never shown, deliberately. |
+
 ## The plaintext cache has two writers
 
 This is the part that can lose data rather than merely disappoint.

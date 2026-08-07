@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../mls/mls_store.dart';
 import 'message_push_decryptor.dart';
 import 'message_push_payload.dart';
+import 'push_decrypt_diagnostics.dart';
 import 'sender_avatar_cache.dart';
 
 /// Builds and posts the tray entry for a new message.
@@ -81,11 +82,15 @@ class MessageNotifier {
     try {
       await _ensureInitialized();
 
-      final decrypted = await MessagePushDecryptor.decrypt(
-        payload,
-        store: store,
-      );
-      final body = decrypted ?? payload.placeholderBody;
+      final attempt = await MessagePushDecryptor.attempt(payload, store: store);
+
+      // Written rather than reported: on Android this often runs in the FCM
+      // background isolate, which has no Sentry, so the outcome goes to disk and
+      // the app forwards it on its next launch. Awaited because the isolate can
+      // be torn down the moment `show` returns.
+      await PushDecryptDiagnostics().record(payload, attempt);
+
+      final body = attempt.text ?? payload.placeholderBody;
       final avatarPath = await SenderAvatarCache.fetch(payload.senderAvatarUrl);
 
       final sender = Person(

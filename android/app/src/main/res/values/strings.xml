@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Notification copy for household pushes, resolved by the OS.
+
+    A household push carries a real `notification` block whose `title_loc_key` /
+    `body_loc_key` name entries in this file. Android resolves them against the
+    bundle and draws the notification itself, which is what makes these work when
+    the app is backgrounded, dead, or has been force-stopped - none of which a
+    data-only push survives.
+
+    Consequences worth knowing before editing:
+
+      * A key the server sends and this file does not contain does NOT fall back
+        to the `title`/`body` the same payload carries. The notification loses
+        its text. That is why the server only sends keys to a build that declared
+        the `push.loc.v1` capability, and why removing a name from here is a
+        breaking change rather than a cleanup.
+
+      * Placeholders are positional (`%1$s`), not sequential (`%s`), because
+        translations reorder arguments. The server supplies the values in a fixed
+        order per key; a translation may put them wherever the sentence needs.
+
+      * `lib/core/push/household_strings.dart` carries the same table for the
+        foreground case the OS never draws, and `ios/Runner/*.lproj` carries it
+        for iOS. `test/household_strings_test.dart` asserts all three agree.
+-->
+<resources>
+    <!-- Chores -->
+    <string name="household_chore_due_body">Your turn, and it\'s due now.</string>
+
+    <!-- Ledger -->
+    <string name="household_expense_share_body">Your share is %1$s.</string>
+    <string name="household_expense_paid_body">Recorded as paid by you: %1$s.</string>
+    <string name="household_settlement_received_title">Payment received</string>
+    <string name="household_settlement_received_body">%1$s was recorded as paid to you.</string>
+    <string name="household_settlement_recorded_title">Payment recorded</string>
+    <string name="household_settlement_recorded_body">%1$s was recorded as paid by you.</string>
+
+    <!-- Decisions -->
+    <string name="household_decision_opened_body">A house decision needs your vote.</string>
+    <string name="household_decision_opened_closing_body">A house decision needs your vote before it closes.</string>
+    <string name="household_decision_blocked_body">Blocked: %1$s</string>
+
+    <!-- Shopping lists -->
+    <string name="household_list_item_added_body">Just went on %1$s - could you grab it while you\'re out?</string>
+    <string name="household_list_item_assigned_body">You\'ve been asked to pick this up from %1$s.</string>
+    <string name="household_list_completed_body">Everything on it is ticked off.</string>
+
+    <!-- Pantry -->
+    <string name="household_pantry_low_body">Running low at home.</string>
+    <string name="household_pantry_low_listed_body">Running low, so it\'s gone on %1$s.</string>
+    <string name="household_pantry_restock_body">Ran low at home and went on the list - could you grab it while you\'re out?</string>
+    <string name="household_pantry_expiring_title">Use it or lose it</string>
+    <string name="household_pantry_expiring_one_body">%1$s is about to go off.</string>
+    <string name="household_pantry_expiring_two_body">%1$s and %2$s are about to go off.</string>
+    <string name="household_pantry_expiring_many_body">%1$s, %2$s and %3$s more are about to go off.</string>
+
+    <!-- Hidden content (privacy spec T2-23) -->
+    <string name="household_hidden_title">Home</string>
+    <string name="household_hidden_body">Something needs your attention at home</string>
+</resources>

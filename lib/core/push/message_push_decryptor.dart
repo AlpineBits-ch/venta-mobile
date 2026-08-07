@@ -5,6 +5,7 @@ import 'package:venta_mls/venta_mls.dart';
 
 import '../mls/mls_store.dart';
 import 'message_push_payload.dart';
+import 'push_decrypt_outcome.dart';
 
 /// Turns the ciphertext riding on a push notification into the text to show in
 /// the tray, without the app running.
@@ -34,9 +35,28 @@ class MessagePushDecryptor {
   static Future<String?> decrypt(
     MessagePushPayload payload, {
     MlsStore? store,
+  }) async => (await attempt(payload, store: store)).text;
+
+  /// The same work as [decrypt], with the reason attached.
+  ///
+  /// Every `return null` below is a distinct cause wearing the same symptom -
+  /// the notification reads "You have a new encrypted message" - and until this
+  /// existed there was no way to tell them apart on Android in production. The
+  /// FCM background isolate has no Sentry and its `debugPrint` goes nowhere, so
+  /// the outcome is written to disk and drained on the next launch, exactly as
+  /// iOS's extension already does. See [PushDecryptOutcome].
+  ///
+  /// Behaviour is deliberately unchanged: the outcome is recorded on the way
+  /// past, never acted on.
+  static Future<PushDecryptResult> attempt(
+    MessagePushPayload payload, {
+    MlsStore? store,
   }) async {
     if (!payload.isEncrypted) {
-      return payload.placeholderBody.isEmpty ? null : payload.placeholderBody;
+      return PushDecryptResult(
+        payload.placeholderBody.isEmpty ? null : payload.placeholderBody,
+        PushDecryptOutcome.notEncrypted,
+      );
     }
 
     // `recipientUserId` is a **server field on a push payload**, and everything
@@ -51,7 +71,9 @@ class MessagePushDecryptor {
     // that directory's, and the flush at the end wrote the loaded account's
     // decrypted messages into it.
     final userId = payload.recipientUserId;
-    if (userId == null) return null;
+    if (userId == null) {
+      return const PushDecryptResult.failed(PushDecryptOutcome.noRecipient);
+    }
 
     final loaded = store?.loadedUserId;
     if (loaded != null && loaded != userId) {
@@ -59,7 +81,9 @@ class MessagePushDecryptor {
         'MessagePushDecryptor: ${payload.messageId} names $userId but this '
         'process holds $loaded - leaving the store alone',
       );
-      return null;
+      return const PushDecryptResult.failed(
+        PushDecryptOutcome.otherAccountLoaded,
+      );
     }
 
     try {
@@ -85,7 +109,9 @@ class MessagePushDecryptor {
             'MessagePushDecryptor: ${payload.messageId} is for another account '
             'than the one this process has loaded - leaving the engine alone',
           );
-          return null;
+          return const PushDecryptResult.failed(
+            PushDecryptOutcome.otherAccountLoaded,
+          );
         }
       }
 
@@ -106,15 +132,38 @@ class MessagePushDecryptor {
         generation: generation,
         messageId: payload.messageId,
       );
-      if (cached != null) return _decode(cached);
+      if (cached != null) {
+        return PushDecryptResult(
+          _decode(cached),
+          PushDecryptOutcome.servedFromCache,
+        );
+      }
 
       final ciphertext = payload.ciphertext;
-      if (ciphertext == null) return null;
+      if (ciphertext == null) {
+        return const PushDecryptResult.failed(PushDecryptOutcome.noCiphertext);
+      }
 
-      final groupId = generation == null
-          ? null
-          : store.groupId(payload.contextId, generation);
-      if (groupId == null) return null;
+      if (generation == null) {
+        return const PushDecryptResult.failed(PushDecryptOutcome.noGeneration);
+      }
+
+      final groupId = store.groupId(payload.contextId, generation);
+      if (groupId == null) {
+        return PushDecryptResult.failed(
+          PushDecryptOutcome.noGroupForGeneration,
+          detail: 'generation $generation',
+        );
+      }
+
+      // Named separately from the throw below because it is the one failure
+      // here with an ordinary cause - a keystore that is not readable before
+      // first unlock - and it would otherwise be filed as an unexplained throw.
+      if (store.stateKeyB64 == null && store.isSealed) {
+        return const PushDecryptResult.failed(
+          PushDecryptOutcome.stateKeyUnavailable,
+        );
+      }
 
       final directory = await store.stateDirectory(userId);
       await engine.initStorage(directory.path, stateKeyB64: store.stateKeyB64);
@@ -127,17 +176,13 @@ class MessagePushDecryptor {
 
       final plaintext = processed.plaintext;
       if (processed.kind != MlsMessageKind.application || plaintext == null) {
-        return null;
+        return const PushDecryptResult.failed(
+          PushDecryptOutcome.notApplicationMessage,
+        );
       }
 
-      if (!await _senderIsWhoTheServerSaid(
-        engine,
-        groupId,
-        processed,
-        payload,
-      )) {
-        return null;
-      }
+      final attribution = await _attribute(engine, groupId, processed, payload);
+      if (attribution != null) return PushDecryptResult.failed(attribution);
 
       // MLS reads a message off the wire exactly once. If this is not written
       // down now, the conversation the notification came from will show "cannot
@@ -150,14 +195,29 @@ class MessagePushDecryptor {
       );
       await store.flush();
 
-      return _decode(plaintext);
+      final text = _decode(plaintext);
+      return text == null
+          ? const PushDecryptResult.failed(
+              PushDecryptOutcome.undecodablePlaintext,
+            )
+          : PushDecryptResult(text, PushDecryptOutcome.decrypted);
     } catch (e) {
       debugPrint(
         'MessagePushDecryptor: could not decrypt ${payload.messageId}: $e',
       );
       // Losing the race against the app's own decrypt attempt looks exactly like
       // a failure from here, and the winner leaves the plaintext behind.
-      return _recheckCache(store, payload);
+      final cached = await _recheckCache(store, payload);
+      if (cached != null) {
+        return PushDecryptResult(cached, PushDecryptOutcome.servedFromCache);
+      }
+
+      return PushDecryptResult.failed(
+        PushDecryptOutcome.threw,
+        // The exception's text, never the payload's: a decrypt failure must not
+        // become the way plaintext reaches a log.
+        detail: e.runtimeType.toString(),
+      );
     }
   }
 
@@ -174,7 +234,8 @@ class MessagePushDecryptor {
   /// credential to a leaf in the tree - and is kept for the narrow case it does
   /// cover: a message decrypted under an epoch its sender has since been removed
   /// in.
-  static Future<bool> _senderIsWhoTheServerSaid(
+  /// Null when the attribution holds; otherwise which check refused it.
+  static Future<PushDecryptOutcome?> _attribute(
     VentaMls engine,
     String groupId,
     MlsProcessedMessage processed,
@@ -190,7 +251,7 @@ class MessagePushDecryptor {
         'MessagePushDecryptor: ${payload.messageId} decrypted with no sender '
         'credential - refusing to attribute it',
       );
-      return false;
+      return PushDecryptOutcome.senderUnnamed;
     }
 
     final authorId = payload.authorId;
@@ -199,13 +260,15 @@ class MessagePushDecryptor {
         'MessagePushDecryptor: ${payload.messageId} was sealed by $sender but '
         'attributed to $authorId - refusing to show it',
       );
-      return false;
+      return PushDecryptOutcome.senderMismatch;
     }
 
-    return engine.verifySenderInRoster(
+    final inRoster = await engine.verifySenderInRoster(
       senderIdentity: sender,
       groupIdB64: groupId,
     );
+
+    return inRoster ? null : PushDecryptOutcome.senderNotInRoster;
   }
 
   static Future<String?> _recheckCache(

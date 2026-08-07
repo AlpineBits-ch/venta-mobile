@@ -73,6 +73,15 @@ class DeviceApi {
     'mls.join-request.conversation.v1',
     'mls.protection-level.v1',
     'mls.backup.v1',
+    // This build ships the string resources household notification keys resolve
+    // against: `android/app/src/main/res/values*/strings.xml`,
+    // `ios/Runner/*.lproj/Localizable.strings` and
+    // `lib/core/push/household_strings.dart`. Until a device says so the server
+    // sends its English copy, because a key with no entry in the bundle is not
+    // replaced by the literal text - Android drops the notification's text and
+    // iOS displays the key itself. Removing those resources means removing this
+    // line in the same commit.
+    'push.loc.v1',
   ];
 
   /// Idempotent: re-registering an id this account already has returns the

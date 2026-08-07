@@ -1,0 +1,35 @@
+/* German household notification copy. See en.lproj/Localizable.strings for the rules. */
+
+/* Chores */
+"household_chore_due_body" = "Du bist dran, und es ist jetzt fällig.";
+
+/* Ledger */
+"household_expense_share_body" = "Dein Anteil beträgt %1$@.";
+"household_expense_paid_body" = "Als von dir bezahlt erfasst: %1$@.";
+"household_settlement_received_title" = "Zahlung erhalten";
+"household_settlement_received_body" = "%1$@ wurde als an dich gezahlt erfasst.";
+"household_settlement_recorded_title" = "Zahlung erfasst";
+"household_settlement_recorded_body" = "%1$@ wurde als von dir gezahlt erfasst.";
+
+/* Decisions */
+"household_decision_opened_body" = "Eine Entscheidung im Haushalt braucht deine Stimme.";
+"household_decision_opened_closing_body" = "Eine Entscheidung im Haushalt braucht deine Stimme, bevor sie schließt.";
+"household_decision_blocked_body" = "Blockiert: %1$@";
+
+/* Shopping lists */
+"household_list_item_added_body" = "Steht jetzt auf %1$@ - kannst du es unterwegs mitnehmen?";
+"household_list_item_assigned_body" = "Du sollst das von %1$@ mitbringen.";
+"household_list_completed_body" = "Alles darauf ist abgehakt.";
+
+/* Pantry */
+"household_pantry_low_body" = "Zu Hause geht es zur Neige.";
+"household_pantry_low_listed_body" = "Geht zur Neige und steht jetzt auf %1$@.";
+"household_pantry_restock_body" = "Ist zu Hause ausgegangen und steht auf der Liste - kannst du es unterwegs mitnehmen?";
+"household_pantry_expiring_title" = "Aufbrauchen oder wegwerfen";
+"household_pantry_expiring_one_body" = "%1$@ läuft bald ab.";
+"household_pantry_expiring_two_body" = "%1$@ und %2$@ laufen bald ab.";
+"household_pantry_expiring_many_body" = "%1$@, %2$@ und %3$@ weitere laufen bald ab.";
+
+/* Hidden content (privacy spec T2-23) */
+"household_hidden_title" = "Zuhause";
+"household_hidden_body" = "Zu Hause braucht etwas deine Aufmerksamkeit";

@@ -46,8 +46,11 @@ class HouseholdNotifier {
         // Keyed on the row, matching the server's own collapse key: a second
         // reminder about one chore replaces the first instead of stacking.
         id: (payload.targetId ?? payload.kind).hashCode,
-        title: payload.title,
-        body: payload.body,
+        // Resolved from the localization key where the server sent one, so this
+        // says exactly what the OS-drawn version of the same push would have
+        // said - see [HouseholdStrings].
+        title: payload.localizedTitle,
+        body: payload.localizedBody,
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             channel.id,

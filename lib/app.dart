@@ -9,6 +9,7 @@ import 'core/di/injector.dart';
 import 'core/mls/mls_session_manager.dart';
 import 'core/mls/mls_store.dart';
 import 'core/push/nse_diagnostics_reporter.dart';
+import 'core/push/push_decrypt_diagnostics.dart';
 import 'core/push/push_notification_service.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/back_navigation.dart';
@@ -82,6 +83,10 @@ class _AppState extends State<App> {
         // extension ran while this isolate did not, and what it recorded is the
         // only account of why a notification showed the placeholder.
         unawaited(_nseDiagnostics.drain());
+        // And the Android half of the same account, written by the FCM
+        // background isolate - which has no Sentry of its own, so this process
+        // is the only one that can forward what it found.
+        unawaited(_pushDiagnostics.drain());
         // An incident can start and end while the app is away, so a resume
         // needs an answer immediately rather than on the next 60s tick.
         _statusRepository?.resume();
@@ -93,9 +98,11 @@ class _AppState extends State<App> {
     // process never sees start or finish, so a cold start is the first moment
     // anything can report what it found.
     unawaited(_nseDiagnostics.drain());
+    unawaited(_pushDiagnostics.drain());
   }
 
   final _nseDiagnostics = NseDiagnosticsReporter();
+  final _pushDiagnostics = PushDecryptDiagnostics();
 
   /// Null only if dependency registration failed on this launch - which is
   /// exactly the kind of launch where nothing else should be made to depend on

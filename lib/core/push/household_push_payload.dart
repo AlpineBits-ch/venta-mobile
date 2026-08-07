@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import '../routing/route_paths.dart';
+import 'household_strings.dart';
 
 /// A household-module push, as the backend's `HouseholdPushService` builds it.
 ///
@@ -24,6 +27,10 @@ class HouseholdPushPayload {
     this.targetId,
     this.recipientUserId,
     this.hidden = false,
+    this.titleLocKey,
+    this.titleLocArgs = const [],
+    this.bodyLocKey,
+    this.bodyLocArgs = const [],
   });
 
   static const type = 'household';
@@ -42,8 +49,27 @@ class HouseholdPushPayload {
   /// the first rather than stacking.
   final String? targetId;
 
+  /// The server's English. What [localizedTitle] falls back to, and all a build
+  /// that never declared `push.loc.v1` is sent.
   final String title;
   final String body;
+
+  /// The localization key [title] is the English rendering of, or null when the
+  /// title is something the user typed - a shopping-list line, an expense
+  /// description, a pantry item's name - which reads the same in every language.
+  ///
+  /// Only ever populated for a build that declared `push.loc.v1` at device
+  /// registration, because a key with no entry in the app bundle renders as the
+  /// key itself rather than falling back to English. See `PushCapabilities`
+  /// server-side.
+  final String? titleLocKey;
+
+  /// Values for the key's placeholders, in order, already formatted by the
+  /// server. Empty for a key that takes none.
+  final List<String> titleLocArgs;
+
+  final String? bodyLocKey;
+  final List<String> bodyLocArgs;
 
   final String? recipientUserId;
 
@@ -57,6 +83,18 @@ class HouseholdPushPayload {
   String get route => channelId == null
       ? RoutePaths.serverPath(guildId)
       : RoutePaths.serverChannelPath(guildId, channelId!);
+
+  /// What to actually show, in the reader's language where there is one.
+  ///
+  /// Only reached when the app is in the foreground - a backgrounded or dead app
+  /// has the OS resolve the very same key against the app bundle and never runs
+  /// this. The two must agree, which is what
+  /// `test/household_strings_test.dart` checks.
+  String get localizedTitle =>
+      HouseholdStrings.resolve(titleLocKey, titleLocArgs) ?? title;
+
+  String get localizedBody =>
+      HouseholdStrings.resolve(bodyLocKey, bodyLocArgs) ?? body;
 
   static bool matches(Map<String, dynamic> data) => data['type'] == type;
 
@@ -75,6 +113,10 @@ class HouseholdPushPayload {
       body: _string(data['body']) ?? '',
       recipientUserId: _string(data['recipientUserId']),
       hidden: data['hidden'] == '1' || data['hidden'] == true,
+      titleLocKey: _string(data['titleLocKey']),
+      titleLocArgs: _args(data['titleLocArgs']),
+      bodyLocKey: _string(data['bodyLocKey']),
+      bodyLocArgs: _args(data['bodyLocArgs']),
     );
   }
 
@@ -82,5 +124,24 @@ class HouseholdPushPayload {
     if (value == null) return null;
     final text = value.toString();
     return text.isEmpty ? null : text;
+  }
+
+  /// FCM data values are strings only, so an argument list arrives as JSON.
+  ///
+  /// Anything unparseable yields an empty list rather than throwing: this runs
+  /// in a background isolate where an exception is a notification that silently
+  /// never arrives, and an empty list only costs the reader the translation -
+  /// [localizedBody] falls through to the server's English.
+  static List<String> _args(Object? value) {
+    final text = _string(value);
+    if (text == null) return const [];
+
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! List) return const [];
+      return decoded.map((e) => e?.toString() ?? '').toList(growable: false);
+    } on FormatException {
+      return const [];
+    }
   }
 }

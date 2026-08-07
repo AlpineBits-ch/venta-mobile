@@ -583,11 +583,19 @@ void main() {
       // Pinned as a list rather than only as a "contains", so adding one is a
       // deliberate act: a capability claimed here is a claim the server will let
       // an account enter VerifiedDevices on.
+      //
+      // `push.loc.v1` is the one entry that claims nothing about MLS. It says
+      // this build ships the string resources household notification keys
+      // resolve against, and the server reads it to decide whether a push may
+      // carry `body_loc_key` at all - a key with no entry in the bundle costs
+      // the notification its text rather than falling back to English. Removing
+      // those resources means removing it here in the same commit.
       expect(DeviceApi.capabilities, const [
         'mls.device-cert.v1',
         'mls.join-request.conversation.v1',
         'mls.protection-level.v1',
         'mls.backup.v1',
+        'push.loc.v1',
       ]);
     });
   });

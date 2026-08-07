@@ -1,0 +1,61 @@
+/*
+   Notification copy for household pushes, resolved by iOS.
+
+   A household push arrives as an APNs alert whose `title-loc-key` / `loc-key`
+   name entries in this file. iOS resolves them against the app bundle and draws
+   the notification itself, with no Dart and no notification service extension
+   involved - which is what makes these work while the app is dead, the one state
+   in which a chore reminder matters most.
+
+   Consequences worth knowing before editing:
+
+     * A key the server sends and this file does not contain is displayed raw:
+       iOS shows "household_pantry_low_body" on the lock screen rather than
+       falling back to the `body` the same payload carries. That is why the
+       server only sends keys to a build that declared the `push.loc.v1`
+       capability, and why removing a name from here is a breaking change.
+
+     * Placeholders are positional (`%1$@`), not `%@`, because translations
+       reorder arguments. Note the `@` - Android's copy of this table uses `%1$s`
+       for the same argument in the same position, and the server supplies only
+       the ordered values.
+
+     * `lib/core/push/household_strings.dart` carries the same table for the
+       foreground case iOS never draws, and `android/app/src/main/res/values*/`
+       carries it for Android. `test/household_strings_test.dart` asserts all
+       three agree.
+*/
+
+/* Chores */
+"household_chore_due_body" = "Your turn, and it's due now.";
+
+/* Ledger */
+"household_expense_share_body" = "Your share is %1$@.";
+"household_expense_paid_body" = "Recorded as paid by you: %1$@.";
+"household_settlement_received_title" = "Payment received";
+"household_settlement_received_body" = "%1$@ was recorded as paid to you.";
+"household_settlement_recorded_title" = "Payment recorded";
+"household_settlement_recorded_body" = "%1$@ was recorded as paid by you.";
+
+/* Decisions */
+"household_decision_opened_body" = "A house decision needs your vote.";
+"household_decision_opened_closing_body" = "A house decision needs your vote before it closes.";
+"household_decision_blocked_body" = "Blocked: %1$@";
+
+/* Shopping lists */
+"household_list_item_added_body" = "Just went on %1$@ - could you grab it while you're out?";
+"household_list_item_assigned_body" = "You've been asked to pick this up from %1$@.";
+"household_list_completed_body" = "Everything on it is ticked off.";
+
+/* Pantry */
+"household_pantry_low_body" = "Running low at home.";
+"household_pantry_low_listed_body" = "Running low, so it's gone on %1$@.";
+"household_pantry_restock_body" = "Ran low at home and went on the list - could you grab it while you're out?";
+"household_pantry_expiring_title" = "Use it or lose it";
+"household_pantry_expiring_one_body" = "%1$@ is about to go off.";
+"household_pantry_expiring_two_body" = "%1$@ and %2$@ are about to go off.";
+"household_pantry_expiring_many_body" = "%1$@, %2$@ and %3$@ more are about to go off.";
+
+/* Hidden content (privacy spec T2-23) */
+"household_hidden_title" = "Home";
+"household_hidden_body" = "Something needs your attention at home";
