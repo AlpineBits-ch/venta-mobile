@@ -63,6 +63,11 @@ _ScanResultDto _$ScanResultDtoFromJson(Map<String, dynamic> json) =>
       item: PantryItemDto.fromJson(json['item'] as Map<String, dynamic>),
       created: json['created'] as bool? ?? false,
       learned: json['learned'] as bool? ?? false,
+      catalog: json['catalog'] == null
+          ? null
+          : ProductCatalogMatchDto.fromJson(
+              json['catalog'] as Map<String, dynamic>,
+            ),
     );
 
 Map<String, dynamic> _$ScanResultDtoToJson(_ScanResultDto instance) =>
@@ -70,7 +75,68 @@ Map<String, dynamic> _$ScanResultDtoToJson(_ScanResultDto instance) =>
       'item': instance.item,
       'created': instance.created,
       'learned': instance.learned,
+      'catalog': instance.catalog,
     };
+
+_ProductCatalogMatchDto _$ProductCatalogMatchDtoFromJson(
+  Map<String, dynamic> json,
+) => _ProductCatalogMatchDto(
+  name: json['name'] as String? ?? '',
+  language: json['language'] as String? ?? '',
+  brand: json['brand'] as String?,
+  quantity: (json['quantity'] as num?)?.toDouble(),
+  quantityUnit: json['quantityUnit'] as String?,
+  source: json['source'] as String? ?? '',
+  sourceName: json['sourceName'] as String? ?? '',
+  sourceUrl: json['sourceUrl'] as String? ?? '',
+  license: json['license'] as String? ?? '',
+  licenseUrl: json['licenseUrl'] as String? ?? '',
+  attribution: json['attribution'] as String? ?? '',
+  importedAt: _$JsonConverterFromJson<String, DateTime>(
+    json['importedAt'],
+    const ApiDateTimeConverter().fromJson,
+  ),
+);
+
+Map<String, dynamic> _$ProductCatalogMatchDtoToJson(
+  _ProductCatalogMatchDto instance,
+) => <String, dynamic>{
+  'name': instance.name,
+  'language': instance.language,
+  'brand': instance.brand,
+  'quantity': instance.quantity,
+  'quantityUnit': instance.quantityUnit,
+  'source': instance.source,
+  'sourceName': instance.sourceName,
+  'sourceUrl': instance.sourceUrl,
+  'license': instance.license,
+  'licenseUrl': instance.licenseUrl,
+  'attribution': instance.attribution,
+  'importedAt': _$JsonConverterToJson<String, DateTime>(
+    instance.importedAt,
+    const ApiDateTimeConverter().toJson,
+  ),
+};
+
+_TeachBarcodeResultDto _$TeachBarcodeResultDtoFromJson(
+  Map<String, dynamic> json,
+) => _TeachBarcodeResultDto(
+  barcode: PantryBarcodeDto.fromJson(json['barcode'] as Map<String, dynamic>),
+  learned: json['learned'] as bool? ?? false,
+  renamedItems:
+      (json['renamedItems'] as List<dynamic>?)
+          ?.map((e) => PantryItemDto.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const <PantryItemDto>[],
+);
+
+Map<String, dynamic> _$TeachBarcodeResultDtoToJson(
+  _TeachBarcodeResultDto instance,
+) => <String, dynamic>{
+  'barcode': instance.barcode,
+  'learned': instance.learned,
+  'renamedItems': instance.renamedItems,
+};
 
 _PantryBarcodeDto _$PantryBarcodeDtoFromJson(Map<String, dynamic> json) =>
     _PantryBarcodeDto(

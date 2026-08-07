@@ -151,6 +151,11 @@ class IdentityApi {
   /// The number is stored as plain text and the server can read it. It is not
   /// end-to-end encrypted, it is not hashed, and nothing about this call
   /// checks that the number exists or that it belongs to the caller.
+  ///
+  /// Writing a number changes no household's sharing opt-in, deliberately: a
+  /// replacement is the same person correcting the same intent, and revoking
+  /// on an edit would silently un-share every household over a typo. Only
+  /// [removePhoneNumber] revokes.
   Future<String?> setPhoneNumber(String phoneNumber) async {
     try {
       final response = await client.dio.put<Map<String, dynamic>>(
@@ -171,10 +176,15 @@ class IdentityApi {
 
   /// Idempotent: `204` whether or not there was a number to take off.
   ///
-  /// This does **not** switch off any household's phone-sharing opt-in - the
-  /// two live in different services and Identity deliberately does not reach
-  /// across. What it does is empty the field those households read, so every
-  /// one of them stops showing anything. See `PhoneSharingCard`.
+  /// Removing revokes. Identity publishes an event that clears the
+  /// `SharePhoneForPayments` opt-in on **every** guild membership for this
+  /// user, so a number added afterwards is shared with nobody until sharing
+  /// is switched back on household by household. It fires on the no-number
+  /// case too, which is how an account left opted-in by an older build
+  /// repairs itself.
+  ///
+  /// Only removal does this: [setPhoneNumber] publishes nothing, so replacing
+  /// a number leaves those opt-ins where they are. See `PhoneSharingCard`.
   Future<void> removePhoneNumber() async {
     await client.dio.delete<void>('$_base/phone');
   }

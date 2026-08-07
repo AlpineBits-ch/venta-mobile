@@ -31,10 +31,15 @@ sealed class PaymentHandlesDto with _$PaymentHandlesDto {
     /// Whether **the caller** is sharing their own number with this household.
     ///
     /// Read from the `SharePhoneForPayments` flag on the caller's membership
-    /// row, not from whether a number exists - so this can be `true` for
-    /// somebody whose account has no number at all, in which case they appear
-    /// in nobody's [phoneNumbers] and re-adding a number republishes it here
-    /// with no further action. See `PhoneSharingCard`.
+    /// row, not from whether a number exists - so this can still be `true`
+    /// for somebody whose account has no number at all, in which case they
+    /// appear in nobody's [phoneNumbers] and adding a number republishes it
+    /// here with no further action.
+    ///
+    /// That combination is now rare rather than routine: removing a number
+    /// clears this flag in every household, so only accounts that removed
+    /// theirs before Identity started publishing the revocation are still in
+    /// it. The server stays the authority either way. See `PhoneSharingCard`.
     @Default(false) bool sharingPhoneNumber,
 
     /// One entry per member who has both opted in *and* has a number.

@@ -32,12 +32,12 @@ sealed class PantryItemDto with _$PantryItemDto {
     DateTime? restockedAt,
     @Default('') String addedByUserId,
 
-    /// The code scanned off the packet, once the house has learned it.
+    /// The code scanned off the packet.
     ///
-    /// There is **no third-party barcode lookup and there must not be one**:
-    /// the guild learns its own products. The first scan of an unknown code
-    /// asks for a name; every scan after that autofills from what this house
-    /// decided to call it.
+    /// Two different things can put a name against it and they are not
+    /// interchangeable: this house's own name, which always wins when there is
+    /// one, and failing that a suggestion from a shared public product catalog.
+    /// Only when both come up empty does a scan ask somebody to type one.
     String? barcode,
   }) = _PantryItemDto;
 
@@ -48,19 +48,86 @@ sealed class PantryItemDto with _$PantryItemDto {
 /// What a scan did, which the item alone cannot say.
 ///
 /// [created] separates "topped up the jar you already had" from "added a new
-/// row". [learned] says the house had never seen this code and has just
-/// recorded what it is called - **the one moment worth interrupting somebody
-/// for**, and the reason every scan after it can be silent.
+/// row".
+///
+/// [learned] and [catalog] answer different questions and must not be collapsed
+/// into one. [learned] means *this house* stated a name, which is now theirs and
+/// wins over everything from then on. [catalog] means a public database
+/// suggested one and **the house has not agreed to it yet** - so it is shown,
+/// it is credited, and correcting it is one tap. The two are mutually exclusive
+/// by design: a catalog hit deliberately teaches the house nothing, because a
+/// suggestion nobody has confirmed is not the house's word for anything.
 @freezed
 sealed class ScanResultDto with _$ScanResultDto {
   const factory ScanResultDto({
     required PantryItemDto item,
     @Default(false) bool created,
     @Default(false) bool learned,
+    ProductCatalogMatchDto? catalog,
   }) = _ScanResultDto;
 
   factory ScanResultDto.fromJson(Map<String, dynamic> json) =>
       _$ScanResultDtoFromJson(json);
+}
+
+/// A name a shared public product catalog supplied, and who to credit for it.
+///
+/// The credit is not decoration and not optional. The catalog is built from
+/// Open Food Facts, published under the Open Database License; showing one of
+/// its names without naming the licence and crediting the source is the breach.
+/// That is why the server sends the strings with the name instead of leaving a
+/// client to remember them - render [attribution] as it arrives, since it is
+/// the wording the licence itself blesses.
+///
+/// [quantity] is the pack size printed on the packet ("380 g"), **not** how
+/// much this scan added. They are two different numbers about the same box, and
+/// the server deliberately never writes one into the other - a box of
+/// cornflakes is one scan and 380 grams at the same time.
+@freezed
+sealed class ProductCatalogMatchDto with _$ProductCatalogMatchDto {
+  @ApiDateTimeConverter()
+  const factory ProductCatalogMatchDto({
+    @Default('') String name,
+
+    /// Which language the name actually came from, which is not always the one
+    /// asked for: a French-speaking flat scanning a product the catalog only
+    /// holds in German gets the German name, and this says so rather than
+    /// pretending.
+    @Default('') String language,
+    String? brand,
+    double? quantity,
+    String? quantityUnit,
+    @Default('') String source,
+    @Default('') String sourceName,
+    @Default('') String sourceUrl,
+    @Default('') String license,
+    @Default('') String licenseUrl,
+    @Default('') String attribution,
+    DateTime? importedAt,
+  }) = _ProductCatalogMatchDto;
+
+  factory ProductCatalogMatchDto.fromJson(Map<String, dynamic> json) =>
+      _$ProductCatalogMatchDtoFromJson(json);
+}
+
+/// What stating a name for a barcode changed.
+///
+/// [renamedItems] is the part a client cannot work out for itself. Teaching a
+/// barcode is guild-scoped, so the jars still showing the catalog's suggestion
+/// are corrected with it - possibly in a pantry the caller is not looking at.
+/// An empty list is the normal case rather than a failure: it means every item
+/// carrying that code already had a name somebody typed, which the server does
+/// not overwrite.
+@freezed
+sealed class TeachBarcodeResultDto with _$TeachBarcodeResultDto {
+  const factory TeachBarcodeResultDto({
+    required PantryBarcodeDto barcode,
+    @Default(false) bool learned,
+    @Default(<PantryItemDto>[]) List<PantryItemDto> renamedItems,
+  }) = _TeachBarcodeResultDto;
+
+  factory TeachBarcodeResultDto.fromJson(Map<String, dynamic> json) =>
+      _$TeachBarcodeResultDtoFromJson(json);
 }
 
 /// One barcode this house has learned, for completions.

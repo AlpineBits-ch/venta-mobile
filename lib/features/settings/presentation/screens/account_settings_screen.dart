@@ -150,9 +150,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Remove your phone number?'),
         content: const Text(
-          'Every household you switched sharing on in stops showing it, right '
-          'away. The switch itself stays on, so putting a number back here '
-          'puts it straight back in front of those flatmates.',
+          'This takes the number off your account and switches sharing off in '
+          'every household, so nobody sees it anywhere. If you add a number '
+          'here later, you choose which households see it again.',
         ),
         actions: [
           TextButton(
@@ -427,9 +427,11 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           ),
           const SettingsFootnote(
             'Nobody sees this until you switch it on inside a household, one '
-            'household at a time - it is off everywhere by default. It is '
-            'stored as ordinary text that our servers can read, and nothing '
-            'anywhere checks that the number is yours or that it still works.',
+            'household at a time - it is off everywhere by default. Removing '
+            'the number switches that off again everywhere; changing it '
+            'leaves your households as they are. It is stored as ordinary '
+            'text that our servers can read, and nothing anywhere checks that '
+            'the number is yours or that it still works.',
           ),
           const SizedBox(height: AppSpacing.l),
           SettingsSection(

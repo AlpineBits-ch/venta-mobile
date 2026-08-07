@@ -202,6 +202,7 @@ class _PantryChannelScreenState
         builder: (_) => PantryScannerScreen(
           channelId: widget.channelId,
           channelName: channelTitle,
+          guildId: widget.guildId,
         ),
       ),
     );

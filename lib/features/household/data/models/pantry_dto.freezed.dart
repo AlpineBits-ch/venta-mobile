@@ -20,12 +20,12 @@ mixin _$PantryItemDto {
 /// idempotency guard for the restock loop, not a timestamp anyone needs
 /// to read - released when the quantity climbs back above the threshold
 /// or the list line is bought/cleared.
- DateTime? get restockedAt; String get addedByUserId;/// The code scanned off the packet, once the house has learned it.
+ DateTime? get restockedAt; String get addedByUserId;/// The code scanned off the packet.
 ///
-/// There is **no third-party barcode lookup and there must not be one**:
-/// the guild learns its own products. The first scan of an unknown code
-/// asks for a name; every scan after that autofills from what this house
-/// decided to call it.
+/// Two different things can put a name against it and they are not
+/// interchangeable: this house's own name, which always wins when there is
+/// one, and failing that a suggestion from a shared public product catalog.
+/// Only when both come up empty does a scan ask somebody to type one.
  String? get barcode;
 /// Create a copy of PantryItemDto
 /// with the given fields replaced by the non-null parameter values.
@@ -242,12 +242,12 @@ class _PantryItemDto implements PantryItemDto {
 /// or the list line is bought/cleared.
 @override final  DateTime? restockedAt;
 @override@JsonKey() final  String addedByUserId;
-/// The code scanned off the packet, once the house has learned it.
+/// The code scanned off the packet.
 ///
-/// There is **no third-party barcode lookup and there must not be one**:
-/// the guild learns its own products. The first scan of an unknown code
-/// asks for a name; every scan after that autofills from what this house
-/// decided to call it.
+/// Two different things can put a name against it and they are not
+/// interchangeable: this house's own name, which always wins when there is
+/// one, and failing that a suggestion from a shared public product catalog.
+/// Only when both come up empty does a scan ask somebody to type one.
 @override final  String? barcode;
 
 /// Create a copy of PantryItemDto
@@ -324,7 +324,7 @@ as String?,
 /// @nodoc
 mixin _$ScanResultDto {
 
- PantryItemDto get item; bool get created; bool get learned;
+ PantryItemDto get item; bool get created; bool get learned; ProductCatalogMatchDto? get catalog;
 /// Create a copy of ScanResultDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -337,16 +337,16 @@ $ScanResultDtoCopyWith<ScanResultDto> get copyWith => _$ScanResultDtoCopyWithImp
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ScanResultDto&&(identical(other.item, item) || other.item == item)&&(identical(other.created, created) || other.created == created)&&(identical(other.learned, learned) || other.learned == learned));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ScanResultDto&&(identical(other.item, item) || other.item == item)&&(identical(other.created, created) || other.created == created)&&(identical(other.learned, learned) || other.learned == learned)&&(identical(other.catalog, catalog) || other.catalog == catalog));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,item,created,learned);
+int get hashCode => Object.hash(runtimeType,item,created,learned,catalog);
 
 @override
 String toString() {
-  return 'ScanResultDto(item: $item, created: $created, learned: $learned)';
+  return 'ScanResultDto(item: $item, created: $created, learned: $learned, catalog: $catalog)';
 }
 
 
@@ -357,11 +357,11 @@ abstract mixin class $ScanResultDtoCopyWith<$Res>  {
   factory $ScanResultDtoCopyWith(ScanResultDto value, $Res Function(ScanResultDto) _then) = _$ScanResultDtoCopyWithImpl;
 @useResult
 $Res call({
- PantryItemDto item, bool created, bool learned
+ PantryItemDto item, bool created, bool learned, ProductCatalogMatchDto? catalog
 });
 
 
-$PantryItemDtoCopyWith<$Res> get item;
+$PantryItemDtoCopyWith<$Res> get item;$ProductCatalogMatchDtoCopyWith<$Res>? get catalog;
 
 }
 /// @nodoc
@@ -374,12 +374,13 @@ class _$ScanResultDtoCopyWithImpl<$Res>
 
 /// Create a copy of ScanResultDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? item = null,Object? created = null,Object? learned = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? item = null,Object? created = null,Object? learned = null,Object? catalog = freezed,}) {
   return _then(_self.copyWith(
 item: null == item ? _self.item : item // ignore: cast_nullable_to_non_nullable
 as PantryItemDto,created: null == created ? _self.created : created // ignore: cast_nullable_to_non_nullable
 as bool,learned: null == learned ? _self.learned : learned // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,catalog: freezed == catalog ? _self.catalog : catalog // ignore: cast_nullable_to_non_nullable
+as ProductCatalogMatchDto?,
   ));
 }
 /// Create a copy of ScanResultDto
@@ -390,6 +391,18 @@ $PantryItemDtoCopyWith<$Res> get item {
   
   return $PantryItemDtoCopyWith<$Res>(_self.item, (value) {
     return _then(_self.copyWith(item: value));
+  });
+}/// Create a copy of ScanResultDto
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$ProductCatalogMatchDtoCopyWith<$Res>? get catalog {
+    if (_self.catalog == null) {
+    return null;
+  }
+
+  return $ProductCatalogMatchDtoCopyWith<$Res>(_self.catalog!, (value) {
+    return _then(_self.copyWith(catalog: value));
   });
 }
 }
@@ -470,10 +483,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PantryItemDto item,  bool created,  bool learned)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PantryItemDto item,  bool created,  bool learned,  ProductCatalogMatchDto? catalog)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ScanResultDto() when $default != null:
-return $default(_that.item,_that.created,_that.learned);case _:
+return $default(_that.item,_that.created,_that.learned,_that.catalog);case _:
   return orElse();
 
 }
@@ -491,10 +504,10 @@ return $default(_that.item,_that.created,_that.learned);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PantryItemDto item,  bool created,  bool learned)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PantryItemDto item,  bool created,  bool learned,  ProductCatalogMatchDto? catalog)  $default,) {final _that = this;
 switch (_that) {
 case _ScanResultDto():
-return $default(_that.item,_that.created,_that.learned);}
+return $default(_that.item,_that.created,_that.learned,_that.catalog);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -508,10 +521,10 @@ return $default(_that.item,_that.created,_that.learned);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PantryItemDto item,  bool created,  bool learned)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PantryItemDto item,  bool created,  bool learned,  ProductCatalogMatchDto? catalog)?  $default,) {final _that = this;
 switch (_that) {
 case _ScanResultDto() when $default != null:
-return $default(_that.item,_that.created,_that.learned);case _:
+return $default(_that.item,_that.created,_that.learned,_that.catalog);case _:
   return null;
 
 }
@@ -523,12 +536,13 @@ return $default(_that.item,_that.created,_that.learned);case _:
 @JsonSerializable()
 
 class _ScanResultDto implements ScanResultDto {
-  const _ScanResultDto({required this.item, this.created = false, this.learned = false});
+  const _ScanResultDto({required this.item, this.created = false, this.learned = false, this.catalog});
   factory _ScanResultDto.fromJson(Map<String, dynamic> json) => _$ScanResultDtoFromJson(json);
 
 @override final  PantryItemDto item;
 @override@JsonKey() final  bool created;
 @override@JsonKey() final  bool learned;
+@override final  ProductCatalogMatchDto? catalog;
 
 /// Create a copy of ScanResultDto
 /// with the given fields replaced by the non-null parameter values.
@@ -543,16 +557,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ScanResultDto&&(identical(other.item, item) || other.item == item)&&(identical(other.created, created) || other.created == created)&&(identical(other.learned, learned) || other.learned == learned));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ScanResultDto&&(identical(other.item, item) || other.item == item)&&(identical(other.created, created) || other.created == created)&&(identical(other.learned, learned) || other.learned == learned)&&(identical(other.catalog, catalog) || other.catalog == catalog));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,item,created,learned);
+int get hashCode => Object.hash(runtimeType,item,created,learned,catalog);
 
 @override
 String toString() {
-  return 'ScanResultDto(item: $item, created: $created, learned: $learned)';
+  return 'ScanResultDto(item: $item, created: $created, learned: $learned, catalog: $catalog)';
 }
 
 
@@ -563,11 +577,11 @@ abstract mixin class _$ScanResultDtoCopyWith<$Res> implements $ScanResultDtoCopy
   factory _$ScanResultDtoCopyWith(_ScanResultDto value, $Res Function(_ScanResultDto) _then) = __$ScanResultDtoCopyWithImpl;
 @override @useResult
 $Res call({
- PantryItemDto item, bool created, bool learned
+ PantryItemDto item, bool created, bool learned, ProductCatalogMatchDto? catalog
 });
 
 
-@override $PantryItemDtoCopyWith<$Res> get item;
+@override $PantryItemDtoCopyWith<$Res> get item;@override $ProductCatalogMatchDtoCopyWith<$Res>? get catalog;
 
 }
 /// @nodoc
@@ -580,12 +594,13 @@ class __$ScanResultDtoCopyWithImpl<$Res>
 
 /// Create a copy of ScanResultDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? item = null,Object? created = null,Object? learned = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? item = null,Object? created = null,Object? learned = null,Object? catalog = freezed,}) {
   return _then(_ScanResultDto(
 item: null == item ? _self.item : item // ignore: cast_nullable_to_non_nullable
 as PantryItemDto,created: null == created ? _self.created : created // ignore: cast_nullable_to_non_nullable
 as bool,learned: null == learned ? _self.learned : learned // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,catalog: freezed == catalog ? _self.catalog : catalog // ignore: cast_nullable_to_non_nullable
+as ProductCatalogMatchDto?,
   ));
 }
 
@@ -597,6 +612,603 @@ $PantryItemDtoCopyWith<$Res> get item {
   
   return $PantryItemDtoCopyWith<$Res>(_self.item, (value) {
     return _then(_self.copyWith(item: value));
+  });
+}/// Create a copy of ScanResultDto
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$ProductCatalogMatchDtoCopyWith<$Res>? get catalog {
+    if (_self.catalog == null) {
+    return null;
+  }
+
+  return $ProductCatalogMatchDtoCopyWith<$Res>(_self.catalog!, (value) {
+    return _then(_self.copyWith(catalog: value));
+  });
+}
+}
+
+
+/// @nodoc
+mixin _$ProductCatalogMatchDto {
+
+ String get name;/// Which language the name actually came from, which is not always the one
+/// asked for: a French-speaking flat scanning a product the catalog only
+/// holds in German gets the German name, and this says so rather than
+/// pretending.
+ String get language; String? get brand; double? get quantity; String? get quantityUnit; String get source; String get sourceName; String get sourceUrl; String get license; String get licenseUrl; String get attribution; DateTime? get importedAt;
+/// Create a copy of ProductCatalogMatchDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ProductCatalogMatchDtoCopyWith<ProductCatalogMatchDto> get copyWith => _$ProductCatalogMatchDtoCopyWithImpl<ProductCatalogMatchDto>(this as ProductCatalogMatchDto, _$identity);
+
+  /// Serializes this ProductCatalogMatchDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ProductCatalogMatchDto&&(identical(other.name, name) || other.name == name)&&(identical(other.language, language) || other.language == language)&&(identical(other.brand, brand) || other.brand == brand)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.quantityUnit, quantityUnit) || other.quantityUnit == quantityUnit)&&(identical(other.source, source) || other.source == source)&&(identical(other.sourceName, sourceName) || other.sourceName == sourceName)&&(identical(other.sourceUrl, sourceUrl) || other.sourceUrl == sourceUrl)&&(identical(other.license, license) || other.license == license)&&(identical(other.licenseUrl, licenseUrl) || other.licenseUrl == licenseUrl)&&(identical(other.attribution, attribution) || other.attribution == attribution)&&(identical(other.importedAt, importedAt) || other.importedAt == importedAt));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,name,language,brand,quantity,quantityUnit,source,sourceName,sourceUrl,license,licenseUrl,attribution,importedAt);
+
+@override
+String toString() {
+  return 'ProductCatalogMatchDto(name: $name, language: $language, brand: $brand, quantity: $quantity, quantityUnit: $quantityUnit, source: $source, sourceName: $sourceName, sourceUrl: $sourceUrl, license: $license, licenseUrl: $licenseUrl, attribution: $attribution, importedAt: $importedAt)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ProductCatalogMatchDtoCopyWith<$Res>  {
+  factory $ProductCatalogMatchDtoCopyWith(ProductCatalogMatchDto value, $Res Function(ProductCatalogMatchDto) _then) = _$ProductCatalogMatchDtoCopyWithImpl;
+@useResult
+$Res call({
+ String name, String language, String? brand, double? quantity, String? quantityUnit, String source, String sourceName, String sourceUrl, String license, String licenseUrl, String attribution, DateTime? importedAt
+});
+
+
+
+
+}
+/// @nodoc
+class _$ProductCatalogMatchDtoCopyWithImpl<$Res>
+    implements $ProductCatalogMatchDtoCopyWith<$Res> {
+  _$ProductCatalogMatchDtoCopyWithImpl(this._self, this._then);
+
+  final ProductCatalogMatchDto _self;
+  final $Res Function(ProductCatalogMatchDto) _then;
+
+/// Create a copy of ProductCatalogMatchDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? language = null,Object? brand = freezed,Object? quantity = freezed,Object? quantityUnit = freezed,Object? source = null,Object? sourceName = null,Object? sourceUrl = null,Object? license = null,Object? licenseUrl = null,Object? attribution = null,Object? importedAt = freezed,}) {
+  return _then(_self.copyWith(
+name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
+as String,language: null == language ? _self.language : language // ignore: cast_nullable_to_non_nullable
+as String,brand: freezed == brand ? _self.brand : brand // ignore: cast_nullable_to_non_nullable
+as String?,quantity: freezed == quantity ? _self.quantity : quantity // ignore: cast_nullable_to_non_nullable
+as double?,quantityUnit: freezed == quantityUnit ? _self.quantityUnit : quantityUnit // ignore: cast_nullable_to_non_nullable
+as String?,source: null == source ? _self.source : source // ignore: cast_nullable_to_non_nullable
+as String,sourceName: null == sourceName ? _self.sourceName : sourceName // ignore: cast_nullable_to_non_nullable
+as String,sourceUrl: null == sourceUrl ? _self.sourceUrl : sourceUrl // ignore: cast_nullable_to_non_nullable
+as String,license: null == license ? _self.license : license // ignore: cast_nullable_to_non_nullable
+as String,licenseUrl: null == licenseUrl ? _self.licenseUrl : licenseUrl // ignore: cast_nullable_to_non_nullable
+as String,attribution: null == attribution ? _self.attribution : attribution // ignore: cast_nullable_to_non_nullable
+as String,importedAt: freezed == importedAt ? _self.importedAt : importedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [ProductCatalogMatchDto].
+extension ProductCatalogMatchDtoPatterns on ProductCatalogMatchDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _ProductCatalogMatchDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _ProductCatalogMatchDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _ProductCatalogMatchDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _ProductCatalogMatchDto():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _ProductCatalogMatchDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _ProductCatalogMatchDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String language,  String? brand,  double? quantity,  String? quantityUnit,  String source,  String sourceName,  String sourceUrl,  String license,  String licenseUrl,  String attribution,  DateTime? importedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _ProductCatalogMatchDto() when $default != null:
+return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quantityUnit,_that.source,_that.sourceName,_that.sourceUrl,_that.license,_that.licenseUrl,_that.attribution,_that.importedAt);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String language,  String? brand,  double? quantity,  String? quantityUnit,  String source,  String sourceName,  String sourceUrl,  String license,  String licenseUrl,  String attribution,  DateTime? importedAt)  $default,) {final _that = this;
+switch (_that) {
+case _ProductCatalogMatchDto():
+return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quantityUnit,_that.source,_that.sourceName,_that.sourceUrl,_that.license,_that.licenseUrl,_that.attribution,_that.importedAt);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String language,  String? brand,  double? quantity,  String? quantityUnit,  String source,  String sourceName,  String sourceUrl,  String license,  String licenseUrl,  String attribution,  DateTime? importedAt)?  $default,) {final _that = this;
+switch (_that) {
+case _ProductCatalogMatchDto() when $default != null:
+return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quantityUnit,_that.source,_that.sourceName,_that.sourceUrl,_that.license,_that.licenseUrl,_that.attribution,_that.importedAt);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+@ApiDateTimeConverter()
+class _ProductCatalogMatchDto implements ProductCatalogMatchDto {
+  const _ProductCatalogMatchDto({this.name = '', this.language = '', this.brand, this.quantity, this.quantityUnit, this.source = '', this.sourceName = '', this.sourceUrl = '', this.license = '', this.licenseUrl = '', this.attribution = '', this.importedAt});
+  factory _ProductCatalogMatchDto.fromJson(Map<String, dynamic> json) => _$ProductCatalogMatchDtoFromJson(json);
+
+@override@JsonKey() final  String name;
+/// Which language the name actually came from, which is not always the one
+/// asked for: a French-speaking flat scanning a product the catalog only
+/// holds in German gets the German name, and this says so rather than
+/// pretending.
+@override@JsonKey() final  String language;
+@override final  String? brand;
+@override final  double? quantity;
+@override final  String? quantityUnit;
+@override@JsonKey() final  String source;
+@override@JsonKey() final  String sourceName;
+@override@JsonKey() final  String sourceUrl;
+@override@JsonKey() final  String license;
+@override@JsonKey() final  String licenseUrl;
+@override@JsonKey() final  String attribution;
+@override final  DateTime? importedAt;
+
+/// Create a copy of ProductCatalogMatchDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$ProductCatalogMatchDtoCopyWith<_ProductCatalogMatchDto> get copyWith => __$ProductCatalogMatchDtoCopyWithImpl<_ProductCatalogMatchDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$ProductCatalogMatchDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ProductCatalogMatchDto&&(identical(other.name, name) || other.name == name)&&(identical(other.language, language) || other.language == language)&&(identical(other.brand, brand) || other.brand == brand)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.quantityUnit, quantityUnit) || other.quantityUnit == quantityUnit)&&(identical(other.source, source) || other.source == source)&&(identical(other.sourceName, sourceName) || other.sourceName == sourceName)&&(identical(other.sourceUrl, sourceUrl) || other.sourceUrl == sourceUrl)&&(identical(other.license, license) || other.license == license)&&(identical(other.licenseUrl, licenseUrl) || other.licenseUrl == licenseUrl)&&(identical(other.attribution, attribution) || other.attribution == attribution)&&(identical(other.importedAt, importedAt) || other.importedAt == importedAt));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,name,language,brand,quantity,quantityUnit,source,sourceName,sourceUrl,license,licenseUrl,attribution,importedAt);
+
+@override
+String toString() {
+  return 'ProductCatalogMatchDto(name: $name, language: $language, brand: $brand, quantity: $quantity, quantityUnit: $quantityUnit, source: $source, sourceName: $sourceName, sourceUrl: $sourceUrl, license: $license, licenseUrl: $licenseUrl, attribution: $attribution, importedAt: $importedAt)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$ProductCatalogMatchDtoCopyWith<$Res> implements $ProductCatalogMatchDtoCopyWith<$Res> {
+  factory _$ProductCatalogMatchDtoCopyWith(_ProductCatalogMatchDto value, $Res Function(_ProductCatalogMatchDto) _then) = __$ProductCatalogMatchDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String name, String language, String? brand, double? quantity, String? quantityUnit, String source, String sourceName, String sourceUrl, String license, String licenseUrl, String attribution, DateTime? importedAt
+});
+
+
+
+
+}
+/// @nodoc
+class __$ProductCatalogMatchDtoCopyWithImpl<$Res>
+    implements _$ProductCatalogMatchDtoCopyWith<$Res> {
+  __$ProductCatalogMatchDtoCopyWithImpl(this._self, this._then);
+
+  final _ProductCatalogMatchDto _self;
+  final $Res Function(_ProductCatalogMatchDto) _then;
+
+/// Create a copy of ProductCatalogMatchDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? language = null,Object? brand = freezed,Object? quantity = freezed,Object? quantityUnit = freezed,Object? source = null,Object? sourceName = null,Object? sourceUrl = null,Object? license = null,Object? licenseUrl = null,Object? attribution = null,Object? importedAt = freezed,}) {
+  return _then(_ProductCatalogMatchDto(
+name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
+as String,language: null == language ? _self.language : language // ignore: cast_nullable_to_non_nullable
+as String,brand: freezed == brand ? _self.brand : brand // ignore: cast_nullable_to_non_nullable
+as String?,quantity: freezed == quantity ? _self.quantity : quantity // ignore: cast_nullable_to_non_nullable
+as double?,quantityUnit: freezed == quantityUnit ? _self.quantityUnit : quantityUnit // ignore: cast_nullable_to_non_nullable
+as String?,source: null == source ? _self.source : source // ignore: cast_nullable_to_non_nullable
+as String,sourceName: null == sourceName ? _self.sourceName : sourceName // ignore: cast_nullable_to_non_nullable
+as String,sourceUrl: null == sourceUrl ? _self.sourceUrl : sourceUrl // ignore: cast_nullable_to_non_nullable
+as String,license: null == license ? _self.license : license // ignore: cast_nullable_to_non_nullable
+as String,licenseUrl: null == licenseUrl ? _self.licenseUrl : licenseUrl // ignore: cast_nullable_to_non_nullable
+as String,attribution: null == attribution ? _self.attribution : attribution // ignore: cast_nullable_to_non_nullable
+as String,importedAt: freezed == importedAt ? _self.importedAt : importedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$TeachBarcodeResultDto {
+
+ PantryBarcodeDto get barcode; bool get learned; List<PantryItemDto> get renamedItems;
+/// Create a copy of TeachBarcodeResultDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$TeachBarcodeResultDtoCopyWith<TeachBarcodeResultDto> get copyWith => _$TeachBarcodeResultDtoCopyWithImpl<TeachBarcodeResultDto>(this as TeachBarcodeResultDto, _$identity);
+
+  /// Serializes this TeachBarcodeResultDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is TeachBarcodeResultDto&&(identical(other.barcode, barcode) || other.barcode == barcode)&&(identical(other.learned, learned) || other.learned == learned)&&const DeepCollectionEquality().equals(other.renamedItems, renamedItems));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,barcode,learned,const DeepCollectionEquality().hash(renamedItems));
+
+@override
+String toString() {
+  return 'TeachBarcodeResultDto(barcode: $barcode, learned: $learned, renamedItems: $renamedItems)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $TeachBarcodeResultDtoCopyWith<$Res>  {
+  factory $TeachBarcodeResultDtoCopyWith(TeachBarcodeResultDto value, $Res Function(TeachBarcodeResultDto) _then) = _$TeachBarcodeResultDtoCopyWithImpl;
+@useResult
+$Res call({
+ PantryBarcodeDto barcode, bool learned, List<PantryItemDto> renamedItems
+});
+
+
+$PantryBarcodeDtoCopyWith<$Res> get barcode;
+
+}
+/// @nodoc
+class _$TeachBarcodeResultDtoCopyWithImpl<$Res>
+    implements $TeachBarcodeResultDtoCopyWith<$Res> {
+  _$TeachBarcodeResultDtoCopyWithImpl(this._self, this._then);
+
+  final TeachBarcodeResultDto _self;
+  final $Res Function(TeachBarcodeResultDto) _then;
+
+/// Create a copy of TeachBarcodeResultDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? barcode = null,Object? learned = null,Object? renamedItems = null,}) {
+  return _then(_self.copyWith(
+barcode: null == barcode ? _self.barcode : barcode // ignore: cast_nullable_to_non_nullable
+as PantryBarcodeDto,learned: null == learned ? _self.learned : learned // ignore: cast_nullable_to_non_nullable
+as bool,renamedItems: null == renamedItems ? _self.renamedItems : renamedItems // ignore: cast_nullable_to_non_nullable
+as List<PantryItemDto>,
+  ));
+}
+/// Create a copy of TeachBarcodeResultDto
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$PantryBarcodeDtoCopyWith<$Res> get barcode {
+  
+  return $PantryBarcodeDtoCopyWith<$Res>(_self.barcode, (value) {
+    return _then(_self.copyWith(barcode: value));
+  });
+}
+}
+
+
+/// Adds pattern-matching-related methods to [TeachBarcodeResultDto].
+extension TeachBarcodeResultDtoPatterns on TeachBarcodeResultDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _TeachBarcodeResultDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _TeachBarcodeResultDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _TeachBarcodeResultDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _TeachBarcodeResultDto():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _TeachBarcodeResultDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _TeachBarcodeResultDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PantryBarcodeDto barcode,  bool learned,  List<PantryItemDto> renamedItems)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _TeachBarcodeResultDto() when $default != null:
+return $default(_that.barcode,_that.learned,_that.renamedItems);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PantryBarcodeDto barcode,  bool learned,  List<PantryItemDto> renamedItems)  $default,) {final _that = this;
+switch (_that) {
+case _TeachBarcodeResultDto():
+return $default(_that.barcode,_that.learned,_that.renamedItems);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PantryBarcodeDto barcode,  bool learned,  List<PantryItemDto> renamedItems)?  $default,) {final _that = this;
+switch (_that) {
+case _TeachBarcodeResultDto() when $default != null:
+return $default(_that.barcode,_that.learned,_that.renamedItems);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _TeachBarcodeResultDto implements TeachBarcodeResultDto {
+  const _TeachBarcodeResultDto({required this.barcode, this.learned = false, final  List<PantryItemDto> renamedItems = const <PantryItemDto>[]}): _renamedItems = renamedItems;
+  factory _TeachBarcodeResultDto.fromJson(Map<String, dynamic> json) => _$TeachBarcodeResultDtoFromJson(json);
+
+@override final  PantryBarcodeDto barcode;
+@override@JsonKey() final  bool learned;
+ final  List<PantryItemDto> _renamedItems;
+@override@JsonKey() List<PantryItemDto> get renamedItems {
+  if (_renamedItems is EqualUnmodifiableListView) return _renamedItems;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_renamedItems);
+}
+
+
+/// Create a copy of TeachBarcodeResultDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$TeachBarcodeResultDtoCopyWith<_TeachBarcodeResultDto> get copyWith => __$TeachBarcodeResultDtoCopyWithImpl<_TeachBarcodeResultDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$TeachBarcodeResultDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _TeachBarcodeResultDto&&(identical(other.barcode, barcode) || other.barcode == barcode)&&(identical(other.learned, learned) || other.learned == learned)&&const DeepCollectionEquality().equals(other._renamedItems, _renamedItems));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,barcode,learned,const DeepCollectionEquality().hash(_renamedItems));
+
+@override
+String toString() {
+  return 'TeachBarcodeResultDto(barcode: $barcode, learned: $learned, renamedItems: $renamedItems)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$TeachBarcodeResultDtoCopyWith<$Res> implements $TeachBarcodeResultDtoCopyWith<$Res> {
+  factory _$TeachBarcodeResultDtoCopyWith(_TeachBarcodeResultDto value, $Res Function(_TeachBarcodeResultDto) _then) = __$TeachBarcodeResultDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ PantryBarcodeDto barcode, bool learned, List<PantryItemDto> renamedItems
+});
+
+
+@override $PantryBarcodeDtoCopyWith<$Res> get barcode;
+
+}
+/// @nodoc
+class __$TeachBarcodeResultDtoCopyWithImpl<$Res>
+    implements _$TeachBarcodeResultDtoCopyWith<$Res> {
+  __$TeachBarcodeResultDtoCopyWithImpl(this._self, this._then);
+
+  final _TeachBarcodeResultDto _self;
+  final $Res Function(_TeachBarcodeResultDto) _then;
+
+/// Create a copy of TeachBarcodeResultDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? barcode = null,Object? learned = null,Object? renamedItems = null,}) {
+  return _then(_TeachBarcodeResultDto(
+barcode: null == barcode ? _self.barcode : barcode // ignore: cast_nullable_to_non_nullable
+as PantryBarcodeDto,learned: null == learned ? _self.learned : learned // ignore: cast_nullable_to_non_nullable
+as bool,renamedItems: null == renamedItems ? _self._renamedItems : renamedItems // ignore: cast_nullable_to_non_nullable
+as List<PantryItemDto>,
+  ));
+}
+
+/// Create a copy of TeachBarcodeResultDto
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$PantryBarcodeDtoCopyWith<$Res> get barcode {
+  
+  return $PantryBarcodeDtoCopyWith<$Res>(_self.barcode, (value) {
+    return _then(_self.copyWith(barcode: value));
   });
 }
 }

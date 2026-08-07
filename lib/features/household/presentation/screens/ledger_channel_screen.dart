@@ -794,9 +794,12 @@ class PhoneSharingCard extends StatelessWidget {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.7);
 
-    // The server keeps the opt-in when the number is deleted, so "on with
-    // nothing behind it" is a real state somebody can arrive in by removing
-    // their number from account settings. It has to be named, not hidden.
+    // "On with nothing behind it" is still a state the server can hand back,
+    // so it has to be named rather than hidden - but it is no longer one
+    // removing a number produces. Removal now clears the opt-in in every
+    // household; what is left in this state are accounts that removed theirs
+    // before that was true. The sentence stays correct for them: the flag is
+    // on, so a number added here does appear straight away.
     final body = !hasNumber
         ? (sharing
               ? 'This is switched on, but your account has no phone number, '

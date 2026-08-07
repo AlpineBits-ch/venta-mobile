@@ -823,6 +823,193 @@ class HousePrimaryButton extends StatelessWidget {
   }
 }
 
+/// The mark on a name a public product catalog suggested and this house has not
+/// agreed to yet.
+///
+/// It exists because the two kinds of name in a pantry look identical and are
+/// not: one is what the flat calls the thing, the other is what a stranger's
+/// database says is printed on the box. Unmarked, a suggestion that is slightly
+/// wrong reads as something the house decided, and nobody corrects it. Marked,
+/// it reads as an offer, which is what it is.
+class SuggestedNameBadge extends StatelessWidget {
+  const SuggestedNameBadge({super.key, this.label = 'Suggested'});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) =>
+      HousePill(label: label, icon: Icons.public_rounded, filled: false);
+}
+
+/// The credit a catalog-supplied name owes its source, in the source's own
+/// words.
+///
+/// **Not optional and not ours to paraphrase.** The catalog is built from Open
+/// Food Facts under the Open Database License, which requires the licence named
+/// and the source credited wherever one of its names is shown. [attribution] is
+/// the wording the licence itself blesses and it arrives on the scan response
+/// for exactly this reason, so it is printed rather than reworded.
+///
+/// Quiet on purpose. A legal notice interrupting somebody unpacking a shopping
+/// bag is a notice that gets the feature switched off, and an obligation nobody
+/// can meet in practice is not met at all. One muted line under the names it
+/// covers is the least intrusive placement that is still honest.
+class ProductSourceNote extends StatelessWidget {
+  const ProductSourceNote({super.key, required this.attribution});
+
+  final String attribution;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          Icons.public_rounded,
+          size: 13,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+        ),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            attribution,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              height: 1.35,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The one prompt in the scanner: what this house calls a product.
+///
+/// Two jobs, one sheet, because they are the same act seen from either side.
+/// Either nothing could name the code and somebody types one, or the catalog
+/// suggested one and somebody is correcting it. Both end with the house owning
+/// the name; two sheets would mean two sets of copy drifting apart.
+///
+/// [suggestion] is what a public catalog offered, if anything. When it is set
+/// the field opens holding it, so agreeing costs one tap and correcting costs a
+/// few characters - which matters, because a wrong name that is awkward to fix
+/// is worse than no name at all.
+class ProductNameSheet extends StatefulWidget {
+  const ProductNameSheet({
+    super.key,
+    this.initialName,
+    this.suggestion,
+    this.attribution,
+    this.brand,
+    this.busy = false,
+  });
+
+  /// What the field starts with. Usually the name already on the jar.
+  final String? initialName;
+
+  /// The catalog's offer, when there was one. Shown as an offer, not a fact.
+  final String? suggestion;
+
+  final String? attribution;
+
+  /// The brand the catalog carried, which is often the only thing telling two
+  /// nearly identical suggestions apart.
+  final String? brand;
+
+  final bool busy;
+
+  @override
+  State<ProductNameSheet> createState() => _ProductNameSheetState();
+}
+
+class _ProductNameSheetState extends State<ProductNameSheet> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialName ?? widget.suggestion ?? '',
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() => Navigator.of(context).pop(_controller.text.trim());
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    final suggested = widget.suggestion?.trim();
+    final brand = widget.brand?.trim();
+    final attribution = widget.attribution?.trim();
+    final hasSuggestion = suggested != null && suggested.isNotEmpty;
+
+    return HouseSheet(
+      title: hasSuggestion || widget.initialName != null
+          ? 'Call it something else'
+          : 'What is this?',
+      actionLabel: 'Save and carry on',
+      busy: widget.busy,
+      onAction: _controller.text.trim().isEmpty ? null : _save,
+      children: [
+        SheetField(
+          label: 'Call it',
+          child: TextField(
+            controller: _controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) {
+              if (_controller.text.trim().isNotEmpty) _save();
+            },
+            decoration: const InputDecoration(hintText: 'Oat milk'),
+          ),
+        ),
+        if (hasSuggestion) ...[
+          const SizedBox(height: AppSpacing.m),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SuggestedNameBadge(),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Text(
+                  brand == null || brand.isEmpty
+                      ? suggested
+                      : '$suggested · $brand',
+                  style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: AppSpacing.m),
+        Text(
+          hasSuggestion
+              ? 'That name came from a public product database, not from this '
+                    'house. Whatever you save here is what your flat calls it '
+                    'from now on, and it wins over the suggestion every time.'
+              : 'Only the first time. This house remembers the barcode, so '
+                    'every scan of it after this one goes straight in.',
+          style: theme.textTheme.bodySmall?.copyWith(color: muted, height: 1.4),
+        ),
+        if (attribution != null && attribution.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.s),
+          ProductSourceNote(attribution: attribution),
+        ],
+      ],
+    );
+  }
+}
+
 /// The confirmation buzz for something that worked.
 ///
 /// Deliberately only ever on success. A phone that buzzes at a failure teaches

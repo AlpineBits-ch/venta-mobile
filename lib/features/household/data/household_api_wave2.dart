@@ -336,13 +336,22 @@ extension HouseholdApiWave2 on HouseholdApi {
 
   // -------------------------------------------------------- pantry capture
 
-  /// One scan.
+  /// One scan, resolved in three steps that get progressively less certain
+  /// about what the code means.
   ///
-  /// There is no third-party lookup behind this and there must not be one: the
-  /// guild learns its own products. So the *first* scan of an unknown code
-  /// throws [PantryNameRequired], which is the one moment worth interrupting
-  /// somebody for. Ask for a name, call this again with it, and every scan of
-  /// that code afterwards is silent.
+  /// What this house has already called the code wins outright. Failing that a
+  /// shared public product catalog may suggest a name, which comes back on
+  /// [ScanResultDto.catalog] with the credit it owes its source and **without**
+  /// teaching the house anything. Failing both, this throws
+  /// [PantryNameRequired] - still the one moment worth interrupting somebody
+  /// for, and now a much rarer one, because a common grocery resolves on its
+  /// first scan rather than its second.
+  ///
+  /// The catalog step may make one outbound call, bounded so that it can never
+  /// make a scan worse than a scan with no catalog behind it at all: the server
+  /// skips it unless the instance has budget against the source's rate limit,
+  /// cuts it off after about a second, and treats any failure as "no
+  /// suggestion".
   Future<ScanResultDto> scanPantryItem(
     String channelId, {
     required String barcode,
@@ -396,6 +405,39 @@ extension HouseholdApiWave2 on HouseholdApi {
       data: {if (amount != null) 'amount': amount},
     );
     return PantryItemDto.fromJson(response.data!);
+  }
+
+  /// "This is what we call this." The house stating a name for a barcode.
+  ///
+  /// **Moves no stock**, which is the whole reason it is not a second scan. A
+  /// scan carrying a name would add to the jar, cannot be asked to add nothing,
+  /// and rewrites the learned default quantity on the way past - three things a
+  /// client would have to compensate for, twice, differently, on two platforms.
+  ///
+  /// It is also where a catalog suggestion stops being a suggestion. Until
+  /// somebody calls this, an ODbL-derived name has taught the house nothing on
+  /// purpose; afterwards it is a name a person stated, it is the house's, and it
+  /// wins over the catalog on every scan from then on.
+  ///
+  /// [unit] and [defaultQuantity] left null mean "leave whatever is there", not
+  /// "clear it": a correction made from a scanner toast knows the name and
+  /// nothing else.
+  Future<TeachBarcodeResultDto> teachPantryBarcode(
+    String guildId,
+    String barcode, {
+    required String name,
+    String? unit,
+    double? defaultQuantity,
+  }) async {
+    final response = await client.dio.put<Map<String, dynamic>>(
+      '$_base/guilds/$guildId/pantry/barcodes/${Uri.encodeComponent(barcode)}',
+      data: {
+        'name': name,
+        if (unit != null && unit.isNotEmpty) 'unit': unit,
+        if (defaultQuantity != null) 'defaultQuantity': defaultQuantity,
+      },
+    );
+    return TeachBarcodeResultDto.fromJson(response.data!);
   }
 
   Future<List<PantryBarcodeDto>> getLearnedBarcodes(
@@ -851,11 +893,13 @@ extension HouseholdApiWave2 on HouseholdApi {
   }
 }
 
-/// The first scan of a barcode this house has never seen.
+/// A scan that nothing could put a name to: not this house, and not the shared
+/// product catalog either.
 ///
-/// Not a failure - it is the feature. There is no product database behind the
-/// pantry, deliberately, so the house names its own things once and is never
-/// asked again. A scanner catches this, asks for a name, and re-scans with it.
+/// Not a failure - it is the feature working through to its last step. A
+/// scanner catches this, asks for a name, and re-scans with it, after which the
+/// house owns the answer forever. It stays the normal outcome for cleaning
+/// products and toiletries, where public coverage is close to zero.
 class PantryNameRequired implements Exception {
   const PantryNameRequired(this.barcode);
 

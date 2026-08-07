@@ -20,10 +20,18 @@ import '../widgets/household_widgets.dart';
 /// haptic tick and a line sliding onto the tally - and the next packet can go
 /// straight under the lens.
 ///
-/// **There is exactly one interruption**, and it is the first time this house
-/// sees a barcode: there is no product database behind any of this and there
-/// must not be one, so the house names its own things. Every scan after that is
-/// silent, which is the whole reason the naming prompt is affordable.
+/// **There is exactly one interruption left, and it is now a rare one**: a code
+/// that neither this house nor a shared public product catalog can put a name
+/// to. The house's own name always wins. Failing that the catalog may suggest
+/// one, which arrives on the scan itself, so the first packet of a common
+/// grocery goes in without a keyboard. Failing both, somebody types a name once
+/// and the house owns it from then on - still the normal outcome for cleaning
+/// products and toiletries, where public coverage is close to nothing.
+///
+/// A suggestion is never forced on anybody. It is badged as a suggestion, it
+/// carries the credit its licence requires, and one tap on the line opens the
+/// same sheet the typing prompt uses - because a wrong name that is awkward to
+/// fix is worse than no name at all.
 ///
 /// The tally is not decoration either. Batch entry with no visible record is
 /// how people end up scanning the same jar twice or missing one and not
@@ -34,12 +42,18 @@ class PantryScannerScreen extends StatefulWidget {
     super.key,
     required this.channelId,
     required this.channelName,
+    required this.guildId,
   });
 
   final String channelId;
 
   /// `#fridge`, for the one line of context the camera view has room for.
   final String channelName;
+
+  /// Correcting a name teaches the *house*, not this fridge: a code means the
+  /// same product in the freezer as in the cellar, so the route behind it is
+  /// guild-scoped and this screen needs the guild to reach it.
+  final String guildId;
 
   @override
   State<PantryScannerScreen> createState() => _PantryScannerScreenState();
@@ -51,14 +65,20 @@ class _Scanned {
     required this.item,
     required this.created,
     required this.quantityBefore,
+    this.catalog,
   });
 
-  final PantryItemDto item;
+  PantryItemDto item;
 
   /// Whether the scan added a row or topped up one that was already there -
   /// which is what "undo" has to mean two different things about.
   final bool created;
   final double quantityBefore;
+
+  /// Set when a public catalog is what named this line, and cleared the moment
+  /// somebody corrects it: from then on the name is the house's own and there
+  /// is nothing left to attribute.
+  ProductCatalogMatchDto? catalog;
 
   bool undone = false;
 }
@@ -169,6 +189,7 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
             item: result.item,
             created: result.created,
             quantityBefore: before ?? result.item.quantity - 1,
+            catalog: result.catalog,
           ),
         );
       });
@@ -196,21 +217,102 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
       ?.item
       .quantity;
 
-  /// The only thing that stops the camera, and only ever once per product.
+  /// The only thing that stops the camera, and only when nothing at all could
+  /// name the code.
   Future<void> _askForName(String barcode) async {
-    await _controller.stop();
-    if (!mounted) return;
-    final name = await showHouseSheet<String>(
-      context: context,
-      builder: (_) => const _NameNewProductSheet(),
-    );
-    if (!mounted) return;
-    unawaited(_controller.start());
-    if (name == null || name.trim().isEmpty) {
-      _showToast('Skipped - that one still needs a name');
+    final name = await _promptForName();
+    if (name == null) {
+      if (mounted) _showToast('Skipped - that one still needs a name');
       return;
     }
-    await _scan(barcode, name: name.trim());
+    await _scan(barcode, name: name);
+  }
+
+  /// Correcting a name the catalog suggested, or one somebody typed earlier.
+  ///
+  /// Deliberately **not** a second scan. A scan would add stock nobody bought,
+  /// could not be asked to add none, and would rewrite the learned default
+  /// quantity from whatever the correction happened to carry; the dedicated
+  /// route moves no stock at all. It also teaches the house, which is the whole
+  /// point: from here on this flat's word beats the suggestion every time.
+  Future<void> _rename(_Scanned entry) async {
+    final barcode = entry.item.barcode;
+    if (barcode == null || barcode.isEmpty) return;
+
+    final suggestion = entry.catalog;
+
+    // Held for the whole correction, not just the request. The camera is
+    // stopped while the sheet is up, but the scan that was already in flight
+    // when the row was tapped is not, and two writes about one barcode arriving
+    // in either order is not a race worth having.
+    setState(() => _busy = true);
+
+    try {
+      final name = await _promptForName(
+        initialName: entry.item.name,
+        suggestion: suggestion?.name,
+        brand: suggestion?.brand,
+        attribution: suggestion?.attribution,
+      );
+      if (name == null || name == entry.item.name) return;
+
+      final result = await householdApi.teachPantryBarcode(
+        widget.guildId,
+        barcode,
+        name: name,
+      );
+      if (!mounted) return;
+
+      // The server renames the jars still carrying the suggestion, in every
+      // pantry of this house. Ours is usually among them, but not when somebody
+      // had already given it a name of its own - so the tally follows what came
+      // back rather than assuming.
+      final renamed = result.renamedItems
+          .where((item) => item.id == entry.item.id)
+          .firstOrNull;
+
+      houseHaptic();
+      setState(() {
+        if (renamed != null) entry.item = renamed;
+        entry.catalog = null;
+      });
+      _showToast('This house calls it $name now');
+    } catch (error) {
+      if (mounted) {
+        _showToast(householdErrorText(error, 'That name did not stick.'));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Stops the camera, asks, starts it again. Every prompt in this screen goes
+  /// through here so that none of them can leave the scanner reading barcodes
+  /// behind a keyboard.
+  Future<String?> _promptForName({
+    String? initialName,
+    String? suggestion,
+    String? brand,
+    String? attribution,
+  }) async {
+    await _controller.stop();
+    if (!mounted) return null;
+
+    final name = await showHouseSheet<String>(
+      context: context,
+      builder: (_) => ProductNameSheet(
+        initialName: initialName,
+        suggestion: suggestion,
+        brand: brand,
+        attribution: attribution,
+      ),
+    );
+
+    if (!mounted) return null;
+    unawaited(_controller.start());
+
+    final trimmed = name?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   Future<void> _undo(_Scanned entry) async {
@@ -294,6 +396,7 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
                         _Tally(
                           entries: _scanned,
                           onUndo: _undo,
+                          onRename: _rename,
                           onDone: () => Navigator.of(context).pop(_addedCount),
                         ),
                       ],
@@ -477,17 +580,29 @@ class _Tally extends StatelessWidget {
   const _Tally({
     required this.entries,
     required this.onUndo,
+    required this.onRename,
     required this.onDone,
   });
 
   final List<_Scanned> entries;
   final void Function(_Scanned) onUndo;
+  final void Function(_Scanned) onRename;
   final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final live = entries.where((e) => !e.undone).toList();
+
+    // The credit for whatever the catalog named in this session, once, under
+    // the lines it covers. Once rather than per row because it is the same
+    // notice every time and a scanner is not the place for a stack of them; the
+    // per-row badge is what says which lines it is about.
+    final attribution = live
+        .map((entry) => entry.catalog?.attribution)
+        .whereType<String>()
+        .where((text) => text.trim().isNotEmpty)
+        .firstOrNull;
 
     return Container(
       decoration: BoxDecoration(
@@ -530,10 +645,17 @@ class _Tally extends StatelessWidget {
                 shrinkWrap: true,
                 padding: EdgeInsets.zero,
                 itemCount: live.length,
-                itemBuilder: (context, index) =>
-                    _TallyRow(entry: live[index], onUndo: onUndo),
+                itemBuilder: (context, index) => _TallyRow(
+                  entry: live[index],
+                  onUndo: onUndo,
+                  onRename: onRename,
+                ),
               ),
             ),
+            if (attribution != null) ...[
+              const SizedBox(height: AppSpacing.s),
+              ProductSourceNote(attribution: attribution),
+            ],
             const SizedBox(height: AppSpacing.s),
           ],
           HousePrimaryButton(
@@ -551,17 +673,53 @@ class _Tally extends StatelessWidget {
   }
 }
 
+/// One line of the receipt: what went in, how much of it there is now, and the
+/// two things that can be done about it.
+///
+/// The name is a button. That is the whole correction affordance, and it is on
+/// every row rather than only on catalog-named ones: a typo somebody made in
+/// the naming sheet thirty seconds ago is exactly as worth fixing as a wrong
+/// suggestion, and two different ways to fix a name would be one too many.
 class _TallyRow extends StatelessWidget {
-  const _TallyRow({required this.entry, required this.onUndo});
+  const _TallyRow({
+    required this.entry,
+    required this.onUndo,
+    required this.onRename,
+  });
 
   final _Scanned entry;
   final void Function(_Scanned) onUndo;
+  final void Function(_Scanned) onRename;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final unit = entry.item.unit?.trim();
+    final suggested = entry.catalog != null;
+    final canRename = (entry.item.barcode ?? '').isNotEmpty;
+
+    final name = Row(
+      children: [
+        Flexible(
+          child: Text(
+            entry.item.name,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+        if (suggested) ...[
+          const SizedBox(width: 6),
+
+          // Flexible, not fixed: at the largest text size the word "Suggested"
+          // is wider than the slot a long product name leaves it, and a pill
+          // that cannot shrink takes the whole row over the edge with it. The
+          // pill ellipsises down to its icon, which still says what it means.
+          const Flexible(child: SuggestedNameBadge()),
+        ],
+      ],
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -575,11 +733,22 @@ class _TallyRow extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.s),
           Expanded(
-            child: Text(
-              entry.item.name,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium,
-            ),
+            child: canRename
+                ? InkWell(
+                    onTap: () => onRename(entry),
+                    borderRadius: BorderRadius.circular(AppRadii.badge),
+                    child: Semantics(
+                      button: true,
+                      label: suggested
+                          ? '${entry.item.name}, suggested name, tap to change it'
+                          : '${entry.item.name}, tap to change the name',
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: name,
+                      ),
+                    ),
+                  )
+                : name,
           ),
           Text(
             unit == null || unit.isEmpty
@@ -596,67 +765,6 @@ class _TallyRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// The only prompt in the flow: what this house calls a product it has never
-/// seen. Asked once per barcode, ever.
-class _NameNewProductSheet extends StatefulWidget {
-  const _NameNewProductSheet();
-
-  @override
-  State<_NameNewProductSheet> createState() => _NameNewProductSheetState();
-}
-
-class _NameNewProductSheetState extends State<_NameNewProductSheet> {
-  final _controller = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _controller.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _save() => Navigator.of(context).pop(_controller.text.trim());
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return HouseSheet(
-      title: 'What is this?',
-      actionLabel: 'Save and carry on',
-      onAction: _controller.text.trim().isEmpty ? null : _save,
-      children: [
-        SheetField(
-          label: 'Call it',
-          child: TextField(
-            controller: _controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) {
-              if (_controller.text.trim().isNotEmpty) _save();
-            },
-            decoration: const InputDecoration(hintText: 'Oat milk'),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.m),
-        Text(
-          'Only the first time. This house remembers the barcode, so every '
-          'scan of it after this one goes straight in.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            height: 1.4,
-          ),
-        ),
-      ],
     );
   }
 }
