@@ -267,6 +267,11 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     // already stopped. The snapshot is the only thing that can say what to pull
     // instead, and the gate collapses a burst of these into one request.
     webRtc.onStaleSubscription = () => unawaited(repository.refetchSnapshot());
+    // A track arriving is its own event, later than the subscribe that asked
+    // for it and with nothing else attached to it. Without this the screen
+    // renders whatever it read before the media existed - see
+    // [GuildVoiceState.videoRevision].
+    webRtc.onTracksChanged = _bumpVideoRevision;
     repository.enterChannel(guildId: guildId, channelId: channelId);
     repository.adoptSnapshot(snapshot);
 

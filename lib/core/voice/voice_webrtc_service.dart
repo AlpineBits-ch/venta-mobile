@@ -113,6 +113,26 @@ class VoiceWebRtcService {
   /// instead.
   void Function()? onStaleSubscription;
 
+  /// Called whenever the remote tracks the getters below hand out change - one
+  /// arriving, or one being dropped.
+  ///
+  /// Nothing else announces an arrival, and an arrival is not the same event as
+  /// the subscribe that asked for it: the subscribe returns when the SFU has
+  /// accepted it, and the media turns up over the platform channel some time
+  /// after that. `MediaStreamTrack`s cannot live in `Equatable` cubit state, so
+  /// the screens re-read them from here and rely on the cubit emitting to know
+  /// when to look - which means an arrival nobody is told about is a tile that
+  /// keeps the placeholder it was built with.
+  ///
+  /// That was the bug this exists to fix. Open the voice screen while somebody
+  /// is already sharing and the whole sequence - refetch a snapshot, reconcile,
+  /// subscribe - changes nothing about the roster, so it emitted nothing; the
+  /// share arrived into [_remoteScreenTracks] and stayed there unread for the
+  /// rest of the session. It looked intermittent only because *joining* a room
+  /// produces enough unrelated state for a re-read to land after the track by
+  /// luck.
+  void Function()? onTracksChanged;
+
   /// Keys of subscribe requests currently deferred. Exposed because the flush
   /// itself can only run against a live peer connection (platform channels),
   /// so the queueing half is what unit tests can reach.
@@ -591,6 +611,7 @@ class VoiceWebRtcService {
       case TrackKind.screenAudio:
         if (shareId != null) _remoteScreenAudioTracks.remove(shareId);
     }
+    onTracksChanged?.call();
     final key = _subscriptionKey(userId, kind, shareId);
     _subscribedKeys.remove(key);
     // Also drop a request still waiting on the publish - a participant who
@@ -796,5 +817,9 @@ class VoiceWebRtcService {
           _remoteScreenAudioTracks[owner.shareId!] = track;
         }
     }
+    // The media exists now, which is a different moment from the subscribe that
+    // asked for it - and the only moment a viewer can render it. See
+    // [onTracksChanged].
+    onTracksChanged?.call();
   }
 }
