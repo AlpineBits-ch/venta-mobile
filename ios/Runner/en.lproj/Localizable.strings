@@ -21,9 +21,16 @@
        the ordered values.
 
      * `lib/core/push/household_strings.dart` carries the same table for the
-       foreground case iOS never draws, and `android/app/src/main/res/values*/`
-       carries it for Android. `test/household_strings_test.dart` asserts all
-       three agree.
+       foreground case iOS never draws, and the Android `res/values` and
+       `res/values-de` directories carry it for Android.
+       `test/household_strings_test.dart` asserts all three agree.
+
+     * Nothing in this file may contain the two characters that close a C
+       comment. A `.strings` file is parsed as a property list, so a comment
+       ended early does not degrade - the prose after it becomes body, the plist
+       fails to parse, and the iOS archive fails with "the input data was in an
+       invalid format". Writing a glob for the Android resource directories is
+       exactly how that happened once already.
 */
 
 /* Chores */

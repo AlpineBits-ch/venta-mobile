@@ -48,16 +48,27 @@ void main() {
     };
   }
 
+  final iosEntry = RegExp(r'"([^"]+)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;');
+
+  /// Whatever is left of a `.strings` file once its comments and its entries
+  /// are removed. Anything but whitespace means the file is not a valid
+  /// property list - see the test below.
+  String iosResidue(String path) {
+    final text = File(path).readAsStringSync();
+    // Non-greedy, so this stops at the *first* `*/` exactly as the plist parser
+    // does. That is the point: a comment closed early leaves its remaining prose
+    // here rather than being quietly swallowed.
+    final body = text.replaceAll(RegExp(r'/\*.*?\*/', dotAll: true), '');
+    return body.replaceAll(iosEntry, '');
+  }
+
   Map<String, String> parseIos(String path) {
     final text = File(path).readAsStringSync();
-    // Strip /* ... */ comments first so a sentence inside one is never mistaken
-    // for an entry.
     final body = text.replaceAll(RegExp(r'/\*.*?\*/', dotAll: true), '');
-    final entries = RegExp(r'"([^"]+)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;')
-        .allMatches(body);
 
     return {
-      for (final m in entries) m.group(1)!: m.group(2)!.replaceAll(r'\"', '"'),
+      for (final m in iosEntry.allMatches(body))
+        m.group(1)!: m.group(2)!.replaceAll(r'\"', '"'),
     };
   }
 
@@ -70,6 +81,38 @@ void main() {
     'en': parseIos('ios/Runner/en.lproj/Localizable.strings'),
     'de': parseIos('ios/Runner/de.lproj/Localizable.strings'),
   };
+
+  /// A `.strings` file is parsed as a property list, and it does not degrade:
+  /// anything the parser cannot account for fails the whole file, and the iOS
+  /// build fails during archive with "Couldn't parse property list because the
+  /// input data was in an invalid format" - a message that names the file and
+  /// says nothing about which line.
+  ///
+  /// The way to produce one is to write `*/` inside a comment. `res/values*/`
+  /// closes the comment three lines early, and every sentence after it becomes
+  /// body. Nothing in the file looks wrong, and the previous version of this
+  /// test passed straight through it: it stripped comments, matched the entries
+  /// it recognised, and never asked what was left over.
+  ///
+  /// So it asks now.
+  group('the iOS files are valid property lists', () {
+    for (final language in const ['en', 'de']) {
+      test('$language.lproj has nothing outside a comment or an entry', () {
+        final residue = iosResidue(
+          'ios/Runner/$language.lproj/Localizable.strings',
+        );
+
+        expect(
+          residue.trim(),
+          isEmpty,
+          reason:
+              'left over after removing comments and entries, which means the '
+              'plist parser will choke on it. The usual cause is a `*/` inside '
+              'a comment closing it early.',
+        );
+      });
+    }
+  });
 
   group('every language carries every key', () {
     test('the Dart table agrees with itself across languages', () {
