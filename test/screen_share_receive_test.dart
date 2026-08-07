@@ -187,6 +187,7 @@ void main() {
         state: any(named: 'state'),
       ),
     ).thenAnswer((_) async {});
+    when(() => repository.leave(any(), any())).thenAnswer((_) async {});
 
     when(() => auth.currentUserId).thenReturn(_me);
 
@@ -347,5 +348,55 @@ void main() {
     );
 
     expect(changes, 1);
+  });
+
+  /// What a hub reconnect means, and - just as important - what it does not.
+  ///
+  /// A dropped socket is not leaving the channel: the server shortens this
+  /// client's liveness window rather than evicting it, and reconnecting
+  /// restores it. So the client asserts itself immediately instead of waiting up
+  /// to 30 seconds for the next timer tick - and leaves the media alone. Media
+  /// rides its own transport, and rebuilding the peer connection on a websocket
+  /// blip spends the media session id, which earns `sessionGone` on every call
+  /// after it.
+  group('a hub reconnect', () {
+    test('asserts our state as soon as the socket is back', () async {
+      clearInteractions(repository);
+
+      connection.add(RealtimeConnectionStatus.connected);
+      await pumpEventQueue();
+
+      verify(
+        () => repository.invokeHeartbeat(
+          channelId: any(named: 'channelId'),
+          state: any(named: 'state'),
+        ),
+      ).called(1);
+    });
+
+    test('does not rebuild the media', () async {
+      clearInteractions(transport);
+
+      connection.add(RealtimeConnectionStatus.connected);
+      await pumpEventQueue();
+
+      verifyNever(transport.disconnect);
+      verifyNever(() => transport.connect(any(), any()));
+    });
+
+    test('stays quiet when not in a channel', () async {
+      await cubit.leave();
+      clearInteractions(repository);
+
+      connection.add(RealtimeConnectionStatus.connected);
+      await pumpEventQueue();
+
+      verifyNever(
+        () => repository.invokeHeartbeat(
+          channelId: any(named: 'channelId'),
+          state: any(named: 'state'),
+        ),
+      );
+    });
   });
 }

@@ -66,6 +66,22 @@ class VoiceMediaException implements Exception {
   bool get isStale =>
       statusCode == 409 && (error == 'staleSubscription' || error == null);
 
+  /// This client's *own* media session has no live peer connection - it was closed, or never
+  /// reached `connected`.
+  ///
+  /// The opposite direction to [isStale] and answered differently, which is why they are separate
+  /// despite sharing a status. A stale subscription is a track that stopped: refetch the roster and
+  /// pull whatever replaced it. This is the session doing the pulling being spent, which no roster
+  /// can repair - it has to be recreated before anything can be pulled onto it at all.
+  ///
+  /// Never retried. Every call on that session id fails identically from here on.
+  ///
+  /// The 502 arm matches the transport's own wording, which is what leaks through when the
+  /// operation reaches the SFU before the server classifies it.
+  bool get isSessionGone =>
+      (statusCode == 409 && error == 'sessionGone') ||
+      (statusCode == 502 && (error?.contains('session_error') ?? false));
+
   /// The room was contended and the change was not applied. Transient; retry
   /// after a short delay.
   bool get isContended => statusCode == 503;
@@ -182,7 +198,9 @@ Future<T> mapMediaErrors<T>(String name, Future<T> Function() operation) async {
 ///    actually moves spends requests to learn nothing, and turns one bad moment
 ///    into the burst that trips a degraded threshold.
 Duration? voiceRetryDelay(VoiceMediaException e, int attempt) {
-  if (e.isFatal || e.isStale) return null;
+  // `isSessionGone` is checked before the 502 arm below, because it can *be* a 502 and retrying it
+  // is the one thing guaranteed not to work.
+  if (e.isFatal || e.isStale || e.isSessionGone) return null;
   if (e.isContended) return Duration(milliseconds: 250 * attempt);
   if (e.isTransportFailure) {
     return Duration(milliseconds: 1000 * (1 << (attempt - 1)));

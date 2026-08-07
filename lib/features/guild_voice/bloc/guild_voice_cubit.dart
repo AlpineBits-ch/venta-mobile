@@ -256,22 +256,104 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     return webRtc;
   }
 
-  Future<void> _connect(
-    String guildId,
-    String channelId,
-    VoiceRoomSnapshotDto snapshot,
-  ) async {
+  /// A transport with its three callbacks wired. Built here rather than at each call site so a
+  /// rebuild cannot come back with fewer of them than the original had - which would be silent, and
+  /// would show up much later as one of the failures they exist to answer.
+  GuildVoiceWebRtcService _buildTransport() {
     final webRtc = _webRtcServiceFactory();
-    _webRtc = webRtc;
     // A refused subscribe means this client is looking at a share that has
     // already stopped. The snapshot is the only thing that can say what to pull
     // instead, and the gate collapses a burst of these into one request.
     webRtc.onStaleSubscription = () => unawaited(repository.refetchSnapshot());
+    // Our own session, rather than somebody's track. No snapshot can repair that.
+    webRtc.onSessionGone = () => unawaited(_rebuildMedia());
     // A track arriving is its own event, later than the subscribe that asked
     // for it and with nothing else attached to it. Without this the screen
     // renders whatever it read before the media existed - see
     // [GuildVoiceState.videoRevision].
     webRtc.onTracksChanged = _bumpVideoRevision;
+    return webRtc;
+  }
+
+  /// Guards [_rebuildMedia]: every pending subscribe fails at once when a session dies, so the
+  /// callback fires in a burst.
+  bool _rebuildingMedia = false;
+
+  /// Open a fresh media session after the server declares the current one spent.
+  ///
+  /// A session id outlives nothing: it is meaningless without the peer connection that produced it,
+  /// and once the server has said `sessionGone` every call on it fails identically. So the whole
+  /// media half is rebuilt - new session, republished microphone, re-subscribed room - while the
+  /// room membership, the roster and the version tracker are all left alone. This is not a rejoin.
+  ///
+  /// The camera and any screen share do not survive it. They were publications on the dead session,
+  /// so they are already gone at the SFU; clearing them locally makes the UI agree with the room
+  /// instead of showing a camera nobody is receiving.
+  Future<void> _rebuildMedia() async {
+    final guildId = state.guildId;
+    final channelId = state.channelId;
+    if (_rebuildingMedia || guildId == null || channelId == null) return;
+    if (state.phase != GuildVoicePhase.active) return;
+    _rebuildingMedia = true;
+    try {
+      final dead = _webRtc;
+      _webRtc = null;
+      await dead?.disconnect();
+
+      await _retireLocalPublications(channelId);
+
+      final webRtc = _buildTransport();
+      _webRtc = webRtc;
+      await webRtc.connect(guildId, channelId);
+      webRtc.setMuted(state.isMuted);
+      webRtc.setDeafened(state.isDeafened);
+      await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
+
+      // The roster is unchanged, but every subscription on it was lost with the session, so this is
+      // what pulls the room back in.
+      await repository.refetchSnapshot();
+    } catch (_) {
+      emitIfOpen(state.copyWith(errorMessage: 'Lost the connection to voice.'));
+    } finally {
+      _rebuildingMedia = false;
+    }
+  }
+
+  /// Drops the camera and screen share that died with the old session, and tells the room.
+  Future<void> _retireLocalPublications(String channelId) async {
+    final shareId = _myShareId;
+    _myShareId = null;
+    _updateParticipant(
+      channelId,
+      _myUserId,
+      (p) => shareId == null
+          ? p.copyWith(hasCamera: false)
+          : p.copyWith(hasCamera: false).withoutShare(shareId),
+    );
+    _bumpVideoRevision();
+    try {
+      await repository.invokeCameraChanged(
+        channelId: channelId,
+        isCameraOn: false,
+      );
+      if (shareId != null) {
+        await repository.invokeScreenShareStopped(
+          channelId: channelId,
+          shareId: shareId,
+        );
+      }
+    } catch (_) {
+      // Best-effort - the server's own reconcile corrects it from the next heartbeat either way.
+    }
+  }
+
+  Future<void> _connect(
+    String guildId,
+    String channelId,
+    VoiceRoomSnapshotDto snapshot,
+  ) async {
+    final webRtc = _buildTransport();
+    _webRtc = webRtc;
     repository.enterChannel(guildId: guildId, channelId: channelId);
     repository.adoptSnapshot(snapshot);
 
@@ -463,11 +545,20 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     }
   }
 
-  /// A reconnect is the signal that events broadcast during the gap were
-  /// dropped. One snapshot refetch puts this client back in sync.
+  /// A reconnect is when to assert this client's state, not when to rebuild it.
+  ///
+  /// A dropped socket is not a departure. The server shortens this client's liveness window rather
+  /// than evicting it, and reconnecting restores it - so nothing here touches the peer connection or
+  /// the media session. They ride their own transport, and rebuilding them on a websocket blip
+  /// spends the session id and earns `sessionGone` on every call after it.
+  ///
+  /// The heartbeat goes first and immediately, rather than waiting up to 30 seconds for the next
+  /// tick: it restores the liveness window and, if this client fell behind while away, brings back a
+  /// snapshot on its own. The refetch covers the rest - SignalR does not queue what it missed.
   void _handleConnectionStatus(RealtimeConnectionStatus status) {
     if (status != RealtimeConnectionStatus.connected) return;
     if (state.phase != GuildVoicePhase.active) return;
+    unawaited(_sendHeartbeat());
     unawaited(repository.refetchSnapshot());
   }
 

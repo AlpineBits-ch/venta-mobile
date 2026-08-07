@@ -319,18 +319,64 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     return webRtc;
   }
 
-  Future<void> _connect(CallDto call) async {
+  /// A transport with its three callbacks wired. Built here rather than at each call site so a
+  /// rebuild cannot come back with fewer of them than the original had.
+  CallWebRtcService _buildTransport() {
     final webRtc = _webRtcServiceFactory();
-    _webRtc = webRtc;
     // A refused subscribe means this client is looking at a share that has
     // already stopped. The snapshot is the only thing that can say what to pull
     // instead, and the gate collapses a burst of these into one request.
     webRtc.onStaleSubscription = () => unawaited(repository.refetchSnapshot());
+    // Our own session, rather than somebody's track. No snapshot can repair that.
+    webRtc.onSessionGone = () => unawaited(_rebuildMedia());
     // A track arriving is its own event, later than the subscribe that asked
     // for it and with nothing else attached to it. Without this the screen
     // renders whatever it read before the media existed - see
     // [CallState.videoRevision].
     webRtc.onTracksChanged = _bumpVideoRevision;
+    return webRtc;
+  }
+
+  /// Guards [_rebuildMedia]: every pending subscribe fails at once when a session dies.
+  bool _rebuildingMedia = false;
+
+  /// Open a fresh media session after the server declares the current one spent.
+  ///
+  /// A session id is meaningless without the peer connection that produced it, and once the server
+  /// has said `sessionGone` every call on it fails identically. The media half is rebuilt - new
+  /// session, republished microphone, re-subscribed call - while the call itself, its roster and the
+  /// version tracker are left alone. This is not rejoining the call.
+  Future<void> _rebuildMedia() async {
+    final call = state.call;
+    if (_rebuildingMedia || call == null) return;
+    if (state.phase != CallPhase.active) return;
+    _rebuildingMedia = true;
+    try {
+      final dead = _webRtc;
+      _webRtc = null;
+      await dead?.disconnect();
+
+      final webRtc = _buildTransport();
+      _webRtc = webRtc;
+      await webRtc.connect(call.id);
+      webRtc.setMuted(state.isMuted);
+      webRtc.setDeafened(state.isDeafened);
+      await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
+
+      // The roster is unchanged, but every subscription on it went with the session.
+      await repository.refetchSnapshot();
+    } catch (_) {
+      emitIfOpen(
+        state.copyWith(errorMessage: 'Lost the connection to the call.'),
+      );
+    } finally {
+      _rebuildingMedia = false;
+    }
+  }
+
+  Future<void> _connect(CallDto call) async {
+    final webRtc = _buildTransport();
+    _webRtc = webRtc;
     repository.enterCall(call.id);
 
     emitIfOpen(
@@ -692,10 +738,17 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     emitIfOpen(CallState(phase: CallPhase.incoming, call: pending));
   }
 
-  /// A reconnect is the signal that any `call.*` events broadcast during the
-  /// gap were dropped - SignalR doesn't queue undelivered messages. The
-  /// lifecycle read answers "is this call still running and am I still in it";
-  /// the snapshot answers everything about media.
+  /// A reconnect is when to assert this client's state, not when to rebuild it.
+  ///
+  /// A dropped socket is not leaving the call: the server shortens this client's liveness window
+  /// rather than evicting it, and reconnecting restores it - so nothing here touches the peer
+  /// connection or the media session. They ride their own transport, and rebuilding them on a
+  /// websocket blip spends the session id and earns `sessionGone` on every call after it.
+  ///
+  /// What the gap does cost is events, which SignalR does not queue. The heartbeat goes first and
+  /// immediately rather than at the next 30-second tick: it restores the liveness window and brings
+  /// back a snapshot if this client fell behind. The lifecycle read then answers "is this call still
+  /// running and am I still in it", which no snapshot covers.
   Future<void> _handleConnectionStatus(RealtimeConnectionStatus status) async {
     if (status != RealtimeConnectionStatus.connected) return;
     if (state.phase == CallPhase.idle) {
@@ -705,6 +758,8 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     if (state.phase != CallPhase.active) return;
     final call = state.call;
     if (call == null) return;
+
+    unawaited(_sendHeartbeat());
 
     CallDto fresh;
     try {

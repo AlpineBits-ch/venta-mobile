@@ -253,6 +253,69 @@ void main() {
       expect(failureOf(404, null).isFatal, isTrue);
     });
 
+    /// "Our own session is gone", as opposed to "the track we asked for is gone".
+    ///
+    /// Both are 409s and they are told apart by the code alone, so this pair is the whole
+    /// distinction. Confusing them either rebuilds a healthy session over a stopped share, or
+    /// answers a spent session with a roster refetch that cannot possibly help.
+    test(
+      'a 409 sessionGone is our own session, not somebody else\'s track',
+      () {
+        final gone = failureOf(409, {
+          'error': 'sessionGone',
+          'action': 'recreateSession',
+        });
+
+        expect(gone.isSessionGone, isTrue);
+        expect(gone.isStale, isFalse);
+        expect(gone.action, 'recreateSession');
+      },
+    );
+
+    test('a stale subscription is not a dead session', () {
+      final stale = failureOf(409, {'error': 'staleSubscription'});
+
+      expect(stale.isSessionGone, isFalse);
+    });
+
+    test('the transport wording for the same condition is recognised too', () {
+      // What leaks through when the operation reaches the SFU before the server classifies it -
+      // and what this client was actually being sent in the field.
+      final gone = failureOf(502, {
+        'operation': 'tracks/new',
+        'error':
+            '{"errorCode":"session_error","errorDescription":"Session appears '
+            'to be disconnected. Please check if the PeerConnection is connected."}',
+      });
+
+      expect(gone.isSessionGone, isTrue);
+    });
+
+    test('an ordinary transport failure is not a dead session', () {
+      // It must keep its backoff. Treating every 502 as a dead session would tear down a healthy
+      // one over a blip and lose every subscription on it.
+      final failure = failureOf(502, {'operation': 'tracks', 'error': 'boom'});
+
+      expect(failure.isSessionGone, isFalse);
+      expect(voiceRetryDelay(failure, 1), isNotNull);
+    });
+
+    test('a dead session is never retried, on either status', () {
+      // The session is spent: the identical body fails identically for as long as anyone tries.
+      // Recreating it is the only move, and that is the owner's to make.
+      expect(
+        voiceRetryDelay(failureOf(409, {'error': 'sessionGone'}), 1),
+        isNull,
+      );
+      expect(
+        voiceRetryDelay(
+          failureOf(502, {'operation': 'tracks', 'error': 'session_error'}),
+          1,
+        ),
+        isNull,
+      );
+    });
+
     test('a stale subscribe is never retried', () {
       // Retrying the identical body is guaranteed to fail again. The only
       // useful move is refetching the snapshot and subscribing from that.

@@ -113,6 +113,15 @@ class VoiceWebRtcService {
   /// instead.
   void Function()? onStaleSubscription;
 
+  /// Called when the server says this client's *own* media session is gone.
+  ///
+  /// Distinct from [onStaleSubscription] in both cause and cure. That one means a track stopped and
+  /// is answered by reading the roster again; this means the session doing the pulling is spent, and
+  /// no roster can repair it - the session and the peer connection that gave it meaning both have to
+  /// be rebuilt, which only the room's owner can sequence (it has to republish and re-subscribe
+  /// afterwards).
+  void Function()? onSessionGone;
+
   /// Called whenever the remote tracks the getters below hand out change - one
   /// arriving, or one being dropped.
   ///
@@ -539,6 +548,18 @@ class VoiceWebRtcService {
             'refetching the snapshot: $e',
           );
           onStaleSubscription?.call();
+          return;
+        }
+
+        if (e.isSessionGone) {
+          // Not this track - us. Every subscribe on this session fails identically from now on, so
+          // the guards are released for all of them rather than just this one, and the owner is
+          // asked to rebuild. Retrying here would burn the budget on a session that cannot answer.
+          debugPrint(
+            '[Voice] our media session is gone ("$trackName") - rebuilding: $e',
+          );
+          _subscribedKeys.clear();
+          onSessionGone?.call();
           return;
         }
 
