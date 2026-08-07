@@ -104,6 +104,15 @@ class VoiceWebRtcService {
   /// full resync.
   final Map<String, _PendingSubscribe> _pendingSubscribes = {};
 
+  /// Called when the server refuses a subscribe because this client's view of
+  /// the room is stale - it asked to pull a track nobody is publishing.
+  ///
+  /// The owner answers by refetching the snapshot and reconciling against it.
+  /// There is nothing useful this service can do on its own: it knows the pull
+  /// was refused, but only the room's owner knows what should be pulled
+  /// instead.
+  void Function()? onStaleSubscription;
+
   /// Keys of subscribe requests currently deferred. Exposed because the flush
   /// itself can only run against a live peer connection (platform channels),
   /// so the queueing half is what unit tests can reach.
@@ -277,6 +286,15 @@ class VoiceWebRtcService {
     ]);
   }
 
+  /// Stops the local share and closes its tracks on the SFU.
+  ///
+  /// This is only half of stopping: the caller also announces
+  /// `ScreenShareStopped` over the hub. Both are needed. The hub event tells
+  /// people; this tells the SFU and releases the media. The server now cleans
+  /// its roster up if only the announcement arrives, so skipping this is no
+  /// longer a correctness bug - but it leaves the track live on the SFU until
+  /// the whole session is torn down, which is egress paid for a picture nobody
+  /// is receiving.
   Future<void> stopScreenShare() async {
     final track = _localScreenTrack;
     final shareId = _activeShareId;
@@ -415,10 +433,20 @@ class VoiceWebRtcService {
   /// That rollback is the whole point. Every path that could retry this
   /// subscription is gated behind the same guard, so a guard consumed by a
   /// failed attempt and never released is how one transient error becomes
-  /// permanent silence for that participant. A 503 means the room was
-  /// contended and the change simply was not applied, so it is retried here
-  /// rather than surfaced; a 502 is the SFU refusing outright, and is left
-  /// to the next announcement or resync.
+  /// permanent silence for that participant.
+  ///
+  /// Retries are per status, and the differences matter:
+  ///
+  ///  * **409 stale** - never retried. The track is gone rather than late, so
+  ///    the identical body fails identically; [onStaleSubscription] asks for a
+  ///    fresh snapshot and the reconcile that follows decides what to pull.
+  ///  * **502** - backed off exponentially from a second. Retrying faster than
+  ///    the snapshot being retried against can change just turns one bad moment
+  ///    into a burst; that is what took voice to the status page in
+  ///    VNT-GE21R3P7.
+  ///  * **503** - contended, so the change was simply not applied. Retried
+  ///    quickly, because nothing about the request was wrong.
+  ///  * **403/404** - not retried at all.
   Future<void> _subscribeTrack({
     required String userId,
     required String mediaSessionId,
@@ -484,13 +512,35 @@ class VoiceWebRtcService {
         _processPendingTracks();
         return;
       } on VoiceMediaException catch (e) {
-        if (e.isContended && attempt < attempts) {
-          await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
-          continue;
+        if (e.isStale) {
+          _subscribedKeys.remove(key);
+          debugPrint(
+            '[Voice] stale subscribe for $userId ("$trackName") - '
+            'refetching the snapshot: $e',
+          );
+          onStaleSubscription?.call();
+          return;
         }
-        _subscribedKeys.remove(key);
-        debugPrint('[Voice] subscribe failed for $userId ("$trackName"): $e');
-        return;
+
+        final backoff = voiceRetryDelay(e, attempt);
+        if (backoff == null || attempt == attempts) {
+          // Released so another announcement or a fresh snapshot can try
+          // again - a guard left set is how one failure becomes permanent
+          // silence for this participant.
+          _subscribedKeys.remove(key);
+          debugPrint('[Voice] subscribe failed for $userId ("$trackName"): $e');
+          return;
+        }
+
+        // The guard stays claimed across the wait: this attempt is still the
+        // live one, and a duplicate announcement arriving now should still
+        // dedupe against it.
+        await Future<void>.delayed(backoff);
+
+        // Unless something cleared it meanwhile. `unsubscribeTrack` and
+        // `disconnect` both drop the key, and either means retrying would
+        // subscribe to a participant who has already gone.
+        if (!_subscribedKeys.contains(key)) return;
       } catch (e) {
         _subscribedKeys.remove(key);
         debugPrint('[Voice] subscribe failed for $userId ("$trackName"): $e');

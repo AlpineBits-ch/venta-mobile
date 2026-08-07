@@ -263,6 +263,10 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   ) async {
     final webRtc = _webRtcServiceFactory();
     _webRtc = webRtc;
+    // A refused subscribe means this client is looking at a share that has
+    // already stopped. The snapshot is the only thing that can say what to pull
+    // instead, and the gate collapses a burst of these into one request.
+    webRtc.onStaleSubscription = () => unawaited(repository.refetchSnapshot());
     repository.enterChannel(guildId: guildId, channelId: channelId);
     repository.adoptSnapshot(snapshot);
 

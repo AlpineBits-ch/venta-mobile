@@ -1,5 +1,7 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venta_mobile/core/voice/track_naming.dart';
+import 'package:venta_mobile/core/voice/voice_media_api.dart';
 import 'package:venta_mobile/core/voice/voice_room_gate.dart';
 import 'package:venta_mobile/core/voice/voice_room_version.dart';
 import 'package:venta_mobile/core/voice/voice_snapshot_dto.dart';
@@ -192,6 +194,93 @@ void main() {
 
       expect(gate.instanceId, isNull);
       expect(gate.version, 0);
+    });
+  });
+
+  group('media errors', () {
+    VoiceMediaException failureOf(int status, Map<String, dynamic>? body) =>
+        VoiceMediaException.from(
+          DioException(
+            requestOptions: RequestOptions(path: '/tracks'),
+            response: Response<Map<String, dynamic>>(
+              requestOptions: RequestOptions(path: '/tracks'),
+              statusCode: status,
+              data: body,
+            ),
+          ),
+          'tracks',
+        );
+
+    test('a 409 staleSubscription is a stale client, not a failure', () {
+      // Incident VNT-GE21R3P7: a publisher stopped a share without closing its
+      // tracks, so the snapshot kept advertising it and watchers kept pulling
+      // media nobody was sending. The server answered 502 after six seconds of
+      // SFU retries, clients retried the identical body, and four rounds of
+      // that put voice on the status page.
+      final stale = failureOf(409, {
+        'error': 'staleSubscription',
+        'tracks': ['screen-7c41c31c'],
+        'action': 'refetchSnapshot',
+      });
+
+      expect(stale.isStale, isTrue);
+      expect(stale.staleTracks, ['screen-7c41c31c']);
+      expect(stale.action, 'refetchSnapshot');
+      expect(stale.isTransportFailure, isFalse);
+    });
+
+    test('a 409 with no body still reads as stale', () {
+      // `tracks` is absent when the publisher vanished mid-request. The meaning
+      // is identical, so nothing may branch on its presence.
+      expect(failureOf(409, null).isStale, isTrue);
+      expect(failureOf(409, null).staleTracks, isEmpty);
+    });
+
+    test('the other statuses keep their own meanings', () {
+      expect(
+        failureOf(502, {'operation': 'tracks', 'error': 'boom'}).isStale,
+        isFalse,
+      );
+      expect(
+        failureOf(502, {
+          'operation': 'tracks',
+          'error': 'boom',
+        }).isTransportFailure,
+        isTrue,
+      );
+      expect(failureOf(503, null).isContended, isTrue);
+      expect(failureOf(403, null).isFatal, isTrue);
+      expect(failureOf(404, null).isFatal, isTrue);
+    });
+
+    test('a stale subscribe is never retried', () {
+      // Retrying the identical body is guaranteed to fail again. The only
+      // useful move is refetching the snapshot and subscribing from that.
+      final stale = failureOf(409, {'error': 'staleSubscription'});
+
+      expect(voiceRetryDelay(stale, 1), isNull);
+    });
+
+    test('a permission or missing-room failure is never retried', () {
+      expect(voiceRetryDelay(failureOf(403, null), 1), isNull);
+      expect(voiceRetryDelay(failureOf(404, null), 1), isNull);
+    });
+
+    test('a transport failure backs off exponentially from a second', () {
+      final failure = failureOf(502, {'operation': 'tracks', 'error': 'boom'});
+
+      expect(voiceRetryDelay(failure, 1), const Duration(seconds: 1));
+      expect(voiceRetryDelay(failure, 2), const Duration(seconds: 2));
+      expect(voiceRetryDelay(failure, 3), const Duration(seconds: 4));
+    });
+
+    test('a contended room is retried quickly, since nothing was wrong', () {
+      final contended = failureOf(503, null);
+
+      expect(
+        voiceRetryDelay(contended, 1),
+        lessThan(const Duration(seconds: 1)),
+      );
     });
   });
 

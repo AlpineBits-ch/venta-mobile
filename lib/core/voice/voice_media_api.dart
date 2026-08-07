@@ -7,21 +7,30 @@ import 'voice_snapshot_dto.dart';
 /// A failure returned by the voice media surface, classified the way the
 /// contract classifies it.
 ///
-/// The distinction is load-bearing rather than cosmetic. A **502** is the SFU
-/// rejecting the operation outright: it is a real failure, and treating it as
-/// success is what leaves a client believing it is subscribed to a peer no
-/// media will ever arrive from. A **503** is the room being contended - the
-/// change simply was not applied, and retrying shortly after works. Everything
-/// else ([isFatal]) must not be retried blind.
+/// The distinctions are load-bearing rather than cosmetic:
+///
+///  * **409** is a stale *client* - it asked to pull media nobody is
+///    publishing. Refetch the snapshot and reconcile; re-sending the same body
+///    is guaranteed to fail again, because the track is gone rather than late.
+///  * **502** is the SFU rejecting the operation. A real failure, and treating
+///    it as success is what leaves a client believing it is subscribed to a
+///    peer no media will ever arrive from.
+///  * **503** is the room being contended - the change simply was not applied,
+///    and retrying shortly after works.
+///
+/// Everything else ([isFatal]) must not be retried blind.
 class VoiceMediaException implements Exception {
   VoiceMediaException({
     required this.statusCode,
     required this.operation,
     this.error,
+    this.staleTracks = const [],
+    this.action,
   });
 
-  /// Builds one from a Dio failure, reading the `{ operation, error }` body
-  /// the server sends with a 502.
+  /// Builds one from a Dio failure. The 502 body is `{ operation, error }`;
+  /// the 409 body is `{ error, tracks, action }`, where `error` is a code
+  /// rather than a message.
   factory VoiceMediaException.from(DioException e, String fallbackOperation) {
     final data = e.response?.data;
     final body = data is Map<String, dynamic> ? data : const {};
@@ -29,12 +38,33 @@ class VoiceMediaException implements Exception {
       statusCode: e.response?.statusCode ?? 0,
       operation: body['operation'] as String? ?? fallbackOperation,
       error: body['error'] as String? ?? e.message,
+      staleTracks: (body['tracks'] as List? ?? const []).cast<String>(),
+      action: body['action'] as String?,
     );
   }
 
   final int statusCode;
   final String operation;
   final String? error;
+
+  /// The tracks the server knew were gone up front. Empty when the publisher
+  /// vanished mid-request - the meaning is the same either way, so nothing
+  /// should branch on it beyond logging.
+  final List<String> staleTracks;
+
+  /// What the server says to do about it, e.g. `refetchSnapshot`.
+  final String? action;
+
+  /// This client asked to pull media nobody is publishing - its view of the
+  /// room is out of date.
+  ///
+  /// Never retry: the subscribe was refused because the track no longer
+  /// exists, so the identical body fails identically. Refetch the snapshot and
+  /// subscribe from that instead. Before the server started answering this, a
+  /// stale share cost six seconds of SFU retries and then a 502, and a client
+  /// looping on it took voice to the status page.
+  bool get isStale =>
+      statusCode == 409 && (error == 'staleSubscription' || error == null);
 
   /// The room was contended and the change was not applied. Transient; retry
   /// after a short delay.
@@ -45,12 +75,17 @@ class VoiceMediaException implements Exception {
   bool get isTransportFailure => statusCode == 502;
 
   /// Not permitted, or the room does not exist. Retrying cannot help.
+  ///
+  /// A `404` on these paths is more often the missing gateway prefix than a
+  /// missing room - guild routes need `/api/v1/guild` and call routes
+  /// `/api/v1/messaging` in front.
   bool get isFatal => statusCode == 403 || statusCode == 404;
 
   @override
   String toString() =>
       'VoiceMediaException($statusCode, $operation'
-      '${error == null ? '' : ': $error'})';
+      '${error == null ? '' : ': $error'}'
+      '${staleTracks.isEmpty ? '' : ' tracks=$staleTracks'})';
 }
 
 /// The room named a media backend this build has no implementation for.
@@ -129,6 +164,30 @@ Future<T> mapMediaErrors<T>(String name, Future<T> Function() operation) async {
   } on DioException catch (e) {
     throw VoiceMediaException.from(e, name);
   }
+}
+
+/// How long to wait before retrying a failed negotiation, or null for "do not
+/// retry". [attempt] is 1-based.
+///
+/// The policy, and why each arm is what it is:
+///
+///  * **409 stale** and **403/404** are never retried. The first means the
+///    track is gone rather than late, so the identical body fails identically;
+///    the other two cannot be fixed by asking again.
+///  * **503** is contended - nothing about the request was wrong, so it is
+///    retried quickly.
+///  * **502** backs off exponentially from a second. Incident VNT-GE21R3P7 had
+///    the same subscribe reattempted every 5-6 seconds against a snapshot that
+///    could not have changed in between; retrying faster than the room state
+///    actually moves spends requests to learn nothing, and turns one bad moment
+///    into the burst that trips a degraded threshold.
+Duration? voiceRetryDelay(VoiceMediaException e, int attempt) {
+  if (e.isFatal || e.isStale) return null;
+  if (e.isContended) return Duration(milliseconds: 250 * attempt);
+  if (e.isTransportFailure) {
+    return Duration(milliseconds: 1000 * (1 << (attempt - 1)));
+  }
+  return null;
 }
 
 /// Backends this client's media layer can actually drive.
