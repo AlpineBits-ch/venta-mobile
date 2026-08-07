@@ -25,6 +25,13 @@ class AccountRepository {
     newPassword: newPassword,
   );
 
+  /// See [IdentityApi.setPhoneNumber]. Returns the E.164 form the server
+  /// stored, which is what every other member will see.
+  Future<String?> setPhoneNumber(String phoneNumber) =>
+      api.setPhoneNumber(phoneNumber);
+
+  Future<void> removePhoneNumber() => api.removePhoneNumber();
+
   Future<void> signOutOtherDevices() => api.signOutOtherDevices();
 
   Future<List<LoginSessionDto>> listSessions() => api.listSessions();

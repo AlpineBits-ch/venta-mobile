@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/format/phone_number.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/settings_tiles.dart';
+import '../../../../core/widgets/shimmer_box.dart';
 import '../../../auth/data/account_repository.dart';
 import '../../../auth/data/identity_api.dart';
 import '../../../auth/data/models/user_dto.dart';
@@ -57,6 +59,20 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   bool _passwordChanging = false;
   bool _signingOutOthers = false;
 
+  final _phoneController = TextEditingController();
+
+  /// What the server has, which is not the same thing as what is in the field.
+  /// Seeded from the account read and then replaced with whatever the server
+  /// echoes back on save, because the stored form is the one other people see.
+  String? _savedPhone;
+  bool _phoneSaving = false;
+  bool _phoneRemoving = false;
+
+  /// Distinguishes "still loading" from "the read failed" - the first gets a
+  /// skeleton, the second gets a usable empty field rather than a skeleton
+  /// that never resolves.
+  bool _accountLoadFailed = false;
+
   @override
   void initState() {
     super.initState();
@@ -68,15 +84,112 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     _currentPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
   Future<void> _loadAccount() async {
     try {
       final account = await getIt<AccountRepository>().getSelf();
-      if (mounted) setState(() => _account = account);
+      if (!mounted) return;
+      setState(() {
+        _account = account;
+        _accountLoadFailed = false;
+        _savedPhone = account.phoneNumber;
+        // Only while nobody is mid-edit: a background refresh must not eat
+        // half-typed digits.
+        if (!_phoneSaving && !_phoneRemoving) {
+          _phoneController.text = account.phoneNumber ?? '';
+        }
+      });
     } catch (_) {
-      // Danger zone just stays hidden if this fails.
+      // Danger zone just stays hidden if this fails; the phone field falls
+      // back to an empty one you can still type into.
+      if (mounted) setState(() => _accountLoadFailed = true);
+    }
+  }
+
+  Future<void> _savePhone() async {
+    final typed = _phoneController.text.trim();
+    if (typed.isEmpty || phoneNumberProblem(typed) != null || _phoneSaving) {
+      return;
+    }
+    setState(() => _phoneSaving = true);
+    try {
+      final stored = await getIt<AccountRepository>().setPhoneNumber(typed);
+      if (!mounted) return;
+      setState(() {
+        _phoneSaving = false;
+        _savedPhone = stored;
+        _account = _account?.copyWith(phoneNumber: stored);
+        // Snapped to the server's spelling, so the field and every other
+        // member's screen are showing the same string.
+        if (stored != null) _phoneController.text = stored;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Phone number saved.')));
+    } on PhoneNumberRejectedException catch (e) {
+      if (!mounted) return;
+      setState(() => _phoneSaving = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _phoneSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not save your phone number.')),
+      );
+    }
+  }
+
+  Future<void> _confirmRemovePhone() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove your phone number?'),
+        content: const Text(
+          'Every household you switched sharing on in stops showing it, right '
+          'away. The switch itself stays on, so putting a number back here '
+          'puts it straight back in front of those flatmates.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _phoneRemoving = true);
+    try {
+      await getIt<AccountRepository>().removePhoneNumber();
+      if (!mounted) return;
+      setState(() {
+        _phoneRemoving = false;
+        _savedPhone = null;
+        _account = _account?.copyWith(phoneNumber: null);
+        _phoneController.clear();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Phone number removed.')));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _phoneRemoving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not remove your phone number.')),
+      );
     }
   }
 
@@ -291,6 +404,34 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
             },
           ),
           const SizedBox(height: AppSpacing.l),
+          // Account data, not profile data: it belongs to the person rather
+          // than to any one household, it is the same field a future SMS
+          // second factor would read, and putting it here is what makes the
+          // per-household sharing switch in the ledger mean something. A
+          // number entered in one place and shared nowhere is the default.
+          SettingsSection(
+            label: 'Phone number',
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.m),
+              child: PhoneNumberCard(
+                controller: _phoneController,
+                saved: _savedPhone,
+                loading: _account == null && !_accountLoadFailed,
+                saving: _phoneSaving,
+                removing: _phoneRemoving,
+                onChanged: () => setState(() {}),
+                onSave: _savePhone,
+                onRemove: _confirmRemovePhone,
+              ),
+            ),
+          ),
+          const SettingsFootnote(
+            'Nobody sees this until you switch it on inside a household, one '
+            'household at a time - it is off everywhere by default. It is '
+            'stored as ordinary text that our servers can read, and nothing '
+            'anywhere checks that the number is yours or that it still works.',
+          ),
+          const SizedBox(height: AppSpacing.l),
           SettingsSection(
             label: 'Password',
             child: Padding(
@@ -365,6 +506,154 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The account's phone number: enter it, change it, take it away again.
+///
+/// Presentational on purpose - it owns no repository and no futures, so the
+/// layout test can pump it at every text size in both themes without a
+/// container. The screen above holds the controller and does the talking.
+///
+/// Three things this must never do, in rough order of how much damage they'd
+/// cause:
+///
+///  * claim the number has been checked. Nothing checks it. There is no SMS,
+///    no call, and no flag on the account that could carry the answer even if
+///    there were.
+///  * quietly convert `0041…` into `+41…`. See `phoneNumberProblem` - the
+///    conversion is wrong in enough countries to produce a stranger's live
+///    number, so the field explains the `+` and waits.
+///  * hide removal. Somebody who wants their number off this account is
+///    usually in a hurry, and a delete buried behind an edit flow is a delete
+///    that gets abandoned.
+class PhoneNumberCard extends StatelessWidget {
+  const PhoneNumberCard({
+    super.key,
+    required this.controller,
+    required this.saved,
+    required this.onChanged,
+    required this.onSave,
+    required this.onRemove,
+    this.loading = false,
+    this.saving = false,
+    this.removing = false,
+  });
+
+  final TextEditingController controller;
+
+  /// The E.164 string the server currently holds, or null for no number.
+  final String? saved;
+
+  final VoidCallback onChanged;
+  final VoidCallback onSave;
+  final VoidCallback onRemove;
+
+  /// The account hasn't been read yet - a skeleton in the shape of the field,
+  /// rather than a spinner that says nothing about what is coming.
+  final bool loading;
+
+  final bool saving;
+  final bool removing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+
+    if (loading) {
+      return const Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ExcludeSemantics(
+            child: ShimmerBox(
+              height: 52,
+              borderRadius: AppRadii.input,
+            ),
+          ),
+          SizedBox(height: AppSpacing.m),
+          ExcludeSemantics(
+            child: ShimmerBox(width: 180, height: 14, borderRadius: AppRadii.badge),
+          ),
+        ],
+      );
+    }
+
+    final typed = controller.text.trim();
+    final problem = phoneNumberProblem(typed);
+    final normalized = normalizePhoneNumber(typed);
+    final busy = saving || removing;
+    final changed = normalized != saved;
+    final canSave = typed.isNotEmpty && problem == null && changed && !busy;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: controller,
+          onChanged: (_) => onChanged(),
+          onSubmitted: (_) => canSave ? onSave() : null,
+          enabled: !busy,
+          keyboardType: TextInputType.phone,
+          autofillHints: const [AutofillHints.telephoneNumber],
+          decoration: InputDecoration(
+            hintText: phoneNumberExample,
+            errorText: problem,
+            // These sentences are long because the short version ("invalid
+            // number") is the one that leaves people stuck. They must be
+            // allowed to wrap rather than ellipsize.
+            errorMaxLines: 8,
+            helperText: problem == null
+                ? 'Starts with + and the country code.'
+                : null,
+            helperMaxLines: 2,
+            prefixIcon: const Icon(Icons.phone_outlined),
+          ),
+        ),
+        // The server takes the spaces out, so a number typed with them is
+        // about to look different to everybody else. Saying so beforehand
+        // stops the save looking like it changed something.
+        if (normalized != null && normalized != typed) ...[
+          const SizedBox(height: AppSpacing.s),
+          Text(
+            'Stored as $normalized.',
+            style: theme.textTheme.bodySmall?.copyWith(color: muted),
+          ),
+        ],
+        const SizedBox(height: AppSpacing.m),
+        FilledButton(
+          // A floor rather than a fixed height: 48pt is the target size, and a
+          // label that has grown past it with the reader's text size needs the
+          // button to grow with it instead of clipping.
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+          ),
+          onPressed: canSave ? onSave : null,
+          child: saving
+              ? ButtonProgressIndicator(onColor: theme.colorScheme.onPrimary)
+              : Text(saved == null ? 'Save number' : 'Save changes'),
+        ),
+        // Never behind an overflow menu or an edit mode. Somebody taking their
+        // number off this account usually wants it gone now.
+        if (saved != null) ...[
+          const SizedBox(height: AppSpacing.s),
+          OutlinedButton.icon(
+            onPressed: busy ? null : onRemove,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              foregroundColor: theme.colorScheme.error,
+              side: BorderSide(
+                color: theme.colorScheme.error.withValues(alpha: 0.5),
+              ),
+            ),
+            icon: removing
+                ? ButtonProgressIndicator(onColor: theme.colorScheme.error)
+                : const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('Remove my number'),
+          ),
+        ],
+      ],
     );
   }
 }

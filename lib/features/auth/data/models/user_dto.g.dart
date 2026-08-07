@@ -18,6 +18,7 @@ _UserDto _$UserDtoFromJson(Map<String, dynamic> json) => _UserDto(
     const ApiDateTimeConverter().fromJson,
   ),
   mfaEnabled: json['mfaEnabled'] as bool? ?? false,
+  phoneNumber: json['phoneNumber'] as String?,
   consentRequired:
       (json['consentRequired'] as List<dynamic>?)
           ?.map(
@@ -39,6 +40,7 @@ Map<String, dynamic> _$UserDtoToJson(_UserDto instance) => <String, dynamic>{
     const ApiDateTimeConverter().toJson,
   ),
   'mfaEnabled': instance.mfaEnabled,
+  'phoneNumber': instance.phoneNumber,
   'consentRequired': instance.consentRequired,
 };
 

@@ -34,6 +34,18 @@ sealed class UserDto with _$UserDto {
     // rather than assuming it's enabled.
     @Default(false) bool mfaEnabled,
 
+    /// The account's phone number in E.164 (`+41791234567`), or null when
+    /// there isn't one - which is the default for every account.
+    ///
+    /// Nothing in this system checks it. Nobody sends an SMS to it, nobody
+    /// dials it, and no flag anywhere records that anyone ever confirmed it
+    /// belongs to this person. The payload does carry ASP.NET Identity's
+    /// `phoneNumberConfirmed` and a `phoneVerifiedAt`, and both are
+    /// deliberately **not** modelled here: the server never writes either one,
+    /// so a field on this class would only ever be an invitation to render a
+    /// tick that means nothing. See `AccountRepository.setPhoneNumber`.
+    String? phoneNumber,
+
     /// Legal documents whose current version this account has not accepted,
     /// each with the version, when it takes effect and where to read it.
     ///

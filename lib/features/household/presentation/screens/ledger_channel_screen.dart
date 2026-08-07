@@ -2,17 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/injector.dart';
 import '../../../../core/format/date_time_format.dart';
 import '../../../../core/routing/household_deep_link.dart';
+import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/load_failure_view.dart';
+import '../../../../core/widgets/shimmer_box.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../auth/data/account_repository.dart';
 import '../../../guilds/data/models/guild_features.dart';
 import '../../../guilds/data/models/guild_member_dto.dart';
+import '../../data/household_api_payments.dart';
 import '../../data/household_repository.dart';
 import '../../data/models/household_alert.dart';
 import '../../data/models/ledger_dto.dart';
+import '../../data/models/payment_handles_dto.dart';
 import '../../data/money.dart';
 import '../widgets/household_widgets.dart';
 import 'bills_view.dart';
@@ -75,6 +82,25 @@ class _LedgerChannelScreenState
   String? _nextCursor;
   bool _loadingMore = false;
 
+  /// Who in this household is showing a number, and whether I am. Null while
+  /// it is still in flight; [_handlesFailed] separates that from "the read
+  /// came back empty", which is a legitimate and very common answer.
+  PaymentHandlesDto? _handles;
+  bool _handlesFailed = false;
+  bool _sharingBusy = false;
+
+  /// The number on **my account**, which is a different service and a
+  /// different question from whether I've opted in here.
+  ///
+  /// [_ownNumberKnown] stays false when the account read fails, and an unknown
+  /// account is treated as having a number: refusing to let somebody opt in
+  /// because a request we made on their behalf failed is worse than letting
+  /// the server decide.
+  String? _ownNumber;
+  bool _ownNumberKnown = false;
+
+  bool get _hasOwnNumber => !_ownNumberKnown || _ownNumber != null;
+
   /// The server's own default page size, mirrored so a refresh can ask for the
   /// depth already on screen instead of one page.
   static const _pageSize = 50;
@@ -104,6 +130,8 @@ class _LedgerChannelScreenState
     }
     _load();
     unawaited(ensureMembers());
+    unawaited(_loadPaymentHandles());
+    unawaited(_loadOwnNumber());
     _eventsSub = household
         .channelEvents(widget.channelId, HouseholdEvents.ledger)
         // Every one of these moves the balances, so nothing here is
@@ -158,6 +186,73 @@ class _LedgerChannelScreenState
     } catch (_) {
       if (mounted && _expenses == null) setState(() => _loadFailed = true);
     }
+  }
+
+  /// Read separately from [_load], and allowed to fail quietly.
+  ///
+  /// Nothing on this screen depends on it: a household where nobody has opted
+  /// in and a household whose payment-handle read failed both show the same
+  /// thing, which is nothing at all. That is the correct outcome for the
+  /// failure too - a "couldn't load phone numbers" banner would tell everyone
+  /// that there might be numbers to load, on a screen where absence is the
+  /// normal case.
+  Future<void> _loadPaymentHandles() async {
+    try {
+      final handles = await api.getPaymentHandles(widget.guildId);
+      if (!mounted) return;
+      setState(() {
+        _handles = handles;
+        _handlesFailed = false;
+      });
+    } catch (_) {
+      if (mounted && _handles == null) setState(() => _handlesFailed = true);
+    }
+  }
+
+  Future<void> _loadOwnNumber() async {
+    try {
+      final self = await getIt<AccountRepository>().getSelf();
+      if (!mounted) return;
+      setState(() {
+        _ownNumber = self.phoneNumber;
+        _ownNumberKnown = true;
+      });
+    } catch (_) {
+      // Left unknown on purpose - see [_hasOwnNumber].
+    }
+  }
+
+  /// Pull-to-refresh on the balances tab. The sharing state is somebody else's
+  /// to change too (they opt in on their own phone), so a pull down here has
+  /// to re-read it alongside the balances.
+  Future<void> _refreshBalances() async {
+    await Future.wait([_load(), _loadPaymentHandles(), _loadOwnNumber()]);
+  }
+
+  Future<void> _setPhoneSharing(bool share) async {
+    if (_sharingBusy) return;
+    setState(() => _sharingBusy = true);
+    try {
+      final now = await api.setPhoneSharing(widget.guildId, share: share);
+      if (!mounted) return;
+      setState(() => _handles = _handles?.copyWith(sharingPhoneNumber: now));
+      // Opting in adds my own row to the directory, and opting out removes it,
+      // so the list is stale the moment this returns.
+      await _loadPaymentHandles();
+    } catch (error) {
+      showError(error, 'Could not change who can see your number.');
+    } finally {
+      if (mounted) setState(() => _sharingBusy = false);
+    }
+  }
+
+  /// Sends somebody to the field itself rather than switching a toggle on over
+  /// an empty account. Account settings is where the number lives, because it
+  /// is one number across every household rather than one per house.
+  Future<void> _openPhoneNumberField() async {
+    await context.push(RoutePaths.accountSettings);
+    if (!mounted) return;
+    await _loadOwnNumber();
   }
 
   Future<void> _loadMore() async {
@@ -247,11 +342,16 @@ class _LedgerChannelScreenState
   /// payment app returns a result and a settlement is therefore a claim rather
   /// than a fact. The copy here already says so and must keep saying so.
   ///
-  /// Deliberately not started here: the crypto and the QR payload are being
-  /// built web-first, TWINT cannot be deep-linked or prefilled at all, and the
-  /// phone-number half lives in Identity behind a per-household opt-in that is
-  /// still cross-service work. If a number ever surfaces on this screen it must
-  /// never be labelled verified - nothing SMS-verifies it.
+  /// The **phone-number** half of that is done: it arrives as plain text on
+  /// the same endpoint and is rendered by [PayeePhoneRow] on the settle row
+  /// itself, one tap before this dialog, because the number is needed while
+  /// leaving for the banking app rather than on the way back. What is still
+  /// deliberately not started is the sealed `members` array - device-scoped
+  /// crypto being built web-first - and the QR payload, since TWINT cannot be
+  /// deep-linked or prefilled at all.
+  ///
+  /// Whatever else lands here, a number on this screen must never be labelled
+  /// verified. Nothing SMS-verifies it, and there is no flag that could.
   Future<void> _recordSettlement(TransferSuggestionDto transfer) async {
     final isMine = transfer.fromUserId == currentUserId;
     if (!isMine && !_canManage) return;
@@ -517,18 +617,8 @@ class _LedgerChannelScreenState
       ..sort((a, b) => b.netMinor.compareTo(a.netMinor));
     final suggestions = _suggestions ?? const <TransferSuggestionDto>[];
 
-    if (balances.isEmpty) {
-      return const HouseEmptyState(
-        icon: Icons.handshake_outlined,
-        title: 'All square',
-        body:
-            'Nobody owes anybody anything. Balances always add up to zero, so '
-            'when this is empty the house really is settled.',
-      );
-    }
-
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: _refreshBalances,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.m,
@@ -537,44 +627,321 @@ class _LedgerChannelScreenState
           80,
         ),
         children: [
-          _MyPositionCard(netMinor: _myNetMinor, currency: _currency),
-          const HouseSectionHeader(label: 'Everyone'),
-          for (final balance in balances)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.s),
-              child: _BalanceCard(balance: balance, currency: _currency),
-            ),
-          if (suggestions.isNotEmpty) ...[
-            HouseSectionHeader(
-              label: 'Settling up',
-              trailing: Text(
-                '${suggestions.length} '
-                '${suggestions.length == 1 ? 'payment' : 'payments'}',
+          if (balances.isEmpty)
+            // Kept inside the list rather than returned early, because the
+            // sharing switch below belongs to a settled house just as much as
+            // to one mid-argument - and switching it on before you owe anybody
+            // is the sensible time to do it.
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.l),
+              child: HouseEmptyState(
+                icon: Icons.handshake_outlined,
+                title: 'All square',
+                body:
+                    'Nobody owes anybody anything. Balances always add up to '
+                    'zero, so when this is empty the house really is settled.',
               ),
-            ),
-            for (final transfer in suggestions)
+            )
+          else ...[
+            _MyPositionCard(netMinor: _myNetMinor, currency: _currency),
+            const HouseSectionHeader(label: 'Everyone'),
+            for (final balance in balances)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.s),
-                child: _SettleCard(
-                  transfer: transfer,
-                  currency: _currency,
-                  canRecord: transfer.fromUserId == currentUserId || _canManage,
-                  onRecord: () => _recordSettlement(transfer),
+                child: _BalanceCard(balance: balance, currency: _currency),
+              ),
+            if (suggestions.isNotEmpty) ...[
+              HouseSectionHeader(
+                label: 'Settling up',
+                trailing: Text(
+                  '${suggestions.length} '
+                  '${suggestions.length == 1 ? 'payment' : 'payments'}',
                 ),
               ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'That\'s the fewest payments that settle everyone - four people '
-              'square up with two transfers, not six. Recording one doesn\'t '
-              'move any money; it notes that it happened.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                height: 1.4,
+              for (final transfer in suggestions)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                  child: _SettleCard(
+                    transfer: transfer,
+                    currency: _currency,
+                    canRecord:
+                        transfer.fromUserId == currentUserId || _canManage,
+                    onRecord: () => _recordSettlement(transfer),
+                    // Only on the rows where *I* am the one paying. Everyone
+                    // else's number on every row would be a phone book, and
+                    // this is a payment aid.
+                    payeePhoneNumber: transfer.fromUserId == currentUserId
+                        ? _handles?.phoneNumberFor(transfer.toUserId)
+                        : null,
+                  ),
+                ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'That\'s the fewest payments that settle everyone - four '
+                'people square up with two transfers, not six. Recording one '
+                'doesn\'t move any money; it notes that it happened.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  height: 1.4,
+                ),
               ),
+            ],
+          ],
+          _buildSharingSection(),
+        ],
+      ),
+    );
+  }
+
+  /// The opt-in, which lives here rather than in account settings on purpose.
+  ///
+  /// A switch on the account page would read as "share my number", full stop,
+  /// and that is precisely the leak the per-household design exists to
+  /// prevent: the flat you split rent with is not the group chat you were
+  /// added to once. Sharing is a decision about *these* people, so the control
+  /// belongs on their screen.
+  Widget _buildSharingSection() {
+    // Nothing loaded and nothing coming: render nothing at all rather than a
+    // dead control.
+    if (_handles == null && _handlesFailed) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const HouseSectionHeader(label: 'Paying each other'),
+        if (_handles == null)
+          const _SharingSkeleton()
+        else
+          PhoneSharingCard(
+            sharing: _handles!.sharingPhoneNumber,
+            hasNumber: _hasOwnNumber,
+            busy: _sharingBusy,
+            onChanged: _setPhoneSharing,
+            onAddNumber: _openPhoneNumberField,
+          ),
+      ],
+    );
+  }
+}
+
+/// The sharing card's shape while the directory is in flight - the same
+/// height and the same two lines, so nothing jumps when it arrives.
+class _SharingSkeleton extends StatelessWidget {
+  const _SharingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ExcludeSemantics(
+      child: HouseCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ShimmerBox(width: 210, height: 15, borderRadius: AppRadii.badge),
+            SizedBox(height: AppSpacing.s),
+            ShimmerBox(
+              width: double.infinity,
+              height: 12,
+              borderRadius: AppRadii.badge,
+            ),
+            SizedBox(height: 6),
+            ShimmerBox(width: 140, height: 12, borderRadius: AppRadii.badge),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Whether the reader's own phone number is shown to **this** household.
+///
+/// Off by default, everywhere, and switched on one household at a time. The
+/// copy has three jobs and they are all load-bearing:
+///
+///  * never suggest the number has been checked. It hasn't. No SMS is sent, no
+///    call is placed, and there is no flag on the account that could record
+///    such a thing even if one were.
+///  * say plainly that the number is stored as text the server can read. It is
+///    not end-to-end encrypted like the messages next to it, and somebody
+///    deciding whether to switch this on deserves to know which of the two
+///    they are dealing with.
+///  * when there is no number on the account, say so and point at the field.
+///    Letting the switch flip on over an empty account produces a control that
+///    is on, is honestly reported as on by the server, and shows nobody
+///    anything - which is the single most confusing state this feature has.
+class PhoneSharingCard extends StatelessWidget {
+  const PhoneSharingCard({
+    super.key,
+    required this.sharing,
+    required this.hasNumber,
+    required this.onChanged,
+    required this.onAddNumber,
+    this.busy = false,
+  });
+
+  /// The caller's own opt-in for this household, as the server holds it.
+  final bool sharing;
+
+  /// Whether the account has a number at all. False sends every interaction to
+  /// [onAddNumber] instead of the switch.
+  final bool hasNumber;
+
+  final ValueChanged<bool> onChanged;
+  final VoidCallback onAddNumber;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.7);
+
+    // The server keeps the opt-in when the number is deleted, so "on with
+    // nothing behind it" is a real state somebody can arrive in by removing
+    // their number from account settings. It has to be named, not hidden.
+    final body = !hasNumber
+        ? (sharing
+              ? 'This is switched on, but your account has no phone number, '
+                    'so there is nothing here for anyone to see. Add one and '
+                    'it appears for this household straight away.'
+              : 'Your account doesn\'t have a phone number yet.')
+        : (sharing
+              ? 'Everyone in this household can see it here. It is stored as '
+                    'ordinary text that our servers can read, and nothing '
+                    'anywhere checks that the number is yours.'
+              : 'Nobody here can see it. Switching this on covers this '
+                    'household only - every other one stays off.');
+
+    return HouseCard(
+      onTap: hasNumber ? null : onAddNumber,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Merged so the label and the switch are announced as one control
+          // rather than as an orphaned sentence followed by "switch, off".
+          MergeSemantics(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Show my phone number to this household',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s),
+                if (busy)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    child: SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  Switch(
+                    value: sharing,
+                    // Null rather than a switch that flips and does nothing.
+                    // The row itself is tappable in this state and leads to
+                    // the field instead.
+                    onChanged: hasNumber ? onChanged : null,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: muted,
+              height: 1.4,
+            ),
+          ),
+          if (!hasNumber) ...[
+            const SizedBox(height: AppSpacing.m),
+            OutlinedButton.icon(
+              // A floor, not a fixed height - the label has to be allowed to
+              // grow past 48pt with the reader's text size rather than clip.
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              onPressed: onAddNumber,
+              icon: const Icon(Icons.phone_outlined, size: 18),
+              label: const Text('Add a phone number'),
             ),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The number to send money to, under the row that says who owes whom.
+///
+/// The warning is not boilerplate. TWINT (and every other number-addressed
+/// payment app) resolves the number to an account name and shows it before the
+/// payer confirms, and that name is the **only** check that exists anywhere in
+/// this flow: nothing verified the number when it was typed, nothing verified
+/// it when it was shared, and a single wrong digit is a valid number belonging
+/// to somebody else. Reading the name costs nothing and catches exactly that.
+class PayeePhoneRow extends StatelessWidget {
+  const PayeePhoneRow({super.key, required this.phoneNumber});
+
+  final String phoneNumber;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.7);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpacing.s),
+        Divider(
+          height: 1,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+        ),
+        const SizedBox(height: AppSpacing.s),
+        Row(
+          children: [
+            Icon(Icons.phone_outlined, size: 16, color: muted),
+            const SizedBox(width: AppSpacing.s),
+            Expanded(
+              child: Text(
+                phoneNumber,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+                semanticsLabel: 'Phone number to pay, $phoneNumber',
+              ),
+            ),
+            IconButton(
+              tooltip: 'Copy number',
+              // The full 48pt target: this is tapped on the way out of the app
+              // and into a banking one, usually one-handed.
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              icon: const Icon(Icons.copy_rounded, size: 18),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: phoneNumber));
+                houseHaptic();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Number copied.')),
+                );
+              },
+            ),
+          ],
+        ),
+        Text(
+          'TWINT - and anything else that pays to a number - shows you a name '
+          'before you confirm. Read it and make sure it is the person you '
+          'mean. Nothing here checked this number, so that name is the only '
+          'check there is.',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: muted,
+            height: 1.4,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -836,6 +1203,7 @@ class _SettleCard extends StatelessWidget {
     required this.currency,
     required this.canRecord,
     required this.onRecord,
+    this.payeePhoneNumber,
   });
 
   final TransferSuggestionDto transfer;
@@ -843,50 +1211,70 @@ class _SettleCard extends StatelessWidget {
   final bool canRecord;
   final VoidCallback onRecord;
 
+  /// The recipient's number, when they are showing one to this household and
+  /// the viewer is the one paying.
+  ///
+  /// Null covers two cases the server makes deliberately indistinguishable -
+  /// they haven't opted in, and they have no number - so nothing is drawn for
+  /// either. Any sentence that could go here ("Anna hasn't shared her number")
+  /// asserts that Anna has one, which is not something this client knows.
+  final String? payeePhoneNumber;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final phoneNumber = payeePhoneNumber;
     return HouseCard(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          UserAvatar(userId: transfer.fromUserId, radius: 12),
-          const SizedBox(width: AppSpacing.s),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          Row(
+            children: [
+              UserAvatar(userId: transfer.fromUserId, radius: 12),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: MemberName(
-                        userId: transfer.fromUserId,
-                        style: theme.textTheme.bodyMedium,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: MemberName(
+                            userId: transfer.fromUserId,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_right_alt_rounded,
+                          size: 18,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
+                        ),
+                        Flexible(
+                          child: MemberName(
+                            userId: transfer.toUserId,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
                     ),
-                    Icon(
-                      Icons.arrow_right_alt_rounded,
-                      size: 18,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                    Flexible(
-                      child: MemberName(
-                        userId: transfer.toUserId,
-                        style: theme.textTheme.bodyMedium,
+                    Text(
+                      formatMinor(transfer.amountMinor, currency),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                Text(
-                  formatMinor(transfer.amountMinor, currency),
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                  ),
-                ),
-              ],
-            ),
+              ),
+              if (canRecord)
+                TextButton(onPressed: onRecord, child: const Text('Paid')),
+            ],
           ),
-          if (canRecord)
-            TextButton(onPressed: onRecord, child: const Text('Paid')),
+          if (phoneNumber != null) PayeePhoneRow(phoneNumber: phoneNumber),
         ],
       ),
     );

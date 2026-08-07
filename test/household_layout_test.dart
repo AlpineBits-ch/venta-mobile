@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venta_mobile/core/theme/app_theme.dart';
 import 'package:venta_mobile/features/household/data/models/maintenance_dto.dart';
+import 'package:venta_mobile/features/household/presentation/screens/ledger_channel_screen.dart';
 import 'package:venta_mobile/features/household/presentation/screens/maintenance_channel_screen.dart';
 import 'package:venta_mobile/features/household/presentation/widgets/household_widgets.dart';
+import 'package:venta_mobile/features/settings/presentation/screens/account_settings_screen.dart';
 
 /// The household screens are read standing up, one-handed, on a narrow phone -
 /// and by people who have turned the text size up, which is exactly the
@@ -66,6 +68,23 @@ void main() {
     warrantyUntil: DateTime.utc(2026, 12, 1),
   );
 
+  /// Controllers for the phone field's four interesting contents. Built once
+  /// and shared across the pumps below - the widget only ever reads them.
+  final emptyPhone = TextEditingController();
+  final savedPhone = TextEditingController(text: '+41 79 123 45 67');
+  final nationalPhone = TextEditingController(text: '079 123 45 67');
+  final doubleZeroPhone = TextEditingController(text: '0041 79 123 45 67');
+  tearDownAll(() {
+    for (final controller in [
+      emptyPhone,
+      savedPhone,
+      nationalPhone,
+      doubleZeroPhone,
+    ]) {
+      controller.dispose();
+    }
+  });
+
   final cases = <String, Widget>{
     'an amount': const HouseAmount(amountMinor: 123456789, currency: 'CHF'),
     'an amount nobody has typed yet': const HouseAmountPending(),
@@ -96,6 +115,102 @@ void main() {
       onMarkBroken: () {},
     ),
     'a loading board': const SizedBox(height: 320, child: HouseCardSkeleton()),
+
+    // The phone-number half, which is read in the same conditions as the rest
+    // of the household UI plus one worse one: standing in a kitchen trying to
+    // work out why the number you typed isn't being accepted. The error copy
+    // has to be long enough to explain the `+` and must therefore be allowed
+    // to wrap rather than clip - which is exactly what these catch.
+    'a phone number nobody has entered yet': PhoneNumberCard(
+      controller: emptyPhone,
+      saved: null,
+      onChanged: () {},
+      onSave: () {},
+      onRemove: () {},
+    ),
+    'a phone number already on the account': PhoneNumberCard(
+      controller: savedPhone,
+      saved: '+41791234567',
+      onChanged: () {},
+      onSave: () {},
+      onRemove: () {},
+    ),
+    // The long refusal: the whole point of it is that it explains why 00 is
+    // not swapped for +, and that explanation is several lines at 2.35x.
+    'a phone number typed the way you dial it': PhoneNumberCard(
+      controller: nationalPhone,
+      saved: null,
+      onChanged: () {},
+      onSave: () {},
+      onRemove: () {},
+    ),
+    'a phone number written 0041': PhoneNumberCard(
+      controller: doubleZeroPhone,
+      saved: null,
+      onChanged: () {},
+      onSave: () {},
+      onRemove: () {},
+    ),
+    'a phone number still being read': PhoneNumberCard(
+      controller: emptyPhone,
+      saved: null,
+      loading: true,
+      onChanged: () {},
+      onSave: () {},
+      onRemove: () {},
+    ),
+    'a number being saved': PhoneNumberCard(
+      controller: savedPhone,
+      saved: '+41799999999',
+      saving: true,
+      onChanged: () {},
+      onSave: () {},
+      onRemove: () {},
+    ),
+
+    // The per-household opt-in, in all four states it can actually be in -
+    // including the one the server allows and nothing else would think to
+    // draw: switched on over an account with no number behind it.
+    'sharing switched off': PhoneSharingCard(
+      sharing: false,
+      hasNumber: true,
+      onChanged: (_) {},
+      onAddNumber: () {},
+    ),
+    'sharing switched on': PhoneSharingCard(
+      sharing: true,
+      hasNumber: true,
+      onChanged: (_) {},
+      onAddNumber: () {},
+    ),
+    'sharing with no number on the account': PhoneSharingCard(
+      sharing: false,
+      hasNumber: false,
+      onChanged: (_) {},
+      onAddNumber: () {},
+    ),
+    'sharing switched on with nothing behind it': PhoneSharingCard(
+      sharing: true,
+      hasNumber: false,
+      onChanged: (_) {},
+      onAddNumber: () {},
+    ),
+    'sharing mid-flight': PhoneSharingCard(
+      sharing: false,
+      hasNumber: true,
+      busy: true,
+      onChanged: (_) {},
+      onAddNumber: () {},
+    ),
+
+    // The number itself, next to the caution that is the only check in the
+    // whole flow. Both have to survive being read at the largest text size,
+    // because that caution is the one sentence that stops money going to a
+    // stranger.
+    'a number to pay into': const PayeePhoneRow(phoneNumber: '+41791234567'),
+    'a very long number to pay into': const PayeePhoneRow(
+      phoneNumber: '+998901234567890',
+    ),
   };
 
   for (final entry in cases.entries) {

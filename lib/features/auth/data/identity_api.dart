@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../../core/format/api_date_time.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_error.dart';
 import 'models/login_session_dto.dart';
 import 'models/user_dto.dart';
 
@@ -52,6 +53,19 @@ class QrLoginCodeInvalidException implements Exception {
 /// between scanning and tapping Approve.
 class QrLoginNotYoursException implements Exception {
   const QrLoginNotYoursException();
+}
+
+/// Thrown by [IdentityApi.setPhoneNumber] on a `400` - the number is not in
+/// E.164. [message] is the server's own sentence, which names the format and
+/// gives an example, and is already user-facing.
+///
+/// The client checks the same rule before sending (see `phoneNumberProblem`),
+/// so reaching this means the two disagreed - worth showing verbatim rather
+/// than replacing with wording of our own.
+class PhoneNumberRejectedException implements Exception {
+  PhoneNumberRejectedException(this.message);
+
+  final String message;
 }
 
 class MfaEnrollment {
@@ -125,6 +139,44 @@ class IdentityApi {
     } on DioException catch (e) {
       return e.response?.statusCode ?? 500;
     }
+  }
+
+  /// Stores [phoneNumber] on the account and returns what the server made of
+  /// it - the same digits with the separators taken out, `+41 79 123 45 67`
+  /// coming back as `+41791234567`. Callers should keep the returned value
+  /// rather than the typed one, because that is what everybody else will read.
+  ///
+  /// Writing the same number twice is a no-op and still answers `200`.
+  ///
+  /// The number is stored as plain text and the server can read it. It is not
+  /// end-to-end encrypted, it is not hashed, and nothing about this call
+  /// checks that the number exists or that it belongs to the caller.
+  Future<String?> setPhoneNumber(String phoneNumber) async {
+    try {
+      final response = await client.dio.put<Map<String, dynamic>>(
+        '$_base/phone',
+        data: {'phoneNumber': phoneNumber},
+      );
+      return response.data?['phoneNumber'] as String?;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 400) {
+        throw PhoneNumberRejectedException(
+          apiErrorMessage(e) ??
+              'A phone number must start with + and the country code.',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// Idempotent: `204` whether or not there was a number to take off.
+  ///
+  /// This does **not** switch off any household's phone-sharing opt-in - the
+  /// two live in different services and Identity deliberately does not reach
+  /// across. What it does is empty the field those households read, so every
+  /// one of them stops showing anything. See `PhoneSharingCard`.
+  Future<void> removePhoneNumber() async {
+    await client.dio.delete<void>('$_base/phone');
   }
 
   Future<void> signOutOtherDevices() async {
