@@ -449,6 +449,65 @@ extension HouseholdApiWave2 on HouseholdApi {
     return TeachBarcodeResultDto.fromJson(response.data!);
   }
 
+  /// Names in the shared public product catalog, searched by text.
+  ///
+  /// This is the *offer* half of the pantry's naming story and it is not the
+  /// scan half. A scan knows a barcode, so its answer is one product and can be
+  /// applied. A search knows a phrase somebody typed or a model read off a
+  /// shelf, so its answer is a list of candidates - "oat milk" is dozens of
+  /// products - and taking the first one and writing its barcode would promote
+  /// a fuzzy match to a stated fact that is indistinguishable afterwards from a
+  /// code somebody actually scanned. Callers show candidates and let a person
+  /// pick; see `docs/pantry-vision.md` §1.
+  ///
+  /// **Not a live lookup.** Only our own catalog is searched, so an empty
+  /// result means "not in our catalog" and never "no such product". Coverage is
+  /// good on groceries and cosmetics, thin on cleaning products, and close to
+  /// absent for Swiss retailer own-brands (M-Budget, Prix Garantie, Denner) -
+  /// so the copy over an empty list has to leave adding by hand looking normal
+  /// rather than like a fallback for a failure.
+  ///
+  /// Under [productCatalogMinQueryLength] characters this answers an empty
+  /// envelope **without touching the network**. The server would answer `200`
+  /// with no results anyway, which is the point: the reply is known in advance,
+  /// and the alternative is a request per keystroke while somebody types the
+  /// first two letters of a word.
+  ///
+  /// [acceptLanguage] asks for names in a language, it does not promise them:
+  /// each result says which language it is *actually* in, and a name in the
+  /// wrong one is still shown, because a German name on a French-speaking
+  /// flat's packet is a name they can read off the box, while no name at all
+  /// costs them typing.
+  ///
+  /// [limit] clamps to 1-100 server-side and [offset] pages. Ordering is stable
+  /// (by barcode), so paging does not shuffle rows a person has already looked
+  /// at. [cancelToken] is what lets a picker abandon the search it fired two
+  /// keystrokes ago - without it, results arrive out of order and the slower,
+  /// staler query wins whenever it happens to land last.
+  Future<ProductCatalogSearchDto> searchProductCatalog(
+    String query, {
+    int limit = 25,
+    int offset = 0,
+    String? acceptLanguage,
+    CancelToken? cancelToken,
+  }) async {
+    final term = query.trim();
+    if (term.length < productCatalogMinQueryLength) {
+      return ProductCatalogSearchDto(query: term, limit: limit, offset: offset);
+    }
+    final response = await client.dio.get<Map<String, dynamic>>(
+      // Not nested under a guild: the catalog is one shared public database,
+      // the same for every house, and nothing about a search is guild-scoped.
+      '$_base/pantry/catalog/search',
+      queryParameters: {'q': term, 'limit': limit, 'offset': offset},
+      cancelToken: cancelToken,
+      options: acceptLanguage == null || acceptLanguage.isEmpty
+          ? null
+          : Options(headers: {'Accept-Language': acceptLanguage}),
+    );
+    return ProductCatalogSearchDto.fromJson(response.data!);
+  }
+
   Future<List<PantryBarcodeDto>> getLearnedBarcodes(
     String guildId, {
     String? query,

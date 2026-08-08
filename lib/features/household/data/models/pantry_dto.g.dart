@@ -86,6 +86,7 @@ _ProductCatalogMatchDto _$ProductCatalogMatchDtoFromJson(
   brand: json['brand'] as String?,
   quantity: (json['quantity'] as num?)?.toDouble(),
   quantityUnit: json['quantityUnit'] as String?,
+  barcode: json['barcode'] as String?,
   source: json['source'] as String? ?? '',
   sourceName: json['sourceName'] as String? ?? '',
   sourceUrl: json['sourceUrl'] as String? ?? '',
@@ -106,6 +107,7 @@ Map<String, dynamic> _$ProductCatalogMatchDtoToJson(
   'brand': instance.brand,
   'quantity': instance.quantity,
   'quantityUnit': instance.quantityUnit,
+  'barcode': instance.barcode,
   'source': instance.source,
   'sourceName': instance.sourceName,
   'sourceUrl': instance.sourceUrl,
@@ -116,6 +118,40 @@ Map<String, dynamic> _$ProductCatalogMatchDtoToJson(
     instance.importedAt,
     const ApiDateTimeConverter().toJson,
   ),
+};
+
+_ProductCatalogSearchDto _$ProductCatalogSearchDtoFromJson(
+  Map<String, dynamic> json,
+) => _ProductCatalogSearchDto(
+  query: json['query'] as String? ?? '',
+  results:
+      (json['results'] as List<dynamic>?)
+          ?.map(
+            (e) => ProductCatalogMatchDto.fromJson(e as Map<String, dynamic>),
+          )
+          .toList() ??
+      const <ProductCatalogMatchDto>[],
+  count: (json['count'] as num?)?.toInt() ?? 0,
+  countIsLowerBound: json['countIsLowerBound'] as bool? ?? false,
+  limit: (json['limit'] as num?)?.toInt() ?? 25,
+  offset: (json['offset'] as num?)?.toInt() ?? 0,
+  attribution: json['attribution'] as String? ?? '',
+  license: json['license'] as String? ?? '',
+  licenseUrl: json['licenseUrl'] as String? ?? '',
+);
+
+Map<String, dynamic> _$ProductCatalogSearchDtoToJson(
+  _ProductCatalogSearchDto instance,
+) => <String, dynamic>{
+  'query': instance.query,
+  'results': instance.results,
+  'count': instance.count,
+  'countIsLowerBound': instance.countIsLowerBound,
+  'limit': instance.limit,
+  'offset': instance.offset,
+  'attribution': instance.attribution,
+  'license': instance.license,
+  'licenseUrl': instance.licenseUrl,
 };
 
 _TeachBarcodeResultDto _$TeachBarcodeResultDtoFromJson(

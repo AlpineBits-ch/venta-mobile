@@ -94,9 +94,39 @@ sealed class ProductCatalogMatchDto with _$ProductCatalogMatchDto {
     /// holds in German gets the German name, and this says so rather than
     /// pretending.
     @Default('') String language,
+
+    /// Free text exactly as the source database holds it, which is not a clean
+    /// field: it is sometimes a manufacturer, sometimes a retailer, and
+    /// sometimes several comma-joined ("Nutella, Ferrero"). It is shown as it
+    /// arrives and **never split, titlecased or otherwise tidied** - every rule
+    /// that would tidy one row mangles another, and the string's only job is to
+    /// tell two nearly identical names apart.
     String? brand,
+
+    /// The pack size printed on the packaging - 250 and `ml`, not 250 of them.
+    ///
+    /// Null roughly seven times in eight for groceries, so nothing may depend
+    /// on it being there. It is offered as a suggestion for a unit field and is
+    /// never written silently: the number a person means when they add a jar is
+    /// how many jars, and quietly filling 380 into a stock count is the one
+    /// mistake this field is capable of causing.
     double? quantity,
     String? quantityUnit,
+
+    /// The code the catalog holds this product under.
+    ///
+    /// Search returns it; the scan response now carries it too, since the scan
+    /// already knew the code it was asked about. It is what makes a *chosen*
+    /// search result usable - adopting one turns a typed name into the scan
+    /// path with a real code behind it. Null when a response predates the field
+    /// rather than meaning "no code exists", so a caller that needs one checks
+    /// before assuming.
+    ///
+    /// **A search result's barcode is never adopted without somebody tapping
+    /// it.** "Oat milk" matches dozens of products; taking the first and writing
+    /// its code is a fuzzy match promoted to a fact, and it is indistinguishable
+    /// afterwards from a code somebody actually scanned.
+    String? barcode,
     @Default('') String source,
     @Default('') String sourceName,
     @Default('') String sourceUrl,
@@ -108,6 +138,67 @@ sealed class ProductCatalogMatchDto with _$ProductCatalogMatchDto {
 
   factory ProductCatalogMatchDto.fromJson(Map<String, dynamic> json) =>
       _$ProductCatalogMatchDtoFromJson(json);
+}
+
+/// One page of catalog search results, and the credit the whole page owes.
+///
+/// The licence strings sit here rather than only on each row because that is
+/// where the obligation actually lands: ODbL asks for the source named wherever
+/// its names are shown, and a list is one showing. [attribution] is the wording
+/// the licence itself blesses, printed as it arrives - see [ProductSourceNote].
+/// Per-row `sourceName` still varies (Open Food Facts / Beauty / Products / Pet
+/// Food) and is not interchangeable with this.
+///
+/// **An empty [results] means "not in our catalog", never "no such product".**
+/// There is no live third-party lookup behind search - only the *scan* path
+/// reaches the live source, and then only by barcode. Coverage is honestly
+/// uneven: groceries and cosmetics good, cleaning products thin, Swiss retailer
+/// own-brands (M-Budget, Prix Garantie, Denner) largely absent from open data.
+/// Copy over an empty list that implies the product does not exist is therefore
+/// wrong on the facts as well as unhelpful, because adding it by hand is the
+/// normal ending and has to read like one.
+///
+/// [count] is how many matched, not how many came back; [countIsLowerBound]
+/// says the server stopped counting, so it renders `500+`. Ordering is stable
+/// (by barcode), which is what makes [offset] paging safe to page through
+/// without rows shuffling underneath.
+@freezed
+sealed class ProductCatalogSearchDto with _$ProductCatalogSearchDto {
+  const factory ProductCatalogSearchDto({
+    /// Echoed back, so a late response can be matched against what is in the
+    /// field now rather than assumed to be about it.
+    @Default('') String query,
+    @Default(<ProductCatalogMatchDto>[]) List<ProductCatalogMatchDto> results,
+    @Default(0) int count,
+    @Default(false) bool countIsLowerBound,
+    @Default(25) int limit,
+    @Default(0) int offset,
+    @Default('') String attribution,
+    @Default('') String license,
+    @Default('') String licenseUrl,
+  }) = _ProductCatalogSearchDto;
+
+  factory ProductCatalogSearchDto.fromJson(Map<String, dynamic> json) =>
+      _$ProductCatalogSearchDtoFromJson(json);
+}
+
+/// The shortest query the catalog will look at.
+///
+/// Below this the server answers an empty result set rather than an error, so
+/// firing anyway is not *wrong* - it is just a round trip whose answer is known
+/// before it leaves, on a field somebody is still typing into. The client stops
+/// short instead.
+const int productCatalogMinQueryLength = 3;
+
+extension ProductCatalogSearchX on ProductCatalogSearchDto {
+  /// `37`, or `500+` when the server gave up counting.
+  ///
+  /// Printing the bare number in that case states a total the server explicitly
+  /// declined to state, and "500 matches" invites somebody to page to the end
+  /// of a list that does not end there.
+  String get countLabel => countIsLowerBound ? '$count+' : '$count';
+
+  bool get isEmpty => results.isEmpty;
 }
 
 /// What stating a name for a barcode changed.

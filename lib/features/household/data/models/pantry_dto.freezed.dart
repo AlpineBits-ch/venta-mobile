@@ -636,7 +636,33 @@ mixin _$ProductCatalogMatchDto {
 /// asked for: a French-speaking flat scanning a product the catalog only
 /// holds in German gets the German name, and this says so rather than
 /// pretending.
- String get language; String? get brand; double? get quantity; String? get quantityUnit; String get source; String get sourceName; String get sourceUrl; String get license; String get licenseUrl; String get attribution; DateTime? get importedAt;
+ String get language;/// Free text exactly as the source database holds it, which is not a clean
+/// field: it is sometimes a manufacturer, sometimes a retailer, and
+/// sometimes several comma-joined ("Nutella, Ferrero"). It is shown as it
+/// arrives and **never split, titlecased or otherwise tidied** - every rule
+/// that would tidy one row mangles another, and the string's only job is to
+/// tell two nearly identical names apart.
+ String? get brand;/// The pack size printed on the packaging - 250 and `ml`, not 250 of them.
+///
+/// Null roughly seven times in eight for groceries, so nothing may depend
+/// on it being there. It is offered as a suggestion for a unit field and is
+/// never written silently: the number a person means when they add a jar is
+/// how many jars, and quietly filling 380 into a stock count is the one
+/// mistake this field is capable of causing.
+ double? get quantity; String? get quantityUnit;/// The code the catalog holds this product under.
+///
+/// Search returns it; the scan response now carries it too, since the scan
+/// already knew the code it was asked about. It is what makes a *chosen*
+/// search result usable - adopting one turns a typed name into the scan
+/// path with a real code behind it. Null when a response predates the field
+/// rather than meaning "no code exists", so a caller that needs one checks
+/// before assuming.
+///
+/// **A search result's barcode is never adopted without somebody tapping
+/// it.** "Oat milk" matches dozens of products; taking the first and writing
+/// its code is a fuzzy match promoted to a fact, and it is indistinguishable
+/// afterwards from a code somebody actually scanned.
+ String? get barcode; String get source; String get sourceName; String get sourceUrl; String get license; String get licenseUrl; String get attribution; DateTime? get importedAt;
 /// Create a copy of ProductCatalogMatchDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -649,16 +675,16 @@ $ProductCatalogMatchDtoCopyWith<ProductCatalogMatchDto> get copyWith => _$Produc
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ProductCatalogMatchDto&&(identical(other.name, name) || other.name == name)&&(identical(other.language, language) || other.language == language)&&(identical(other.brand, brand) || other.brand == brand)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.quantityUnit, quantityUnit) || other.quantityUnit == quantityUnit)&&(identical(other.source, source) || other.source == source)&&(identical(other.sourceName, sourceName) || other.sourceName == sourceName)&&(identical(other.sourceUrl, sourceUrl) || other.sourceUrl == sourceUrl)&&(identical(other.license, license) || other.license == license)&&(identical(other.licenseUrl, licenseUrl) || other.licenseUrl == licenseUrl)&&(identical(other.attribution, attribution) || other.attribution == attribution)&&(identical(other.importedAt, importedAt) || other.importedAt == importedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ProductCatalogMatchDto&&(identical(other.name, name) || other.name == name)&&(identical(other.language, language) || other.language == language)&&(identical(other.brand, brand) || other.brand == brand)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.quantityUnit, quantityUnit) || other.quantityUnit == quantityUnit)&&(identical(other.barcode, barcode) || other.barcode == barcode)&&(identical(other.source, source) || other.source == source)&&(identical(other.sourceName, sourceName) || other.sourceName == sourceName)&&(identical(other.sourceUrl, sourceUrl) || other.sourceUrl == sourceUrl)&&(identical(other.license, license) || other.license == license)&&(identical(other.licenseUrl, licenseUrl) || other.licenseUrl == licenseUrl)&&(identical(other.attribution, attribution) || other.attribution == attribution)&&(identical(other.importedAt, importedAt) || other.importedAt == importedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,name,language,brand,quantity,quantityUnit,source,sourceName,sourceUrl,license,licenseUrl,attribution,importedAt);
+int get hashCode => Object.hash(runtimeType,name,language,brand,quantity,quantityUnit,barcode,source,sourceName,sourceUrl,license,licenseUrl,attribution,importedAt);
 
 @override
 String toString() {
-  return 'ProductCatalogMatchDto(name: $name, language: $language, brand: $brand, quantity: $quantity, quantityUnit: $quantityUnit, source: $source, sourceName: $sourceName, sourceUrl: $sourceUrl, license: $license, licenseUrl: $licenseUrl, attribution: $attribution, importedAt: $importedAt)';
+  return 'ProductCatalogMatchDto(name: $name, language: $language, brand: $brand, quantity: $quantity, quantityUnit: $quantityUnit, barcode: $barcode, source: $source, sourceName: $sourceName, sourceUrl: $sourceUrl, license: $license, licenseUrl: $licenseUrl, attribution: $attribution, importedAt: $importedAt)';
 }
 
 
@@ -669,7 +695,7 @@ abstract mixin class $ProductCatalogMatchDtoCopyWith<$Res>  {
   factory $ProductCatalogMatchDtoCopyWith(ProductCatalogMatchDto value, $Res Function(ProductCatalogMatchDto) _then) = _$ProductCatalogMatchDtoCopyWithImpl;
 @useResult
 $Res call({
- String name, String language, String? brand, double? quantity, String? quantityUnit, String source, String sourceName, String sourceUrl, String license, String licenseUrl, String attribution, DateTime? importedAt
+ String name, String language, String? brand, double? quantity, String? quantityUnit, String? barcode, String source, String sourceName, String sourceUrl, String license, String licenseUrl, String attribution, DateTime? importedAt
 });
 
 
@@ -686,13 +712,14 @@ class _$ProductCatalogMatchDtoCopyWithImpl<$Res>
 
 /// Create a copy of ProductCatalogMatchDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? language = null,Object? brand = freezed,Object? quantity = freezed,Object? quantityUnit = freezed,Object? source = null,Object? sourceName = null,Object? sourceUrl = null,Object? license = null,Object? licenseUrl = null,Object? attribution = null,Object? importedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? language = null,Object? brand = freezed,Object? quantity = freezed,Object? quantityUnit = freezed,Object? barcode = freezed,Object? source = null,Object? sourceName = null,Object? sourceUrl = null,Object? license = null,Object? licenseUrl = null,Object? attribution = null,Object? importedAt = freezed,}) {
   return _then(_self.copyWith(
 name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,language: null == language ? _self.language : language // ignore: cast_nullable_to_non_nullable
 as String,brand: freezed == brand ? _self.brand : brand // ignore: cast_nullable_to_non_nullable
 as String?,quantity: freezed == quantity ? _self.quantity : quantity // ignore: cast_nullable_to_non_nullable
 as double?,quantityUnit: freezed == quantityUnit ? _self.quantityUnit : quantityUnit // ignore: cast_nullable_to_non_nullable
+as String?,barcode: freezed == barcode ? _self.barcode : barcode // ignore: cast_nullable_to_non_nullable
 as String?,source: null == source ? _self.source : source // ignore: cast_nullable_to_non_nullable
 as String,sourceName: null == sourceName ? _self.sourceName : sourceName // ignore: cast_nullable_to_non_nullable
 as String,sourceUrl: null == sourceUrl ? _self.sourceUrl : sourceUrl // ignore: cast_nullable_to_non_nullable
@@ -782,10 +809,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String language,  String? brand,  double? quantity,  String? quantityUnit,  String source,  String sourceName,  String sourceUrl,  String license,  String licenseUrl,  String attribution,  DateTime? importedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String language,  String? brand,  double? quantity,  String? quantityUnit,  String? barcode,  String source,  String sourceName,  String sourceUrl,  String license,  String licenseUrl,  String attribution,  DateTime? importedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ProductCatalogMatchDto() when $default != null:
-return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quantityUnit,_that.source,_that.sourceName,_that.sourceUrl,_that.license,_that.licenseUrl,_that.attribution,_that.importedAt);case _:
+return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quantityUnit,_that.barcode,_that.source,_that.sourceName,_that.sourceUrl,_that.license,_that.licenseUrl,_that.attribution,_that.importedAt);case _:
   return orElse();
 
 }
@@ -803,10 +830,10 @@ return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quant
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String language,  String? brand,  double? quantity,  String? quantityUnit,  String source,  String sourceName,  String sourceUrl,  String license,  String licenseUrl,  String attribution,  DateTime? importedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String language,  String? brand,  double? quantity,  String? quantityUnit,  String? barcode,  String source,  String sourceName,  String sourceUrl,  String license,  String licenseUrl,  String attribution,  DateTime? importedAt)  $default,) {final _that = this;
 switch (_that) {
 case _ProductCatalogMatchDto():
-return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quantityUnit,_that.source,_that.sourceName,_that.sourceUrl,_that.license,_that.licenseUrl,_that.attribution,_that.importedAt);}
+return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quantityUnit,_that.barcode,_that.source,_that.sourceName,_that.sourceUrl,_that.license,_that.licenseUrl,_that.attribution,_that.importedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -820,10 +847,10 @@ return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quant
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String language,  String? brand,  double? quantity,  String? quantityUnit,  String source,  String sourceName,  String sourceUrl,  String license,  String licenseUrl,  String attribution,  DateTime? importedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String language,  String? brand,  double? quantity,  String? quantityUnit,  String? barcode,  String source,  String sourceName,  String sourceUrl,  String license,  String licenseUrl,  String attribution,  DateTime? importedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _ProductCatalogMatchDto() when $default != null:
-return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quantityUnit,_that.source,_that.sourceName,_that.sourceUrl,_that.license,_that.licenseUrl,_that.attribution,_that.importedAt);case _:
+return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quantityUnit,_that.barcode,_that.source,_that.sourceName,_that.sourceUrl,_that.license,_that.licenseUrl,_that.attribution,_that.importedAt);case _:
   return null;
 
 }
@@ -835,7 +862,7 @@ return $default(_that.name,_that.language,_that.brand,_that.quantity,_that.quant
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _ProductCatalogMatchDto implements ProductCatalogMatchDto {
-  const _ProductCatalogMatchDto({this.name = '', this.language = '', this.brand, this.quantity, this.quantityUnit, this.source = '', this.sourceName = '', this.sourceUrl = '', this.license = '', this.licenseUrl = '', this.attribution = '', this.importedAt});
+  const _ProductCatalogMatchDto({this.name = '', this.language = '', this.brand, this.quantity, this.quantityUnit, this.barcode, this.source = '', this.sourceName = '', this.sourceUrl = '', this.license = '', this.licenseUrl = '', this.attribution = '', this.importedAt});
   factory _ProductCatalogMatchDto.fromJson(Map<String, dynamic> json) => _$ProductCatalogMatchDtoFromJson(json);
 
 @override@JsonKey() final  String name;
@@ -844,9 +871,36 @@ class _ProductCatalogMatchDto implements ProductCatalogMatchDto {
 /// holds in German gets the German name, and this says so rather than
 /// pretending.
 @override@JsonKey() final  String language;
+/// Free text exactly as the source database holds it, which is not a clean
+/// field: it is sometimes a manufacturer, sometimes a retailer, and
+/// sometimes several comma-joined ("Nutella, Ferrero"). It is shown as it
+/// arrives and **never split, titlecased or otherwise tidied** - every rule
+/// that would tidy one row mangles another, and the string's only job is to
+/// tell two nearly identical names apart.
 @override final  String? brand;
+/// The pack size printed on the packaging - 250 and `ml`, not 250 of them.
+///
+/// Null roughly seven times in eight for groceries, so nothing may depend
+/// on it being there. It is offered as a suggestion for a unit field and is
+/// never written silently: the number a person means when they add a jar is
+/// how many jars, and quietly filling 380 into a stock count is the one
+/// mistake this field is capable of causing.
 @override final  double? quantity;
 @override final  String? quantityUnit;
+/// The code the catalog holds this product under.
+///
+/// Search returns it; the scan response now carries it too, since the scan
+/// already knew the code it was asked about. It is what makes a *chosen*
+/// search result usable - adopting one turns a typed name into the scan
+/// path with a real code behind it. Null when a response predates the field
+/// rather than meaning "no code exists", so a caller that needs one checks
+/// before assuming.
+///
+/// **A search result's barcode is never adopted without somebody tapping
+/// it.** "Oat milk" matches dozens of products; taking the first and writing
+/// its code is a fuzzy match promoted to a fact, and it is indistinguishable
+/// afterwards from a code somebody actually scanned.
+@override final  String? barcode;
 @override@JsonKey() final  String source;
 @override@JsonKey() final  String sourceName;
 @override@JsonKey() final  String sourceUrl;
@@ -868,16 +922,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ProductCatalogMatchDto&&(identical(other.name, name) || other.name == name)&&(identical(other.language, language) || other.language == language)&&(identical(other.brand, brand) || other.brand == brand)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.quantityUnit, quantityUnit) || other.quantityUnit == quantityUnit)&&(identical(other.source, source) || other.source == source)&&(identical(other.sourceName, sourceName) || other.sourceName == sourceName)&&(identical(other.sourceUrl, sourceUrl) || other.sourceUrl == sourceUrl)&&(identical(other.license, license) || other.license == license)&&(identical(other.licenseUrl, licenseUrl) || other.licenseUrl == licenseUrl)&&(identical(other.attribution, attribution) || other.attribution == attribution)&&(identical(other.importedAt, importedAt) || other.importedAt == importedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ProductCatalogMatchDto&&(identical(other.name, name) || other.name == name)&&(identical(other.language, language) || other.language == language)&&(identical(other.brand, brand) || other.brand == brand)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.quantityUnit, quantityUnit) || other.quantityUnit == quantityUnit)&&(identical(other.barcode, barcode) || other.barcode == barcode)&&(identical(other.source, source) || other.source == source)&&(identical(other.sourceName, sourceName) || other.sourceName == sourceName)&&(identical(other.sourceUrl, sourceUrl) || other.sourceUrl == sourceUrl)&&(identical(other.license, license) || other.license == license)&&(identical(other.licenseUrl, licenseUrl) || other.licenseUrl == licenseUrl)&&(identical(other.attribution, attribution) || other.attribution == attribution)&&(identical(other.importedAt, importedAt) || other.importedAt == importedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,name,language,brand,quantity,quantityUnit,source,sourceName,sourceUrl,license,licenseUrl,attribution,importedAt);
+int get hashCode => Object.hash(runtimeType,name,language,brand,quantity,quantityUnit,barcode,source,sourceName,sourceUrl,license,licenseUrl,attribution,importedAt);
 
 @override
 String toString() {
-  return 'ProductCatalogMatchDto(name: $name, language: $language, brand: $brand, quantity: $quantity, quantityUnit: $quantityUnit, source: $source, sourceName: $sourceName, sourceUrl: $sourceUrl, license: $license, licenseUrl: $licenseUrl, attribution: $attribution, importedAt: $importedAt)';
+  return 'ProductCatalogMatchDto(name: $name, language: $language, brand: $brand, quantity: $quantity, quantityUnit: $quantityUnit, barcode: $barcode, source: $source, sourceName: $sourceName, sourceUrl: $sourceUrl, license: $license, licenseUrl: $licenseUrl, attribution: $attribution, importedAt: $importedAt)';
 }
 
 
@@ -888,7 +942,7 @@ abstract mixin class _$ProductCatalogMatchDtoCopyWith<$Res> implements $ProductC
   factory _$ProductCatalogMatchDtoCopyWith(_ProductCatalogMatchDto value, $Res Function(_ProductCatalogMatchDto) _then) = __$ProductCatalogMatchDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String name, String language, String? brand, double? quantity, String? quantityUnit, String source, String sourceName, String sourceUrl, String license, String licenseUrl, String attribution, DateTime? importedAt
+ String name, String language, String? brand, double? quantity, String? quantityUnit, String? barcode, String source, String sourceName, String sourceUrl, String license, String licenseUrl, String attribution, DateTime? importedAt
 });
 
 
@@ -905,13 +959,14 @@ class __$ProductCatalogMatchDtoCopyWithImpl<$Res>
 
 /// Create a copy of ProductCatalogMatchDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? language = null,Object? brand = freezed,Object? quantity = freezed,Object? quantityUnit = freezed,Object? source = null,Object? sourceName = null,Object? sourceUrl = null,Object? license = null,Object? licenseUrl = null,Object? attribution = null,Object? importedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? language = null,Object? brand = freezed,Object? quantity = freezed,Object? quantityUnit = freezed,Object? barcode = freezed,Object? source = null,Object? sourceName = null,Object? sourceUrl = null,Object? license = null,Object? licenseUrl = null,Object? attribution = null,Object? importedAt = freezed,}) {
   return _then(_ProductCatalogMatchDto(
 name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,language: null == language ? _self.language : language // ignore: cast_nullable_to_non_nullable
 as String,brand: freezed == brand ? _self.brand : brand // ignore: cast_nullable_to_non_nullable
 as String?,quantity: freezed == quantity ? _self.quantity : quantity // ignore: cast_nullable_to_non_nullable
 as double?,quantityUnit: freezed == quantityUnit ? _self.quantityUnit : quantityUnit // ignore: cast_nullable_to_non_nullable
+as String?,barcode: freezed == barcode ? _self.barcode : barcode // ignore: cast_nullable_to_non_nullable
 as String?,source: null == source ? _self.source : source // ignore: cast_nullable_to_non_nullable
 as String,sourceName: null == sourceName ? _self.sourceName : sourceName // ignore: cast_nullable_to_non_nullable
 as String,sourceUrl: null == sourceUrl ? _self.sourceUrl : sourceUrl // ignore: cast_nullable_to_non_nullable
@@ -920,6 +975,297 @@ as String,licenseUrl: null == licenseUrl ? _self.licenseUrl : licenseUrl // igno
 as String,attribution: null == attribution ? _self.attribution : attribution // ignore: cast_nullable_to_non_nullable
 as String,importedAt: freezed == importedAt ? _self.importedAt : importedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$ProductCatalogSearchDto {
+
+/// Echoed back, so a late response can be matched against what is in the
+/// field now rather than assumed to be about it.
+ String get query; List<ProductCatalogMatchDto> get results; int get count; bool get countIsLowerBound; int get limit; int get offset; String get attribution; String get license; String get licenseUrl;
+/// Create a copy of ProductCatalogSearchDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ProductCatalogSearchDtoCopyWith<ProductCatalogSearchDto> get copyWith => _$ProductCatalogSearchDtoCopyWithImpl<ProductCatalogSearchDto>(this as ProductCatalogSearchDto, _$identity);
+
+  /// Serializes this ProductCatalogSearchDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ProductCatalogSearchDto&&(identical(other.query, query) || other.query == query)&&const DeepCollectionEquality().equals(other.results, results)&&(identical(other.count, count) || other.count == count)&&(identical(other.countIsLowerBound, countIsLowerBound) || other.countIsLowerBound == countIsLowerBound)&&(identical(other.limit, limit) || other.limit == limit)&&(identical(other.offset, offset) || other.offset == offset)&&(identical(other.attribution, attribution) || other.attribution == attribution)&&(identical(other.license, license) || other.license == license)&&(identical(other.licenseUrl, licenseUrl) || other.licenseUrl == licenseUrl));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,query,const DeepCollectionEquality().hash(results),count,countIsLowerBound,limit,offset,attribution,license,licenseUrl);
+
+@override
+String toString() {
+  return 'ProductCatalogSearchDto(query: $query, results: $results, count: $count, countIsLowerBound: $countIsLowerBound, limit: $limit, offset: $offset, attribution: $attribution, license: $license, licenseUrl: $licenseUrl)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ProductCatalogSearchDtoCopyWith<$Res>  {
+  factory $ProductCatalogSearchDtoCopyWith(ProductCatalogSearchDto value, $Res Function(ProductCatalogSearchDto) _then) = _$ProductCatalogSearchDtoCopyWithImpl;
+@useResult
+$Res call({
+ String query, List<ProductCatalogMatchDto> results, int count, bool countIsLowerBound, int limit, int offset, String attribution, String license, String licenseUrl
+});
+
+
+
+
+}
+/// @nodoc
+class _$ProductCatalogSearchDtoCopyWithImpl<$Res>
+    implements $ProductCatalogSearchDtoCopyWith<$Res> {
+  _$ProductCatalogSearchDtoCopyWithImpl(this._self, this._then);
+
+  final ProductCatalogSearchDto _self;
+  final $Res Function(ProductCatalogSearchDto) _then;
+
+/// Create a copy of ProductCatalogSearchDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? query = null,Object? results = null,Object? count = null,Object? countIsLowerBound = null,Object? limit = null,Object? offset = null,Object? attribution = null,Object? license = null,Object? licenseUrl = null,}) {
+  return _then(_self.copyWith(
+query: null == query ? _self.query : query // ignore: cast_nullable_to_non_nullable
+as String,results: null == results ? _self.results : results // ignore: cast_nullable_to_non_nullable
+as List<ProductCatalogMatchDto>,count: null == count ? _self.count : count // ignore: cast_nullable_to_non_nullable
+as int,countIsLowerBound: null == countIsLowerBound ? _self.countIsLowerBound : countIsLowerBound // ignore: cast_nullable_to_non_nullable
+as bool,limit: null == limit ? _self.limit : limit // ignore: cast_nullable_to_non_nullable
+as int,offset: null == offset ? _self.offset : offset // ignore: cast_nullable_to_non_nullable
+as int,attribution: null == attribution ? _self.attribution : attribution // ignore: cast_nullable_to_non_nullable
+as String,license: null == license ? _self.license : license // ignore: cast_nullable_to_non_nullable
+as String,licenseUrl: null == licenseUrl ? _self.licenseUrl : licenseUrl // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [ProductCatalogSearchDto].
+extension ProductCatalogSearchDtoPatterns on ProductCatalogSearchDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _ProductCatalogSearchDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _ProductCatalogSearchDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _ProductCatalogSearchDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _ProductCatalogSearchDto():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _ProductCatalogSearchDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _ProductCatalogSearchDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String query,  List<ProductCatalogMatchDto> results,  int count,  bool countIsLowerBound,  int limit,  int offset,  String attribution,  String license,  String licenseUrl)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _ProductCatalogSearchDto() when $default != null:
+return $default(_that.query,_that.results,_that.count,_that.countIsLowerBound,_that.limit,_that.offset,_that.attribution,_that.license,_that.licenseUrl);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String query,  List<ProductCatalogMatchDto> results,  int count,  bool countIsLowerBound,  int limit,  int offset,  String attribution,  String license,  String licenseUrl)  $default,) {final _that = this;
+switch (_that) {
+case _ProductCatalogSearchDto():
+return $default(_that.query,_that.results,_that.count,_that.countIsLowerBound,_that.limit,_that.offset,_that.attribution,_that.license,_that.licenseUrl);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String query,  List<ProductCatalogMatchDto> results,  int count,  bool countIsLowerBound,  int limit,  int offset,  String attribution,  String license,  String licenseUrl)?  $default,) {final _that = this;
+switch (_that) {
+case _ProductCatalogSearchDto() when $default != null:
+return $default(_that.query,_that.results,_that.count,_that.countIsLowerBound,_that.limit,_that.offset,_that.attribution,_that.license,_that.licenseUrl);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _ProductCatalogSearchDto implements ProductCatalogSearchDto {
+  const _ProductCatalogSearchDto({this.query = '', final  List<ProductCatalogMatchDto> results = const <ProductCatalogMatchDto>[], this.count = 0, this.countIsLowerBound = false, this.limit = 25, this.offset = 0, this.attribution = '', this.license = '', this.licenseUrl = ''}): _results = results;
+  factory _ProductCatalogSearchDto.fromJson(Map<String, dynamic> json) => _$ProductCatalogSearchDtoFromJson(json);
+
+/// Echoed back, so a late response can be matched against what is in the
+/// field now rather than assumed to be about it.
+@override@JsonKey() final  String query;
+ final  List<ProductCatalogMatchDto> _results;
+@override@JsonKey() List<ProductCatalogMatchDto> get results {
+  if (_results is EqualUnmodifiableListView) return _results;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_results);
+}
+
+@override@JsonKey() final  int count;
+@override@JsonKey() final  bool countIsLowerBound;
+@override@JsonKey() final  int limit;
+@override@JsonKey() final  int offset;
+@override@JsonKey() final  String attribution;
+@override@JsonKey() final  String license;
+@override@JsonKey() final  String licenseUrl;
+
+/// Create a copy of ProductCatalogSearchDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$ProductCatalogSearchDtoCopyWith<_ProductCatalogSearchDto> get copyWith => __$ProductCatalogSearchDtoCopyWithImpl<_ProductCatalogSearchDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$ProductCatalogSearchDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ProductCatalogSearchDto&&(identical(other.query, query) || other.query == query)&&const DeepCollectionEquality().equals(other._results, _results)&&(identical(other.count, count) || other.count == count)&&(identical(other.countIsLowerBound, countIsLowerBound) || other.countIsLowerBound == countIsLowerBound)&&(identical(other.limit, limit) || other.limit == limit)&&(identical(other.offset, offset) || other.offset == offset)&&(identical(other.attribution, attribution) || other.attribution == attribution)&&(identical(other.license, license) || other.license == license)&&(identical(other.licenseUrl, licenseUrl) || other.licenseUrl == licenseUrl));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,query,const DeepCollectionEquality().hash(_results),count,countIsLowerBound,limit,offset,attribution,license,licenseUrl);
+
+@override
+String toString() {
+  return 'ProductCatalogSearchDto(query: $query, results: $results, count: $count, countIsLowerBound: $countIsLowerBound, limit: $limit, offset: $offset, attribution: $attribution, license: $license, licenseUrl: $licenseUrl)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$ProductCatalogSearchDtoCopyWith<$Res> implements $ProductCatalogSearchDtoCopyWith<$Res> {
+  factory _$ProductCatalogSearchDtoCopyWith(_ProductCatalogSearchDto value, $Res Function(_ProductCatalogSearchDto) _then) = __$ProductCatalogSearchDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String query, List<ProductCatalogMatchDto> results, int count, bool countIsLowerBound, int limit, int offset, String attribution, String license, String licenseUrl
+});
+
+
+
+
+}
+/// @nodoc
+class __$ProductCatalogSearchDtoCopyWithImpl<$Res>
+    implements _$ProductCatalogSearchDtoCopyWith<$Res> {
+  __$ProductCatalogSearchDtoCopyWithImpl(this._self, this._then);
+
+  final _ProductCatalogSearchDto _self;
+  final $Res Function(_ProductCatalogSearchDto) _then;
+
+/// Create a copy of ProductCatalogSearchDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? query = null,Object? results = null,Object? count = null,Object? countIsLowerBound = null,Object? limit = null,Object? offset = null,Object? attribution = null,Object? license = null,Object? licenseUrl = null,}) {
+  return _then(_ProductCatalogSearchDto(
+query: null == query ? _self.query : query // ignore: cast_nullable_to_non_nullable
+as String,results: null == results ? _self._results : results // ignore: cast_nullable_to_non_nullable
+as List<ProductCatalogMatchDto>,count: null == count ? _self.count : count // ignore: cast_nullable_to_non_nullable
+as int,countIsLowerBound: null == countIsLowerBound ? _self.countIsLowerBound : countIsLowerBound // ignore: cast_nullable_to_non_nullable
+as bool,limit: null == limit ? _self.limit : limit // ignore: cast_nullable_to_non_nullable
+as int,offset: null == offset ? _self.offset : offset // ignore: cast_nullable_to_non_nullable
+as int,attribution: null == attribution ? _self.attribution : attribution // ignore: cast_nullable_to_non_nullable
+as String,license: null == license ? _self.license : license // ignore: cast_nullable_to_non_nullable
+as String,licenseUrl: null == licenseUrl ? _self.licenseUrl : licenseUrl // ignore: cast_nullable_to_non_nullable
+as String,
   ));
 }
 
