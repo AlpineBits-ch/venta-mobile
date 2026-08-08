@@ -43,6 +43,7 @@ import '../../features/settings/presentation/screens/account_settings_screen.dar
 import '../../features/settings/presentation/screens/ai_settings_screen.dart';
 import '../../features/settings/presentation/screens/appearance_settings_screen.dart';
 import '../../features/settings/presentation/screens/devices_screen.dart';
+import '../../features/settings/presentation/screens/language_settings_screen.dart';
 import '../../features/settings/presentation/screens/notification_settings_screen.dart';
 import '../../features/settings/presentation/screens/qr_login_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
@@ -357,6 +358,10 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       _route(
         RoutePaths.appearanceSettings,
         (context, state) => const AppearanceSettingsScreen(),
+      ),
+      _route(
+        RoutePaths.languageSettings,
+        (context, state) => const LanguageSettingsScreen(),
       ),
       _route(
         RoutePaths.aiSettings,

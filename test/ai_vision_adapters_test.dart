@@ -9,6 +9,7 @@ import 'package:venta_mobile/core/ai/adapters/openai_adapter.dart';
 import 'package:venta_mobile/core/ai/ai_provider.dart';
 import 'package:venta_mobile/core/ai/pantry_vision_models.dart';
 import 'package:venta_mobile/core/ai/vision_image_prep.dart';
+import 'package:venta_mobile/core/locale/app_language.dart';
 
 /// The provider layer, held to fixtures rather than to three live accounts.
 ///
@@ -31,10 +32,14 @@ void main() {
     VisionImage(bytes: Uint8List.fromList([5, 6, 7, 8]), mediaType: 'image/png'),
   ];
 
-  VisionRequest request({List<VisionImage>? withImages}) => VisionRequest(
+  VisionRequest request({
+    List<VisionImage>? withImages,
+    AppLanguage language = AppLanguage.english,
+  }) => VisionRequest(
     model: 'test-model',
     apiKey: 'sk-test-key',
     images: withImages ?? images,
+    systemPrompt: pantryVisionSystemPrompt(language),
   );
 
   /// What the model is asked to produce, as it would come back on the wire.
@@ -111,7 +116,13 @@ void main() {
       // The budget covers thinking as well as the answer, so a figure sized for
       // the answer alone truncates the JSON mid-object.
       expect(body['max_tokens'], greaterThanOrEqualTo(4000));
-      expect(body['system'], pantryVisionSystemPrompt);
+      expect(body['system'], pantryVisionSystemPrompt(AppLanguage.english));
+    });
+
+    test('carries the language the request was built in, not a default', () {
+      final body = adapter.buildBody(request(language: AppLanguage.italian));
+      expect(body['system'], contains('Answer in Italian'));
+      expect(body['system'], isNot(contains('Answer in German')));
     });
 
     test('reads the text block past a leading thinking block', () {
@@ -305,6 +316,7 @@ void main() {
                 model: 'models/gemini-3.6-flash',
                 apiKey: 'k',
                 images: images,
+                systemPrompt: pantryVisionSystemPrompt(AppLanguage.english),
               ),
             )
             .toString(),
@@ -329,7 +341,7 @@ void main() {
       final instruction = body['systemInstruction']! as Map;
       expect(
         ((instruction['parts']! as List).single as Map)['text'],
-        pantryVisionSystemPrompt,
+        pantryVisionSystemPrompt(AppLanguage.english),
       );
     });
 
@@ -462,7 +474,149 @@ void main() {
     });
   });
 
+  _promptTests();
+  _normalisationTests();
   _imagePreparationTests();
+}
+
+/// The photo prompt, per language.
+///
+/// The failure this guards is silent in both directions. A prompt that forgot to
+/// name a language gets English names matched against a German catalog and every
+/// row abstains, which reads on screen as a catalog with no Swiss coverage. A
+/// prompt that asked for a *translation* instead of a reading gets `Karotten`
+/// where the packet and the catalog both say `Rüebli` - correct German, and it
+/// matches nothing either.
+void _promptTests() {
+  group('the photo prompt', () {
+    const languages = <(AppLanguage, String)>[
+      (AppLanguage.english, 'English'),
+      (AppLanguage.german, 'German'),
+      (AppLanguage.italian, 'Italian'),
+      // "Match device" is not a language a model can answer in, and
+      // `AppLanguage.promptName` resolves it to English rather than leaving the
+      // prompt telling a model to guess.
+      (AppLanguage.system, 'English'),
+    ];
+
+    // The prompt is hard-wrapped, so a sentence worth asserting on straddles a
+    // newline and two spaces of indent. Matching against the unwrapped form
+    // tests the wording rather than where somebody's editor broke the line.
+    String flat(AppLanguage language) =>
+        pantryVisionSystemPrompt(language).replaceAll(RegExp(r'\s+'), ' ');
+
+    test('names the language it wants the answer in', () {
+      for (final (language, name) in languages) {
+        expect(flat(language), contains('Answer in $name.'), reason: name);
+      }
+    });
+
+    test('asks for the language to be read off the packet, not translated', () {
+      for (final (language, name) in languages) {
+        expect(
+          flat(language),
+          contains('read the $name off the packet'),
+          reason: name,
+        );
+        expect(
+          flat(language),
+          contains('Do not translate a name you read in another language'),
+          reason: name,
+        );
+      }
+    });
+
+    test('falls back to the common name when the packet does not carry it', () {
+      for (final (language, name) in languages) {
+        expect(
+          flat(language),
+          contains(
+            'Where a packet carries no $name at all, use the ordinary $name '
+            'name for that product',
+          ),
+          reason: name,
+        );
+      }
+    });
+
+    test('does not name a language nobody asked for', () {
+      expect(pantryVisionSystemPrompt(AppLanguage.german), isNot(contains('Italian')));
+      expect(pantryVisionSystemPrompt(AppLanguage.italian), isNot(contains('German')));
+    });
+
+    /// The rules that predate the language work and must survive it. Each one is
+    /// load-bearing for a different failure, and all four are the kind that get
+    /// dropped by accident while somebody is editing the paragraph above them.
+    test('keeps every rule the feature is built on', () {
+      for (final (language, _) in languages) {
+        final prompt = pantryVisionSystemPrompt(language);
+        expect(prompt, contains('Never output a barcode'));
+        expect(prompt, contains('front row'));
+        expect(prompt, contains('unreadable'));
+        expect(prompt, contains('Set confidence honestly'));
+        expect(prompt, contains('not a food or household product'));
+      }
+    });
+  });
+}
+
+/// [normaliseProductName] against the alphabets the catalog actually answers in.
+///
+/// These assert the real behaviour rather than an intention, because the whole
+/// resolution ladder and the cross-photo merger compare on this one string and
+/// a regex tweak that changed it would break both without failing anywhere else.
+void _normalisationTests() {
+  group('normalising a product name', () {
+    test('keeps umlauts and accents rather than eating them', () {
+      // The old `[^\w\s]` looked unicode-aware and was not: `\w` is ASCII in
+      // ECMAScript whatever flags it carries, so these each lost a letter to a
+      // space - `m sli`, `gr ne bohnen`, `caff`.
+      expect(normaliseProductName('Müsli'), 'müsli');
+      expect(normaliseProductName('Grüne Bohnen'), 'grüne bohnen');
+      expect(normaliseProductName('Caffè'), 'caffè');
+      expect(normaliseProductName('Rüebli'), 'rüebli');
+      expect(normaliseProductName('Straße'), 'straße');
+      expect(normaliseProductName('Zopf'), 'zopf');
+    });
+
+    test('does not transliterate, so two real products stay two', () {
+      // `ü` must not fold to `u` or to `ue`. Folding accents away is how a
+      // matcher starts merging products that genuinely differ, and a merge is
+      // silent - one row simply absorbs another's count.
+      expect(
+        normaliseProductName('Müsli'),
+        isNot(normaliseProductName('Musli')),
+      );
+      expect(
+        normaliseProductName('Müsli'),
+        isNot(normaliseProductName('Mösli')),
+      );
+      expect(
+        normaliseProductName('Caffè'),
+        isNot(normaliseProductName('Caffé')),
+      );
+    });
+
+    test('is still blunt about case, punctuation and spacing', () {
+      expect(normaliseProductName('  Oat   Milk '), 'oat milk');
+      expect(normaliseProductName('Süssmost (1 l)'), 'süssmost 1 l');
+      expect(normaliseProductName('Pasta - Penne'), 'pasta penne');
+      // An apostrophe joins a word to itself and is deleted, not spaced.
+      expect(normaliseProductName('Grandma’s jam'), 'grandmas jam');
+      expect(normaliseProductName('Rüebli, frisch'), 'rüebli frisch');
+    });
+
+    test('the same name in two photos folds into one row', () {
+      const item = PantryVisionItem(name: 'Müsli', count: 2);
+      final merged = PantryVisionResult.merge([
+        const PantryVisionResult(items: [item]),
+        const PantryVisionResult(items: [PantryVisionItem(name: 'Müsli', count: 3)]),
+      ]);
+
+      expect(merged.items, hasLength(1));
+      expect(merged.items.single.count, 5);
+    });
+  });
 }
 
 void _imagePreparationTests() {

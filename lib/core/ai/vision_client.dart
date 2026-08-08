@@ -29,6 +29,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../locale/app_language.dart';
 import 'adapters/anthropic_adapter.dart';
 import 'adapters/gemini_adapter.dart';
 import 'adapters/openai_adapter.dart';
@@ -90,8 +91,18 @@ class PantryVisionClient {
       'object described by the schema - no prose, no markdown fences, nothing '
       'before or after it.';
 
+  /// Reads a photograph and names what is on the shelf, in [language].
+  ///
+  /// [language] is passed in rather than read off `LocaleCubit` here on purpose.
+  /// This client is built once in DI and has no `BuildContext`, its tests
+  /// construct it directly, and reaching for ambient state from inside it would
+  /// make "which language did this answer come back in" a question with no
+  /// answer at the call site - which is the same class of invisible mismatch the
+  /// language setting exists to remove. It must be the language the catalog is
+  /// being searched in; see [AppLanguage].
   Future<PantryVisionResult> read(
     List<VisionImage> images, {
+    required AppLanguage language,
     CancelToken? cancelToken,
   }) async {
     // Nothing to look at. Guarded rather than sent, because a vision request
@@ -114,6 +125,7 @@ class PantryVisionClient {
       model: config.model,
       apiKey: apiKey,
       images: images,
+      systemPrompt: pantryVisionSystemPrompt(language),
     );
 
     // Our own token, so the deadline can cancel the request in flight rather
@@ -165,8 +177,14 @@ class PantryVisionClient {
   /// in - see `catalog_matcher.dart`, which owns that guarantee. Nothing here is
   /// written anywhere; a match is a pre-filled suggestion that somebody still
   /// confirms.
+  ///
+  /// [language] must be the one [read] was given and the one the catalog search
+  /// carried in `Accept-Language`. Both sides of the comparison are already in
+  /// it by the time they get here; the prompt only has to say so, and what it
+  /// buys is described on [catalogMatchSystemPrompt].
   Future<List<CatalogMatchChoice>> matchCatalog(
     List<CatalogMatchCandidates> items, {
+    required AppLanguage language,
     CancelToken? cancelToken,
   }) async {
     // Nothing to choose between. Guarded rather than sent, for the same reason
@@ -189,7 +207,7 @@ class PantryVisionClient {
       // No photograph. The proposal has already been read out of one; sending it
       // again would double the cost of the shelf to re-ask a text question.
       images: const [],
-      systemPrompt: catalogMatchSystemPrompt,
+      systemPrompt: catalogMatchSystemPrompt(language),
       userPrompt: buildCatalogMatchPrompt(items),
     );
 

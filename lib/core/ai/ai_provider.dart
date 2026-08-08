@@ -107,11 +107,18 @@ class VisionImage {
 /// ambient state: an adapter is a pure translator, which is what makes both
 /// halves of it testable against recorded fixtures.
 class VisionRequest {
+  /// [systemPrompt] is required rather than defaulted, and that is the point
+  /// rather than an inconvenience. It used to default to the pantry-vision
+  /// prompt, which stopped being expressible the moment that prompt became a
+  /// function of the user's language - and a default here would have had to pick
+  /// one language, silently, for every caller that forgot to pass one. A model
+  /// answering in English while the catalog is searched in Italian abstains on
+  /// every row and looks exactly like a model that simply found nothing.
   const VisionRequest({
     required this.model,
     required this.apiKey,
     required this.images,
-    this.systemPrompt = pantryVisionSystemPrompt,
+    required this.systemPrompt,
     this.userPrompt = 'List what is in this photo.',
   });
 

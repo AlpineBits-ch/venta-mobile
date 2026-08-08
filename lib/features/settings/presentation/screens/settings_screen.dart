@@ -240,6 +240,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       path: RoutePaths.appearanceSettings,
       keywords: 'theme dark light mode',
     ),
+    // Keywords carry the language names themselves, in the languages: somebody
+    // who has landed in the wrong language searches for "Deutsch", not for
+    // "language". "Product names" is here too, because that is the thing this
+    // page actually changes today.
+    const _Entry(
+      section: 'App Settings',
+      title: 'Language',
+      icon: Icons.translate,
+      path: RoutePaths.languageSettings,
+      keywords:
+          'language locale translation english german deutsch italian '
+          'italiano product names catalogue catalog date picker',
+    ),
     const _Entry(
       section: 'App Settings',
       title: 'Notifications',

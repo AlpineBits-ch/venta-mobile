@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:dio/dio.dart';
 
+import '../locale/app_language.dart';
+
 /// Tells the server which language this device reads.
 ///
 /// Added when the product catalog shipped and it turned out nothing in this app
@@ -17,31 +19,74 @@ import 'package:dio/dio.dart';
 /// that describes the device belongs with the other headers that describe the
 /// device.
 ///
-/// Read from [PlatformDispatcher] rather than `Localizations.localeOf`: the app
-/// has no `supportedLocales` and no delegates, so a `MaterialApp` lookup
-/// resolves to `en` on every device regardless of its actual settings - which
-/// would be worse than sending nothing, because it would confidently ask for
-/// the wrong language. `lib/core/push/household_strings.dart` reads the
-/// platform locale for the same reason.
+/// The device half is read from [PlatformDispatcher] rather than
+/// `Localizations.localeOf`, and still is now that `MaterialApp` has
+/// `supportedLocales` and delegates. A `Localizations` lookup answers with the
+/// locale the *app* resolved to - one of three, clamped to `en` for anything
+/// else - so a phone set to French would report `en` and the request would
+/// confidently ask for the wrong language, when the catalog holds a French name
+/// and would happily have served it. [PlatformDispatcher] reports what the
+/// handset actually prefers, which is the honest thing to put in this header.
+/// An interceptor also has no `BuildContext` to do the lookup with;
+/// `lib/core/push/household_strings.dart` reads the platform locale for the
+/// same pair of reasons.
+///
+/// ## Where the language comes from now
+///
+/// The device is the *fallback*, not the answer. Since the language setting
+/// shipped, a person can say which language they want and it has to beat what
+/// the handset is set to - which is the whole point of the setting, given the
+/// app's own strings are still English and the catalog's names are the only
+/// thing it visibly changes. Both are used together rather than one replacing
+/// the other: an explicit choice leads at `q=1`, the device's own preference
+/// list follows at lower qualities, so a German-speaking user on an Italian
+/// phone gets German where the catalog has it and Italian - not English - where
+/// it does not. [AppLanguage.system] contributes nothing and leaves the header
+/// exactly as it was before the setting existed.
 class AcceptLanguageInterceptor extends Interceptor {
-  AcceptLanguageInterceptor({List<Locale> Function()? locales})
-    : _locales = locales ?? (() => PlatformDispatcher.instance.locales);
+  /// [language] is a callback rather than a `LocaleCubit` or a `getIt` lookup
+  /// on purpose. This is constructed inside `ApiClient`, which is built during
+  /// dependency registration and long before any widget tree exists, and an
+  /// interceptor that reaches for a service locator is one that cannot be
+  /// exercised from a test without standing the whole locator up. The default
+  /// keeps the pre-setting behaviour, so an `ApiClient` built without one - a
+  /// test's, most of all - still sends what the device asks for.
+  AcceptLanguageInterceptor({
+    AppLanguage Function()? language,
+    List<Locale> Function()? locales,
+  }) : _language = language ?? (() => AppLanguage.system),
+       _locales = locales ?? (() => PlatformDispatcher.instance.locales);
+
+  /// What the user chose, unresolved - [AppLanguage.system] means "no choice",
+  /// which is a different thing from "chose the device's language" only in that
+  /// it keeps following the device when the device changes.
+  final AppLanguage Function() _language;
 
   /// Injected so a test can pin the device's languages.
   final List<Locale> Function() _locales;
 
   @override
-  void onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     // A caller that set the header meant it - a screen offering "show me this
-    // in French" must win over what the phone is set to.
+    // in French" must win over both the setting and what the phone is set to.
     if (!options.headers.containsKey('Accept-Language')) {
-      final header = buildAcceptLanguage(_locales());
+      final header = buildAcceptLanguage(_preferredLocales());
       if (header != null) options.headers['Accept-Language'] = header;
     }
     handler.next(options);
+  }
+
+  /// The chosen language in front of the device's list.
+  ///
+  /// Composed here rather than inside [buildAcceptLanguage] so that helper
+  /// stays a pure list-of-locales-to-header function with no idea this app has
+  /// a setting. Duplicates cost nothing: `buildAcceptLanguage` drops repeated
+  /// tags, so choosing the language the phone is already set to produces the
+  /// same header it produced before.
+  List<Locale> _preferredLocales() {
+    final chosen = _language().locale;
+    final device = _locales();
+    return chosen == null ? device : [chosen, ...device];
   }
 }
 

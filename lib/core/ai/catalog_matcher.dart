@@ -43,6 +43,7 @@
 library;
 
 import '../../features/household/data/models/pantry_dto.dart';
+import '../locale/app_language.dart';
 import 'ai_provider.dart';
 import 'pantry_vision_models.dart';
 
@@ -207,7 +208,8 @@ const Map<String, Object?> catalogMatchJsonSchema = {
   'additionalProperties': false,
 };
 
-/// The instruction sent with every match request.
+/// The instruction sent with every match request, in the language both sides of
+/// the comparison are written in.
 ///
 /// Three things in it are load-bearing. It never mentions codes as something to
 /// produce, only as something that exists behind the numbers. It says plainly
@@ -216,7 +218,25 @@ const Map<String, Object?> catalogMatchJsonSchema = {
 /// in opposite directions. And it makes abstaining *cheap*: a model that treats
 /// null as a failure will pick the first plausible row every time, which is a
 /// fuzzy match promoted to a fact in somebody else's cupboard.
-const String catalogMatchSystemPrompt = '''
+///
+/// ## Why the language has to be said out loud here too
+///
+/// Both halves of this prompt already arrive in [language]: the catalog rows
+/// because the search carried `Accept-Language`, and the proposals because
+/// [pantryVisionSystemPrompt] asked for the words printed on the packet. Saying
+/// so is what stops the fourth rule above from eating the whole change. A
+/// matcher that has not been told will read `Hafer Drink` beside `Oat drink` as
+/// two products described in two languages - which is exactly the shape of "same
+/// brand, different variety" - and answer null, correctly by its own lights and
+/// wrongly for every row. Abstaining is meant to be cheap, so an argument for
+/// abstaining that applies to *every* item is the most expensive thing that can
+/// get into this prompt.
+///
+/// It is a floor, not a licence: the rule says language is never by itself a
+/// reason to abstain, and leaves every other reason exactly where it was.
+String catalogMatchSystemPrompt(AppLanguage language) {
+  final name = language.promptName;
+  return '''
 You are matching products somebody photographed in a kitchen against rows from a
 product catalog. For each item you are given what was read off the packet, then a
 numbered list of catalog products it might be. Say which numbered candidate is
@@ -225,6 +245,13 @@ the same product, or say you cannot tell.
 Rules:
 - Answer with the candidate's number. Numbers are the only way to name a
   candidate; there is nothing else to write and no code to produce.
+- Everything below is in $name. The items were read off the $name text on the
+  packets and the candidates came out of the catalog in $name, so wording that
+  differs between an item and a candidate is two people describing one product,
+  not evidence of two products. A candidate written in another language is the
+  same row wearing a different label. Never answer null because of the language
+  something is written in - abstain over what the product is, never over which
+  words it is spelled with. Write your reason in $name too.
 - Answer for every item you are given, exactly once, including the ones you
   cannot decide.
 - A different pack size of the right product is still the right product. The
@@ -242,6 +269,7 @@ Rules:
   caused it. One extra tap does not. When it is close, answer null.
 - Set confidence honestly, and use "low" freely. It costs nothing.
 ''';
+}
 
 /// Renders the batch as the numbered lists the model answers about.
 ///

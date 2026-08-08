@@ -26,6 +26,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -35,6 +36,7 @@ import '../../../../core/ai/pantry_vision_models.dart';
 import '../../../../core/ai/vision_client.dart';
 import '../../../../core/ai/vision_image_prep.dart';
 import '../../../../core/di/injector.dart';
+import '../../../../core/locale/locale_cubit.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/app_back_button.dart';
@@ -125,6 +127,11 @@ class _PantryVisionHarnessScreenState extends State<PantryVisionHarnessScreen> {
     }
     if (file == null || !mounted) return;
 
+    // Read before the awaits below, not inside them - and worth having in a
+    // harness at all because "which language did it answer in" is one of the
+    // things this screen exists to find out on a real shelf.
+    final language = context.read<LocaleCubit>().effective;
+
     setState(() {
       _running = true;
       _result = null;
@@ -146,7 +153,11 @@ class _PantryVisionHarnessScreenState extends State<PantryVisionHarnessScreen> {
         bytes,
         longEdge: _detailed ? kVisionLongEdgeDetailed : kVisionLongEdgeDefault,
       );
-      final result = await _client.read([image], cancelToken: cancelToken);
+      final result = await _client.read(
+        [image],
+        language: language,
+        cancelToken: cancelToken,
+      );
       stopwatch.stop();
       if (!mounted) return;
       setState(() {

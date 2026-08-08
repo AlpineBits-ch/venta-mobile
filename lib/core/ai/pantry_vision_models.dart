@@ -18,6 +18,8 @@
 /// things this house already knows - see the resolution ladder in the doc.
 library;
 
+import '../locale/app_language.dart';
+
 /// How sure the model says it is. Advisory only: it orders the review list and
 /// marks the rows worth a second look. It never gates a write - a person does
 /// that.
@@ -212,7 +214,26 @@ class PantryVisionResult {
 /// neither `grandmas jam` nor anything else a person would type. The rest of
 /// the punctuation genuinely separates words and becomes a space.
 final _apostrophes = RegExp(r"['‘’ʼ`]");
-final _punctuation = RegExp(r'[^\w\s]', unicode: true);
+
+/// Letters and digits in **any** alphabet, not just the ASCII ones.
+///
+/// This was `[^\w\s]` and looked unicode-aware because it carries
+/// `unicode: true`. It is not: Dart follows ECMAScript, where `\w` means
+/// `[A-Za-z0-9_]` no matter which flags are set, and the flag only changes how
+/// the pattern is *parsed*. So every accented letter counted as punctuation and
+/// was replaced by a space - `Müsli` normalised to `m sli`, `Caffè` to `caff`.
+///
+/// That was survivable while the model answered in English and broke the moment
+/// it started answering in the language on the packet, which is the whole point
+/// of the language-aware prompt below. Two ways, both silent: `Müsli` and
+/// `Mösli` collapsed onto the same key and merged into one row, and a pantry
+/// item somebody typed as `Caffe` no longer matched the `Caffè` read off the
+/// shelf, so the ladder created a duplicate.
+///
+/// `\p{L}\p{N}` is the same rule the old one was meant to express. It is
+/// deliberately **not** transliteration: `ü` stays `ü` and does not become `ue`
+/// or `u`, because folding accents away merges products that genuinely differ.
+final _punctuation = RegExp(r'[^\p{L}\p{N}_\s]', unicode: true);
 final _whitespace = RegExp(r'\s+');
 
 /// The single comparison form for product names, shared by the merger and the
@@ -302,12 +323,41 @@ const Map<String, Object?> pantryVisionJsonSchema = {
   'additionalProperties': false,
 };
 
-/// The instruction sent with every photograph.
+/// The instruction sent with every photograph, in the language the person using
+/// the app reads.
 ///
 /// Written to be pasted into whichever field each provider calls the system
 /// prompt. Three things in it are load-bearing and must not be softened:
 /// no barcodes, count only the front row, and report what you could not read.
-const String pantryVisionSystemPrompt = '''
+///
+/// ## Why this takes a language instead of naming one
+///
+/// The names that come out of here are matched against a product catalog the
+/// server has already answered in the same language - see the doc comment on
+/// [AppLanguage], which is where the two halves of that agreement are written
+/// down. English names against German candidates match nothing, so every rung
+/// of the resolution ladder above "create it fresh" quietly stops finding
+/// anything, and the person also reads a name their packet does not carry.
+///
+/// ## Why it asks the model to *read* the language rather than translate into it
+///
+/// Swiss packaging carries German, French and Italian on the same box, so the
+/// words we want are already printed in the photograph. Asking for them is more
+/// of the perception task the model is doing anyway; asking for a translation
+/// is a second, different task stacked on top of one it has not finished. The
+/// difference shows up in the answer: reading gives `Rüebli`, `Zopf` and
+/// `Cervelat` - what the packet says and what the Swiss catalog was indexed
+/// under - where translating "carrots" gives `Karotten`, which is correct
+/// German and matches nothing on either shelf.
+///
+/// The fallback matters as much as the rule. Not every packet carries every
+/// language, and a model told only "read the German" will faithfully transcribe
+/// the Italian it can see. So it is told to fall back to the ordinary name in
+/// the chosen language, which is the one case where translating is the right
+/// answer.
+String pantryVisionSystemPrompt(AppLanguage language) {
+  final name = language.promptName;
+  return '''
 You are reading a photograph of a household food cupboard, fridge shelf, or
 freezer compartment, and listing what is in it so somebody can check the list
 against the real shelf.
@@ -315,6 +365,17 @@ against the real shelf.
 Rules:
 - Name each product the way a person reading the label would say it. Prefer the
   common name over marketing copy: "Oat milk", not "Barista Edition Oat Drink".
+- Answer in $name. Swiss packaging usually carries two or three languages on the
+  same box, so read the $name off the packet rather than the language you happen
+  to find easiest - the $name words are already printed there, and they are the
+  ones the person checking this list against the shelf is reading. Do not
+  translate a name you read in another language into $name if the packet also
+  carries the $name one. Where a packet carries no $name at all, use the ordinary
+  $name name for that product rather than transcribing a language nobody asked
+  for. Anything else you write in words - a note about why a row is uncertain -
+  is in $name as well, because the same person reads it.
+- A brand is whatever is printed on the packet, in whatever language it is
+  printed in. Brands are not translated.
 - Never output a barcode, EAN, or product code. You cannot read one from a
   photograph and a wrong one is worse than none.
 - Count only what you can actually see in the front row. Do not estimate what
@@ -329,3 +390,4 @@ Rules:
 - Ignore anything that is not a food or household product: crockery, appliances,
   hands, packaging that is clearly empty or discarded.
 ''';
+}

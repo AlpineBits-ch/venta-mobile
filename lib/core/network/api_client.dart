@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../features/auth/data/auth_repository.dart';
+import '../locale/app_language.dart';
 import 'accept_language_interceptor.dart';
 import 'auth_interceptor.dart';
 import 'device_id_interceptor.dart';
@@ -17,12 +18,19 @@ class ApiClient {
   /// services. Passed as callbacks rather than as a `DeviceIdService`/
   /// `DeviceRegistrationService` because those resolve *through* this client -
   /// taking them eagerly would close the dependency cycle at construction.
+  ///
+  /// [language] is the user's language setting, read per request. A callback
+  /// for the same reason as the two above and one more: `LocaleCubit` is a
+  /// hydrated cubit that also backs a settings screen, and baking its *value*
+  /// in here would freeze the header at whatever it was when the client was
+  /// built - which is once, at startup, before the stored choice is read.
   ApiClient({
     required this.authRepository,
     String? Function()? deviceId,
     Future<void> Function()? registerDevice,
     Dio Function()? retryClient,
     void Function()? onUnreachable,
+    AppLanguage Function()? language,
   }) : dio = Dio(
          BaseOptions(
            connectTimeout: const Duration(seconds: 15),
@@ -41,7 +49,7 @@ class ApiClient {
     dio.interceptors.add(AuthInterceptor(authRepository));
     // Describes the device rather than the request, so it goes on everything
     // and not only the two endpoints that read it today.
-    dio.interceptors.add(AcceptLanguageInterceptor());
+    dio.interceptors.add(AcceptLanguageInterceptor(language: language));
     if (deviceId != null && registerDevice != null) {
       dio.interceptors.add(
         DeviceIdInterceptor(

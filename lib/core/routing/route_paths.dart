@@ -57,6 +57,15 @@ abstract final class RoutePaths {
   static const notificationSettings = '/settings/notifications';
   static const appearanceSettings = '/settings/appearance';
 
+  /// Which language this app asks for. Under App Settings, next to Appearance,
+  /// because it is the same kind of thing: a device-local preference about how
+  /// the app presents itself, with no server behind it.
+  ///
+  /// A flat sibling of [appearanceSettings] rather than a child of anything, so
+  /// [parentOf]'s existing `['settings', ...]` case already sends the system
+  /// back button to the settings index - no case of its own is needed here.
+  static const languageSettings = '/settings/language';
+
   /// Bring-your-own-key AI: which provider reads a photo of a cupboard, which
   /// model, and the key that pays for it.
   ///

@@ -64,6 +64,7 @@ import '../mls/mls_service.dart';
 import '../mls/mls_session_manager.dart';
 import '../mls/mls_store.dart';
 import '../mls/mls_sync_service.dart';
+import '../locale/locale_cubit.dart';
 import '../mls/protection_level_service.dart';
 import '../network/api_client.dart';
 import '../push/call_kit_service.dart';
@@ -106,9 +107,25 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       deviceIdService: getIt(),
     ),
   );
+  // The one bloc registered here rather than owned by the widget tree, and it
+  // is registered because something outside the widget tree needs it: the
+  // `Accept-Language` header on every request. An interceptor has no
+  // `BuildContext`, so the choice has to be reachable without one - and it must
+  // be the *same* instance the settings screen writes to, or the header would
+  // keep answering with a second cubit's default forever. `App` provides it
+  // with `BlocProvider.value` for that reason, exactly as it does `CallCubit`.
+  //
+  // Not in `resetSessionScopedCaches`: the language belongs to the handset, not
+  // to the account. Somebody who set this to Italian and then switched accounts
+  // did not thereby ask to read German again.
+  getIt.registerLazySingleton<LocaleCubit>(() => LocaleCubit());
   getIt.registerLazySingleton<ApiClient>(
     () => ApiClient(
       authRepository: getIt(),
+      // Read per request, not captured: this client is built once at startup
+      // and lives as long as the app, so a value taken here would pin the
+      // header to the language in force at launch.
+      language: () => getIt<LocaleCubit>().state,
       deviceId: () => getIt<DeviceIdService>().deviceIdOrNull,
       // Resolved lazily on purpose: the registration service is built on top
       // of this very client, so taking it eagerly here would deadlock get_it.

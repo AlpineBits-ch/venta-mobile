@@ -36,7 +36,6 @@
 library;
 
 import 'dart:async';
-import 'dart:ui' show PlatformDispatcher;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -98,7 +97,9 @@ class ProductCatalogPickerSheet extends StatefulWidget {
   final String initialQuery;
   final String? title;
 
-  /// Defaults to the real endpoint, asking for names in the device's language.
+  /// Defaults to the real endpoint. The language names come back in is left to
+  /// `AcceptLanguageInterceptor`, which knows about the user's language setting
+  /// - see [_ProductCatalogPickerSheetState._search].
   final ProductCatalogSearchFn? search;
 
   @override
@@ -160,9 +161,15 @@ class _ProductCatalogPickerSheetState extends State<ProductCatalogPickerSheet> {
       widget.search ??
       (query, {CancelToken? cancelToken}) => householdApi.searchProductCatalog(
         query,
-        // Asks for the device's language; the results say which language
-        // they actually came back in, and a mismatch is shown anyway.
-        acceptLanguage: PlatformDispatcher.instance.locale.toLanguageTag(),
+        // No `acceptLanguage` here on purpose. **Do not put one back.**
+        // `AcceptLanguageInterceptor` now stamps the header from the user's
+        // language setting, falling back to the device, and the parameter is an
+        // explicit override that beats the interceptor by design. Passing the
+        // device locale from here therefore does not "make sure" of anything -
+        // it overrides the setting, so somebody who chose German in Settings
+        // would keep getting Italian product names on an Italian phone with no
+        // way to tell why. The results still say which language they actually
+        // came back in, and a mismatch is still shown.
         cancelToken: cancelToken,
       );
 

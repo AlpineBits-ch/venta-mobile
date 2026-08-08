@@ -72,10 +72,10 @@
 library;
 
 import 'dart:async';
-import 'dart:ui' show PlatformDispatcher;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -86,6 +86,8 @@ import '../../../../core/ai/pantry_vision_models.dart';
 import '../../../../core/ai/vision_client.dart';
 import '../../../../core/ai/vision_image_prep.dart';
 import '../../../../core/di/injector.dart';
+import '../../../../core/locale/app_language.dart';
+import '../../../../core/locale/locale_cubit.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../settings/presentation/screens/ai_settings_screen.dart';
@@ -565,6 +567,14 @@ class _PantryVisionScreenState extends State<PantryVisionScreen> {
       return;
     }
 
+    // Read once, at the top, and carried through the whole pass by hand. Two
+    // reasons, and neither is style: the reads and the catalog searches are a
+    // long chain of awaits and `context` is not safe to touch across them, and
+    // the model's language and the catalog's have to be the *same* language or
+    // every match abstains - which is impossible to guarantee if two places
+    // resolve it independently at two different moments. See [AppLanguage].
+    final language = context.read<LocaleCubit>().effective;
+
     final pass = ++_pass;
     final token = CancelToken();
     _inFlight = token;
@@ -583,7 +593,7 @@ class _PantryVisionScreenState extends State<PantryVisionScreen> {
         );
         results.add(
           await _client
-              .read([_shots[i].image], cancelToken: token)
+              .read([_shots[i].image], language: language, cancelToken: token)
               .timeout(_photoDeadline),
         );
       }
@@ -652,6 +662,7 @@ class _PantryVisionScreenState extends State<PantryVisionScreen> {
       final enriched = await _matchCatalogue(
         plan,
         enrichment,
+        language: language,
         pantry: pantry,
         learned: learned,
       );
@@ -785,6 +796,7 @@ class _PantryVisionScreenState extends State<PantryVisionScreen> {
   Future<_CatalogEnrichment> _matchCatalogue(
     PantryVisionPlan plan,
     CancelToken token, {
+    required AppLanguage language,
     required List<PantryItemDto> pantry,
     required List<PantryBarcodeDto> learned,
   }) async {
@@ -797,7 +809,7 @@ class _PantryVisionScreenState extends State<PantryVisionScreen> {
     _setStatus(const _Status.working('Matching against the catalogue…'));
 
     try {
-      final envelopes = await _searchCatalogue(wanted, plan, token);
+      final envelopes = await _searchCatalogue(wanted, plan, token, language);
       if (!mounted || token.isCancelled) return _CatalogEnrichment.none(plan);
 
       // Rows with nothing to choose between are left out of the batch entirely
@@ -819,7 +831,11 @@ class _PantryVisionScreenState extends State<PantryVisionScreen> {
       }
       if (items.isEmpty) return _CatalogEnrichment.none(plan);
 
-      final choices = await _client.matchCatalog(items, cancelToken: token);
+      final choices = await _client.matchCatalog(
+        items,
+        language: language,
+        cancelToken: token,
+      );
       if (!mounted || token.isCancelled) return _CatalogEnrichment.none(plan);
 
       var enriched = plan;
@@ -914,6 +930,7 @@ class _PantryVisionScreenState extends State<PantryVisionScreen> {
     List<int> indices,
     PantryVisionPlan plan,
     CancelToken token,
+    AppLanguage language,
   ) async {
     final envelopes = <int, ProductCatalogSearchDto>{};
     var next = 0;
@@ -933,10 +950,22 @@ class _PantryVisionScreenState extends State<PantryVisionScreen> {
                 // [maxCatalogCandidates]. Asking for the picker's twenty-five
                 // would be rows nobody, model or person, ever looks at.
                 limit: maxCatalogCandidates,
-                // Same request the picker makes, so a name that arrives
-                // pre-filled and the same name found by hand read alike.
-                acceptLanguage: PlatformDispatcher.instance.locale
-                    .toLanguageTag(),
+                // No `acceptLanguage` on purpose. `AcceptLanguageInterceptor`
+                // already sends the chosen language for every request, and it
+                // sends a better header than this call could: the choice at
+                // `q=1` with the handset's own preferences trailing it, so a
+                // German-speaking user on an Italian phone gets a German name
+                // where the catalog has one and an Italian - not English - one
+                // where it does not. An explicit value here would be a single
+                // bare tag that *overrode* all of that, which is precisely the
+                // bug the picker had.
+                //
+                // What must stay true is that these candidates come back in the
+                // same language the photo was read in: they are about to be
+                // compared against those names by a model told both sides are
+                // one language, and a mismatch abstains on every row while
+                // looking exactly like a catalog with no coverage. One setting
+                // feeds both ends - see [AppLanguage].
                 cancelToken: token,
               )
               .timeout(_fetchDeadline);

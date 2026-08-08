@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/di/injector.dart';
+import 'core/locale/app_language.dart';
+import 'core/locale/locale_cubit.dart';
 import 'core/mls/mls_session_manager.dart';
 import 'core/mls/mls_store.dart';
 import 'core/push/nse_diagnostics_reporter.dart';
@@ -195,6 +198,13 @@ class _AppState extends State<App> {
       providers: [
         BlocProvider.value(value: _sessionCubit),
         BlocProvider(create: (_) => ThemeCubit()),
+        // From `getIt` rather than constructed here, unlike its neighbour
+        // above: `AcceptLanguageInterceptor` reads the chosen language on
+        // every request and has no context to read it from, so the container
+        // owns the one instance and this tree only borrows it. Two instances
+        // would mean the settings screen writing to one and the network layer
+        // reading the other.
+        BlocProvider.value(value: getIt<LocaleCubit>()),
         // App-lifetime singleton, provided at the root (not inside `AppShell`)
         // so it's still reachable from screens pushed via the *root*
         // navigator - like `CallScreen`, which lives outside the shell.
@@ -204,28 +214,47 @@ class _AppState extends State<App> {
         BlocProvider.value(value: getIt<GuildVoiceCubit>()),
       ],
       child: BlocBuilder<ThemeCubit, ThemeMode>(
-        builder: (context, themeMode) {
-          return MaterialApp.router(
-            title: 'Venta',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
-            themeMode: themeMode,
-            // Above every route rather than inside `AppShell`, where the other
-            // app-wide banners live: an outage is most worth announcing to
-            // somebody stuck on the login screen, which is outside the shell.
-            builder: (context, child) =>
-                PlatformStatusScope(child: child ?? const SizedBox.shrink()),
-            // Spelled out rather than passed as `routerConfig`, which is the
-            // same four fields but hard-wires `GoRouter`'s own back button
-            // dispatcher - and the one thing that needs changing is what
-            // happens when nothing pops.
-            routerDelegate: _router.routerDelegate,
-            routeInformationParser: _router.routeInformationParser,
-            routeInformationProvider: _router.routeInformationProvider,
-            backButtonDispatcher: _backButtonDispatcher,
-          );
-        },
+        builder: (context, themeMode) => BlocBuilder<LocaleCubit, AppLanguage>(
+          builder: (context, language) {
+            return MaterialApp.router(
+              title: 'Venta',
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.light,
+              darkTheme: AppTheme.dark,
+              themeMode: themeMode,
+              // Null for `AppLanguage.system`, which is not a gap - it is how
+              // `MaterialApp` is told to match `supportedLocales` against the
+              // device itself rather than being handed an answer.
+              locale: language.locale,
+              supportedLocales: AppLanguage.supportedLocales,
+              // The app's own strings are still English only, so these three
+              // do all the visible work for now: `MaterialLocalizations` and
+              // its siblings are what draw the date picker the pantry opens
+              // for an expiry date, the text-selection menu, and every
+              // "Cancel"/"OK" Flutter supplies. Without the delegates,
+              // declaring `de` and `it` above is a locale the app claims to
+              // support and cannot render a single dialog in.
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              // Above every route rather than inside `AppShell`, where the other
+              // app-wide banners live: an outage is most worth announcing to
+              // somebody stuck on the login screen, which is outside the shell.
+              builder: (context, child) =>
+                  PlatformStatusScope(child: child ?? const SizedBox.shrink()),
+              // Spelled out rather than passed as `routerConfig`, which is the
+              // same four fields but hard-wires `GoRouter`'s own back button
+              // dispatcher - and the one thing that needs changing is what
+              // happens when nothing pops.
+              routerDelegate: _router.routerDelegate,
+              routeInformationParser: _router.routeInformationParser,
+              routeInformationProvider: _router.routeInformationProvider,
+              backButtonDispatcher: _backButtonDispatcher,
+            );
+          },
+        ),
       ),
     );
   }

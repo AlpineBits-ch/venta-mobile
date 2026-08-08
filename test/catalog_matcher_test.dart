@@ -9,6 +9,7 @@ import 'package:venta_mobile/core/ai/ai_provider.dart';
 import 'package:venta_mobile/core/ai/catalog_matcher.dart';
 import 'package:venta_mobile/core/ai/pantry_vision_models.dart';
 import 'package:venta_mobile/core/ai/vision_client.dart';
+import 'package:venta_mobile/core/locale/app_language.dart';
 import 'package:venta_mobile/features/household/data/models/pantry_dto.dart';
 
 /// The matcher, held to hand-written answers rather than to a live model.
@@ -470,6 +471,104 @@ void main() {
     });
   });
 
+  /// The system prompt, per language.
+  ///
+  /// This one has a failure mode the photo prompt does not: getting it wrong
+  /// does not produce wrong answers, it produces *no* answers. A matcher that
+  /// has not been told both sides are in one language reads `Hafer Drink`
+  /// against `Oat drink` as two products, abstains, and is being obedient - the
+  /// prompt already tells it that a different variety from the same brand is a
+  /// different product. So the whole change lands here or it lands nowhere.
+  group('the matcher prompt', () {
+    const languages = <(AppLanguage, String)>[
+      (AppLanguage.english, 'English'),
+      (AppLanguage.german, 'German'),
+      (AppLanguage.italian, 'Italian'),
+      // Never a language a model can be asked to answer in; resolved to English
+      // rather than left as an instruction to guess.
+      (AppLanguage.system, 'English'),
+    ];
+
+    // Hard-wrapped, so a sentence worth asserting on straddles a newline and two
+    // spaces of indent. Matching the unwrapped form tests the wording rather
+    // than where a line happened to break.
+    String flat(AppLanguage language) =>
+        catalogMatchSystemPrompt(language).replaceAll(RegExp(r'\s+'), ' ');
+
+    test('says which language both sides of the comparison are in', () {
+      for (final (language, name) in languages) {
+        expect(
+          flat(language),
+          contains('Everything below is in $name.'),
+          reason: name,
+        );
+        expect(
+          flat(language),
+          contains(
+            'read off the $name text on the packets and the candidates came '
+            'out of the catalog in $name',
+          ),
+          reason: name,
+        );
+      }
+    });
+
+    test('language alone is never a reason to abstain', () {
+      for (final (language, name) in languages) {
+        expect(
+          flat(language),
+          contains(
+            'Never answer null because of the language something is written in',
+          ),
+          reason: name,
+        );
+        expect(
+          flat(language),
+          contains('abstain over what the product is'),
+          reason: name,
+        );
+      }
+    });
+
+    test('differing wording is not read as a differing product', () {
+      for (final (language, name) in languages) {
+        expect(
+          flat(language),
+          contains(
+            'wording that differs between an item and a candidate is two '
+            'people describing one product, not evidence of two products',
+          ),
+          reason: name,
+        );
+      }
+    });
+
+    test('does not name a language nobody asked for', () {
+      expect(
+        catalogMatchSystemPrompt(AppLanguage.german),
+        isNot(contains('Italian')),
+      );
+      expect(
+        catalogMatchSystemPrompt(AppLanguage.italian),
+        isNot(contains('German')),
+      );
+    });
+
+    /// The rules that predate the language work. The fourth is the one the new
+    /// paragraph is closest to contradicting, and the fifth is what keeps a
+    /// permission to ignore language from becoming a permission to guess.
+    test('keeps every rule the matcher is built on', () {
+      for (final (language, _) in languages) {
+        final prompt = flat(language);
+        expect(prompt, contains('no code to produce'));
+        expect(prompt, contains('A different pack size of the right product'));
+        expect(prompt, contains('A different product from the same brand'));
+        expect(prompt, contains('Abstaining is the right answer, not a failure'));
+        expect(prompt, contains('When it is close, answer null'));
+      }
+    });
+  });
+
   group('the schema', () {
     /// The guarantee is structural, not behavioural: there is nowhere in the
     /// response for thirteen digits to arrive. If this test ever fails because
@@ -533,7 +632,9 @@ void main() {
         },
       );
 
-      final choices = await clientWith(adapter).matchCatalog(items);
+      final choices = await clientWith(
+        adapter,
+      ).matchCatalog(items, language: AppLanguage.german);
 
       expect(choices, hasLength(2));
       expect(choices.every((c) => c.match == null), isTrue);
@@ -546,7 +647,7 @@ void main() {
     test('a provider outage abstains rather than throwing', () async {
       final choices = await clientWith(
         _StubAdapter(status: 500, body: const {}),
-      ).matchCatalog([oatMilk()]);
+      ).matchCatalog([oatMilk()], language: AppLanguage.german);
 
       expect(choices.single.match, isNull);
     });
@@ -554,7 +655,9 @@ void main() {
     test('an unreadable answer abstains after its one repair attempt', () async {
       final adapter = _StubAdapter(status: 200, body: 'not json at all');
 
-      final choices = await clientWith(adapter).matchCatalog([oatMilk()]);
+      final choices = await clientWith(
+        adapter,
+      ).matchCatalog([oatMilk()], language: AppLanguage.german);
 
       expect(choices.single.match, isNull);
       expect(adapter.calls, 2, reason: 'one repair, and only one');
@@ -564,7 +667,9 @@ void main() {
       when(() => keys.readConfig()).thenAnswer((_) async => null);
       final adapter = _StubAdapter(status: 200, body: const {});
 
-      final choices = await clientWith(adapter).matchCatalog([oatMilk()]);
+      final choices = await clientWith(
+        adapter,
+      ).matchCatalog([oatMilk()], language: AppLanguage.german);
 
       expect(choices.single.match, isNull);
       expect(adapter.calls, 0);
@@ -573,9 +678,10 @@ void main() {
     test('nothing to choose between is answered without paying for it', () async {
       final adapter = _StubAdapter(status: 200, body: const {});
 
-      final choices = await clientWith(adapter).matchCatalog([
-        oatMilk(candidates: const []),
-      ]);
+      final choices = await clientWith(adapter).matchCatalog(
+        [oatMilk(candidates: const [])],
+        language: AppLanguage.german,
+      );
 
       expect(choices, hasLength(1));
       expect(choices.single.match, isNull);
@@ -602,10 +708,10 @@ void main() {
         },
       );
 
-      final choices = await clientWith(adapter).matchCatalog([
-        oatMilk(),
-        tomatoes(),
-      ]);
+      final choices = await clientWith(adapter).matchCatalog(
+        [oatMilk(), tomatoes()],
+        language: AppLanguage.german,
+      );
 
       expect(choices.first.barcode, '7394376616068');
       expect(choices.first.reason, 'same brand and size');
@@ -622,7 +728,10 @@ void main() {
         },
       );
 
-      await clientWith(adapter).matchCatalog([oatMilk(), tomatoes()]);
+      await clientWith(adapter).matchCatalog(
+        [oatMilk(), tomatoes()],
+        language: AppLanguage.german,
+      );
 
       final sent = jsonEncode(adapter.requests.single.data);
       for (final code in const [
@@ -636,6 +745,12 @@ void main() {
       expect(sent, isNot(contains('base64')));
       expect(sent, contains('Item 0:'));
       expect(sent, contains('Abstaining is the right answer'));
+      // The language the caller asked for actually reaches the provider. It is
+      // threaded through four frames to get here, and a parameter dropped
+      // anywhere along the way would leave the matcher comparing German
+      // candidates under an English instruction - which fails as an abstention
+      // on every row rather than as an error.
+      expect(sent, contains('Everything below is in German'));
     });
   });
 }
