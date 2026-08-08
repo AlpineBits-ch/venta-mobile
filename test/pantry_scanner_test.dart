@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:venta_mobile/features/household/data/models/pantry_dto.dart';
+import 'package:venta_mobile/features/household/presentation/screens/pantry_channel_screen.dart';
 import 'package:venta_mobile/features/household/presentation/screens/pantry_scanner_screen.dart';
 
 /// What the scanner decides to act on, before anything reaches the pantry.
@@ -106,6 +108,55 @@ void main() {
       // Not every platform fills `size` in. A zero-area code must not be
       // silently unpickable - it is still the only thing on screen.
       expect(bestBarcodeOf([barcode(validEan13, size: Size.zero)]), validEan13);
+    });
+  });
+
+  group('finding one jar in a cupboard of fifty', () {
+    PantryItemDto item(String name) =>
+        PantryItemDto(id: name, channelId: 'c1', name: name);
+
+    List<String> namesOf(List<PantryItemDto> items) =>
+        items.map((i) => i.name).toList();
+
+    final pantry = [
+      item('Barilla penne'),
+      item('Penne rigate'),
+      item('Almond milk'),
+      item('Oat milk'),
+      item('Milk'),
+    ];
+
+    test('matches anywhere in the name, not just the start', () {
+      // Half the things in a cupboard are called "Barilla penne" and everybody
+      // types "penne".
+      expect(
+        namesOf(pantryMatches(pantry, 'penne')),
+        containsAll(['Barilla penne', 'Penne rigate']),
+      );
+    });
+
+    test('puts names that start with the query first', () {
+      expect(namesOf(pantryMatches(pantry, 'penne')).first, 'Penne rigate');
+      expect(namesOf(pantryMatches(pantry, 'milk')).first, 'Milk');
+    });
+
+    test('orders the rest alphabetically, so typing does not reshuffle', () {
+      expect(namesOf(pantryMatches(pantry, 'milk')), [
+        'Milk',
+        'Almond milk',
+        'Oat milk',
+      ]);
+    });
+
+    test('returns nothing for a query nothing matches', () {
+      expect(pantryMatches(pantry, 'quinoa'), isEmpty);
+    });
+
+    test('leaves the source list alone', () {
+      // The caller passes the screen's own list; sorting it in place would
+      // silently reorder the grouped view behind the search.
+      pantryMatches(pantry, 'milk');
+      expect(namesOf(pantry).first, 'Barilla penne');
     });
   });
 }

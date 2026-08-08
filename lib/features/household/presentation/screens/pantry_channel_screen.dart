@@ -72,6 +72,21 @@ class _PantryChannelScreenState
   /// way to use this screen.
   final _pendingQuantity = <String, double>{};
 
+  /// Finding one jar in a cupboard of fifty.
+  ///
+  /// A pantry that is actually being used stops being a list you read and
+  /// becomes a list you search, and the "Running low / Eat these first / In
+  /// stock" grouping - which is exactly right for reading - is in the way when
+  /// you already know the name. So searching drops the grouping and shows one
+  /// flat list of matches: at that point the only question is where the row is,
+  /// and three headers are three things to scroll past.
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  /// Below this the field is clutter - a search box over four items is a box
+  /// that says the list is longer than it is.
+  static const _searchFrom = 8;
+
   bool get _canManage => can('ManagePantry');
 
   @override
@@ -96,6 +111,7 @@ class _PantryChannelScreenState
           .updatePantryItem(entry.key, quantity: entry.value)
           .then((_) {}, onError: (Object _) {});
     }
+    _searchController.dispose();
     unawaited(_eventsSub?.cancel());
     super.dispose();
   }
@@ -195,20 +211,35 @@ class _PantryChannelScreenState
     );
   }
 
-  /// Unpacking a bag, by camera, without leaving the camera between items.
-  Future<void> _openScanner() async {
-    final added = await Navigator.of(context, rootNavigator: true).push<int>(
+  /// Unpacking a bag, or emptying a cupboard, by camera - without leaving the
+  /// camera between items.
+  ///
+  /// Both directions go through the same screen. Scanning things *out* is the
+  /// one that gets used daily: hunting a named row down a list of fifty and
+  /// hitting a small minus button is the interaction that gets an inventory
+  /// abandoned, and the packet is already in somebody's hand on the way to the
+  /// bin.
+  Future<void> _openScanner(PantryScanMode mode) async {
+    final moved = await Navigator.of(context, rootNavigator: true).push<int>(
       MaterialPageRoute<int>(
         builder: (_) => PantryScannerScreen(
           channelId: widget.channelId,
           channelName: channelTitle,
           guildId: widget.guildId,
+          mode: mode,
         ),
       ),
     );
     await _load();
-    if (!mounted || added == null || added == 0) return;
-    showMessage(added == 1 ? 'One thing put away.' : '$added things put away.');
+    if (!mounted || moved == null || moved == 0) return;
+    showMessage(
+      switch ((mode, moved)) {
+        (PantryScanMode.stockUp, 1) => 'One thing put away.',
+        (PantryScanMode.stockUp, _) => '$moved things put away.',
+        (PantryScanMode.useUp, 1) => 'One thing used up.',
+        (PantryScanMode.useUp, _) => '$moved things used up.',
+      },
+    );
   }
 
   /// The one-tap "used it up".
@@ -354,7 +385,8 @@ class _PantryChannelScreenState
                   : 'Nobody has added anything to this pantry yet.',
               action: _canManage
                   ? FilledButton.icon(
-                      onPressed: _openScanner,
+                      onPressed: () =>
+                          unawaited(_openScanner(PantryScanMode.stockUp)),
                       icon: const Icon(Icons.qr_code_scanner_rounded),
                       label: const Text('Scan things in'),
                     )
@@ -364,6 +396,10 @@ class _PantryChannelScreenState
       // In the bottom third rather than in an app-bar corner: this screen is
       // used at an open fridge with one hand, and the top of a phone is where
       // a thumb cannot go.
+      //
+      // Both directions get a button of the same weight. Filling a pantry is a
+      // burst once a week; emptying one is every day, and burying it would be
+      // burying the half people actually do.
       bottomNavigationBar:
           moduleEnabled && _canManage && (items?.isNotEmpty ?? false)
           ? HouseActionBar(
@@ -371,9 +407,19 @@ class _PantryChannelScreenState
                 children: [
                   Expanded(
                     child: HousePrimaryButton(
-                      label: 'Scan things in',
+                      label: 'Stock up',
                       icon: Icons.qr_code_scanner_rounded,
-                      onPressed: _openScanner,
+                      onPressed: () =>
+                          unawaited(_openScanner(PantryScanMode.stockUp)),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  Expanded(
+                    child: HouseSecondaryButton(
+                      label: 'Use up',
+                      icon: Icons.remove_shopping_cart_outlined,
+                      onPressed: () =>
+                          unawaited(_openScanner(PantryScanMode.useUp)),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.s),
@@ -400,6 +446,13 @@ class _PantryChannelScreenState
 
   Widget _buildList(List<PantryItemDto> items, int warningDays) {
     final theme = Theme.of(context);
+    final searchable = items.length >= _searchFrom;
+    final query = _query.trim().toLowerCase();
+
+    if (searchable && query.isNotEmpty) {
+      return _buildSearchResults(items, warningDays, query);
+    }
+
     final low = items.where((i) => i.isLow).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final expiring =
@@ -429,6 +482,13 @@ class _PantryChannelScreenState
           80,
         ),
         children: [
+          if (searchable) ...[
+            _PantrySearchField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value),
+            ),
+            const SizedBox(height: AppSpacing.s),
+          ],
           if (low.isNotEmpty && restockOff)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.s),
@@ -467,6 +527,81 @@ class _PantryChannelScreenState
           ..._group('In stock', rest, null, warningDays),
         ],
       ),
+    );
+  }
+
+  /// Searching, which is a different job from reading.
+  ///
+  /// No grouping and no headers: somebody typing a name already knows what they
+  /// are looking for, and "Running low / Eat these first / In stock" is three
+  /// things to scroll past between them and the row. Best matches first - a
+  /// name that *starts* with what was typed is almost always the one meant.
+  Widget _buildSearchResults(
+    List<PantryItemDto> items,
+    int warningDays,
+    String query,
+  ) {
+    final theme = Theme.of(context);
+    final matches = pantryMatches(items, query);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.m,
+        AppSpacing.s,
+        AppSpacing.m,
+        80,
+      ),
+      children: [
+        _PantrySearchField(
+          controller: _searchController,
+          onChanged: (value) => setState(() => _query = value),
+        ),
+        const SizedBox(height: AppSpacing.s),
+        if (matches.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+            child: Column(
+              children: [
+                Text(
+                  'Nothing here matches "${_query.trim()}".',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                if (_canManage) ...[
+                  const SizedBox(height: AppSpacing.m),
+                  OutlinedButton.icon(
+                    onPressed: () => _openItemEditor(),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Add it by hand'),
+                  ),
+                ],
+              ],
+            ),
+          )
+        else
+          for (final item in matches)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.s),
+              child: _PantryRow(
+                item: item,
+                warningDays: warningDays,
+                canManage: _canManage,
+                onAdjust: (delta) => _adjustQuantity(item, delta),
+                onOpen: _canManage ? () => _openItemEditor(item) : null,
+                onUsedOne: _canManage
+                    ? () => unawaited(_consume(item, all: false))
+                    : null,
+                onUsedUp: _canManage
+                    ? () => unawaited(_consume(item, all: true))
+                    : null,
+                onRestock: _canManage && item.isAwaitingRestock
+                    ? () => unawaited(_restock(item))
+                    : null,
+              ),
+            ),
+      ],
     );
   }
 
@@ -509,6 +644,74 @@ class _PantryChannelScreenState
           ),
         ),
     ];
+  }
+}
+
+/// What a typed name matches in this pantry, best first.
+///
+/// A substring match rather than a prefix one, because half the things in a
+/// cupboard are called something like "Barilla penne" and people type "penne".
+/// But a name that *starts* with what was typed is almost always the one meant,
+/// so those come first and everything else falls back to alphabetical - which
+/// keeps the order stable as somebody types rather than reshuffling under their
+/// thumb.
+///
+/// [query] must already be trimmed and lower-cased; it comes straight off the
+/// field on every keystroke and doing that work here would do it per item.
+List<PantryItemDto> pantryMatches(List<PantryItemDto> items, String query) {
+  final matches =
+      items.where((item) => item.name.toLowerCase().contains(query)).toList()
+        ..sort((a, b) {
+          final aName = a.name.toLowerCase();
+          final bName = b.name.toLowerCase();
+          final aStarts = aName.startsWith(query);
+          final bStarts = bName.startsWith(query);
+          if (aStarts != bStarts) return aStarts ? -1 : 1;
+          return aName.compareTo(bName);
+        });
+  return matches;
+}
+
+/// Finding one jar in a cupboard of fifty.
+///
+/// `TextInputAction.search` rather than done, and no autofocus: arriving at a
+/// pantry to a keyboard covering half of it is worse than one extra tap, and
+/// most visits are to read the list rather than hunt in it.
+class _PantrySearchField extends StatelessWidget {
+  const _PantrySearchField({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      textInputAction: TextInputAction.search,
+      textCapitalization: TextCapitalization.sentences,
+      decoration: InputDecoration(
+        hintText: 'Find something',
+        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+        // Rebuilt from the controller so the button is there exactly when there
+        // is something to clear.
+        suffixIcon: ValueListenableBuilder<TextEditingValue>(
+          valueListenable: controller,
+          builder: (context, value, _) => value.text.isEmpty
+              ? const SizedBox.shrink()
+              : IconButton(
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 18,
+                  tooltip: 'Clear',
+                  icon: const Icon(Icons.close_rounded),
+                ),
+        ),
+      ),
+    );
   }
 }
 

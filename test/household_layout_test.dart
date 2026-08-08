@@ -96,6 +96,40 @@ void main() {
       icon: Icons.playlist_add_rounded,
       onPressed: () {},
     ),
+
+    /// The pantry's action bar, which is the tightest row in the feature: two
+    /// labelled buttons and an icon square sharing one phone width. Both
+    /// directions of the scanner earn a real button, and at the largest text
+    /// step there is very little room left over.
+    'a pantry action bar': Row(
+      children: [
+        Expanded(
+          child: HousePrimaryButton(
+            label: 'Stock up',
+            icon: Icons.qr_code_scanner_rounded,
+            onPressed: () {},
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: HouseSecondaryButton(
+            label: 'Use up',
+            icon: Icons.remove_shopping_cart_outlined,
+            onPressed: () {},
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 52,
+          width: 52,
+          child: OutlinedButton(
+            onPressed: () {},
+            style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
+            child: const Icon(Icons.add_rounded),
+          ),
+        ),
+      ],
+    ),
     'a full row of pills': const Wrap(
       spacing: 4,
       runSpacing: 4,

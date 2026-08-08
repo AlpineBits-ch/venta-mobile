@@ -68,77 +68,29 @@ import '../widgets/household_widgets.dart';
 /// running behind a screen that stopped caring - either by the deadline or by
 /// the person, who gets a way out of it once it has gone on long enough to be
 /// worth offering.
-/// Which of the codes in frame the person actually meant, or nothing.
 ///
-/// Both halves of this matter in a kitchen, and both used to be left to luck.
+/// ## Both directions
 ///
-/// A shopping bag puts three or four barcodes in frame at once - the packet
-/// being held up, and whatever else is lying on the counter behind it. Picking
-/// "the first one with a value" picked among those by list order. The one held
-/// up to the lens is the one taking up the most of the frame, so that is the
-/// one taken.
+/// The same screen runs backwards, and it has to. Filling a pantry is a burst
+/// of ten minutes once a week; emptying one is every day for the rest of the
+/// week, and doing that by hunting a named row down a list of fifty and hitting
+/// a small minus button is the interaction that gets an inventory abandoned.
+/// The packet is already in somebody's hand on the way to the bin. Pointing the
+/// phone at it is the whole gesture.
 ///
-/// And a partly-read EAN comes back looking exactly like a real code: the right
-/// length, all digits, one of them wrong. Accepting it puts a barcode that
-/// belongs to nothing into the pantry, asks somebody to name it, and teaches
-/// the house that name for good. The check digit these formats carry exists to
-/// catch precisely that, so it is checked rather than assumed.
-///
-/// Extracted from the screen because getting the checksum subtly wrong would
-/// reject every genuine scan while looking entirely reasonable, which is the
-/// definition of something that needs a test.
-String? bestBarcodeOf(List<Barcode> barcodes) {
-  String? best;
-  var bestArea = -1.0;
+/// So [PantryScanMode] swaps which call a scan makes and the words around it,
+/// and nothing else: the camera, the frame, the status, the tally and the undo
+/// are one screen because they are one interaction seen from either end.
+enum PantryScanMode {
+  /// Unpacking a bag. A scan adds stock, and an unknown code is worth stopping
+  /// to name, because naming it is how the pantry learns.
+  stockUp,
 
-  for (final barcode in barcodes) {
-    final raw = barcode.rawValue;
-    if (raw == null || raw.isEmpty) continue;
-    if (!isPlausibleBarcode(barcode.format, raw)) continue;
+  /// Using things up. A scan takes one off, and an unknown code is simply not
+  /// in this pantry - there is nothing to name and nothing to ask.
+  useUp;
 
-    final area = barcode.size.width * barcode.size.height;
-    if (best == null || area > bestArea) {
-      best = raw;
-      bestArea = area;
-    }
-  }
-
-  return best;
-}
-
-/// Whether a decoded string is worth acting on, given what format it claims to
-/// be.
-bool isPlausibleBarcode(BarcodeFormat format, String raw) {
-  switch (format) {
-    // The GTIN family, every member of which ends in a mod-10 check digit.
-    case BarcodeFormat.ean13:
-    case BarcodeFormat.ean8:
-    case BarcodeFormat.upcA:
-      return gtinChecksumHolds(raw);
-    // UPC-E is a compressed GTIN whose check digit belongs to the expanded
-    // form, so the digits are all there is to go on here.
-    case BarcodeFormat.upcE:
-      return raw.length >= 6 && _digitsOnly.hasMatch(raw);
-    // Code 128 and ITF-14 carry nothing that can be relied on this side of the
-    // symbology. A length floor is all that separates a code from a smear.
-    default:
-      return raw.trim().length >= 4;
-  }
-}
-
-final _digitsOnly = RegExp(r'^\d+$');
-
-/// Weights of 1 and 3 alternating from the right, check digit included, and the
-/// sum divisible by ten. The same rule for EAN-8, EAN-13 and UPC-A.
-bool gtinChecksumHolds(String raw) {
-  if (raw.length < 8) return false;
-  var sum = 0;
-  for (var i = 0; i < raw.length; i++) {
-    final digit = raw.codeUnitAt(raw.length - 1 - i) - 0x30;
-    if (digit < 0 || digit > 9) return false;
-    sum += i.isOdd ? digit * 3 : digit;
-  }
-  return sum % 10 == 0;
+  bool get isStockUp => this == PantryScanMode.stockUp;
 }
 
 class PantryScannerScreen extends StatefulWidget {
@@ -147,6 +99,7 @@ class PantryScannerScreen extends StatefulWidget {
     required this.channelId,
     required this.channelName,
     required this.guildId,
+    this.mode = PantryScanMode.stockUp,
   });
 
   final String channelId;
@@ -159,25 +112,47 @@ class PantryScannerScreen extends StatefulWidget {
   /// guild-scoped and this screen needs the guild to reach it.
   final String guildId;
 
+  final PantryScanMode mode;
+
   @override
   State<PantryScannerScreen> createState() => _PantryScannerScreenState();
 }
 
-/// One thing this session put away, kept so it can be taken back.
+/// One product this session moved, kept so it can be moved further or taken
+/// back.
+///
+/// **One of these per product, not per scan.** Four identical yoghurts out of
+/// one bag are one line saying four, because that is what is in the fridge and
+/// what somebody checking their work is counting. Four identical lines is a
+/// list nobody can read and a count nobody can trust.
 class _Scanned {
   _Scanned({
     required this.item,
     required this.created,
     required this.quantityBefore,
+    required this.step,
     this.catalog,
   });
 
   PantryItemDto item;
 
-  /// Whether the scan added a row or topped up one that was already there -
-  /// which is what "undo" has to mean two different things about.
+  /// Whether the first scan of this product added a row or topped up one that
+  /// was already there - which is what "undo" has to mean two different things
+  /// about.
   final bool created;
+
+  /// The stock before this session touched it. Both the floor the stepper works
+  /// down to and what undo restores.
   final double quantityBefore;
+
+  /// What one scan of this product is worth.
+  ///
+  /// Not always one. A pantry that has learned "a pack of six" moves six per
+  /// scan, and the stepper has to speak in the same units the camera does -
+  /// otherwise tapping `+` after scanning adds a different amount than scanning
+  /// again would, which is the sort of thing that makes people stop trusting a
+  /// count.
+  final double step;
 
   /// Set when a public catalog is what named this line, and cleared the moment
   /// somebody corrects it: from then on the name is the house's own and there
@@ -185,6 +160,13 @@ class _Scanned {
   ProductCatalogMatchDto? catalog;
 
   bool undone = false;
+
+  /// How much of this product this session has moved, always positive.
+  double get moved => (item.quantity - quantityBefore).abs();
+
+  /// The same, counted in scans - what the stepper shows and what somebody
+  /// standing at a cupboard is actually counting.
+  int get count => step <= 0 ? 1 : (moved / step).round().clamp(1, 9999);
 }
 
 /// What the screen is doing, as the person holding the packet needs to hear it.
@@ -315,10 +297,29 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
   /// actually cancel rather than just stop looking at.
   CancelToken? _inFlight;
 
+  bool get _useUp => widget.mode == PantryScanMode.useUp;
+
+  /// What this pantry holds, by barcode - loaded once in [PantryScanMode.useUp]
+  /// and kept current from every response after that.
+  ///
+  /// Taking something out is a local lookup followed by one call, rather than
+  /// the server-side resolution a scan-in does, because there is nothing to
+  /// resolve: either this pantry has that code or it does not, and "it does
+  /// not" is an answer better given instantly than after a round trip.
+  final _byBarcode = <String, PantryItemDto>{};
+  bool _stockLoaded = false;
+
+  /// Tapping `+` four times is one intent, not four requests - the same rule
+  /// the pantry list itself plays by, and for the same reason.
+  final _commitTimers = <String, Timer>{};
+  final _pendingQuantity = <String, double>{};
+  static const _commitDelay = Duration(milliseconds: 600);
+
   @override
   void initState() {
     super.initState();
     unawaited(_requestCamera());
+    if (_useUp) unawaited(_loadStock());
   }
 
   @override
@@ -326,6 +327,17 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
     _clearTimer?.cancel();
     _slowTimer?.cancel();
     _inFlight?.cancel();
+    for (final timer in _commitTimers.values) {
+      timer.cancel();
+    }
+    // Fire and forget, exactly as the pantry list does on the way out: there is
+    // no state left to reconcile against, and closing the camera a moment after
+    // the last `+` is the most normal way there is to leave this screen.
+    for (final entry in _pendingQuantity.entries) {
+      householdApi
+          .updatePantryItem(entry.key, quantity: entry.value)
+          .then((_) {}, onError: (Object _) {});
+    }
     unawaited(_controller.dispose());
     super.dispose();
   }
@@ -406,13 +418,42 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
     unawaited(_scan(value));
   }
 
+  /// This pantry's stock, for the lookup a scan-out does locally.
+  ///
+  /// A failure here is not fatal and deliberately not loud: the first scan will
+  /// say plainly that it cannot find the code, which is the same sentence at
+  /// the moment it actually matters.
+  Future<void> _loadStock() async {
+    try {
+      final items = await householdApi
+          .getPantryItems(widget.channelId)
+          .timeout(_scanDeadline);
+      if (!mounted) return;
+      setState(() {
+        for (final item in items) {
+          final barcode = item.barcode;
+          if (barcode != null && barcode.isNotEmpty) _byBarcode[barcode] = item;
+        }
+        _stockLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _stockLoaded = true);
+    }
+  }
+
   Future<void> _scan(String barcode, {String? name}) async {
+    if (_useUp) return _scanOut(barcode);
+
     final token = CancelToken();
     _inFlight = token;
     _setStatus(_Status.working('Putting it away…', barcode: barcode));
 
     try {
-      final before = _quantityOf(barcode);
+      final existing = _entryFor(barcode);
+      // Taps made in the last half-second have not reached the server yet, and
+      // a scan is relative to what the server holds. Sending it first is what
+      // stops "tap +, then scan again" quietly losing the scan.
+      await _flushPending(existing);
       final result = await householdApi
           .scanPantryItem(
             widget.channelId,
@@ -426,25 +467,16 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
           });
       if (!mounted) return;
       houseHaptic();
-      setState(() {
-        _scanned.insert(
-          0,
-          _Scanned(
-            item: result.item,
-            created: result.created,
-            quantityBefore: before ?? result.item.quantity - 1,
-            catalog: result.catalog,
-          ),
-        );
-      });
-      _setStatus(
-        _Status.done(
-          result.created
-              ? 'Added ${result.item.name}'
-              : '${result.item.name} · ${formatQuantity(result.item.quantity)}'
-                    '${result.item.unit == null ? '' : ' ${result.item.unit}'}',
-        ),
+      _record(
+        existing: existing,
+        item: result.item,
+        created: result.created,
+        catalog: result.catalog,
+        // Only meaningful on the first scan of a product; afterwards the line
+        // already knows what one scan is worth.
+        fallbackBefore: result.item.quantity - 1,
       );
+      _setStatus(_Status.done(_doneMessage(_entryFor(barcode))));
     } on PantryNameRequired {
       if (!mounted) return;
       await _askForName(barcode);
@@ -493,6 +525,217 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
       if (current && mounted && _status.phase == _Phase.working) {
         _setStatus(const _Status.idle());
       }
+    }
+  }
+
+  /// Taking one off, by camera.
+  ///
+  /// Shorter than a scan-in and different in kind: there is no catalog to ask,
+  /// no name to learn and nothing to create. Either this pantry has the code or
+  /// the answer is "not here", and that answer is worth giving instantly rather
+  /// than after a round trip - which is why the stock is held locally.
+  Future<void> _scanOut(String barcode) async {
+    final known = _byBarcode[barcode];
+    if (known == null) {
+      // Deliberately not offered as "shall I add it?". Somebody who came here
+      // to empty a cupboard and is told the thing in their hand is not in it
+      // wants that fact, not a different job.
+      _setStatus(
+        _Status.failed(
+          _stockLoaded
+              ? 'Nothing in ${widget.channelName} has that barcode.'
+              : 'Still reading what is in ${widget.channelName} - try that '
+                    'one again in a moment.',
+          barcode: _stockLoaded ? null : barcode,
+        ),
+      );
+      return;
+    }
+
+    if (known.quantity <= 0) {
+      _setStatus(_Status.failed('${known.name} is already at nothing.'));
+      return;
+    }
+
+    _setStatus(_Status.working('Taking it out…', barcode: barcode));
+    try {
+      final existing = _entryFor(barcode);
+      await _flushPending(existing);
+      final updated = await householdApi
+          .consumePantryItem(known.id, amount: 1)
+          .timeout(_scanDeadline, onTimeout: () => throw TimeoutException('use'));
+      if (!mounted) return;
+      houseHaptic();
+      _byBarcode[barcode] = updated;
+      _record(
+        existing: existing,
+        item: updated,
+        created: false,
+        fallbackBefore: known.quantity,
+      );
+      _setStatus(_Status.done(_doneMessage(_entryFor(barcode))));
+    } on TimeoutException {
+      _recent.remove(barcode);
+      if (!mounted) return;
+      _setStatus(
+        const _Status.failed(
+          'That took too long. Check the tally before scanning it again.',
+        ),
+      );
+    } catch (error) {
+      _recent.remove(barcode);
+      if (!mounted) return;
+      _setStatus(
+        _Status.failed(
+          householdErrorText(error, 'That one did not come out.'),
+          barcode: barcode,
+        ),
+      );
+    } finally {
+      if (mounted && _status.phase == _Phase.working) {
+        _setStatus(const _Status.idle());
+      }
+    }
+  }
+
+  _Scanned? _entryFor(String barcode) => _scanned
+      .where((s) => !s.undone && s.item.barcode == barcode)
+      .firstOrNull;
+
+  /// Folds a scan into the tally - onto the line this product already has, or
+  /// onto a new one.
+  ///
+  /// The folding is the point. Four identical yoghurts are one line saying
+  /// four; the alternative is four lines nobody reads and a "put away" count
+  /// that has to be added up by eye.
+  void _record({
+    required _Scanned? existing,
+    required PantryItemDto item,
+    required bool created,
+    required double fallbackBefore,
+    ProductCatalogMatchDto? catalog,
+  }) {
+    setState(() {
+      if (existing != null) {
+        existing.item = item;
+        // A line already on the tally is moved back to the top, because the
+        // thing just scanned is the thing being confirmed.
+        _scanned
+          ..remove(existing)
+          ..insert(0, existing);
+        return;
+      }
+
+      final before = fallbackBefore;
+      _scanned.insert(
+        0,
+        _Scanned(
+          item: item,
+          created: created,
+          quantityBefore: before,
+          // What the server actually moved, which is not always one: a pantry
+          // that has learned "a pack of six" moves six.
+          step: (item.quantity - before).abs().clamp(1.0, 999999.0),
+          catalog: catalog,
+        ),
+      );
+    });
+  }
+
+  String _doneMessage(_Scanned? entry) {
+    if (entry == null) return _useUp ? 'Taken out' : 'Put away';
+    final unit = entry.item.unit?.trim();
+    final stock =
+        '${formatQuantity(entry.item.quantity)}'
+        '${unit == null || unit.isEmpty ? '' : ' $unit'}';
+
+    // The count is only worth saying once there is one to say. "Oat milk ×1" is
+    // noise; "Oat milk ×4" is the whole reason somebody is looking.
+    final times = entry.count > 1 ? ' ×${entry.count}' : '';
+    return _useUp
+        ? '${entry.item.name}$times · $stock left'
+        : '${entry.item.name}$times · $stock';
+  }
+
+  /// One more of something already on the tally, or one fewer, without finding
+  /// the packet again.
+  ///
+  /// This is what stops a bag of six yoghurts being six scans - and, going the
+  /// other way, what stops "I took two" being a trip back to the list. It moves
+  /// in whole scans rather than whole units so that `+` and the camera always
+  /// mean the same thing.
+  void _adjustEntry(_Scanned entry, int direction) {
+    if (entry.undone) return;
+
+    final delta = entry.step * direction * (_useUp ? -1 : 1);
+    var next = entry.item.quantity + delta;
+
+    // The floor is where this session found things, not zero: below that the
+    // line would be claiming to have moved stock in the opposite direction,
+    // and "put it back the way it was" is what undo is for.
+    final floor = _useUp
+        ? 0.0
+        : entry.quantityBefore;
+    final ceiling = _useUp ? entry.quantityBefore : 999999.0;
+    next = next.clamp(floor, ceiling).toDouble();
+
+    if (next == entry.item.quantity) return;
+
+    houseHaptic();
+    setState(() {
+      entry.item = entry.item.copyWith(
+        quantity: next,
+        // Predicted locally so the pantry's own list is not the first place
+        // somebody learns this dropped low.
+        isLow: entry.item.lowThreshold != null &&
+            next <= entry.item.lowThreshold!,
+      );
+    });
+
+    final barcode = entry.item.barcode;
+    if (barcode != null) _byBarcode[barcode] = entry.item;
+
+    _commitTimers[entry.item.id]?.cancel();
+    _pendingQuantity[entry.item.id] = next;
+    _commitTimers[entry.item.id] = Timer(
+      _commitDelay,
+      () => unawaited(_commitQuantity(entry, next)),
+    );
+  }
+
+  /// Sends a debounced change now, if there is one waiting.
+  ///
+  /// Called before every scan of a product that already has a line, because a
+  /// scan is relative to what the *server* holds: a `+` still sitting in the
+  /// debounce would be overwritten by the scan's response and vanish.
+  Future<void> _flushPending(_Scanned? entry) async {
+    if (entry == null) return;
+    final id = entry.item.id;
+    final pending = _pendingQuantity[id];
+    if (pending == null) return;
+    _commitTimers.remove(id)?.cancel();
+    await _commitQuantity(entry, pending);
+  }
+
+  Future<void> _commitQuantity(_Scanned entry, double quantity) async {
+    final id = entry.item.id;
+    _pendingQuantity.remove(id);
+    try {
+      final updated = await householdApi
+          .updatePantryItem(id, quantity: quantity)
+          .timeout(_scanDeadline);
+      if (!mounted) return;
+      // Only if nothing has moved on since: a slow response landing on top of
+      // taps made while it was in flight would silently undo them.
+      if (_pendingQuantity.containsKey(id)) return;
+      setState(() => entry.item = updated);
+      final barcode = updated.barcode;
+      if (barcode != null) _byBarcode[barcode] = updated;
+    } catch (error) {
+      if (!mounted) return;
+      _setStatus(
+        _Status.failed(householdErrorText(error, 'That count did not save.')),
+      );
     }
   }
 
@@ -550,12 +793,6 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
     width: frame.width * 1.15,
     height: frame.height * 1.8,
   );
-
-  double? _quantityOf(String barcode) => _scanned
-      .where((s) => !s.undone && s.item.barcode == barcode)
-      .firstOrNull
-      ?.item
-      .quantity;
 
   /// The only thing that stops the camera, and only when nothing at all could
   /// name the code.
@@ -691,18 +928,37 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
+  /// Puts a whole line back the way it was found, however many scans and taps
+  /// went into it.
   Future<void> _undo(_Scanned entry) async {
+    // A debounced `+` still waiting to be sent would otherwise land after the
+    // undo and put the stock straight back.
+    _commitTimers[entry.item.id]?.cancel();
+    _pendingQuantity.remove(entry.item.id);
+
     setState(() => entry.undone = true);
     try {
+      // Only a line this session *created* is deleted. Everything else is
+      // restored to the quantity it had, which is the only correct answer for a
+      // jar that was already in the cupboard.
       if (entry.created) {
-        await householdApi.deletePantryItem(entry.item.id);
+        await householdApi.deletePantryItem(entry.item.id).timeout(_scanDeadline);
+        _byBarcode.remove(entry.item.barcode);
       } else {
-        await householdApi.updatePantryItem(
-          entry.item.id,
-          quantity: entry.quantityBefore,
-        );
+        final updated = await householdApi
+            .updatePantryItem(entry.item.id, quantity: entry.quantityBefore)
+            .timeout(_scanDeadline);
+        final barcode = updated.barcode;
+        if (barcode != null) _byBarcode[barcode] = updated;
       }
-      if (mounted) _setStatus(_Status.done('Took ${entry.item.name} back out'));
+      if (!mounted) return;
+      _setStatus(
+        _Status.done(
+          _useUp
+              ? 'Put ${entry.item.name} back'
+              : 'Took ${entry.item.name} back out',
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() => entry.undone = false);
@@ -712,7 +968,13 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
     }
   }
 
-  int get _addedCount => _scanned.where((s) => !s.undone).length;
+  /// What the screen hands back on the way out: **scans, not lines**.
+  ///
+  /// Four yoghurts on one line is four things put away, and the pantry behind
+  /// this screen says so in a sentence. Counting lines instead would have
+  /// folding the tally quietly change the number.
+  int get _movedCount =>
+      _scanned.where((s) => !s.undone).fold(0, (sum, s) => sum + s.count);
 
   @override
   Widget build(BuildContext context) {
@@ -776,8 +1038,9 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
                             _ScannerBar(
                               controller: _controller,
                               channelName: widget.channelName,
+                              mode: widget.mode,
                               onClose: () =>
-                                  Navigator.of(context).pop(_addedCount),
+                                  Navigator.of(context).pop(_movedCount),
                             ),
                             Expanded(
                               child: Align(
@@ -794,6 +1057,7 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
                                       visible:
                                           _status.phase == _Phase.idle &&
                                           _scanned.isEmpty,
+                                      mode: widget.mode,
                                     ),
                                   ),
                                 ),
@@ -816,10 +1080,12 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
                             ),
                             _Tally(
                               entries: _scanned,
+                              mode: widget.mode,
                               onUndo: _undo,
                               onRename: _rename,
+                              onAdjust: _adjustEntry,
                               onDone: () =>
-                                  Navigator.of(context).pop(_addedCount),
+                                  Navigator.of(context).pop(_movedCount),
                             ),
                           ],
                         ),
@@ -833,16 +1099,95 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
   }
 }
 
-/// Top row: what is being filled, the torch, and the way out.
+/// Which of the codes in frame the person actually meant, or nothing.
+///
+/// Both halves of this matter in a kitchen, and both used to be left to luck.
+///
+/// A shopping bag puts three or four barcodes in frame at once - the packet
+/// being held up, and whatever else is lying on the counter behind it. Picking
+/// "the first one with a value" picked among those by list order. The one held
+/// up to the lens is the one taking up the most of the frame, so that is the
+/// one taken.
+///
+/// And a partly-read EAN comes back looking exactly like a real code: the right
+/// length, all digits, one of them wrong. Accepting it puts a barcode that
+/// belongs to nothing into the pantry, asks somebody to name it, and teaches
+/// the house that name for good. The check digit these formats carry exists to
+/// catch precisely that, so it is checked rather than assumed.
+///
+/// Extracted from the screen because getting the checksum subtly wrong would
+/// reject every genuine scan while looking entirely reasonable, which is the
+/// definition of something that needs a test.
+String? bestBarcodeOf(List<Barcode> barcodes) {
+  String? best;
+  var bestArea = -1.0;
+
+  for (final barcode in barcodes) {
+    final raw = barcode.rawValue;
+    if (raw == null || raw.isEmpty) continue;
+    if (!isPlausibleBarcode(barcode.format, raw)) continue;
+
+    final area = barcode.size.width * barcode.size.height;
+    if (best == null || area > bestArea) {
+      best = raw;
+      bestArea = area;
+    }
+  }
+
+  return best;
+}
+
+/// Whether a decoded string is worth acting on, given what format it claims to
+/// be.
+bool isPlausibleBarcode(BarcodeFormat format, String raw) {
+  switch (format) {
+    // The GTIN family, every member of which ends in a mod-10 check digit.
+    case BarcodeFormat.ean13:
+    case BarcodeFormat.ean8:
+    case BarcodeFormat.upcA:
+      return gtinChecksumHolds(raw);
+    // UPC-E is a compressed GTIN whose check digit belongs to the expanded
+    // form, so the digits are all there is to go on here.
+    case BarcodeFormat.upcE:
+      return raw.length >= 6 && _digitsOnly.hasMatch(raw);
+    // Code 128 and ITF-14 carry nothing that can be relied on this side of the
+    // symbology. A length floor is all that separates a code from a smear.
+    default:
+      return raw.trim().length >= 4;
+  }
+}
+
+final _digitsOnly = RegExp(r'^\d+$');
+
+/// Weights of 1 and 3 alternating from the right, check digit included, and the
+/// sum divisible by ten. The same rule for EAN-8, EAN-13 and UPC-A.
+bool gtinChecksumHolds(String raw) {
+  if (raw.length < 8) return false;
+  var sum = 0;
+  for (var i = 0; i < raw.length; i++) {
+    final digit = raw.codeUnitAt(raw.length - 1 - i) - 0x30;
+    if (digit < 0 || digit > 9) return false;
+    sum += i.isOdd ? digit * 3 : digit;
+  }
+  return sum % 10 == 0;
+}
+
+/// Top row: which way round this is, the torch, and the way out.
+///
+/// The direction is stated here rather than left to be inferred from the
+/// buttons, because the two modes look identical through a lens and getting
+/// them the wrong way round empties a cupboard somebody was trying to fill.
 class _ScannerBar extends StatelessWidget {
   const _ScannerBar({
     required this.controller,
     required this.channelName,
+    required this.mode,
     required this.onClose,
   });
 
   final MobileScannerController controller;
   final String channelName;
+  final PantryScanMode mode;
   final VoidCallback onClose;
 
   @override
@@ -861,7 +1206,9 @@ class _ScannerBar extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              'Filling $channelName',
+              mode.isStockUp
+                  ? 'Filling $channelName'
+                  : 'Using up from $channelName',
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleSmall?.copyWith(color: Colors.white),
@@ -934,9 +1281,10 @@ class _ScanReticle extends StatelessWidget {
 /// The one thing a first-time user needs and nobody else does, so it leaves as
 /// soon as the first packet goes in.
 class _AimHint extends StatelessWidget {
-  const _AimHint({required this.visible});
+  const _AimHint({required this.visible, required this.mode});
 
   final bool visible;
+  final PantryScanMode mode;
 
   @override
   Widget build(BuildContext context) {
@@ -954,7 +1302,9 @@ class _AimHint extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadii.composerPill),
         ),
         child: Text(
-          'Hold a barcode in the frame · tap to focus',
+          mode.isStockUp
+              ? 'Hold a barcode in the frame · tap to focus'
+              : 'Scan what you are taking out · tap to focus',
           style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
         ),
       ),
@@ -1156,20 +1506,28 @@ class _StatusStrip extends StatelessWidget {
 class _Tally extends StatelessWidget {
   const _Tally({
     required this.entries,
+    required this.mode,
     required this.onUndo,
     required this.onRename,
+    required this.onAdjust,
     required this.onDone,
   });
 
   final List<_Scanned> entries;
+  final PantryScanMode mode;
   final void Function(_Scanned) onUndo;
   final void Function(_Scanned) onRename;
+
+  /// `+1` / `-1`, in whole scans.
+  final void Function(_Scanned, int) onAdjust;
+
   final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final live = entries.where((e) => !e.undone).toList();
+    final moved = live.fold(0, (sum, entry) => sum + entry.count);
 
     // The credit for whatever the catalog named in this session, once, under
     // the lines it covers. Once rather than per row because it is the same
@@ -1202,8 +1560,11 @@ class _Tally extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.m),
               child: Text(
-                'Nothing in yet. Everything you scan lands here, and you can '
-                'take any of it back out.',
+                mode.isStockUp
+                    ? 'Nothing in yet. Everything you scan lands here, and you '
+                          'can add more of it or take it back out.'
+                    : 'Nothing out yet. Scan what you are using and it lands '
+                          'here, where you can take more or put it back.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -1213,19 +1574,26 @@ class _Tally extends StatelessWidget {
             )
           else ...[
             HouseSectionHeader(
-              label: live.length == 1 ? '1 thing put away' : 'Put away',
-              trailing: Text('${live.length}'),
+              // Counted in things, not lines: four yoghurts folded onto one row
+              // are still four things, and the header is the number somebody
+              // checks their bag against.
+              label: moved == 1
+                  ? (mode.isStockUp ? '1 thing put away' : '1 thing used')
+                  : (mode.isStockUp ? 'Put away' : 'Used up'),
+              trailing: Text('$moved'),
             ),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 168),
+              constraints: const BoxConstraints(maxHeight: 196),
               child: ListView.builder(
                 shrinkWrap: true,
                 padding: EdgeInsets.zero,
                 itemCount: live.length,
                 itemBuilder: (context, index) => _TallyRow(
                   entry: live[index],
+                  mode: mode,
                   onUndo: onUndo,
                   onRename: onRename,
+                  onAdjust: onAdjust,
                 ),
               ),
             ),
@@ -1238,9 +1606,9 @@ class _Tally extends StatelessWidget {
           HousePrimaryButton(
             label: live.isEmpty
                 ? 'Done'
-                : live.length == 1
+                : moved == 1
                 ? 'Done · 1 thing'
-                : 'Done · ${live.length} things',
+                : 'Done · $moved things',
             icon: Icons.check_rounded,
             onPressed: onDone,
           ),
@@ -1250,23 +1618,33 @@ class _Tally extends StatelessWidget {
   }
 }
 
-/// One line of the receipt: what went in, how much of it there is now, and the
-/// two things that can be done about it.
+/// One line of the receipt: which product, how many of it this session moved,
+/// where that leaves the cupboard, and the three things that can be done about
+/// it.
 ///
 /// The name is a button. That is the whole correction affordance, and it is on
 /// every row rather than only on catalog-named ones: a typo somebody made in
 /// the naming sheet thirty seconds ago is exactly as worth fixing as a wrong
 /// suggestion, and two different ways to fix a name would be one too many.
+///
+/// The stepper is the other half of the point. A bag with six identical
+/// yoghurts in it should not be six trips past the lens, each one waiting out
+/// the repeat guard - it should be one scan and five taps, and the taps have to
+/// move in the same units the camera does or the two disagree.
 class _TallyRow extends StatelessWidget {
   const _TallyRow({
     required this.entry,
+    required this.mode,
     required this.onUndo,
     required this.onRename,
+    required this.onAdjust,
   });
 
   final _Scanned entry;
+  final PantryScanMode mode;
   final void Function(_Scanned) onUndo;
   final void Function(_Scanned) onRename;
+  final void Function(_Scanned, int) onAdjust;
 
   @override
   Widget build(BuildContext context) {
@@ -1275,6 +1653,10 @@ class _TallyRow extends StatelessWidget {
     final unit = entry.item.unit?.trim();
     final suggested = entry.catalog != null;
     final canRename = (entry.item.barcode ?? '').isNotEmpty;
+
+    final stock =
+        '${formatQuantity(entry.item.quantity)}'
+        '${unit == null || unit.isEmpty ? '' : ' $unit'}';
 
     final name = Row(
       children: [
@@ -1297,6 +1679,14 @@ class _TallyRow extends StatelessWidget {
       ],
     );
 
+    // Both numbers, because they answer different questions and people ask
+    // both: "how many did I just do" is what the tally is for, "what is in
+    // there now" is why they were counting.
+    final detail = Text(
+      mode.isStockUp ? '$stock in stock' : '$stock left',
+      style: theme.textTheme.labelSmall?.copyWith(color: muted),
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -1304,14 +1694,20 @@ class _TallyRow extends StatelessWidget {
           Icon(
             entry.created
                 ? Icons.add_circle_outline_rounded
-                : Icons.arrow_upward_rounded,
+                : mode.isStockUp
+                ? Icons.arrow_upward_rounded
+                : Icons.arrow_downward_rounded,
             size: 16,
             color: muted,
           ),
           const SizedBox(width: AppSpacing.s),
           Expanded(
-            child: canRename
-                ? InkWell(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (canRename)
+                  InkWell(
                     onTap: () => onRename(entry),
                     borderRadius: BorderRadius.circular(AppRadii.badge),
                     child: Semantics(
@@ -1320,28 +1716,97 @@ class _TallyRow extends StatelessWidget {
                           ? '${entry.item.name}, suggested name, tap to change it'
                           : '${entry.item.name}, tap to change the name',
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.symmetric(vertical: 2),
                         child: name,
                       ),
                     ),
                   )
-                : name,
+                else
+                  name,
+                detail,
+              ],
+            ),
           ),
-          Text(
-            unit == null || unit.isEmpty
-                ? formatQuantity(entry.item.quantity)
-                : '${formatQuantity(entry.item.quantity)} $unit',
-            style: theme.textTheme.labelMedium?.copyWith(color: muted),
+          _TallyStepper(
+            count: entry.count,
+            label: entry.item.name,
+            mode: mode,
+            // Below one scan there is nothing left to take off - that is what
+            // undo is for, and it sits right beside this.
+            onLess: entry.count <= 1 ? null : () => onAdjust(entry, -1),
+            onMore: () => onAdjust(entry, 1),
           ),
           IconButton(
             onPressed: () => onUndo(entry),
             visualDensity: VisualDensity.compact,
-            iconSize: 20,
-            tooltip: 'Take ${entry.item.name} back out',
+            iconSize: 18,
+            tooltip: mode.isStockUp
+                ? 'Take ${entry.item.name} back out'
+                : 'Put ${entry.item.name} back',
             icon: const Icon(Icons.undo_rounded),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// How many scans' worth of one product this session has moved, and the two
+/// ways to change it without finding the packet again.
+///
+/// Counted in scans rather than units on purpose. A pantry that has learned
+/// "a pack of six" moves six per scan, and a stepper that moved one at a time
+/// would mean `+` and the camera did different things - which is exactly how a
+/// count stops being trusted.
+class _TallyStepper extends StatelessWidget {
+  const _TallyStepper({
+    required this.count,
+    required this.label,
+    required this.mode,
+    required this.onLess,
+    required this.onMore,
+  });
+
+  final int count;
+  final String label;
+  final PantryScanMode mode;
+  final VoidCallback? onLess;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          onPressed: onLess,
+          visualDensity: VisualDensity.compact,
+          iconSize: 18,
+          tooltip: mode.isStockUp ? 'One fewer $label' : 'Take one less $label',
+          icon: const Icon(Icons.remove_circle_outline),
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 26),
+          child: Semantics(
+            label: mode.isStockUp
+                ? '$count $label put away'
+                : '$count $label used',
+            child: Text(
+              '$count',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleSmall,
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: onMore,
+          visualDensity: VisualDensity.compact,
+          iconSize: 18,
+          tooltip: mode.isStockUp ? 'One more $label' : 'Take one more $label',
+          icon: const Icon(Icons.add_circle_outline),
+        ),
+      ],
     );
   }
 }

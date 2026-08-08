@@ -819,6 +819,60 @@ class HousePrimaryButton extends StatelessWidget {
   }
 }
 
+/// The same button, one step quieter - for the action bar that has two real
+/// actions in it rather than one.
+///
+/// Matched to [HousePrimaryButton] in height and text growth on purpose. Two
+/// buttons side by side that scale differently are two buttons that stop lining
+/// up the moment somebody turns their text size up, and these are read at an
+/// open fridge.
+class HouseSecondaryButton extends StatelessWidget {
+  const HouseSecondaryButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.7);
+    return SizedBox(
+      width: double.infinity,
+      height: 52 * scale,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 20),
+              const SizedBox(width: AppSpacing.s),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 2,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// The mark on a name a public product catalog suggested and this house has not
 /// agreed to yet.
 ///
