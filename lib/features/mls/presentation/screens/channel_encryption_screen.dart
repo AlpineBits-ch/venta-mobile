@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/mls/channel_encryption_service.dart';
+import '../../../../core/mls/mls_coverage_service.dart';
 import '../../../../core/mls/mls_join_request_service.dart';
 import '../../../../core/mls/mls_service.dart';
 import '../../../../core/realtime/realtime_event.dart';
@@ -17,6 +18,7 @@ import '../../../auth/data/auth_repository.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../data/mls_api.dart';
 import '../../data/models/mls_dtos.dart';
+import '../widgets/device_coverage_section.dart';
 
 /// Turning a guild channel's end-to-end encryption on and off.
 ///
@@ -90,6 +92,12 @@ class _ChannelEncryptionScreenState extends State<ChannelEncryptionScreen> {
     setState(() => _loading = true);
     try {
       final state = await _service.state(widget.channelId);
+      // A re-key makes every cached coverage verdict wrong rather than stale,
+      // and the state call already carries the live generation.
+      getIt<MlsCoverageService>().noteGeneration(
+        widget.channelId,
+        state.activeGeneration,
+      );
       if (!mounted) return;
       setState(() {
         _state = state;
@@ -330,6 +338,14 @@ class _ChannelEncryptionScreenState extends State<ChannelEncryptionScreen> {
                     ),
                   ),
                 ],
+
+                // Devices of this account that are outside the group. A
+                // channel's roster lives in Guild, so the peer half is always
+                // empty here - only the reader's own devices can appear.
+                DeviceCoverageSection(
+                  contextId: widget.channelId,
+                  isChannel: true,
+                ),
 
                 // Access requests awaiting review.
                 if (_requests.isNotEmpty) ...[

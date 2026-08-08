@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venta_mobile/features/wiki/data/wiki_blocks.dart';
 import 'package:venta_mobile/features/wiki/presentation/widgets/wiki_rich_text.dart';
@@ -301,13 +301,12 @@ Closing paragraph.
       codeBackground: Color(0x11000000),
     );
 
-    List<TextSpan> spansOf(String text, {int? caret}) =>
-        buildWikiInlineSpans(
-          text: text,
-          base: base,
-          palette: palette,
-          caret: caret,
-        ).cast<TextSpan>();
+    List<TextSpan> spansOf(String text, {int? caret}) => buildWikiInlineSpans(
+      text: text,
+      base: base,
+      palette: palette,
+      caret: caret,
+    ).cast<TextSpan>();
 
     test('draws bold text bold and fades its asterisks', () {
       final spans = spansOf('a **b** c');

@@ -252,7 +252,8 @@ sealed class LedgerSummaryDto with _$LedgerSummaryDto {
     /// shop, not what they happened to pay for. This is the number people
     /// actually want.
     @Default(0) int myShareMinor,
-    @Default(<LedgerCategoryTotalDto>[]) List<LedgerCategoryTotalDto> byCategory,
+    @Default(<LedgerCategoryTotalDto>[])
+    List<LedgerCategoryTotalDto> byCategory,
 
     /// **Not zero-filled.** A month with no spending is absent rather than
     /// present as a zero, so a chart must not draw the gap as a data point.

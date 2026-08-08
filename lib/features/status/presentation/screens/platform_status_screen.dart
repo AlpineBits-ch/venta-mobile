@@ -202,7 +202,10 @@ class _IndicatorCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(summary.indicator.label, style: theme.textTheme.titleSmall),
+                  Text(
+                    summary.indicator.label,
+                    style: theme.textTheme.titleSmall,
+                  ),
                   if (updatedAt != null) ...[
                     const SizedBox(height: 2),
                     Text(

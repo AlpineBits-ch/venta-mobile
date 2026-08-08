@@ -50,8 +50,7 @@ abstract class HouseholdChannelState<W extends StatefulWidget>
   HouseholdFocus? focus;
 
   /// Whether [focus] names [id] as a row of [kind].
-  bool isFocused(String kind, String? id) =>
-      focus?.matches(kind, id) ?? false;
+  bool isFocused(String kind, String? id) => focus?.matches(kind, id) ?? false;
 
   void clearFocus() {
     if (focus == null) return;

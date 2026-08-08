@@ -174,7 +174,10 @@ class _ChoresChannelScreenState
 
   Future<void> _refreshBalance() async {
     try {
-      final balance = await api.getChoreBalance(widget.channelId, days: _balanceWindowDays);
+      final balance = await api.getChoreBalance(
+        widget.channelId,
+        days: _balanceWindowDays,
+      );
       if (mounted) setState(() => _balance = balance);
     } catch (_) {
       // The board is still correct; the bars just lag until the next load.
@@ -233,7 +236,10 @@ class _ChoresChannelScreenState
     try {
       final nudgedAt = await api.nudgeOccurrence(occurrence.id);
       if (nudgedAt != null) {
-        _patchOccurrence(occurrence.id, occurrence.copyWith(nudgedAt: nudgedAt));
+        _patchOccurrence(
+          occurrence.id,
+          occurrence.copyWith(nudgedAt: nudgedAt),
+        );
       }
       if (mounted) showMessage('The house has been asked.');
     } on NudgeRejected catch (rejection) {

@@ -212,7 +212,10 @@ void main() {
       expect(summary.incidents.single.status, IncidentStatus.unknown);
       // And specifically not the alarming end of any of them.
       expect(summary.indicator, isNot(StatusIndicator.majorOutage));
-      expect(summary.components.single.status, isNot(ComponentStatus.majorOutage));
+      expect(
+        summary.components.single.status,
+        isNot(ComponentStatus.majorOutage),
+      );
     });
 
     test('reads a timestamp that arrives without a Z as UTC', () {
@@ -241,7 +244,10 @@ void main() {
         summary.incidents.single.newestUpdateAt,
         DateTime.utc(2026, 8, 5, 12, 30),
       );
-      expect(summary.incidents.single.latestUpdate?.status, IncidentStatus.identified);
+      expect(
+        summary.incidents.single.latestUpdate?.status,
+        IncidentStatus.identified,
+      );
     });
   });
 
@@ -271,15 +277,18 @@ void main() {
       expect(snapshot.unverified, isTrue);
     });
 
-    test('a first read that fails reports nothing at all, not "operational"', () async {
-      final harness = _build((_) => null);
-      await harness.repository.refresh();
+    test(
+      'a first read that fails reports nothing at all, not "operational"',
+      () async {
+        final harness = _build((_) => null);
+        await harness.repository.refresh();
 
-      final snapshot = harness.repository.snapshot.value;
-      expect(snapshot.summary, isNull);
-      expect(snapshot.visibleBanner, isNull);
-      expect(snapshot.unverified, isTrue);
-    });
+        final snapshot = harness.repository.snapshot.value;
+        expect(snapshot.summary, isNull);
+        expect(snapshot.visibleBanner, isNull);
+        expect(snapshot.unverified, isTrue);
+      },
+    );
 
     test('probeAfterFailure is throttled so an outage costs one check', () async {
       final harness = _build((_) => _summaryJson());
@@ -345,27 +354,30 @@ void main() {
       expect(harness.repository.snapshot.value.visibleBanner, isNotNull);
     });
 
-    test('forgets the dismissal once the incident leaves the response', () async {
-      var open = true;
-      final harness = _build(
-        (_) => open
-            ? _summaryJson()
-            : {'indicator': 'operational', 'components': <dynamic>[]},
-      );
+    test(
+      'forgets the dismissal once the incident leaves the response',
+      () async {
+        var open = true;
+        final harness = _build(
+          (_) => open
+              ? _summaryJson()
+              : {'indicator': 'operational', 'components': <dynamic>[]},
+        );
 
-      await harness.repository.refresh();
-      harness.repository.dismissBanner();
+        await harness.repository.refresh();
+        harness.repository.dismissBanner();
 
-      open = false;
-      await harness.repository.refresh();
-      expect(harness.repository.snapshot.value.visibleBanner, isNull);
+        open = false;
+        await harness.repository.refresh();
+        expect(harness.repository.snapshot.value.visibleBanner, isNull);
 
-      // The same reference coming back is a new incident as far as the user is
-      // concerned, and inherits nothing.
-      open = true;
-      await harness.repository.refresh();
-      expect(harness.repository.snapshot.value.visibleBanner, isNotNull);
-    });
+        // The same reference coming back is a new incident as far as the user is
+        // concerned, and inherits nothing.
+        open = true;
+        await harness.repository.refresh();
+        expect(harness.repository.snapshot.value.visibleBanner, isNotNull);
+      },
+    );
   });
 
   group('realtime', () {
@@ -394,7 +406,10 @@ void main() {
         RealtimeEvent('status.SummaryChanged', [
           {
             'Indicator': 'major_outage',
-            'Banner': {'Title': 'Everything is on fire', 'Severity': 'critical'},
+            'Banner': {
+              'Title': 'Everything is on fire',
+              'Severity': 'critical',
+            },
             'Components': <dynamic>[],
           },
         ]),
@@ -411,20 +426,23 @@ void main() {
     // parses *successfully* into a DTO of all defaults - `operational`, no
     // banner - which would take a live outage banner down instead of updating
     // it. Anything unrecognised has to become a refetch.
-    test('refetches rather than blanking on a payload it cannot read', () async {
-      final harness = _build((_) => _summaryJson());
-      await harness.repository.refresh();
+    test(
+      'refetches rather than blanking on a payload it cannot read',
+      () async {
+        final harness = _build((_) => _summaryJson());
+        await harness.repository.refresh();
 
-      harness.events.add(
-        RealtimeEvent('status.SummaryChanged', [
-          {'somethingElseEntirely': true},
-        ]),
-      );
-      await _settle();
+        harness.events.add(
+          RealtimeEvent('status.SummaryChanged', [
+            {'somethingElseEntirely': true},
+          ]),
+        );
+        await _settle();
 
-      expect(harness.adapter.requests, hasLength(2));
-      expect(harness.repository.snapshot.value.visibleBanner, isNotNull);
-    });
+        expect(harness.adapter.requests, hasLength(2));
+        expect(harness.repository.snapshot.value.visibleBanner, isNotNull);
+      },
+    );
 
     test('IncidentUpdated refetches instead of merging client-side', () async {
       final harness = _build((_) => _summaryJson());
@@ -455,15 +473,18 @@ void main() {
       );
     });
 
-    test('falls back to the status page when a banner carries no url', () async {
-      final json = _summaryJson();
-      (json['banner'] as Map).remove('url');
-      final harness = _build((_) => json);
-      await harness.repository.refresh();
+    test(
+      'falls back to the status page when a banner carries no url',
+      () async {
+        final json = _summaryJson();
+        (json['banner'] as Map).remove('url');
+        final harness = _build((_) => json);
+        await harness.repository.refresh();
 
-      final banner = harness.repository.snapshot.value.visibleBanner!;
-      expect(harness.repository.urlFor(banner), 'https://status.venta.test');
-    });
+        final banner = harness.repository.snapshot.value.visibleBanner!;
+        expect(harness.repository.urlFor(banner), 'https://status.venta.test');
+      },
+    );
   });
 
   group('failure probe', () {

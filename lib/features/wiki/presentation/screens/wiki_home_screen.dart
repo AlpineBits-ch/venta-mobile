@@ -149,8 +149,9 @@ class _WikiHomeScreenState extends State<WikiHomeScreen> {
       body: _buildBody(canCreate),
       floatingActionButton: canCreate && wiki != null && wiki.pages.isNotEmpty
           ? FloatingActionButton.extended(
-              onPressed: () =>
-                  context.push(RoutePaths.serverWikiNewPagePath(widget.guildId)),
+              onPressed: () => context.push(
+                RoutePaths.serverWikiNewPagePath(widget.guildId),
+              ),
               icon: const Icon(Icons.add),
               label: const Text('New page'),
             )
@@ -247,7 +248,12 @@ class _WikiHomeScreenState extends State<WikiHomeScreen> {
           collapsed: false,
           onTap: null,
         );
-      case _PageRow(:final page, :final depth, :final childCount, :final subtitle):
+      case _PageRow(
+        :final page,
+        :final depth,
+        :final childCount,
+        :final subtitle,
+      ):
         return _PageTile(
           key: ValueKey('page-${page.id}'),
           page: page,
@@ -310,9 +316,7 @@ class _WikiHomeScreenState extends State<WikiHomeScreen> {
     void addPage(WikiPageSummaryDto page, int depth) {
       if (!visitedPages.add(page.id)) return;
       final children = _childrenOf(wiki, page.id);
-      rows.add(
-        _PageRow(page: page, depth: depth, childCount: children.length),
-      );
+      rows.add(_PageRow(page: page, depth: depth, childCount: children.length));
       if (_collapsedPages.contains(page.id)) return;
       for (final child in children) {
         addPage(child, depth + 1);
@@ -1080,10 +1084,7 @@ class _WikiHomeSkeleton extends StatelessWidget {
         AppSpacing.m,
       ),
       children: [
-        const ShimmerBox(
-          height: 44,
-          borderRadius: AppRadii.composerPill,
-        ),
+        const ShimmerBox(height: 44, borderRadius: AppRadii.composerPill),
         const SizedBox(height: AppSpacing.l),
         SizedBox(
           height: 96,

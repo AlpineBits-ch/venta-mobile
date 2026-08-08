@@ -414,9 +414,7 @@ class _MaintenanceAssetScreenState extends State<MaintenanceAssetScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              householdErrorText(error, 'Could not change that.'),
-            ),
+            content: Text(householdErrorText(error, 'Could not change that.')),
           ),
         );
       }
@@ -1133,9 +1131,7 @@ class _AssetSheetState extends State<_AssetSheet> {
                   label: Text(
                     _warrantyUntil == null
                         ? 'Not recorded'
-                        : formatShortDateTime(
-                            _warrantyUntil!,
-                          ).split(',').first,
+                        : formatShortDateTime(_warrantyUntil!).split(',').first,
                   ),
                 ),
               ),
@@ -1203,9 +1199,7 @@ class _AssetSheetState extends State<_AssetSheet> {
               const SizedBox(height: AppSpacing.s),
               TextField(
                 controller: _serialController,
-                decoration: const InputDecoration(
-                  hintText: 'Serial number',
-                ),
+                decoration: const InputDecoration(hintText: 'Serial number'),
               ),
             ],
           ),

@@ -569,14 +569,15 @@ class PhoneNumberCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ExcludeSemantics(
-            child: ShimmerBox(
-              height: 52,
-              borderRadius: AppRadii.input,
-            ),
+            child: ShimmerBox(height: 52, borderRadius: AppRadii.input),
           ),
           SizedBox(height: AppSpacing.m),
           ExcludeSemantics(
-            child: ShimmerBox(width: 180, height: 14, borderRadius: AppRadii.badge),
+            child: ShimmerBox(
+              width: 180,
+              height: 14,
+              borderRadius: AppRadii.badge,
+            ),
           ),
         ],
       );
@@ -628,9 +629,7 @@ class PhoneNumberCard extends StatelessWidget {
           // A floor rather than a fixed height: 48pt is the target size, and a
           // label that has grown past it with the reader's text size needs the
           // button to grow with it instead of clipping.
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(48),
-          ),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           onPressed: canSave ? onSave : null,
           child: saving
               ? ButtonProgressIndicator(onColor: theme.colorScheme.onPrimary)

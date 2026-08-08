@@ -86,12 +86,12 @@ Future<({StatusRepository repository, _Adapter adapter})> _install(
   when(() => auth.baseUrl).thenReturn('https://api.venta.test');
 
   final realtime = _MockRealtimeService();
-  when(() => realtime.events).thenAnswer(
-    (_) => const Stream<RealtimeEvent>.empty(),
-  );
-  when(() => realtime.connectionStatus).thenAnswer(
-    (_) => const Stream<RealtimeConnectionStatus>.empty(),
-  );
+  when(
+    () => realtime.events,
+  ).thenAnswer((_) => const Stream<RealtimeEvent>.empty());
+  when(
+    () => realtime.connectionStatus,
+  ).thenAnswer((_) => const Stream<RealtimeConnectionStatus>.empty());
 
   final adapter = _Adapter(body);
   final repository = StatusRepository(
@@ -107,8 +107,7 @@ Future<({StatusRepository repository, _Adapter adapter})> _install(
   return (repository: repository, adapter: adapter);
 }
 
-Widget _wrap(Widget child) =>
-    MaterialApp(theme: AppTheme.light, home: child);
+Widget _wrap(Widget child) => MaterialApp(theme: AppTheme.light, home: child);
 
 void main() {
   tearDown(getIt.reset);

@@ -195,9 +195,7 @@ class AuthApi {
         // account that fell through to "incorrect username or password" is the
         // worst outcome here - it is the one message that is definitely a lie,
         // and it sends someone into a password reset that cannot help them.
-        throw SigninNotAllowedException(
-          supportUrl: supportUrlOrNull(baseUrl),
-        );
+        throw SigninNotAllowedException(supportUrl: supportUrlOrNull(baseUrl));
       }
       rethrow;
     }

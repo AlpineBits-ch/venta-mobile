@@ -240,10 +240,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // next step here that could spend it.
       _pending = null;
       emit.ifOpen(
-        AuthState(
-          status: AuthStatus.signinBlocked,
-          supportUrl: e.supportUrl,
-        ),
+        AuthState(status: AuthStatus.signinBlocked, supportUrl: e.supportUrl),
       );
     } on EmailNotVerifiedException {
       // The login field is a username *or* `user@self-hosted-server` (see

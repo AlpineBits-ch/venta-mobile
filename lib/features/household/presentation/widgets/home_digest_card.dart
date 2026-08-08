@@ -263,8 +263,7 @@ class _HomeDigestCardState extends State<HomeDigestCard> {
           subtitle: bill.dueAt == null
               ? 'Coming up'
               : formatDueLabel(bill.dueAt!),
-          urgent:
-              bill.dueAt != null && bill.dueAt!.isBefore(DateTime.now()),
+          urgent: bill.dueAt != null && bill.dueAt!.isBefore(DateTime.now()),
           onTap: () => _openBill(bill),
         ),
     ];
@@ -329,8 +328,7 @@ class _HomeDigestCardState extends State<HomeDigestCard> {
               ? Icons.report_gmailerrorred_rounded
               : Icons.handyman_outlined,
           title: asset.name,
-          subtitle:
-              maintenanceReasonLabel(asset.reason) ?? asset.status.label,
+          subtitle: maintenanceReasonLabel(asset.reason) ?? asset.status.label,
           urgent: asset.reason == 'broken',
           onTap: () => _openAsset(asset),
         ),

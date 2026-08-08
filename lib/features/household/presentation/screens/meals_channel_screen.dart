@@ -220,10 +220,7 @@ class _MealsChannelScreenState
       body: !moduleEnabled
           ? buildModuleOff()
           : _loadFailed
-          ? LoadFailureView(
-              message: 'Couldn\'t load the plan.',
-              onRetry: _load,
-            )
+          ? LoadFailureView(message: 'Couldn\'t load the plan.', onRetry: _load)
           : entries == null
           ? const HouseCardSkeleton(lines: 2)
           : Column(
@@ -405,7 +402,8 @@ class _DayStripState extends State<_DayStrip> {
                 onTap: () => widget.onSelected(date),
                 child: Semantics(
                   selected: selected,
-                  label: '${_weekdayName(date)} ${date.day} ${_monthName(date)}',
+                  label:
+                      '${_weekdayName(date)} ${date.day} ${_monthName(date)}',
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -643,19 +641,17 @@ class _MealEntrySheetState extends State<_MealEntrySheet> {
       _recipeId != null || _textController.text.trim().isNotEmpty;
 
   Future<void> _pickRecipe() async {
-    final picked = await Navigator.of(
-      context,
-      rootNavigator: true,
-    ).push<RecipeDto>(
-      MaterialPageRoute<RecipeDto>(
-        builder: (_) => RecipesScreen(
-          channelId: widget.channelId,
-          canEdit: false,
-          canEditAnyone: false,
-          pickMode: true,
-        ),
-      ),
-    );
+    final picked = await Navigator.of(context, rootNavigator: true)
+        .push<RecipeDto>(
+          MaterialPageRoute<RecipeDto>(
+            builder: (_) => RecipesScreen(
+              channelId: widget.channelId,
+              canEdit: false,
+              canEditAnyone: false,
+              pickMode: true,
+            ),
+          ),
+        );
     if (picked != null && mounted) {
       setState(() {
         _recipeId = picked.id;
@@ -1191,7 +1187,9 @@ class _CookableSheetState extends State<_CookableSheet> {
                       children: [
                         for (final item in result.items)
                           Padding(
-                            padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.s,
+                            ),
                             child: _CookableCard(item: item),
                           ),
                       ],

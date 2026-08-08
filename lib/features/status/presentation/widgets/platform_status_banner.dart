@@ -40,7 +40,9 @@ class _PlatformStatusScopeState extends State<PlatformStatusScope> {
     try {
       _repository = getIt<StatusRepository>();
     } catch (e) {
-      debugPrint('PlatformStatusScope: no status repository, staying hidden: $e');
+      debugPrint(
+        'PlatformStatusScope: no status repository, staying hidden: $e',
+      );
     }
   }
 

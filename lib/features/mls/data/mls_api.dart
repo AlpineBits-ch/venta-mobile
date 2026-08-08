@@ -105,7 +105,31 @@ class MlsApi {
     return MlsContextStateDto.fromJson(response.data!);
   }
 
+  /// Which devices can read this context, asked after the fact.
+  ///
+  /// Reports, never repairs: the server holds no group keys and cannot add a
+  /// device to a group. It is the step before the repair, where until now
+  /// nobody knew there was anything to ask for.
+  ///
+  /// Conversation needs membership, channel needs ViewChannel - the same
+  /// authorization as `getState` either side.
+  Future<MlsCoverageDto> getCoverage({
+    required String contextId,
+    required bool isChannel,
+  }) async {
+    final response = await client.dio.get<Map<String, dynamic>>(
+      client.url('${_contextBase(contextId, isChannel)}/coverage'),
+    );
+    return MlsCoverageDto.fromJson(response.data!);
+  }
+
   /// Turns encryption on for a channel. Requires ManageChannel server-side.
+  ///
+  /// `X-Device-Id` rides along from `DeviceIdInterceptor`, which stamps every
+  /// request through [ApiClient]. The server reads it to record which device
+  /// built the group; without it coverage can say nothing about this account's
+  /// own hardware, on exactly the path - re-keying - where the account's other
+  /// devices are most likely to fall out.
   Future<MlsToggleResultDto> enableChannelEncryption({
     required String channelId,
     required EnableMlsDto dto,

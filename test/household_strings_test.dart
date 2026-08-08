@@ -133,7 +133,8 @@ void main() {
         expect(
           entry.value.keys.toSet(),
           HouseholdStrings.keys,
-          reason: 'values${entry.key == 'en' ? '' : '-${entry.key}'}/strings.xml',
+          reason:
+              'values${entry.key == 'en' ? '' : '-${entry.key}'}/strings.xml',
         );
       }
     });
@@ -182,7 +183,8 @@ void main() {
           expect(
             normalized,
             dart[key],
-            reason: '$language/$key differs between Localizable.strings and Dart',
+            reason:
+                '$language/$key differs between Localizable.strings and Dart',
           );
         }
       }
@@ -202,7 +204,10 @@ void main() {
 
         for (final language in HouseholdStrings.byLanguage.keys) {
           expect(
-            indices(HouseholdStrings.byLanguage[language]![key]!, androidPlaceholder),
+            indices(
+              HouseholdStrings.byLanguage[language]![key]!,
+              androidPlaceholder,
+            ),
             expected,
             reason: 'Dart $language/$key',
           );
@@ -224,11 +229,9 @@ void main() {
   group('resolve', () {
     test('substitutes positional arguments', () {
       expect(
-        HouseholdStrings.resolve(
-          'household_pantry_low_listed_body',
-          ['Shopping'],
-          language: 'en',
-        ),
+        HouseholdStrings.resolve('household_pantry_low_listed_body', [
+          'Shopping',
+        ], language: 'en'),
         "Running low, so it's gone on Shopping.",
       );
     });
@@ -280,10 +283,7 @@ void main() {
     });
 
     test('substitutes out of order when the translation reorders', () {
-      expect(
-        HouseholdStrings.format(r'%2$s vor %1$s', ['a', 'b']),
-        'b vor a',
-      );
+      expect(HouseholdStrings.format(r'%2$s vor %1$s', ['a', 'b']), 'b vor a');
     });
   });
 
@@ -330,19 +330,22 @@ void main() {
     /// This runs in a background isolate where a throw is a notification that
     /// silently never arrives, so a malformed list costs the translation and
     /// nothing else.
-    test('unparseable arguments fall back to the English rather than throwing', () {
-      final payload = HouseholdPushPayload.tryParse(
-        data(
-          bodyLocKey: 'household_pantry_low_listed_body',
-          bodyLocArgs: 'not json',
-        ),
-      )!;
+    test(
+      'unparseable arguments fall back to the English rather than throwing',
+      () {
+        final payload = HouseholdPushPayload.tryParse(
+          data(
+            bodyLocKey: 'household_pantry_low_listed_body',
+            bodyLocArgs: 'not json',
+          ),
+        )!;
 
-      expect(payload.bodyLocArgs, isEmpty);
-      // The key still resolves; its placeholder is simply left visible rather
-      // than being filled with a value nobody sent.
-      expect(payload.localizedBody, contains('Running low'));
-    });
+        expect(payload.bodyLocArgs, isEmpty);
+        // The key still resolves; its placeholder is simply left visible rather
+        // than being filled with a value nobody sent.
+        expect(payload.localizedBody, contains('Running low'));
+      },
+    );
 
     test('a title with no key is left as the user typed it', () {
       final payload = HouseholdPushPayload.tryParse(data())!;

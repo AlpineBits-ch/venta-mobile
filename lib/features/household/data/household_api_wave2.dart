@@ -931,7 +931,11 @@ class PantryNameRequired implements Exception {
 /// occurrence rather than per sender precisely so that nobody can be identified
 /// by elimination.
 class NudgeRejected implements Exception {
-  const NudgeRejected({required this.message, this.nextNudgeAt, this.quietUntil});
+  const NudgeRejected({
+    required this.message,
+    this.nextNudgeAt,
+    this.quietUntil,
+  });
 
   final String message;
 

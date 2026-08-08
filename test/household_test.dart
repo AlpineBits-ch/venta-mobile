@@ -575,10 +575,7 @@ void main() {
 
     test('steps across a month boundary', () {
       expect(PlainDate(2026, 8, 30).addDays(3).toIso(), '2026-09-02');
-      expect(
-        PlainDate(2026, 9, 2).differenceInDays(PlainDate(2026, 8, 30)),
-        3,
-      );
+      expect(PlainDate(2026, 9, 2).differenceInDays(PlainDate(2026, 8, 30)), 3);
     });
 
     /// A date built as midnight UTC renders as the previous evening west of

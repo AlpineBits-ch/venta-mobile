@@ -298,6 +298,72 @@ sealed class UnreachableDeviceDto with _$UnreachableDeviceDto {
       _$UnreachableDeviceDtoFromJson(json);
 }
 
+/// One of the caller's own devices, and whether the server can see it holds a
+/// leaf in the live group.
+@freezed
+sealed class MlsDeviceCoverageDto with _$MlsDeviceCoverageDto {
+  const factory MlsDeviceCoverageDto({
+    required String deviceId,
+    String? deviceName,
+
+    /// **False is evidence, not proof.** The server computes this from the
+    /// three traces it can see - a Welcome addressed to the device, a commit
+    /// published from it, or the record that it built the group - and a device
+    /// that joined by external commit leaves none of them while decrypting
+    /// perfectly. Callers must cross-check against local group state before
+    /// telling anybody their device is locked out.
+    @Default(false) bool covered,
+  }) = _MlsDeviceCoverageDto;
+
+  factory MlsDeviceCoverageDto.fromJson(Map<String, dynamic> json) =>
+      _$MlsDeviceCoverageDtoFromJson(json);
+}
+
+/// Which devices can read a context, asked on demand rather than only in the
+/// response to the write that formed the group.
+///
+/// Coverage used to be reported at creation, at enable and on the commit that
+/// admits somebody, and nowhere else. Each of those is one response handed to
+/// one client, so a device stranded on Tuesday was invisible on Wednesday to
+/// everybody including the stranded device itself - it holds no group state and
+/// raises no error, which is indistinguishable from a conversation nobody has
+/// written in.
+///
+/// The two lists are deliberately asymmetric. [ownDevices] carries a verdict for
+/// every device on the caller's account; [unreachableDevices] carries other
+/// people's devices only when they are *outside* the group, so this is not a
+/// directory of everyone's hardware.
+@freezed
+sealed class MlsCoverageDto with _$MlsCoverageDto {
+  const factory MlsCoverageDto({
+    required String contextId,
+
+    /// False when the context has no live group. Both lists are then empty and
+    /// mean "there is nothing to be outside of", never "everybody is outside".
+    @Default(false) bool encrypted,
+
+    /// Which era the answer is about, null when [encrypted] is false. A device
+    /// covered in generation 2 is not covered in generation 3, so a cached
+    /// answer is only valid for the generation it names.
+    int? generation,
+    @Default(<MlsDeviceCoverageDto>[]) List<MlsDeviceCoverageDto> ownDevices,
+
+    /// Always empty for a channel, whose roster lives in the Guild service and
+    /// is not enumerable from Messaging.
+    @Default(<UnreachableDeviceDto>[])
+    List<UnreachableDeviceDto> unreachableDevices,
+
+    /// True when the device list could not be read at all - both lists are then
+    /// empty because nothing could be looked up, not because everyone is in.
+    /// Rendering that as "all clear" reproduces the exact silence this route
+    /// exists to break.
+    @Default(false) bool coverageUnavailable,
+  }) = _MlsCoverageDto;
+
+  factory MlsCoverageDto.fromJson(Map<String, dynamic> json) =>
+      _$MlsCoverageDtoFromJson(json);
+}
+
 @freezed
 sealed class ConsumeTokensResultDto with _$ConsumeTokensResultDto {
   const factory ConsumeTokensResultDto({

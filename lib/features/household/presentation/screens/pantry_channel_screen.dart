@@ -208,9 +208,7 @@ class _PantryChannelScreenState
     );
     await _load();
     if (!mounted || added == null || added == 0) return;
-    showMessage(
-      added == 1 ? 'One thing put away.' : '$added things put away.',
-    );
+    showMessage(added == 1 ? 'One thing put away.' : '$added things put away.');
   }
 
   /// The one-tap "used it up".
@@ -366,7 +364,8 @@ class _PantryChannelScreenState
       // In the bottom third rather than in an app-bar corner: this screen is
       // used at an open fridge with one hand, and the top of a phone is where
       // a thumb cannot go.
-      bottomNavigationBar: moduleEnabled && _canManage && (items?.isNotEmpty ?? false)
+      bottomNavigationBar:
+          moduleEnabled && _canManage && (items?.isNotEmpty ?? false)
           ? HouseActionBar(
               child: Row(
                 children: [

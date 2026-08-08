@@ -31,8 +31,10 @@ void main() {
     });
 
     test('takes out a non-breaking space, which contact apps emit', () {
-      expect(normalizePhoneNumber('+41\u00A079\u00A0123\u00A045\u00A067'),
-          '+41791234567');
+      expect(
+        normalizePhoneNumber('+41\u00A079\u00A0123\u00A045\u00A067'),
+        '+41791234567',
+      );
     });
 
     test('trims the whitespace a paste brings with it', () {
@@ -124,12 +126,7 @@ void main() {
     /// This is the one assertion in the file that is about copy rather than
     /// behaviour, and it is here because the words are the feature.
     test('never claims the number has been checked', () {
-      const forbidden = [
-        'verif',
-        'confirm',
-        'validat',
-        'authenticat',
-      ];
+      const forbidden = ['verif', 'confirm', 'validat', 'authenticat'];
       final messages = [
         phoneNumberProblem('0041791234567'),
         phoneNumberProblem('0791234567'),
@@ -146,7 +143,8 @@ void main() {
           expect(
             message.toLowerCase(),
             isNot(contains(word)),
-            reason: 'nothing in this system checks a phone number, so no '
+            reason:
+                'nothing in this system checks a phone number, so no '
                 'message may hint that something did: "$message"',
           );
         }

@@ -153,9 +153,7 @@ class _RecipesScreenState extends State<RecipesScreen> {
                       padding: const EdgeInsets.only(top: AppSpacing.s),
                       child: OutlinedButton(
                         onPressed: _loadingMore ? null : _loadMore,
-                        child: Text(
-                          _loadingMore ? 'Loading…' : 'Show more',
-                        ),
+                        child: Text(_loadingMore ? 'Loading…' : 'Show more'),
                       ),
                     ),
                 ],
@@ -279,11 +277,12 @@ class _RecipeSheetState extends State<_RecipeSheet> {
     super.dispose();
   }
 
-  List<({String text, String? matchName, bool isOptional})> get _ingredients => [
-    for (final line in _ingredientsController.text.split('\n'))
-      if (line.trim().isNotEmpty)
-        (text: line.trim(), matchName: null, isOptional: false),
-  ];
+  List<({String text, String? matchName, bool isOptional})> get _ingredients =>
+      [
+        for (final line in _ingredientsController.text.split('\n'))
+          if (line.trim().isNotEmpty)
+            (text: line.trim(), matchName: null, isOptional: false),
+      ];
 
   Future<void> _save() async {
     setState(() => _saving = true);

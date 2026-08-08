@@ -375,7 +375,9 @@ class _PantryScannerScreenState extends State<PantryScannerScreen> {
                           child: Align(
                             alignment: Alignment.topCenter,
                             child: Padding(
-                              padding: const EdgeInsets.only(top: AppSpacing.xl),
+                              padding: const EdgeInsets.only(
+                                top: AppSpacing.xl,
+                              ),
                               child: _Hint(
                                 busy: _busy,
                                 hasScanned: _scanned.isNotEmpty,

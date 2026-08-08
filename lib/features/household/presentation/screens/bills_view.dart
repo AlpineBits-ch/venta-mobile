@@ -117,10 +117,10 @@ class _BillsViewState extends State<BillsView> {
     return widget.canAdd && schedule?.payerUserId == widget.currentUserId;
   }
 
-  RecurringExpenseDto? _scheduleFor(BillOccurrenceDto bill) => (_schedules ??
-          const <RecurringExpenseDto>[])
-      .where((s) => s.id == bill.recurringExpenseId)
-      .firstOrNull;
+  RecurringExpenseDto? _scheduleFor(BillOccurrenceDto bill) =>
+      (_schedules ?? const <RecurringExpenseDto>[])
+          .where((s) => s.id == bill.recurringExpenseId)
+          .firstOrNull;
 
   Future<void> _openBill(BillOccurrenceDto bill) async {
     final changed = await showHouseSheet<bool>(
@@ -203,10 +203,7 @@ class _BillsViewState extends State<BillsView> {
           ..._group('Coming up', soon),
           ..._group('Later', later),
           const SizedBox(height: AppSpacing.m),
-          _SchedulesLink(
-            count: _schedules?.length ?? 0,
-            onTap: _openSchedules,
-          ),
+          _SchedulesLink(count: _schedules?.length ?? 0, onTap: _openSchedules),
         ],
       ),
     );
@@ -500,7 +497,10 @@ class _BillSheetState extends State<_BillSheet> {
       busy: _busy,
       onAction: widget.canPost && _amountMinor != null ? _post : null,
       leadingAction: widget.canSkip
-          ? TextButton(onPressed: _busy ? null : _skip, child: const Text('Skip'))
+          ? TextButton(
+              onPressed: _busy ? null : _skip,
+              child: const Text('Skip'),
+            )
           : null,
       children: [
         Row(
@@ -873,6 +873,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
 
   late RecurrenceUnit _unit =
       widget.existing?.recurrenceUnit ?? RecurrenceUnit.month;
+
   /// Kept from whatever the schedule already had. There is no "every 2 months"
   /// control on this form because nothing in a flat recurs that way often
   /// enough to earn a picker - but editing a schedule that has one must not
@@ -904,8 +905,9 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     super.dispose();
   }
 
-  int? get _amountMinor =>
-      _varies ? null : parseAmountToMinor(_amountController.text, widget.currency);
+  int? get _amountMinor => _varies
+      ? null
+      : parseAmountToMinor(_amountController.text, widget.currency);
 
   bool get _canSave {
     if (_descriptionController.text.trim().isEmpty) return false;
@@ -1091,14 +1093,12 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                 children: [
                   for (final unit in RecurrenceUnit.values)
                     ChoiceChip(
-                      label: Text(
-                        switch (unit) {
-                          RecurrenceUnit.day => 'Daily',
-                          RecurrenceUnit.week => 'Weekly',
-                          RecurrenceUnit.month => 'Monthly',
-                          RecurrenceUnit.year => 'Yearly',
-                        },
-                      ),
+                      label: Text(switch (unit) {
+                        RecurrenceUnit.day => 'Daily',
+                        RecurrenceUnit.week => 'Weekly',
+                        RecurrenceUnit.month => 'Monthly',
+                        RecurrenceUnit.year => 'Yearly',
+                      }),
                       selected: _unit == unit,
                       onSelected: (_) => setState(() => _unit = unit),
                     ),

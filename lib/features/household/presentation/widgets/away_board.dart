@@ -105,7 +105,8 @@ class _AwayBoardState extends State<AwayBoard> {
     if (absences == null || absences.isEmpty) return const SizedBox.shrink();
 
     final now = DateTime.now();
-    final ordered = [...absences]..sort((a, b) => a.startAt.compareTo(b.startAt));
+    final ordered = [...absences]
+      ..sort((a, b) => a.startAt.compareTo(b.startAt));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -465,8 +466,7 @@ class _AbsenceSheet extends StatefulWidget {
 }
 
 class _AbsenceSheetState extends State<_AbsenceSheet> {
-  late DateTime _startAt =
-      widget.existing?.startAt.toLocal() ?? DateTime.now();
+  late DateTime _startAt = widget.existing?.startAt.toLocal() ?? DateTime.now();
   late DateTime _endAt =
       widget.existing?.endAt.toLocal() ??
       DateTime.now().add(const Duration(days: 7));
@@ -551,9 +551,7 @@ class _AbsenceSheetState extends State<_AbsenceSheet> {
       // wording is far more useful than anything generic.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            householdErrorText(error, 'Could not save that.'),
-          ),
+          content: Text(householdErrorText(error, 'Could not save that.')),
         ),
       );
     }
@@ -606,11 +604,9 @@ class _AbsenceSheetState extends State<_AbsenceSheet> {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final days =
-        DateTime(
-          _endAt.year,
-          _endAt.month,
-          _endAt.day,
-        ).difference(DateTime(_startAt.year, _startAt.month, _startAt.day)).inDays +
+        DateTime(_endAt.year, _endAt.month, _endAt.day)
+            .difference(DateTime(_startAt.year, _startAt.month, _startAt.day))
+            .inDays +
         1;
 
     return HouseSheet(

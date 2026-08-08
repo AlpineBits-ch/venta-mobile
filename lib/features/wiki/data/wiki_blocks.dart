@@ -123,18 +123,24 @@ class WikiBlock {
 // ── Parsing ────────────────────────────────────────────────────────────────
 
 final _fencePattern = RegExp(r'^[ \t]*(`{3,}|~{3,})[ \t]*([\w+#.-]*)[ \t]*$');
-final _headingPattern = RegExp(r'^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*#*[ \t]*$');
+final _headingPattern = RegExp(
+  r'^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*#*[ \t]*$',
+);
 final _rulePattern = RegExp(r'^ {0,3}([-*_])[ \t]*(?:\1[ \t]*){2,}$');
 final _listPattern = RegExp(r'^([ \t]*)(?:([-*+])|(\d{1,9})([.)]))[ \t]+(.*)$');
 final _taskPattern = RegExp(r'^\[([ xX])\][ \t]+(.*)$');
 final _quotePattern = RegExp(r'^ {0,3}>[ \t]?(.*)$');
 final _htmlPattern = RegExp(r'^ {0,3}<[a-zA-Z!/]');
-final _tableDelimiterPattern = RegExp(r'^ {0,3}\|?[ \t:|-]*-[ \t:|-]*\|?[ \t]*$');
+final _tableDelimiterPattern = RegExp(
+  r'^ {0,3}\|?[ \t:|-]*-[ \t:|-]*\|?[ \t]*$',
+);
 
 /// Turns wiki content into editable blocks. Accepts HTML content too - it goes
 /// through [normalizeWikiContent] first, same as everywhere else in the wiki.
 List<WikiBlock> parseWikiBlocks(String source) {
-  final lines = normalizeWikiContent(source).replaceAll('\r\n', '\n').split('\n');
+  final lines = normalizeWikiContent(
+    source,
+  ).replaceAll('\r\n', '\n').split('\n');
   final blocks = <WikiBlock>[];
 
   /// Indent columns of the currently open list, outermost first. Nesting is
@@ -278,11 +284,7 @@ List<WikiBlock> parseWikiBlocks(String source) {
                 checked: task.group(1)!.toLowerCase() == 'x',
               )
             : item.group(2) != null
-            ? WikiBlock(
-                kind: WikiBlockKind.bullet,
-                text: text,
-                indent: indent,
-              )
+            ? WikiBlock(kind: WikiBlockKind.bullet, text: text, indent: indent)
             : WikiBlock(
                 kind: WikiBlockKind.numbered,
                 text: text,

@@ -129,7 +129,10 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
               ),
               const SizedBox(height: AppSpacing.m),
-              Text('No earlier versions yet', style: theme.textTheme.titleSmall),
+              Text(
+                'No earlier versions yet',
+                style: theme.textTheme.titleSmall,
+              ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'A version is saved every time someone edits this page.',

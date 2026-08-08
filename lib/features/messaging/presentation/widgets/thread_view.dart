@@ -16,6 +16,7 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/di/injector.dart';
+import '../../../../core/mls/mls_coverage_service.dart';
 import '../../../../core/mls/mls_sync_service.dart';
 import '../../../../core/theme/hex_color.dart';
 import '../../../mls/presentation/widgets/channel_access_banner.dart';
@@ -190,7 +191,16 @@ class _ThreadViewState extends State<ThreadView> {
   /// presenting as an empty channel.
   bool _serverEncrypted = false;
 
-  bool get _lockedOutOfEncryption => _serverEncrypted && !_isEncrypted;
+  /// The server's per-device answer, cross-checked against local group state.
+  ///
+  /// Covers the gap the two flags above leave: they are both about the
+  /// *context*, and a state call that failed or a device this account has other
+  /// hardware on can leave [_serverEncrypted] false while this handset is
+  /// genuinely outside a live group.
+  bool _uncoveredHere = false;
+
+  bool get _lockedOutOfEncryption =>
+      (_serverEncrypted && !_isEncrypted) || _uncoveredHere;
 
   @override
   void initState() {
@@ -221,10 +231,32 @@ class _ThreadViewState extends State<ThreadView> {
         repository.isChannel,
       );
       if (mounted) _serverEncrypted = state.encrypted;
+      // A re-key makes every cached coverage verdict wrong rather than stale,
+      // and this call already carries the live generation.
+      getIt<MlsCoverageService>().noteGeneration(
+        repository.contextId,
+        state.activeGeneration,
+      );
     } catch (e) {
       debugPrint('ThreadView: could not refresh MLS state: $e');
     }
     _syncEncryptedFlag(repository);
+    await _refreshCoverage(repository);
+  }
+
+  /// Asks which of this account's devices can read the context, once per
+  /// context per session - the service caches, and nothing here is on a timer.
+  ///
+  /// Skipped entirely while nothing suggests the context is encrypted, so a
+  /// plaintext DM costs no request.
+  Future<void> _refreshCoverage(MessageRepository repository) async {
+    if (!_serverEncrypted && !_isEncrypted) return;
+    final view = await getIt<MlsCoverageService>().view(
+      repository.contextId,
+      isChannel: repository.isChannel,
+    );
+    if (!mounted || view.lockedOutHere == _uncoveredHere) return;
+    setState(() => _uncoveredHere = view.lockedOutHere);
   }
 
   void _syncEncryptedFlag(MessageRepository repository) {
@@ -234,6 +266,12 @@ class _ThreadViewState extends State<ThreadView> {
     // two flags consistent when the change arrived over the wire rather than
     // from our own refresh.
     if (encrypted) _serverEncrypted = true;
+    // Holding the group settles the per-device question too. Without this the
+    // notice would survive the Welcome that answered it, since the server's
+    // verdict is only refetched when the thread is next opened.
+    if (encrypted && _uncoveredHere) {
+      setState(() => _uncoveredHere = false);
+    }
     if (_isEncrypted == encrypted) return;
     setState(() => _isEncrypted = encrypted);
   }

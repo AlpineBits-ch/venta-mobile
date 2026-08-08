@@ -66,14 +66,12 @@ class HouseholdStrings {
         r"You've been asked to pick this up from %1$s.",
     'household_list_completed_body': 'Everything on it is ticked off.',
     'household_pantry_low_body': 'Running low at home.',
-    'household_pantry_low_listed_body':
-        r"Running low, so it's gone on %1$s.",
+    'household_pantry_low_listed_body': r"Running low, so it's gone on %1$s.",
     'household_pantry_restock_body':
         "Ran low at home and went on the list - could you grab it while you're out?",
     'household_pantry_expiring_title': 'Use it or lose it',
     'household_pantry_expiring_one_body': r'%1$s is about to go off.',
-    'household_pantry_expiring_two_body':
-        r'%1$s and %2$s are about to go off.',
+    'household_pantry_expiring_two_body': r'%1$s and %2$s are about to go off.',
     'household_pantry_expiring_many_body':
         r'%1$s, %2$s and %3$s more are about to go off.',
     'household_hidden_title': 'Home',
@@ -113,8 +111,7 @@ class HouseholdStrings {
     'household_decision_blocked_body': r'Blockiert: %1$s',
     'household_list_item_added_body':
         r'Steht jetzt auf %1$s - kannst du es unterwegs mitnehmen?',
-    'household_list_item_assigned_body':
-        r'Du sollst das von %1$s mitbringen.',
+    'household_list_item_assigned_body': r'Du sollst das von %1$s mitbringen.',
     'household_list_completed_body': 'Alles darauf ist abgehakt.',
     'household_pantry_low_body': 'Zu Hause geht es zur Neige.',
     'household_pantry_low_listed_body':
@@ -135,10 +132,7 @@ class HouseholdStrings {
   /// no regional idiom in it - the server has already formatted every value that
   /// would have needed one - so `de_CH` and `de_DE` want the same string and
   /// splitting them would only produce bundles that drift.
-  static const byLanguage = <String, Map<String, String>>{
-    'en': _en,
-    'de': _de,
-  };
+  static const byLanguage = <String, Map<String, String>>{'en': _en, 'de': _de};
 
   /// Every key this table knows, in any language. The English map is the
   /// authority: a key translated into German but missing from English is a
@@ -158,11 +152,7 @@ class HouseholdStrings {
   /// description), and a key this build has never heard of, which is a server
   /// running ahead of this app. Neither is an error worth logging; a key added
   /// tomorrow arriving today is the normal state of a mobile release train.
-  static String? resolve(
-    String? key,
-    List<String> args, {
-    String? language,
-  }) {
+  static String? resolve(String? key, List<String> args, {String? language}) {
     if (key == null || key.isEmpty) return null;
 
     final requested = (language ?? _deviceLanguage).toLowerCase();

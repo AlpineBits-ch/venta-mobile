@@ -927,9 +927,9 @@ class PayeePhoneRow extends StatelessWidget {
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: phoneNumber));
                 houseHaptic();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Number copied.')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Number copied.')));
               },
             ),
           ],

@@ -1,4 +1,4 @@
-﻿/// Live inline-markdown styling for the rich editor's text fields.
+/// Live inline-markdown styling for the rich editor's text fields.
 ///
 /// A block's text stays markdown while you type it - what changes is that
 /// `**bold**` is *drawn* bold and its asterisks fade into the background
@@ -76,8 +76,7 @@ List<InlineSpan> buildWikiInlineSpans({
   for (final match in _inlinePattern.allMatches(text)) {
     plain(match.start);
     final raw = match.group(0)!;
-    final active =
-        caret != null && caret >= match.start && caret <= match.end;
+    final active = caret != null && caret >= match.start && caret <= match.end;
     final markerStyle = base.copyWith(
       color: active ? palette.activeMarker : palette.marker,
       fontWeight: FontWeight.w400,

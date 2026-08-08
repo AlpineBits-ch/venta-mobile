@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/mls/mls_service.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../conversations/data/conversation_repository.dart';
 import '../../../conversations/data/models/conversation_dto.dart';
+import '../../../mls/presentation/screens/conversation_encryption_screen.dart';
 import '../../../voice/bloc/call_cubit.dart';
 import '../../bloc/message_thread_bloc.dart';
 import '../../data/message_api.dart';
@@ -78,6 +80,17 @@ class _ConversationScreenState extends State<ConversationScreen> {
     return others.map((m) => m.cachedUserName).join(', ');
   }
 
+  /// Whether to offer the encryption screen at all. A plaintext DM has nothing
+  /// to say there, and an entry point that leads to an empty page is worse than
+  /// no entry point.
+  bool get _encrypted {
+    final conversation = getIt<ConversationRepository>().cached
+        .where((c) => c.id == widget.conversationId)
+        .firstOrNull;
+    return conversation?.encryptionState == ConversationEncryption.encrypted ||
+        getIt<MlsService>().hasEverHeldGroup(widget.conversationId);
+  }
+
   List<String> _otherMemberIds(String myUserId) {
     final conversation = getIt<ConversationRepository>().cached
         .where((c) => c.id == widget.conversationId)
@@ -110,46 +123,56 @@ class _ConversationScreenState extends State<ConversationScreen> {
         title: _title(myUserId),
         myUserId: myUserId,
         mentionableUserIds: otherMemberIds,
-        actions: otherMemberIds.isEmpty
-            ? null
-            : [
-                BlocBuilder<CallCubit, CallState>(
-                  bloc: getIt<CallCubit>(),
-                  builder: (context, callState) {
-                    final cubit = getIt<CallCubit>();
-                    final inThisCall =
-                        callState.call?.conversationId ==
-                            widget.conversationId &&
-                        callState.phase != CallPhase.idle;
-                    // A call already running here is joined rather than
-                    // placed. Nothing else surfaces it to someone the ring
-                    // never addressed - a member who declined, who left, or
-                    // who was never invited.
-                    final ongoing = cubit.ongoingCallIn(widget.conversationId);
-                    if (!inThisCall &&
-                        ongoing != null &&
-                        callState.phase == CallPhase.idle) {
-                      return TextButton.icon(
-                        icon: const Icon(Icons.call),
-                        label: const Text('Join'),
-                        onPressed: () =>
-                            cubit.joinConversationCall(widget.conversationId),
-                      );
-                    }
-                    return IconButton(
-                      icon: Icon(inThisCall ? Icons.call_end : Icons.call),
-                      onPressed: inThisCall
-                          ? cubit.endCall
-                          : callState.phase == CallPhase.idle
-                          ? () => cubit.startCall(
-                              conversationId: widget.conversationId,
-                              participantUserIds: otherMemberIds,
-                            )
-                          : null,
-                    );
-                  },
+        actions: [
+          if (_encrypted)
+            IconButton(
+              icon: const Icon(Icons.lock_outline),
+              tooltip: 'Encryption',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ConversationEncryptionScreen(
+                    conversationId: widget.conversationId,
+                  ),
                 ),
-              ],
+              ),
+            ),
+          if (otherMemberIds.isNotEmpty)
+            BlocBuilder<CallCubit, CallState>(
+              bloc: getIt<CallCubit>(),
+              builder: (context, callState) {
+                final cubit = getIt<CallCubit>();
+                final inThisCall =
+                    callState.call?.conversationId == widget.conversationId &&
+                    callState.phase != CallPhase.idle;
+                // A call already running here is joined rather than
+                // placed. Nothing else surfaces it to someone the ring
+                // never addressed - a member who declined, who left, or
+                // who was never invited.
+                final ongoing = cubit.ongoingCallIn(widget.conversationId);
+                if (!inThisCall &&
+                    ongoing != null &&
+                    callState.phase == CallPhase.idle) {
+                  return TextButton.icon(
+                    icon: const Icon(Icons.call),
+                    label: const Text('Join'),
+                    onPressed: () =>
+                        cubit.joinConversationCall(widget.conversationId),
+                  );
+                }
+                return IconButton(
+                  icon: Icon(inThisCall ? Icons.call_end : Icons.call),
+                  onPressed: inThisCall
+                      ? cubit.endCall
+                      : callState.phase == CallPhase.idle
+                      ? () => cubit.startCall(
+                          conversationId: widget.conversationId,
+                          participantUserIds: otherMemberIds,
+                        )
+                      : null,
+                );
+              },
+            ),
+        ],
       ),
     );
   }

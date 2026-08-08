@@ -78,7 +78,12 @@ void main() {
             // is an `appPage`, the way `buildAppRouter` builds it.
             pageBuilder: (context, state, child) => appPage(
               state,
-              Row(children: [const SizedBox(width: 60), Expanded(child: child)]),
+              Row(
+                children: [
+                  const SizedBox(width: 60),
+                  Expanded(child: child),
+                ],
+              ),
             ),
             routes: [
               GoRoute(
@@ -141,12 +146,10 @@ void main() {
 
   test('the app shell builds its own page', () {
     final authRepository = _FakeAuthRepository();
-    when(() => authRepository.sessionExpired).thenAnswer(
-      (_) => const Stream<void>.empty(),
-    );
-    final router = buildAppRouter(
-      SessionCubit(authRepository: authRepository),
-    );
+    when(
+      () => authRepository.sessionExpired,
+    ).thenAnswer((_) => const Stream<void>.empty());
+    final router = buildAppRouter(SessionCubit(authRepository: authRepository));
 
     final shell = router.configuration.routes.whereType<ShellRoute>().single;
     // Without one, go_router wraps the shell in a `MaterialPage` that can only

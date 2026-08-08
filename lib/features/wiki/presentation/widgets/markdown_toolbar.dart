@@ -62,9 +62,8 @@ class MarkdownEditingActions {
         prefix.length,
         selected.length - end.length,
       );
-      final next = selection.textBefore(text) + stripped + selection.textAfter(
-        text,
-      );
+      final next =
+          selection.textBefore(text) + stripped + selection.textAfter(text);
       _set(next, selection.start + stripped.length);
       return;
     }
@@ -104,8 +103,7 @@ class MarkdownEditingActions {
       if (removing) {
         final indent = line.length - line.trimLeft().length;
         rewritten.add(
-          line.substring(0, indent) +
-              line.trimLeft().substring(prefix.length),
+          line.substring(0, indent) + line.trimLeft().substring(prefix.length),
         );
       } else {
         rewritten.add('$prefix$line');
@@ -146,7 +144,10 @@ class MarkdownEditingActions {
     }
 
     final replacement = rewritten.join('\n');
-    _set(text.replaceRange(start, end, replacement), start + replacement.length);
+    _set(
+      text.replaceRange(start, end, replacement),
+      start + replacement.length,
+    );
   }
 
   /// `#` → `##` → `###` → plain, on the line under the caret. One button

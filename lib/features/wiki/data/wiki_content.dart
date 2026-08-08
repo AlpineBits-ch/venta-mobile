@@ -189,10 +189,9 @@ String? _tableOf(dom.Element table) {
         rows.add([
           for (final cell in child.children)
             if (cell.localName == 'td' || cell.localName == 'th')
-              _childrenInline(cell)
-                  .replaceAll('\n', ' ')
-                  .replaceAll('|', r'\|')
-                  .trim(),
+              _childrenInline(
+                cell,
+              ).replaceAll('\n', ' ').replaceAll('|', r'\|').trim(),
         ]);
       } else {
         collect(child);
@@ -233,7 +232,9 @@ String _codeBlockOf(dom.Element pre) {
     }
   }
   final language =
-      RegExp(r'language-([\w+#-]+)').firstMatch(code?.className ?? '')?.group(1) ??
+      RegExp(
+        r'language-([\w+#-]+)',
+      ).firstMatch(code?.className ?? '')?.group(1) ??
       '';
   final body = (code ?? pre).text.replaceAll(RegExp(r'\n+$'), '');
   return '```$language\n$body\n```';
@@ -378,7 +379,10 @@ int countWikiCheckboxes(String markdown) {
 
 /// Runs [transform] over every line that isn't inside a fenced code block -
 /// a `- [ ]` inside a ``` fence is sample text, not a checkbox.
-String _mapOutsideFences(String source, String Function(String line) transform) {
+String _mapOutsideFences(
+  String source,
+  String Function(String line) transform,
+) {
   final lines = source.split('\n');
   String? fence;
   for (var i = 0; i < lines.length; i++) {
@@ -492,8 +496,10 @@ final _stripPatterns = <RegExp, String>{
   RegExp(r'\[([^\]]*)\]\([^)]*\)'): r'$1',
   RegExp(r'^\s{0,3}#{1,6}\s+', multiLine: true): '',
   RegExp(r'^\s{0,3}>\s?', multiLine: true): '',
-  RegExp(r'^([ \t]*)(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?', multiLine: true):
-      '',
+  RegExp(
+    r'^([ \t]*)(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?',
+    multiLine: true,
+  ): '',
   RegExp(r'^\s{0,3}([-*_])\s*(?:\1\s*){2,}$', multiLine: true): '',
   RegExp(r'(\*\*|__|~~|\*|_)'): '',
   RegExp(r'\s+'): ' ',

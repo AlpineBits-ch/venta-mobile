@@ -344,10 +344,7 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
   Future<void> _handleBack() async {
     if (_dirty && !await _confirmDiscard()) return;
     if (!mounted) return;
-    BackNavigation.goBack(
-      context,
-      RoutePaths.serverWikiPath(widget.guildId),
-    );
+    BackNavigation.goBack(context, RoutePaths.serverWikiPath(widget.guildId));
   }
 
   @override
@@ -529,7 +526,8 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
       keyboardType: TextInputType.multiline,
       style: theme.textTheme.bodyLarge?.copyWith(height: 1.55),
       decoration: InputDecoration(
-        hintText: 'Write in Markdown…\n\n'
+        hintText:
+            'Write in Markdown…\n\n'
             '# Heading\n'
             '- [ ] a task\n'
             '**bold**, `code`, [links](https://…)',
@@ -1006,10 +1004,7 @@ class _SettingLabel extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: color),
         const SizedBox(width: AppSpacing.s),
-        Text(
-          label,
-          style: theme.textTheme.titleSmall?.copyWith(color: color),
-        ),
+        Text(label, style: theme.textTheme.titleSmall?.copyWith(color: color)),
       ],
     );
   }
@@ -1168,10 +1163,9 @@ class _LinkDialogState extends State<_LinkDialog> {
             final url = _urlController.text.trim();
             if (url.isEmpty) return;
             final text = _textController.text.trim();
-            Navigator.of(context).pop((
-              text: text.isEmpty ? url : text,
-              url: url,
-            ));
+            Navigator.of(
+              context,
+            ).pop((text: text.isEmpty ? url : text, url: url));
           },
           child: const Text('Insert'),
         ),

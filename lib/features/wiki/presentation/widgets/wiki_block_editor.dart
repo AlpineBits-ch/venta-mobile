@@ -387,11 +387,7 @@ class _WikiBlockEditorState extends State<WikiBlockEditor> {
         block.kind != WikiBlockKind.bullet) {
       _rewrite(
         index,
-        WikiBlock(
-          kind: WikiBlockKind.bullet,
-          text: rest,
-          indent: block.indent,
-        ),
+        WikiBlock(kind: WikiBlockKind.bullet, text: rest, indent: block.indent),
         caret: 0,
       );
       return true;
@@ -469,8 +465,7 @@ class _WikiBlockEditorState extends State<WikiBlockEditor> {
 
   void _appendParagraph() {
     final last = _entries.last;
-    if (last.block.kind == WikiBlockKind.paragraph &&
-        last.block.text.isEmpty) {
+    if (last.block.kind == WikiBlockKind.paragraph && last.block.text.isEmpty) {
       last.focus.requestFocus();
       return;
     }
@@ -781,9 +776,7 @@ class _TextBlock extends StatelessWidget {
     if (isFirst) return 0;
     return switch (block.kind) {
       WikiBlockKind.heading => block.level <= 2 ? AppSpacing.m : AppSpacing.s,
-      WikiBlockKind.bullet ||
-      WikiBlockKind.numbered ||
-      WikiBlockKind.task => 2,
+      WikiBlockKind.bullet || WikiBlockKind.numbered || WikiBlockKind.task => 2,
       _ => AppSpacing.s,
     };
   }
@@ -867,9 +860,7 @@ class _CodeBlock extends StatelessWidget {
                 Icon(Icons.data_object, size: 14, color: muted),
                 const SizedBox(width: AppSpacing.xs + 2),
                 Text(
-                  entry.block.language.isEmpty
-                      ? 'Code'
-                      : entry.block.language,
+                  entry.block.language.isEmpty ? 'Code' : entry.block.language,
                   style: theme.textTheme.labelSmall?.copyWith(color: muted),
                 ),
                 const Spacer(),
@@ -951,7 +942,9 @@ class _RawBlock extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.s),
-              IgnorePointer(child: WikiMarkdown(data: source, selectable: false)),
+              IgnorePointer(
+                child: WikiMarkdown(data: source, selectable: false),
+              ),
             ],
           ),
         ),
@@ -1015,9 +1008,7 @@ class _BlockField extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: style.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.3,
-                      ),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
                     ),
                   ),
                 ),
@@ -1117,8 +1108,7 @@ class _SourceSheetState extends State<_SourceSheet> {
               ),
               const SizedBox(height: AppSpacing.m),
               FilledButton(
-                onPressed: () =>
-                    Navigator.of(context).pop(_controller.text),
+                onPressed: () => Navigator.of(context).pop(_controller.text),
                 child: const Text('Done'),
               ),
             ],
@@ -1140,25 +1130,22 @@ TextStyle wikiBlockTextStyle(ThemeData theme, WikiBlock block) {
   switch (block.kind) {
     case WikiBlockKind.heading:
       return switch (block.level) {
-        1 =>
-          text.headlineSmall!.copyWith(
-            fontWeight: FontWeight.w800,
-            height: 1.25,
-            letterSpacing: -0.4,
-          ),
-        2 =>
-          text.titleLarge!.copyWith(
-            fontWeight: FontWeight.w700,
-            fontSize: 19,
-            height: 1.3,
-            letterSpacing: -0.2,
-          ),
-        3 =>
-          text.titleMedium!.copyWith(
-            fontWeight: FontWeight.w700,
-            fontSize: 16.5,
-            height: 1.35,
-          ),
+        1 => text.headlineSmall!.copyWith(
+          fontWeight: FontWeight.w800,
+          height: 1.25,
+          letterSpacing: -0.4,
+        ),
+        2 => text.titleLarge!.copyWith(
+          fontWeight: FontWeight.w700,
+          fontSize: 19,
+          height: 1.3,
+          letterSpacing: -0.2,
+        ),
+        3 => text.titleMedium!.copyWith(
+          fontWeight: FontWeight.w700,
+          fontSize: 16.5,
+          height: 1.35,
+        ),
         4 => text.titleSmall!.copyWith(
           fontWeight: FontWeight.w700,
           color: onSurface,

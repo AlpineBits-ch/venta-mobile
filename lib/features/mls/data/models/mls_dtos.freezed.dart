@@ -3911,6 +3911,589 @@ as String?,
 
 
 /// @nodoc
+mixin _$MlsDeviceCoverageDto {
+
+ String get deviceId; String? get deviceName;/// **False is evidence, not proof.** The server computes this from the
+/// three traces it can see - a Welcome addressed to the device, a commit
+/// published from it, or the record that it built the group - and a device
+/// that joined by external commit leaves none of them while decrypting
+/// perfectly. Callers must cross-check against local group state before
+/// telling anybody their device is locked out.
+ bool get covered;
+/// Create a copy of MlsDeviceCoverageDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$MlsDeviceCoverageDtoCopyWith<MlsDeviceCoverageDto> get copyWith => _$MlsDeviceCoverageDtoCopyWithImpl<MlsDeviceCoverageDto>(this as MlsDeviceCoverageDto, _$identity);
+
+  /// Serializes this MlsDeviceCoverageDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsDeviceCoverageDto&&(identical(other.deviceId, deviceId) || other.deviceId == deviceId)&&(identical(other.deviceName, deviceName) || other.deviceName == deviceName)&&(identical(other.covered, covered) || other.covered == covered));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,deviceId,deviceName,covered);
+
+@override
+String toString() {
+  return 'MlsDeviceCoverageDto(deviceId: $deviceId, deviceName: $deviceName, covered: $covered)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $MlsDeviceCoverageDtoCopyWith<$Res>  {
+  factory $MlsDeviceCoverageDtoCopyWith(MlsDeviceCoverageDto value, $Res Function(MlsDeviceCoverageDto) _then) = _$MlsDeviceCoverageDtoCopyWithImpl;
+@useResult
+$Res call({
+ String deviceId, String? deviceName, bool covered
+});
+
+
+
+
+}
+/// @nodoc
+class _$MlsDeviceCoverageDtoCopyWithImpl<$Res>
+    implements $MlsDeviceCoverageDtoCopyWith<$Res> {
+  _$MlsDeviceCoverageDtoCopyWithImpl(this._self, this._then);
+
+  final MlsDeviceCoverageDto _self;
+  final $Res Function(MlsDeviceCoverageDto) _then;
+
+/// Create a copy of MlsDeviceCoverageDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? deviceId = null,Object? deviceName = freezed,Object? covered = null,}) {
+  return _then(_self.copyWith(
+deviceId: null == deviceId ? _self.deviceId : deviceId // ignore: cast_nullable_to_non_nullable
+as String,deviceName: freezed == deviceName ? _self.deviceName : deviceName // ignore: cast_nullable_to_non_nullable
+as String?,covered: null == covered ? _self.covered : covered // ignore: cast_nullable_to_non_nullable
+as bool,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [MlsDeviceCoverageDto].
+extension MlsDeviceCoverageDtoPatterns on MlsDeviceCoverageDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _MlsDeviceCoverageDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _MlsDeviceCoverageDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _MlsDeviceCoverageDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _MlsDeviceCoverageDto():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _MlsDeviceCoverageDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _MlsDeviceCoverageDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String deviceId,  String? deviceName,  bool covered)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _MlsDeviceCoverageDto() when $default != null:
+return $default(_that.deviceId,_that.deviceName,_that.covered);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String deviceId,  String? deviceName,  bool covered)  $default,) {final _that = this;
+switch (_that) {
+case _MlsDeviceCoverageDto():
+return $default(_that.deviceId,_that.deviceName,_that.covered);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String deviceId,  String? deviceName,  bool covered)?  $default,) {final _that = this;
+switch (_that) {
+case _MlsDeviceCoverageDto() when $default != null:
+return $default(_that.deviceId,_that.deviceName,_that.covered);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _MlsDeviceCoverageDto implements MlsDeviceCoverageDto {
+  const _MlsDeviceCoverageDto({required this.deviceId, this.deviceName, this.covered = false});
+  factory _MlsDeviceCoverageDto.fromJson(Map<String, dynamic> json) => _$MlsDeviceCoverageDtoFromJson(json);
+
+@override final  String deviceId;
+@override final  String? deviceName;
+/// **False is evidence, not proof.** The server computes this from the
+/// three traces it can see - a Welcome addressed to the device, a commit
+/// published from it, or the record that it built the group - and a device
+/// that joined by external commit leaves none of them while decrypting
+/// perfectly. Callers must cross-check against local group state before
+/// telling anybody their device is locked out.
+@override@JsonKey() final  bool covered;
+
+/// Create a copy of MlsDeviceCoverageDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$MlsDeviceCoverageDtoCopyWith<_MlsDeviceCoverageDto> get copyWith => __$MlsDeviceCoverageDtoCopyWithImpl<_MlsDeviceCoverageDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$MlsDeviceCoverageDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsDeviceCoverageDto&&(identical(other.deviceId, deviceId) || other.deviceId == deviceId)&&(identical(other.deviceName, deviceName) || other.deviceName == deviceName)&&(identical(other.covered, covered) || other.covered == covered));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,deviceId,deviceName,covered);
+
+@override
+String toString() {
+  return 'MlsDeviceCoverageDto(deviceId: $deviceId, deviceName: $deviceName, covered: $covered)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$MlsDeviceCoverageDtoCopyWith<$Res> implements $MlsDeviceCoverageDtoCopyWith<$Res> {
+  factory _$MlsDeviceCoverageDtoCopyWith(_MlsDeviceCoverageDto value, $Res Function(_MlsDeviceCoverageDto) _then) = __$MlsDeviceCoverageDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String deviceId, String? deviceName, bool covered
+});
+
+
+
+
+}
+/// @nodoc
+class __$MlsDeviceCoverageDtoCopyWithImpl<$Res>
+    implements _$MlsDeviceCoverageDtoCopyWith<$Res> {
+  __$MlsDeviceCoverageDtoCopyWithImpl(this._self, this._then);
+
+  final _MlsDeviceCoverageDto _self;
+  final $Res Function(_MlsDeviceCoverageDto) _then;
+
+/// Create a copy of MlsDeviceCoverageDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? deviceId = null,Object? deviceName = freezed,Object? covered = null,}) {
+  return _then(_MlsDeviceCoverageDto(
+deviceId: null == deviceId ? _self.deviceId : deviceId // ignore: cast_nullable_to_non_nullable
+as String,deviceName: freezed == deviceName ? _self.deviceName : deviceName // ignore: cast_nullable_to_non_nullable
+as String?,covered: null == covered ? _self.covered : covered // ignore: cast_nullable_to_non_nullable
+as bool,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$MlsCoverageDto {
+
+ String get contextId;/// False when the context has no live group. Both lists are then empty and
+/// mean "there is nothing to be outside of", never "everybody is outside".
+ bool get encrypted;/// Which era the answer is about, null when [encrypted] is false. A device
+/// covered in generation 2 is not covered in generation 3, so a cached
+/// answer is only valid for the generation it names.
+ int? get generation; List<MlsDeviceCoverageDto> get ownDevices;/// Always empty for a channel, whose roster lives in the Guild service and
+/// is not enumerable from Messaging.
+ List<UnreachableDeviceDto> get unreachableDevices;/// True when the device list could not be read at all - both lists are then
+/// empty because nothing could be looked up, not because everyone is in.
+/// Rendering that as "all clear" reproduces the exact silence this route
+/// exists to break.
+ bool get coverageUnavailable;
+/// Create a copy of MlsCoverageDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$MlsCoverageDtoCopyWith<MlsCoverageDto> get copyWith => _$MlsCoverageDtoCopyWithImpl<MlsCoverageDto>(this as MlsCoverageDto, _$identity);
+
+  /// Serializes this MlsCoverageDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MlsCoverageDto&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.encrypted, encrypted) || other.encrypted == encrypted)&&(identical(other.generation, generation) || other.generation == generation)&&const DeepCollectionEquality().equals(other.ownDevices, ownDevices)&&const DeepCollectionEquality().equals(other.unreachableDevices, unreachableDevices)&&(identical(other.coverageUnavailable, coverageUnavailable) || other.coverageUnavailable == coverageUnavailable));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,contextId,encrypted,generation,const DeepCollectionEquality().hash(ownDevices),const DeepCollectionEquality().hash(unreachableDevices),coverageUnavailable);
+
+@override
+String toString() {
+  return 'MlsCoverageDto(contextId: $contextId, encrypted: $encrypted, generation: $generation, ownDevices: $ownDevices, unreachableDevices: $unreachableDevices, coverageUnavailable: $coverageUnavailable)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $MlsCoverageDtoCopyWith<$Res>  {
+  factory $MlsCoverageDtoCopyWith(MlsCoverageDto value, $Res Function(MlsCoverageDto) _then) = _$MlsCoverageDtoCopyWithImpl;
+@useResult
+$Res call({
+ String contextId, bool encrypted, int? generation, List<MlsDeviceCoverageDto> ownDevices, List<UnreachableDeviceDto> unreachableDevices, bool coverageUnavailable
+});
+
+
+
+
+}
+/// @nodoc
+class _$MlsCoverageDtoCopyWithImpl<$Res>
+    implements $MlsCoverageDtoCopyWith<$Res> {
+  _$MlsCoverageDtoCopyWithImpl(this._self, this._then);
+
+  final MlsCoverageDto _self;
+  final $Res Function(MlsCoverageDto) _then;
+
+/// Create a copy of MlsCoverageDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? contextId = null,Object? encrypted = null,Object? generation = freezed,Object? ownDevices = null,Object? unreachableDevices = null,Object? coverageUnavailable = null,}) {
+  return _then(_self.copyWith(
+contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
+as String,encrypted: null == encrypted ? _self.encrypted : encrypted // ignore: cast_nullable_to_non_nullable
+as bool,generation: freezed == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
+as int?,ownDevices: null == ownDevices ? _self.ownDevices : ownDevices // ignore: cast_nullable_to_non_nullable
+as List<MlsDeviceCoverageDto>,unreachableDevices: null == unreachableDevices ? _self.unreachableDevices : unreachableDevices // ignore: cast_nullable_to_non_nullable
+as List<UnreachableDeviceDto>,coverageUnavailable: null == coverageUnavailable ? _self.coverageUnavailable : coverageUnavailable // ignore: cast_nullable_to_non_nullable
+as bool,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [MlsCoverageDto].
+extension MlsCoverageDtoPatterns on MlsCoverageDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _MlsCoverageDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _MlsCoverageDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _MlsCoverageDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _MlsCoverageDto():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _MlsCoverageDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _MlsCoverageDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String contextId,  bool encrypted,  int? generation,  List<MlsDeviceCoverageDto> ownDevices,  List<UnreachableDeviceDto> unreachableDevices,  bool coverageUnavailable)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _MlsCoverageDto() when $default != null:
+return $default(_that.contextId,_that.encrypted,_that.generation,_that.ownDevices,_that.unreachableDevices,_that.coverageUnavailable);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String contextId,  bool encrypted,  int? generation,  List<MlsDeviceCoverageDto> ownDevices,  List<UnreachableDeviceDto> unreachableDevices,  bool coverageUnavailable)  $default,) {final _that = this;
+switch (_that) {
+case _MlsCoverageDto():
+return $default(_that.contextId,_that.encrypted,_that.generation,_that.ownDevices,_that.unreachableDevices,_that.coverageUnavailable);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String contextId,  bool encrypted,  int? generation,  List<MlsDeviceCoverageDto> ownDevices,  List<UnreachableDeviceDto> unreachableDevices,  bool coverageUnavailable)?  $default,) {final _that = this;
+switch (_that) {
+case _MlsCoverageDto() when $default != null:
+return $default(_that.contextId,_that.encrypted,_that.generation,_that.ownDevices,_that.unreachableDevices,_that.coverageUnavailable);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _MlsCoverageDto implements MlsCoverageDto {
+  const _MlsCoverageDto({required this.contextId, this.encrypted = false, this.generation, final  List<MlsDeviceCoverageDto> ownDevices = const <MlsDeviceCoverageDto>[], final  List<UnreachableDeviceDto> unreachableDevices = const <UnreachableDeviceDto>[], this.coverageUnavailable = false}): _ownDevices = ownDevices,_unreachableDevices = unreachableDevices;
+  factory _MlsCoverageDto.fromJson(Map<String, dynamic> json) => _$MlsCoverageDtoFromJson(json);
+
+@override final  String contextId;
+/// False when the context has no live group. Both lists are then empty and
+/// mean "there is nothing to be outside of", never "everybody is outside".
+@override@JsonKey() final  bool encrypted;
+/// Which era the answer is about, null when [encrypted] is false. A device
+/// covered in generation 2 is not covered in generation 3, so a cached
+/// answer is only valid for the generation it names.
+@override final  int? generation;
+ final  List<MlsDeviceCoverageDto> _ownDevices;
+@override@JsonKey() List<MlsDeviceCoverageDto> get ownDevices {
+  if (_ownDevices is EqualUnmodifiableListView) return _ownDevices;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_ownDevices);
+}
+
+/// Always empty for a channel, whose roster lives in the Guild service and
+/// is not enumerable from Messaging.
+ final  List<UnreachableDeviceDto> _unreachableDevices;
+/// Always empty for a channel, whose roster lives in the Guild service and
+/// is not enumerable from Messaging.
+@override@JsonKey() List<UnreachableDeviceDto> get unreachableDevices {
+  if (_unreachableDevices is EqualUnmodifiableListView) return _unreachableDevices;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_unreachableDevices);
+}
+
+/// True when the device list could not be read at all - both lists are then
+/// empty because nothing could be looked up, not because everyone is in.
+/// Rendering that as "all clear" reproduces the exact silence this route
+/// exists to break.
+@override@JsonKey() final  bool coverageUnavailable;
+
+/// Create a copy of MlsCoverageDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$MlsCoverageDtoCopyWith<_MlsCoverageDto> get copyWith => __$MlsCoverageDtoCopyWithImpl<_MlsCoverageDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$MlsCoverageDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MlsCoverageDto&&(identical(other.contextId, contextId) || other.contextId == contextId)&&(identical(other.encrypted, encrypted) || other.encrypted == encrypted)&&(identical(other.generation, generation) || other.generation == generation)&&const DeepCollectionEquality().equals(other._ownDevices, _ownDevices)&&const DeepCollectionEquality().equals(other._unreachableDevices, _unreachableDevices)&&(identical(other.coverageUnavailable, coverageUnavailable) || other.coverageUnavailable == coverageUnavailable));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,contextId,encrypted,generation,const DeepCollectionEquality().hash(_ownDevices),const DeepCollectionEquality().hash(_unreachableDevices),coverageUnavailable);
+
+@override
+String toString() {
+  return 'MlsCoverageDto(contextId: $contextId, encrypted: $encrypted, generation: $generation, ownDevices: $ownDevices, unreachableDevices: $unreachableDevices, coverageUnavailable: $coverageUnavailable)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$MlsCoverageDtoCopyWith<$Res> implements $MlsCoverageDtoCopyWith<$Res> {
+  factory _$MlsCoverageDtoCopyWith(_MlsCoverageDto value, $Res Function(_MlsCoverageDto) _then) = __$MlsCoverageDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String contextId, bool encrypted, int? generation, List<MlsDeviceCoverageDto> ownDevices, List<UnreachableDeviceDto> unreachableDevices, bool coverageUnavailable
+});
+
+
+
+
+}
+/// @nodoc
+class __$MlsCoverageDtoCopyWithImpl<$Res>
+    implements _$MlsCoverageDtoCopyWith<$Res> {
+  __$MlsCoverageDtoCopyWithImpl(this._self, this._then);
+
+  final _MlsCoverageDto _self;
+  final $Res Function(_MlsCoverageDto) _then;
+
+/// Create a copy of MlsCoverageDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? contextId = null,Object? encrypted = null,Object? generation = freezed,Object? ownDevices = null,Object? unreachableDevices = null,Object? coverageUnavailable = null,}) {
+  return _then(_MlsCoverageDto(
+contextId: null == contextId ? _self.contextId : contextId // ignore: cast_nullable_to_non_nullable
+as String,encrypted: null == encrypted ? _self.encrypted : encrypted // ignore: cast_nullable_to_non_nullable
+as bool,generation: freezed == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
+as int?,ownDevices: null == ownDevices ? _self._ownDevices : ownDevices // ignore: cast_nullable_to_non_nullable
+as List<MlsDeviceCoverageDto>,unreachableDevices: null == unreachableDevices ? _self._unreachableDevices : unreachableDevices // ignore: cast_nullable_to_non_nullable
+as List<UnreachableDeviceDto>,coverageUnavailable: null == coverageUnavailable ? _self.coverageUnavailable : coverageUnavailable // ignore: cast_nullable_to_non_nullable
+as bool,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
 mixin _$ConsumeTokensResultDto {
 
  List<MlsDeviceTokenDto> get deviceTokens; List<UnreachableDeviceDto> get unreachableDevices;

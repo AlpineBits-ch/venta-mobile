@@ -20,10 +20,7 @@ void main() {
           '<label><input type="checkbox"><span></span></label>'
           '<div><p>Feed cat</p></div></li>'
           '</ul>';
-      expect(
-        normalizeWikiContent(html),
-        '- [x] Buy milk\n- [ ] Feed cat',
-      );
+      expect(normalizeWikiContent(html), '- [x] Buy milk\n- [ ] Feed cat');
     });
 
     test('converts marked-style checkbox items', () {
@@ -52,10 +49,7 @@ void main() {}
       const html =
           '<ol><li><p>First</p><ul><li>Inner</li></ul></li>'
           '<li>Second</li></ol>';
-      expect(
-        normalizeWikiContent(html),
-        '1. First\n   - Inner\n2. Second',
-      );
+      expect(normalizeWikiContent(html), '1. First\n   - Inner\n2. Second');
     });
 
     test('converts tables and blockquotes', () {
@@ -120,7 +114,8 @@ void main() {}
 
   group('splitWikiSections', () {
     test('splits at headings and offsets each section\'s checkboxes', () {
-      const source = 'Intro line\n\n'
+      const source =
+          'Intro line\n\n'
           '# One\n- [ ] a\n- [ ] b\n\n'
           '## Two\n- [ ] c';
       final sections = splitWikiSections(source);
@@ -143,10 +138,7 @@ void main() {}
   group('wikiPlainText', () {
     test('strips markdown down to something previewable', () {
       const source = '## Heading\n\nSome **bold** and [a link](https://x.dev).';
-      expect(
-        wikiPlainText(source),
-        'Heading Some bold and a link.',
-      );
+      expect(wikiPlainText(source), 'Heading Some bold and a link.');
     });
 
     test('truncates on the requested length', () {

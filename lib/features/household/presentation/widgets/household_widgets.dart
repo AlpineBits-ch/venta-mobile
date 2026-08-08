@@ -698,11 +698,7 @@ void unawaitedEnsureVisible(BuildContext context) {
 /// than in an app-bar corner nobody can reach without shifting their grip. It
 /// floats over the list rather than pushing it, and the list pads for it.
 class HouseActionBar extends StatelessWidget {
-  const HouseActionBar({
-    super.key,
-    required this.child,
-    this.secondary,
-  });
+  const HouseActionBar({super.key, required this.child, this.secondary});
 
   final Widget child;
 

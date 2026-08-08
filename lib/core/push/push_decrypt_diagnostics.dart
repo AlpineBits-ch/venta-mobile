@@ -163,10 +163,7 @@ class PushDecryptDiagnostics {
     try {
       final decoded = jsonDecode(await file.readAsString());
       if (decoded is! List) return [];
-      return decoded
-          .whereType<Map>()
-          .map(Map<String, Object?>.from)
-          .toList();
+      return decoded.whereType<Map>().map(Map<String, Object?>.from).toList();
     } on FormatException {
       // A half-written file from a killed isolate. Starting over loses a few
       // breadcrumbs; refusing to write loses every one from here on.

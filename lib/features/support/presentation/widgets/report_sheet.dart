@@ -265,7 +265,10 @@ class _ReportSheetState extends State<_ReportSheet> {
                 ),
               ),
               const SizedBox(height: AppSpacing.m),
-              Text('ANYTHING ELSE? (OPTIONAL)', style: theme.textTheme.labelSmall),
+              Text(
+                'ANYTHING ELSE? (OPTIONAL)',
+                style: theme.textTheme.labelSmall,
+              ),
               const SizedBox(height: AppSpacing.xs),
               TextField(
                 controller: _detailsController,

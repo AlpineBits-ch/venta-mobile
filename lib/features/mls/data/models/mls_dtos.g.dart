@@ -356,6 +356,51 @@ Map<String, dynamic> _$UnreachableDeviceDtoToJson(
   'deviceName': instance.deviceName,
 };
 
+_MlsDeviceCoverageDto _$MlsDeviceCoverageDtoFromJson(
+  Map<String, dynamic> json,
+) => _MlsDeviceCoverageDto(
+  deviceId: json['deviceId'] as String,
+  deviceName: json['deviceName'] as String?,
+  covered: json['covered'] as bool? ?? false,
+);
+
+Map<String, dynamic> _$MlsDeviceCoverageDtoToJson(
+  _MlsDeviceCoverageDto instance,
+) => <String, dynamic>{
+  'deviceId': instance.deviceId,
+  'deviceName': instance.deviceName,
+  'covered': instance.covered,
+};
+
+_MlsCoverageDto _$MlsCoverageDtoFromJson(
+  Map<String, dynamic> json,
+) => _MlsCoverageDto(
+  contextId: json['contextId'] as String,
+  encrypted: json['encrypted'] as bool? ?? false,
+  generation: (json['generation'] as num?)?.toInt(),
+  ownDevices:
+      (json['ownDevices'] as List<dynamic>?)
+          ?.map((e) => MlsDeviceCoverageDto.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const <MlsDeviceCoverageDto>[],
+  unreachableDevices:
+      (json['unreachableDevices'] as List<dynamic>?)
+          ?.map((e) => UnreachableDeviceDto.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const <UnreachableDeviceDto>[],
+  coverageUnavailable: json['coverageUnavailable'] as bool? ?? false,
+);
+
+Map<String, dynamic> _$MlsCoverageDtoToJson(_MlsCoverageDto instance) =>
+    <String, dynamic>{
+      'contextId': instance.contextId,
+      'encrypted': instance.encrypted,
+      'generation': instance.generation,
+      'ownDevices': instance.ownDevices,
+      'unreachableDevices': instance.unreachableDevices,
+      'coverageUnavailable': instance.coverageUnavailable,
+    };
+
 _ConsumeTokensResultDto _$ConsumeTokensResultDtoFromJson(
   Map<String, dynamic> json,
 ) => _ConsumeTokensResultDto(

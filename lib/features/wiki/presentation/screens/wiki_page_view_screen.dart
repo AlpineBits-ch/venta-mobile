@@ -272,7 +272,10 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Edit',
               onPressed: () => context.push(
-                RoutePaths.serverWikiPageEditPath(widget.guildId, widget.pageId),
+                RoutePaths.serverWikiPageEditPath(
+                  widget.guildId,
+                  widget.pageId,
+                ),
               ),
             ),
           if (canSeeHistory || canDelete)
@@ -350,10 +353,9 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
     final wiki = _wiki;
     final children = wiki == null
         ? const <WikiPageSummaryDto>[]
-        : (wiki.pages.where((p) => p.parentPageId == page.id).toList()
-            ..sort(
-              (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
-            ));
+        : (wiki.pages.where((p) => p.parentPageId == page.id).toList()..sort(
+            (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+          ));
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -361,11 +363,7 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
         controller: _scrollController,
         slivers: [
           SliverToBoxAdapter(
-            child: _PageHeader(
-              page: page,
-              wiki: wiki,
-              onOpenPage: _openPage,
-            ),
+            child: _PageHeader(page: page, wiki: wiki, onOpenPage: _openPage),
           ),
           SliverToBoxAdapter(
             child: page.content.trim().isEmpty
@@ -399,7 +397,9 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
                               checkboxIndexOffset: _sections[i].checkboxOffset,
                               onTapLink: (href) =>
                                   openMessageLink(context, href),
-                              onToggleCheckbox: canEdit ? _toggleCheckbox : null,
+                              onToggleCheckbox: canEdit
+                                  ? _toggleCheckbox
+                                  : null,
                             ),
                           ),
                       ],
@@ -415,7 +415,10 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
               page: page,
               canEdit: canEdit,
               onEdit: () => context.push(
-                RoutePaths.serverWikiPageEditPath(widget.guildId, widget.pageId),
+                RoutePaths.serverWikiPageEditPath(
+                  widget.guildId,
+                  widget.pageId,
+                ),
               ),
             ),
           ),
@@ -508,7 +511,10 @@ class _PageHeader extends StatelessWidget {
           const SizedBox(height: AppSpacing.s + 2),
           Row(
             children: [
-              UserAvatar(userId: page.lastEditorId ?? page.authorId, radius: 11),
+              UserAvatar(
+                userId: page.lastEditorId ?? page.authorId,
+                radius: 11,
+              ),
               const SizedBox(width: AppSpacing.s),
               Flexible(
                 child: ProfileResolver(
@@ -518,7 +524,9 @@ class _PageHeader extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.labelMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.75,
+                      ),
                     ),
                   ),
                 ),

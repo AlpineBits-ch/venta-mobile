@@ -85,15 +85,17 @@ void main() {
       }
     }
 
-    test('turns the restriction 403 into a typed refusal with a support URL',
-        () async {
-      final error = await grantError(403, 'User is not allowed to sign in');
-      expect(error, isA<SigninNotAllowedException>());
-      expect(
-        (error! as SigninNotAllowedException).supportUrl,
-        'https://support.venta.gg',
-      );
-    });
+    test(
+      'turns the restriction 403 into a typed refusal with a support URL',
+      () async {
+        final error = await grantError(403, 'User is not allowed to sign in');
+        expect(error, isA<SigninNotAllowedException>());
+        expect(
+          (error! as SigninNotAllowedException).supportUrl,
+          'https://support.venta.gg',
+        );
+      },
+    );
 
     test('still tells the email-verification 403 apart', () async {
       expect(
@@ -102,10 +104,12 @@ void main() {
       );
     });
 
-    test('an unrecognised 403 body is still a restriction, not a bad password',
-        () async {
-      expect(await grantError(403, ''), isA<SigninNotAllowedException>());
-    });
+    test(
+      'an unrecognised 403 body is still a restriction, not a bad password',
+      () async {
+        expect(await grantError(403, ''), isA<SigninNotAllowedException>());
+      },
+    );
 
     test('a 401 is left alone', () async {
       final error = await grantError(401, {'error': 'invalid_grant'});
@@ -149,14 +153,17 @@ void main() {
   });
 
   group('ReportEvidence.build', () {
-    EvidenceMessage message(String id, String content, {bool reported = false}) =>
-        EvidenceMessage(
-          id: id,
-          authorId: 'user_a',
-          content: content,
-          sentAt: DateTime.utc(2026, 8, 5, 10),
-          reported: reported,
-        );
+    EvidenceMessage message(
+      String id,
+      String content, {
+      bool reported = false,
+    }) => EvidenceMessage(
+      id: id,
+      authorId: 'user_a',
+      content: content,
+      sentAt: DateTime.utc(2026, 8, 5, 10),
+      reported: reported,
+    );
 
     Map<String, dynamic>? build(List<EvidenceMessage> messages) =>
         ReportEvidence.build(
@@ -280,7 +287,9 @@ class _StubAdapter implements HttpClientAdapter {
       status,
       headers: {
         Headers.contentTypeHeader: [
-          body is String ? Headers.textPlainContentType : Headers.jsonContentType,
+          body is String
+              ? Headers.textPlainContentType
+              : Headers.jsonContentType,
         ],
       },
     );

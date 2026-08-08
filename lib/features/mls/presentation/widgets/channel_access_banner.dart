@@ -211,10 +211,7 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _title(pending, keysGone),
-                      style: theme.textTheme.bodyMedium,
-                    ),
+                    Text(_title(pending), style: theme.textTheme.bodyMedium),
                     const SizedBox(height: 2),
                     Text(
                       _describe(pending, locked, keysGone),
@@ -246,6 +243,15 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontFamily: 'monospace',
                 letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${pending.approverUserIds.length} of '
+              '${pending.requiredApprovals} approved. Read this out to whoever '
+              'approves, so they can check it against what they see.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
             ),
           ],
@@ -297,13 +303,10 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
     );
   }
 
-  String _title(MlsJoinRequestDto? pending, bool keysGone) {
-    if (pending != null) return 'Waiting to be let in';
-    if (keysGone) return 'This device can\'t read this conversation';
-    return widget.isChannel
-        ? 'You can\'t read this channel'
-        : 'This device can\'t read this conversation';
-  }
+  static const _lockedOutTitle = 'This device can\'t read these messages';
+
+  String _title(MlsJoinRequestDto? pending) =>
+      pending != null ? 'Waiting to be let in' : _lockedOutTitle;
 
   String _describe(MlsJoinRequestDto? pending, bool locked, bool keysGone) {
     if (locked) {
@@ -311,17 +314,22 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
           'ask to join.';
     }
     if (pending != null) {
-      return '${pending.approverUserIds.length} of ${pending.requiredApprovals} '
-          'members have approved. Read your fingerprint out to one of them so '
-          'they can check it before approving.';
+      // A status line, not a progress indicator: an approval can take days, and
+      // a spinner that runs for days is a lie about what is happening.
+      return 'Approve this from another of your devices, or ask someone in '
+          'this $_noun to.';
     }
     if (keysGone) {
       return 'Its encryption keys are gone, so the messages here can\'t be '
-          'opened. Re-linking gets it back into the group - anything sent '
-          'before that stays unreadable on this device.';
+          'opened. Re-linking gets this device back in - anything sent before '
+          'that stays unavailable here.';
     }
-    return 'It\'s end-to-end encrypted and this device isn\'t in the group. '
-        'Ask to be let in - the server can\'t do it for you, because it holds '
-        'no keys.';
+    // Honest about history on purpose. A device admitted now joins at the
+    // current epoch, so everything sent before it joined stays unreadable on it
+    // forever, and copy that implies a sync is coming would be false.
+    return 'It wasn\'t set up for this $_noun\'s encryption. Older messages '
+        'will stay unavailable here.';
   }
+
+  String get _noun => widget.isChannel ? 'channel' : 'conversation';
 }

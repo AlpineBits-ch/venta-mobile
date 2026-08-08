@@ -44,9 +44,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: brightness == Brightness.dark
-            ? AppTheme.dark
-            : AppTheme.light,
+        theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
         home: MediaQuery(
           data: MediaQueryData(
             size: phone,
@@ -54,10 +52,7 @@ void main() {
           ),
           child: Scaffold(
             body: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: child,
-              ),
+              child: Padding(padding: const EdgeInsets.all(16), child: child),
             ),
           ),
         ),
@@ -278,19 +273,16 @@ void main() {
   for (final entry in cases.entries) {
     for (final brightness in Brightness.values) {
       for (final scale in const [1.0, largestTextScale]) {
-        testWidgets(
-          '${entry.key} fits at 390pt '
-          '(${brightness.name}, text x$scale)',
-          (tester) async {
-            await pump(
-              tester,
-              entry.value,
-              textScale: scale,
-              brightness: brightness,
-            );
-            expect(tester.takeException(), isNull);
-          },
-        );
+        testWidgets('${entry.key} fits at 390pt '
+            '(${brightness.name}, text x$scale)', (tester) async {
+          await pump(
+            tester,
+            entry.value,
+            textScale: scale,
+            brightness: brightness,
+          );
+          expect(tester.takeException(), isNull);
+        });
       }
     }
   }

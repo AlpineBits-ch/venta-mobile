@@ -53,6 +53,7 @@ import '../mls/device_admission_service.dart';
 import '../mls/leaf_verification_service.dart';
 import '../mls/mls_backup_api.dart';
 import '../mls/mls_backup_service.dart';
+import '../mls/mls_coverage_service.dart';
 import '../mls/mls_failure_log.dart';
 import '../mls/mls_join_request_service.dart';
 import '../mls/mls_policy_service.dart';
@@ -203,6 +204,16 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   );
   getIt.registerLazySingleton<MlsSyncService>(
     () => MlsSyncService(mls: getIt(), api: getIt(), deviceIdService: getIt()),
+  );
+  getIt.registerLazySingleton<MlsCoverageService>(
+    () => MlsCoverageService(
+      api: getIt(),
+      mls: getIt(),
+      // Subscribed here rather than at every call site, so a Welcome landing or
+      // a commit going out drops the cached answer for all of them - including
+      // the notice that has to come down the moment this device gets in.
+      contextChanged: getIt<MlsSyncService>().contextChanged,
+    ),
   );
   getIt.registerLazySingleton<MlsSessionManager>(
     () => MlsSessionManager(
