@@ -57,6 +57,24 @@ abstract final class RoutePaths {
   static const notificationSettings = '/settings/notifications';
   static const appearanceSettings = '/settings/appearance';
 
+  /// Bring-your-own-key AI: which provider reads a photo of a cupboard, which
+  /// model, and the key that pays for it.
+  ///
+  /// Under App Settings rather than Privacy even though it is the page that
+  /// carries the "photos are not end-to-end encrypted" disclosure: it is a
+  /// thing the user turns on and configures, and burying an opt-in feature in
+  /// the privacy section is how nobody finds it. The disclosure travels with
+  /// the consent sheet, which fires before the first photo leaves the device.
+  static const aiSettings = '/settings/ai';
+
+  /// The phase-1 vision harness - shoot a photo, dump what the model said.
+  ///
+  /// A development tool, deliberately reachable only from [aiSettings] and
+  /// never from the pantry, and slated for removal once the real capture flow
+  /// ships. Nested under [aiSettings] so backing out of it returns to the page
+  /// that offered it.
+  static const pantryVisionHarness = '/settings/ai/harness';
+
   /// Who can reach you, what you share, and what may be done with your data.
   static const privacy = '/settings/privacy';
 
@@ -129,6 +147,9 @@ abstract final class RoutePaths {
       // levels deep and would otherwise back out past the page that opened them.
       ['settings', 'privacy', ...final rest] =>
         rest.isEmpty ? settings : privacy,
+      // Same shape, same reason: the vision harness hangs off the AI settings
+      // page and must back out to it rather than past it to the index.
+      ['settings', 'ai', ...final rest] => rest.isEmpty ? settings : aiSettings,
       ['settings', ...] => settings,
       ['user', ...] => home,
       _ => null,

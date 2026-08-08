@@ -21,6 +21,7 @@ import '../../features/guilds/presentation/screens/forum_settings_screen.dart';
 import '../../features/guilds/presentation/screens/guild_detail_screen.dart';
 import '../../features/guilds/presentation/screens/guild_members_screen.dart';
 import '../../features/guilds/presentation/screens/guild_settings/guild_settings_screen.dart';
+import '../../features/household/presentation/screens/pantry_vision_harness_screen.dart';
 import '../../features/inbox/presentation/screens/inbox_screen.dart';
 import '../../features/messaging/presentation/screens/conversation_screen.dart';
 import '../../features/privacy/presentation/screens/blocked_users_screen.dart';
@@ -39,6 +40,7 @@ import '../../features/profile/presentation/screens/mfa_settings_screen.dart';
 import '../../features/profile/presentation/screens/self_profile_screen.dart';
 import '../../features/profile/presentation/screens/user_profile_screen.dart';
 import '../../features/settings/presentation/screens/account_settings_screen.dart';
+import '../../features/settings/presentation/screens/ai_settings_screen.dart';
 import '../../features/settings/presentation/screens/appearance_settings_screen.dart';
 import '../../features/settings/presentation/screens/devices_screen.dart';
 import '../../features/settings/presentation/screens/notification_settings_screen.dart';
@@ -355,6 +357,16 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
       _route(
         RoutePaths.appearanceSettings,
         (context, state) => const AppearanceSettingsScreen(),
+      ),
+      _route(
+        RoutePaths.aiSettings,
+        (context, state) => const AiSettingsScreen(),
+      ),
+      // A development harness (see the file header) - it goes when phase 2 of
+      // pantry vision lands.
+      _route(
+        RoutePaths.pantryVisionHarness,
+        (context, state) => const PantryVisionHarnessScreen(),
       ),
       _route(
         RoutePaths.privacy,

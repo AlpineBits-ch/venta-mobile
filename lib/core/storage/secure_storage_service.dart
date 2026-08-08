@@ -451,6 +451,32 @@ class SecureStorageService {
     await _storage.delete(key: _pendingCallActionKey);
   }
 
+  // ---------------------------------------------------------------------------
+  // Bring-your-own-key AI credentials
+  // ---------------------------------------------------------------------------
+
+  /// Keychain access for `AiKeyStore`, which owns the naming of what goes in.
+  ///
+  /// Three narrow methods rather than a general `read(key:)` escape hatch. Every
+  /// other accessor on this class is named after exactly one value, and that is
+  /// deliberate: a shared generic reader is how two features end up writing
+  /// different things under the same string and only find out when one of them
+  /// reads back the other's. Keeping this pair explicitly labelled means a
+  /// future caller has to add its own method and think about collisions.
+  ///
+  /// What goes through here is a third-party API key the *user* pays for. It is
+  /// never sent to `api.venta.gg`, never written into a channel or a message,
+  /// and never logged - see `docs/pantry-vision.md` §5. It is not scoped by
+  /// account or device on purpose: the key belongs to the person holding the
+  /// handset, not to whichever account happens to be signed in, and clearing it
+  /// on sign-out would make a shared tablet re-ask for a key nobody changed.
+  Future<String?> readAiSecret(String key) => _storage.read(key: key);
+
+  Future<void> writeAiSecret(String key, String value) =>
+      _storage.write(key: key, value: value);
+
+  Future<void> deleteAiSecret(String key) => _storage.delete(key: key);
+
   Future<void> writeTokens({
     required String accessToken,
     required String refreshToken,

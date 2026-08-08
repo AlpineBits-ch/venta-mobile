@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../features/auth/data/auth_repository.dart';
+import 'accept_language_interceptor.dart';
 import 'auth_interceptor.dart';
 import 'device_id_interceptor.dart';
 import 'rate_limit_interceptor.dart';
@@ -38,6 +39,9 @@ class ApiClient {
       dio.interceptors.add(StatusProbeInterceptor(onUnreachable));
     }
     dio.interceptors.add(AuthInterceptor(authRepository));
+    // Describes the device rather than the request, so it goes on everything
+    // and not only the two endpoints that read it today.
+    dio.interceptors.add(AcceptLanguageInterceptor());
     if (deviceId != null && registerDevice != null) {
       dio.interceptors.add(
         DeviceIdInterceptor(

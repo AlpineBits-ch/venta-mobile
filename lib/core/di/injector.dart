@@ -38,6 +38,8 @@ import '../../features/voice/data/voice_repository.dart';
 import '../../features/voice/webrtc/call_webrtc_service.dart';
 import '../../features/wiki/data/wiki_api.dart';
 import '../../features/wiki/data/wiki_repository.dart';
+import '../ai/ai_key_store.dart';
+import '../ai/vision_client.dart';
 import '../crypto/account_encryption_service.dart';
 import '../crypto/account_identity_service.dart';
 import '../crypto/master_key_api.dart';
@@ -360,6 +362,20 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   );
   getIt.registerLazySingleton<HouseholdRepository>(
     () => HouseholdRepository(api: getIt(), realtimeService: getIt()),
+  );
+  // Bring-your-own-key AI. Deliberately built on `SecureStorageService` and
+  // nothing else: no `ApiClient`, no `AuthRepository`, no interceptors - the
+  // whole privacy claim of pantry vision is that a photo and a key go straight
+  // to the provider and never near `api.venta.gg`, and that claim is easiest to
+  // keep true by giving this layer no way to reach it.
+  //
+  // Not in `resetSessionScopedCaches`: the key belongs to the person paying for
+  // it and lives in the device keychain, and neither object caches anything a
+  // second account could read. `AiKeyStore` reads through to secure storage on
+  // every call.
+  getIt.registerLazySingleton<AiKeyStore>(() => AiKeyStore(storage: getIt()));
+  getIt.registerLazySingleton<PantryVisionClient>(
+    () => PantryVisionClient(keys: getIt()),
   );
   getIt.registerLazySingleton<SoundService>(() => SoundService());
   getIt.registerLazySingleton<VoiceApi>(

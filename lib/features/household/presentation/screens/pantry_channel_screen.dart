@@ -17,6 +17,7 @@ import '../../data/models/pantry_dto.dart';
 import '../widgets/household_widgets.dart';
 import 'household_channel_base.dart';
 import 'pantry_scanner_screen.dart';
+import 'pantry_vision_screen.dart';
 
 /// A `Pantry` channel - one location: the fridge, the freezer, the cellar.
 ///
@@ -242,6 +243,38 @@ class _PantryChannelScreenState
     );
   }
 
+  /// The other camera, for the things a barcode scanner cannot help with.
+  ///
+  /// A photograph reads a whole shelf at once - loose jars, a vegetable drawer,
+  /// a bag already unpacked onto the counter - which is exactly the half of a
+  /// pantry that never gets scanned because scanning it one packet at a time is
+  /// not worth anybody's evening. The model proposes, a person confirms every
+  /// row, and only then is anything written.
+  ///
+  /// Same shape as [_openScanner] on the way back: reload, then say what moved.
+  Future<void> _openVision(PantryScanMode mode) async {
+    final moved = await Navigator.of(context, rootNavigator: true).push<int>(
+      MaterialPageRoute<int>(
+        builder: (_) => PantryVisionScreen(
+          channelId: widget.channelId,
+          channelName: channelTitle,
+          guildId: widget.guildId,
+          mode: mode,
+        ),
+      ),
+    );
+    await _load();
+    if (!mounted || moved == null || moved == 0) return;
+    showMessage(
+      switch ((mode, moved)) {
+        (PantryScanMode.stockUp, 1) => 'One thing put away.',
+        (PantryScanMode.stockUp, _) => '$moved things put away.',
+        (PantryScanMode.useUp, 1) => 'One thing used up.',
+        (PantryScanMode.useUp, _) => '$moved things used up.',
+      },
+    );
+  }
+
   /// The one-tap "used it up".
   ///
   /// No confirm dialog, deliberately: this is a swipe at an open fridge with
@@ -352,13 +385,41 @@ class _PantryChannelScreenState
             tooltip: 'What needs eating',
             onPressed: _openExpiring,
           ),
+          // The two photo entry points live here rather than in the action bar,
+          // and that is a deliberate demotion of them.
+          //
+          // The bar below is already [Stock up] [Use up] [+] and is genuinely
+          // tight at the largest text step - a fourth control there would push
+          // one of the two daily actions off the row. Photographing a shelf is
+          // also not a daily action and not a one-handed one: it wants both
+          // hands and a cupboard door held open, so the "top corners are
+          // unreachable" argument that keeps the scanner in thumb reach does
+          // not apply to it. And it is the expensive route - somebody's own API
+          // key pays per photo - which is a further reason for it to be chosen
+          // rather than fallen into.
           if (_canManage)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
-                if (value == 'config') unawaited(_openConfig());
+                switch (value) {
+                  case 'config':
+                    unawaited(_openConfig());
+                  case 'photo-in':
+                    unawaited(_openVision(PantryScanMode.stockUp));
+                  case 'photo-out':
+                    unawaited(_openVision(PantryScanMode.useUp));
+                }
               },
               itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'photo-in',
+                  child: Text('Photograph a shelf'),
+                ),
+                PopupMenuItem(
+                  value: 'photo-out',
+                  child: Text('Photograph what you used'),
+                ),
+                PopupMenuDivider(),
                 PopupMenuItem(value: 'config', child: Text('Restock settings')),
               ],
             ),

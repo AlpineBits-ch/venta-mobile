@@ -247,6 +247,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       path: RoutePaths.notificationSettings,
       keywords: 'push mentions sounds cooldown dm',
     ),
+    // Keywords carry the words somebody would actually search for when they
+    // remember the capability and not the section - "photo", "pantry",
+    // "openai" - because nobody looks for a feature under "AI".
+    const _Entry(
+      section: 'App Settings',
+      title: 'AI',
+      icon: Icons.smart_toy_outlined,
+      path: RoutePaths.aiSettings,
+      keywords:
+          'api key byok bring your own key openai gpt claude anthropic gemini '
+          'google model vision photo camera pantry cupboard scan shelf',
+    ),
     const _Entry(
       section: 'App Settings',
       title: 'Your Profile',

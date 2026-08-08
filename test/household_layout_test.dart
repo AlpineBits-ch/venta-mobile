@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venta_mobile/core/theme/app_theme.dart';
+import 'package:venta_mobile/core/ai/pantry_vision_models.dart';
 import 'package:venta_mobile/features/household/data/models/maintenance_dto.dart';
+import 'package:venta_mobile/features/household/data/models/pantry_dto.dart';
+import 'package:venta_mobile/features/household/data/pantry_vision_plan.dart';
 import 'package:venta_mobile/features/household/presentation/screens/ledger_channel_screen.dart';
 import 'package:venta_mobile/features/household/presentation/screens/maintenance_channel_screen.dart';
+import 'package:venta_mobile/features/household/presentation/screens/pantry_vision_screen.dart';
 import 'package:venta_mobile/features/household/presentation/widgets/household_widgets.dart';
 import 'package:venta_mobile/features/settings/presentation/screens/account_settings_screen.dart';
 
@@ -284,6 +288,139 @@ void main() {
     'the credit a catalog name owes': const ProductSourceNote(
       attribution: catalogAttribution,
     ),
+
+    // The densest row in the pantry, and the one where fitting is a
+    // correctness property rather than polish: it is read at an open fridge by
+    // somebody deciding whether a photograph got their shelf right, and a
+    // consequence line clipped into an ellipsis is the difference between
+    // "3, was 1" and "3, was 12". Both worst cases are pumped - the one
+    // carrying every warning it can carry at once, and the one that writes
+    // nothing at all.
+    'a review row that would take stock off': PantryVisionReviewRow(
+      row: PantryVisionRow.resolve(
+        proposal: const PantryVisionItem(
+          name: 'Chopped tomatoes',
+          brand: 'Migros Bio',
+          count: 3,
+          confidence: VisionConfidence.low,
+          note: 'stacked, back row not visible',
+        ),
+        direction: PantryVisionDirection.stockUp,
+        existing: const PantryItemDto(
+          id: 'p1',
+          channelId: 'c1',
+          name: 'Chopped tomatoes',
+          quantity: 6,
+          unit: 'tins',
+          lowThreshold: 4,
+        ),
+      ),
+      suggested: true,
+      duplicated: true,
+      onCount: (_) {},
+      onRename: () {},
+      onToggleIncluded: () {},
+      onFlipAction: () {},
+      onFindInCatalogue: () {},
+    ),
+    'a review row for something the pantry does not have':
+        PantryVisionReviewRow(
+          row: PantryVisionRow.resolve(
+            proposal: const PantryVisionItem(
+              name: 'Barilla penne rigate 500g',
+              count: 2,
+            ),
+            direction: PantryVisionDirection.useUp,
+          ),
+          suggested: true,
+          duplicated: false,
+          onCount: (_) {},
+          onRename: () {},
+          onToggleIncluded: () {},
+          onFlipAction: () {},
+          onFindInCatalogue: () {},
+        ),
+
+    // The same row once rung 3 has pre-filled it. Three things arrive that a
+    // review row never had to hold before: a product name nobody on this phone
+    // typed, the name the photograph actually produced, and two buttons for
+    // deciding between them. The confident case is the common one and is also
+    // the tightest, because a catalog name is regularly far longer than the
+    // model's reading of the same packet.
+    'a review row the catalogue matched confidently': PantryVisionReviewRow(
+      row: PantryVisionRow.resolve(
+        proposal: const PantryVisionItem(
+          name: 'Oatly Havredryck Barista Edition 1 l',
+          brand: 'Oatly',
+          count: 2,
+        ),
+        direction: PantryVisionDirection.stockUp,
+        barcode: '7394376616464',
+      ),
+      suggested: true,
+      duplicated: false,
+      catalogMatch: const PantryVisionCatalogMatch(
+        photoName: 'Oat milk',
+        confidence: VisionConfidence.high,
+        // Carried and deliberately not drawn at high confidence, which is the
+        // half of the rule a layout test can still hold: the row must fit
+        // whether or not it decides to print this.
+        reason: 'Only barista oat drink in the list',
+      ),
+      onCount: (_) {},
+      onRename: () {},
+      onToggleIncluded: () {},
+      onFlipAction: () {},
+      onFindInCatalogue: () {},
+      onKeepCatalogMatch: () {},
+      onDropCatalogMatch: () {},
+    ),
+
+    // The worst case the matcher can produce: an uncertain pick, the sentence
+    // explaining it, and a row that already had a warning of its own to print.
+    // Reachable exactly as drawn - adopting a code lands the row on the pantry
+    // item already carrying it, and the photo counted fewer than that item
+    // records - so the offer, the "takes stock off" caution and the two buttons
+    // all end up in one card at the largest text size.
+    'a review row the catalogue matched with a reason over a warning':
+        PantryVisionReviewRow(
+          row: PantryVisionRow.resolve(
+            proposal: const PantryVisionItem(
+              name: 'Migros Bio Vollmilch UHT 1 l',
+              brand: 'Migros Bio',
+              count: 2,
+              confidence: VisionConfidence.low,
+              note: 'label at an angle',
+            ),
+            direction: PantryVisionDirection.stockUp,
+            barcode: '7613269876543',
+            existing: const PantryItemDto(
+              id: 'p2',
+              channelId: 'c1',
+              name: 'Milch',
+              barcode: '7613269876543',
+              quantity: 5,
+              unit: 'cartons',
+              lowThreshold: 4,
+            ),
+          ),
+          suggested: true,
+          duplicated: true,
+          catalogMatch: const PantryVisionCatalogMatch(
+            photoName: 'Milk',
+            confidence: VisionConfidence.low,
+            reason:
+                'Three own-brand cartons looked the same; this one matches the '
+                'litre size on the packet',
+          ),
+          onCount: (_) {},
+          onRename: () {},
+          onToggleIncluded: () {},
+          onFlipAction: () {},
+          onFindInCatalogue: () {},
+          onKeepCatalogMatch: () {},
+          onDropCatalogMatch: () {},
+        ),
 
     // Both jobs of the naming sheet, since they render different copy. Height
     // is pinned because the sheet scrolls internally: what these catch is a row
