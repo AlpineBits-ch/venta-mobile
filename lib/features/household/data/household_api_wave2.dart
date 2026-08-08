@@ -352,6 +352,13 @@ extension HouseholdApiWave2 on HouseholdApi {
   /// skips it unless the instance has budget against the source's rate limit,
   /// cuts it off after about a second, and treats any failure as "no
   /// suggestion".
+  ///
+  /// [cancelToken] exists because this is the one call in the feature a person
+  /// stands and waits for. The client's own timeouts bound a single attempt,
+  /// but a `429` retry is a wait on top of that and the catalog step adds its
+  /// own second - so the scanner puts a deadline on the whole thing and needs a
+  /// way to actually abandon the request rather than leave it running behind a
+  /// screen that has already given up on it.
   Future<ScanResultDto> scanPantryItem(
     String channelId, {
     required String barcode,
@@ -359,10 +366,12 @@ extension HouseholdApiWave2 on HouseholdApi {
     String? name,
     String? unit,
     DateTime? expiresAt,
+    CancelToken? cancelToken,
   }) async {
     try {
       final response = await client.dio.post<Map<String, dynamic>>(
         '$_base/channels/$channelId/pantry-items/scan',
+        cancelToken: cancelToken,
         data: {
           'barcode': barcode,
           if (quantity != null) 'quantity': quantity,

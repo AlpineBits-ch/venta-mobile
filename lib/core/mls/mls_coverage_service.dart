@@ -181,8 +181,11 @@ class MlsCoverageService {
       encrypted: true,
       unavailable: cannotTell,
       lockedOutHere: !cannotTell && _lockedOutHere(dto, here),
+      // `== false`, never `!covered`: an entry the server did not fill in has
+      // no verdict on it, and reading absence as uncovered would name a working
+      // device on a screen that exists to be believed.
       otherOwnDevices: dto.ownDevices
-          .where((d) => !d.covered && d.deviceId != here)
+          .where((d) => d.covered == false && d.deviceId != here)
           .toList(),
       peerDevices: dto.unreachableDevices,
     );
@@ -204,9 +207,18 @@ class MlsCoverageService {
   bool _lockedOutHere(MlsCoverageDto dto, String? here) {
     if (here == null) return false;
 
+    // Absent claims nothing, and neither does an entry with no verdict on it.
+    // Only an explicit false is evidence worth crossing against local state.
     final entry = dto.ownDevices.where((d) => d.deviceId == here).firstOrNull;
-    if (entry == null || entry.covered) return false;
+    if (entry?.covered != false) return false;
 
+    // The generation-specific lookup is the whole point, and it does **not**
+    // fall back to the active group when it misses. Letting the keys this
+    // device holds for generation 1 vouch for generation 2 is exactly the false
+    // negative that ruled out `hasEverHeldGroup`: a device left out of the
+    // re-key genuinely cannot read what is being sent now. `activeGroupId` is
+    // only reachable when the answer names no generation at all, which is the
+    // case where there is no era to ask about.
     final generation = dto.generation;
     final held = generation == null
         ? mls.activeGroupId(dto.contextId)

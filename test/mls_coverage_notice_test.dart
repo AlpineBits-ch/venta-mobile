@@ -99,9 +99,6 @@ void main() {
     setUp(() {
       joinRequests = _MockJoinRequests();
       when(
-        () => joinRequests.list(any(), isChannel: any(named: 'isChannel')),
-      ).thenAnswer((_) async => const []);
-      when(
         () => joinRequests.rejoin(any(), isChannel: any(named: 'isChannel')),
       ).thenAnswer((_) async => false);
       when(
@@ -117,7 +114,13 @@ void main() {
       getIt.registerSingleton<MlsJoinRequestService>(joinRequests);
     });
 
-    Future<void> pump(WidgetTester tester, {bool isChannel = false}) async {
+    /// [key] names the mounting: a different value remounts the notice, which
+    /// is how a test stands in for a relaunch.
+    Future<void> pump(
+      WidgetTester tester, {
+      bool isChannel = false,
+      String key = 'first',
+    }) async {
       await tester.pumpWidget(
         MaterialApp(
           // The real theme: the notice reads `context.statusColors`, an
@@ -126,6 +129,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: ChannelAccessBanner(
+                key: ValueKey(key),
                 contextId: _context,
                 isChannel: isChannel,
               ),
@@ -186,6 +190,57 @@ void main() {
       verify(
         () => joinRequests.requestAccess(_context, isChannel: false),
       ).called(1);
+    });
+
+    testWidgets('opening the context costs no request of its own', (
+      tester,
+    ) async {
+      // Reading the review queue on mount bought one sentence - opening in the
+      // waiting state - for a round trip on every single open, on the device
+      // least likely to have a connection worth spending. Pressing the button
+      // resolves pending-versus-new instead, because submitting is idempotent
+      // server side.
+      await pump(tester);
+
+      verifyNever(
+        () => joinRequests.list(any(), isChannel: any(named: 'isChannel')),
+      );
+      expect(find.text('Request access'), findsOneWidget);
+      expect(find.text('Waiting to be let in'), findsNothing);
+    });
+
+    testWidgets('an already-open request lands back on waiting', (
+      tester,
+    ) async {
+      // What the mount read used to buy, for one button press: the launch sweep
+      // has already asked, so the server hands the existing request straight
+      // back rather than raising a second one.
+      await pump(tester);
+      await tester.tap(find.text('Request access'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Waiting to be let in'), findsOneWidget);
+      verify(
+        () => joinRequests.requestAccess(
+          any(),
+          isChannel: any(named: 'isChannel'),
+        ),
+      ).called(1);
+    });
+
+    testWidgets('the waiting state does not survive a remount', (tester) async {
+      // Session-scoped on purpose. Persisting it would have this device assert
+      // across a restart that a request is open when it has checked nothing,
+      // and the honest offer after a restart is the button again.
+      await pump(tester);
+      await tester.tap(find.text('Request access'));
+      await tester.pumpAndSettle();
+      expect(find.text('Waiting to be let in'), findsOneWidget);
+
+      await pump(tester, key: 'relaunched');
+
+      expect(find.text('Request access'), findsOneWidget);
+      expect(find.text('Waiting to be let in'), findsNothing);
     });
 
     testWidgets('walking back in on its own asks nobody', (tester) async {
@@ -419,6 +474,25 @@ void main() {
       await pump(tester);
 
       expect(find.byType(Text), findsNothing);
+    });
+
+    testWidgets('a read that failed outright still says it could not check', (
+      tester,
+    ) async {
+      // Nothing came back at all, so there is no `encrypted` to key off. That
+      // must not collapse into the "not encrypted, render nothing" case: on the
+      // screen somebody explicitly opened, silence is read as an all-clear.
+      when(
+        () => api.getCoverage(
+          contextId: any(named: 'contextId'),
+          isChannel: any(named: 'isChannel'),
+        ),
+      ).thenThrow(Exception('offline'));
+
+      await pump(tester);
+
+      expect(find.text('Couldn\'t check right now.'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
     });
 
     testWidgets('admits it could not check rather than saying all clear', (

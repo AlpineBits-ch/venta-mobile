@@ -3919,7 +3919,12 @@ mixin _$MlsDeviceCoverageDto {
 /// that joined by external commit leaves none of them while decrypting
 /// perfectly. Callers must cross-check against local group state before
 /// telling anybody their device is locked out.
- bool get covered;
+///
+/// **Nullable, and read as `== false` rather than `!covered`.** Absent is
+/// the server declining to report on this device, not a verdict of
+/// uncovered - defaulting it to false would turn a field that failed to
+/// arrive into an accusation against a working handset.
+ bool? get covered;
 /// Create a copy of MlsDeviceCoverageDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -3952,7 +3957,7 @@ abstract mixin class $MlsDeviceCoverageDtoCopyWith<$Res>  {
   factory $MlsDeviceCoverageDtoCopyWith(MlsDeviceCoverageDto value, $Res Function(MlsDeviceCoverageDto) _then) = _$MlsDeviceCoverageDtoCopyWithImpl;
 @useResult
 $Res call({
- String deviceId, String? deviceName, bool covered
+ String deviceId, String? deviceName, bool? covered
 });
 
 
@@ -3969,12 +3974,12 @@ class _$MlsDeviceCoverageDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsDeviceCoverageDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? deviceId = null,Object? deviceName = freezed,Object? covered = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? deviceId = null,Object? deviceName = freezed,Object? covered = freezed,}) {
   return _then(_self.copyWith(
 deviceId: null == deviceId ? _self.deviceId : deviceId // ignore: cast_nullable_to_non_nullable
 as String,deviceName: freezed == deviceName ? _self.deviceName : deviceName // ignore: cast_nullable_to_non_nullable
-as String?,covered: null == covered ? _self.covered : covered // ignore: cast_nullable_to_non_nullable
-as bool,
+as String?,covered: freezed == covered ? _self.covered : covered // ignore: cast_nullable_to_non_nullable
+as bool?,
   ));
 }
 
@@ -4056,7 +4061,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String deviceId,  String? deviceName,  bool covered)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String deviceId,  String? deviceName,  bool? covered)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _MlsDeviceCoverageDto() when $default != null:
 return $default(_that.deviceId,_that.deviceName,_that.covered);case _:
@@ -4077,7 +4082,7 @@ return $default(_that.deviceId,_that.deviceName,_that.covered);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String deviceId,  String? deviceName,  bool covered)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String deviceId,  String? deviceName,  bool? covered)  $default,) {final _that = this;
 switch (_that) {
 case _MlsDeviceCoverageDto():
 return $default(_that.deviceId,_that.deviceName,_that.covered);}
@@ -4094,7 +4099,7 @@ return $default(_that.deviceId,_that.deviceName,_that.covered);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String deviceId,  String? deviceName,  bool covered)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String deviceId,  String? deviceName,  bool? covered)?  $default,) {final _that = this;
 switch (_that) {
 case _MlsDeviceCoverageDto() when $default != null:
 return $default(_that.deviceId,_that.deviceName,_that.covered);case _:
@@ -4109,7 +4114,7 @@ return $default(_that.deviceId,_that.deviceName,_that.covered);case _:
 @JsonSerializable()
 
 class _MlsDeviceCoverageDto implements MlsDeviceCoverageDto {
-  const _MlsDeviceCoverageDto({required this.deviceId, this.deviceName, this.covered = false});
+  const _MlsDeviceCoverageDto({required this.deviceId, this.deviceName, this.covered});
   factory _MlsDeviceCoverageDto.fromJson(Map<String, dynamic> json) => _$MlsDeviceCoverageDtoFromJson(json);
 
 @override final  String deviceId;
@@ -4120,7 +4125,12 @@ class _MlsDeviceCoverageDto implements MlsDeviceCoverageDto {
 /// that joined by external commit leaves none of them while decrypting
 /// perfectly. Callers must cross-check against local group state before
 /// telling anybody their device is locked out.
-@override@JsonKey() final  bool covered;
+///
+/// **Nullable, and read as `== false` rather than `!covered`.** Absent is
+/// the server declining to report on this device, not a verdict of
+/// uncovered - defaulting it to false would turn a field that failed to
+/// arrive into an accusation against a working handset.
+@override final  bool? covered;
 
 /// Create a copy of MlsDeviceCoverageDto
 /// with the given fields replaced by the non-null parameter values.
@@ -4155,7 +4165,7 @@ abstract mixin class _$MlsDeviceCoverageDtoCopyWith<$Res> implements $MlsDeviceC
   factory _$MlsDeviceCoverageDtoCopyWith(_MlsDeviceCoverageDto value, $Res Function(_MlsDeviceCoverageDto) _then) = __$MlsDeviceCoverageDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String deviceId, String? deviceName, bool covered
+ String deviceId, String? deviceName, bool? covered
 });
 
 
@@ -4172,12 +4182,12 @@ class __$MlsDeviceCoverageDtoCopyWithImpl<$Res>
 
 /// Create a copy of MlsDeviceCoverageDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? deviceId = null,Object? deviceName = freezed,Object? covered = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? deviceId = null,Object? deviceName = freezed,Object? covered = freezed,}) {
   return _then(_MlsDeviceCoverageDto(
 deviceId: null == deviceId ? _self.deviceId : deviceId // ignore: cast_nullable_to_non_nullable
 as String,deviceName: freezed == deviceName ? _self.deviceName : deviceName // ignore: cast_nullable_to_non_nullable
-as String?,covered: null == covered ? _self.covered : covered // ignore: cast_nullable_to_non_nullable
-as bool,
+as String?,covered: freezed == covered ? _self.covered : covered // ignore: cast_nullable_to_non_nullable
+as bool?,
   ));
 }
 

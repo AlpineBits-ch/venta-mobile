@@ -361,7 +361,7 @@ _MlsDeviceCoverageDto _$MlsDeviceCoverageDtoFromJson(
 ) => _MlsDeviceCoverageDto(
   deviceId: json['deviceId'] as String,
   deviceName: json['deviceName'] as String?,
-  covered: json['covered'] as bool? ?? false,
+  covered: json['covered'] as bool?,
 );
 
 Map<String, dynamic> _$MlsDeviceCoverageDtoToJson(

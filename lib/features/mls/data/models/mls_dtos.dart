@@ -312,7 +312,12 @@ sealed class MlsDeviceCoverageDto with _$MlsDeviceCoverageDto {
     /// that joined by external commit leaves none of them while decrypting
     /// perfectly. Callers must cross-check against local group state before
     /// telling anybody their device is locked out.
-    @Default(false) bool covered,
+    ///
+    /// **Nullable, and read as `== false` rather than `!covered`.** Absent is
+    /// the server declining to report on this device, not a verdict of
+    /// uncovered - defaulting it to false would turn a field that failed to
+    /// arrive into an accusation against a working handset.
+    bool? covered,
   }) = _MlsDeviceCoverageDto;
 
   factory MlsDeviceCoverageDto.fromJson(Map<String, dynamic> json) =>

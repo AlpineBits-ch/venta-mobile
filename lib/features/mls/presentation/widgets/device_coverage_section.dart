@@ -72,7 +72,13 @@ class _DeviceCoverageSectionState extends State<DeviceCoverageSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final view = _view;
-    if (view == null || !view.encrypted) return const SizedBox.shrink();
+    // Not encrypted renders nothing at all. "Could not tell" is a different
+    // answer and does not collapse into it: a read that failed outright has
+    // nothing to report *and* nothing to conclude, and on the screen somebody
+    // explicitly opened, saying nothing would read as an all-clear.
+    if (view == null || (!view.encrypted && !view.unavailable)) {
+      return const SizedBox.shrink();
+    }
 
     // Nothing could be looked up, so both lists are empty for a reason that is
     // not "everybody is in". The reader asked, so they get told that much and

@@ -216,19 +216,78 @@ void main() {
       expect(view.lockedOutHere, isFalse);
     });
 
-    test('asks about the generation the answer was computed for', () async {
-      // Holding generation 1 says nothing about generation 2: a device left out
-      // of the re-key genuinely cannot read what is being sent now, and a check
-      // that only asked "has this device ever held a group here" would wave it
-      // through.
+    test('does not let generation 1\'s keys vouch for generation 2', () async {
+      // The lookup is per generation and does **not** fall back to the active
+      // group when it misses. A device left out of the re-key genuinely cannot
+      // read what is being sent now, so letting the keys it still holds for the
+      // previous era answer for the current one is the same false negative that
+      // ruled out `hasEverHeldGroup` - and it would silently suppress the one
+      // notice that carries a repair.
       when(() => mls.groupId(_context, 1)).thenReturn('an-old-group');
       when(() => mls.groupId(_context, 2)).thenReturn(null);
+      when(() => mls.activeGroupId(_context)).thenReturn('an-old-group');
       serverSays(
         _coverage(generation: 2, own: [_device(_thisDevice, covered: false)]),
       );
 
       expect((await read()).lockedOutHere, isTrue);
+      verifyNever(() => mls.activeGroupId(_context));
     });
+
+    test('asks the active group only when no generation is named', () async {
+      // There is no era to ask about, so the registry's live entry is the only
+      // local evidence there is.
+      when(() => mls.activeGroupId(_context)).thenReturn('a-group-held-here');
+      serverSays(
+        MlsCoverageDto(
+          contextId: _context,
+          encrypted: true,
+          ownDevices: [_device(_thisDevice, covered: false)],
+        ),
+      );
+
+      expect((await read()).lockedOutHere, isFalse);
+    });
+
+    test('an entry with no verdict on it accuses nobody', () async {
+      // Absent is the server declining to report, not a verdict of uncovered.
+      // Read as `!covered` this would raise the notice with the action on it
+      // against a handset nothing was ever said about.
+      serverSays(
+        _coverage(own: [const MlsDeviceCoverageDto(deviceId: _thisDevice)]),
+      );
+
+      final view = await read();
+
+      expect(view.lockedOutHere, isFalse);
+      expect(view.otherOwnDevices, isEmpty);
+    });
+
+    test('an unreported device of yours is not listed as stranded', () async {
+      serverSays(
+        _coverage(own: [const MlsDeviceCoverageDto(deviceId: _myLaptop)]),
+      );
+
+      expect((await read()).hasStrandedDevices, isFalse);
+    });
+
+    test(
+      'a missing covered field parses as no verdict, not as false',
+      () async {
+        // The wire half of the same decision: a default of false would turn a
+        // field that failed to arrive into an accusation.
+        final dto = MlsCoverageDto.fromJson({
+          'contextId': _context,
+          'encrypted': true,
+          'generation': 2,
+          'ownDevices': [
+            {'deviceId': _thisDevice, 'deviceName': 'Pixel 8'},
+          ],
+        });
+
+        expect(dto.ownDevices.single.covered, isNull);
+      },
+    );
 
     test('says nothing when this installation has no device id yet', () async {
       final deviceIds = _MockDeviceIds();

@@ -9,7 +9,6 @@ import '../../../../core/mls/mls_service.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/button_progress_indicator.dart';
-import '../../../auth/data/auth_repository.dart';
 import '../../data/models/mls_dtos.dart';
 
 /// Shown at the top of an encrypted context this device cannot read.
@@ -52,9 +51,21 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
   final _joinRequests = getIt<MlsJoinRequestService>();
   final _failures = getIt<MlsFailureLog>();
 
+  /// This device's open request, **for this mounting of the notice only**.
+  ///
+  /// Deliberately not restored from the server on mount, and deliberately not
+  /// persisted. Opening a context this device cannot read used to cost a
+  /// `GET .../mls/join-requests` every single time, purely so the notice could
+  /// open in the waiting state - one round trip on every open, on the device
+  /// least likely to have a good connection, to change nothing but a sentence.
+  ///
+  /// Pressing the button resolves it instead: submitting is idempotent server
+  /// side, so an existing open request comes straight back and lands on the same
+  /// waiting state. The cost is one button press in the case where the launch
+  /// sweep already asked, and after a restart the notice offers the button again
+  /// rather than claiming to know something it has not checked.
   MlsJoinRequestDto? _pending;
   String? _fingerprint;
-  bool _loading = true;
   bool _busy = false;
   String? _error;
 
@@ -62,7 +73,6 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
   void initState() {
     super.initState();
     _failures.addListener(_onFailuresChanged);
-    unawaited(_load());
   }
 
   @override
@@ -73,42 +83,6 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
 
   void _onFailuresChanged() {
     if (mounted) setState(() {});
-  }
-
-  Future<void> _load() async {
-    try {
-      final requests = await _joinRequests.list(
-        widget.contextId,
-        isChannel: widget.isChannel,
-      );
-      final myUserId = getIt<AuthRepository>().currentUserId;
-      final myDeviceId = getIt<MlsService>().deviceIdService.deviceIdOrNull;
-
-      // Admission is per device, so another of this user's devices having asked
-      // does nothing for this one.
-      final mine = requests
-          .where(
-            (r) =>
-                r.requesterUserId == myUserId &&
-                r.requesterDeviceId == myDeviceId &&
-                r.state == MlsJoinRequestState.pending,
-          )
-          .firstOrNull;
-
-      final fingerprint = mine == null
-          ? null
-          : await _joinRequests.ownFingerprint();
-
-      if (!mounted) return;
-      setState(() {
-        _pending = mine;
-        _fingerprint = fingerprint;
-        _loading = false;
-      });
-    } catch (e) {
-      debugPrint('ChannelAccessBanner: could not read the request queue: $e');
-      if (mounted) setState(() => _loading = false);
-    }
   }
 
   Future<void> _request() async {
@@ -181,8 +155,6 @@ class _ChannelAccessBannerState extends State<ChannelAccessBanner> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (_loading) return const SizedBox.shrink();
-
     final pending = _pending;
     final mls = getIt<MlsService>();
     final locked = !mls.isUnlocked;
