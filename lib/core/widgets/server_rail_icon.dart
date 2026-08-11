@@ -36,9 +36,10 @@ class ServerRailIcon extends StatelessWidget {
   /// merely "occupied" and gets the louder colour.
   final bool voiceHasStream;
 
-  /// Real server icon image, when the backend sends one. Falls back to
-  /// [icon]/[label] while null - most guilds today, since the backend
-  /// doesn't send this field yet.
+  /// The server's icon image. Falls back to [icon]/[label] both while null and
+  /// when the fetch fails, which is the normal case rather than an error path:
+  /// the icon route answers a `404` for a guild that has never had one
+  /// uploaded, so "no icon" arrives as a failed image load, not as a null URL.
   final String? imageUrl;
 
   /// An arbitrary glyph for rails whose chip isn't a Material icon, a letter
@@ -49,6 +50,11 @@ class ServerRailIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final fallback =
+        child ??
+        (icon != null
+            ? Icon(icon, color: theme.colorScheme.onSurface, size: 24)
+            : Text(label ?? '', style: theme.textTheme.titleSmall));
     return SizedBox(
       height: 56,
       child: Stack(
@@ -89,18 +95,18 @@ class ServerRailIcon extends StatelessWidget {
                             width: 48,
                             height: 48,
                             fadeInDuration: const Duration(milliseconds: 200),
+                            // The letter, not a broken-image glyph: a guild with
+                            // no icon uploaded is the common case, and it
+                            // reaches this widget as a 404.
+                            errorWidget: (context, url, error) =>
+                                Center(child: fallback),
+                            // Same reason the placeholder isn't a spinner - a
+                            // rail of 48px spinners on every cold start is
+                            // noisier than the letters they replace.
+                            placeholder: (context, url) =>
+                                Center(child: fallback),
                           )
-                        : child ??
-                              (icon != null
-                                  ? Icon(
-                                      icon,
-                                      color: theme.colorScheme.onSurface,
-                                      size: 24,
-                                    )
-                                  : Text(
-                                      label ?? '',
-                                      style: theme.textTheme.titleSmall,
-                                    )),
+                        : fallback,
                   ),
                   if (voiceParticipantCount > 0)
                     Positioned(

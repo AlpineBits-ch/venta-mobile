@@ -9,6 +9,7 @@ import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/live_badge.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
@@ -59,6 +60,11 @@ class GuildDetailScreen extends StatefulWidget {
 
 class _GuildDetailScreenState extends State<GuildDetailScreen> {
   GuildDto? _guild;
+
+  /// Every attempt at reading this guild failed and nothing was cached to fall
+  /// back on - drives the retry state in [build]. Distinct from `_guild == null`
+  /// alone, which is also true while the first read is still in flight.
+  bool _loadFailed = false;
   GuildPermissions _permissions = GuildPermissions.none;
   Map<String, _ChannelReadState> _unread = {};
   late final StreamSubscription<RealtimeEvent> _messageSub;
@@ -298,6 +304,7 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
     // load was started for.
     final guildId = widget.guildId;
     final repository = getIt<GuildRepository>();
+    if (_loadFailed) setState(() => _loadFailed = false);
     final cached = repository.cachedById(guildId);
     // Painting the cache first is only worth doing when there is something to
     // paint. A cached guild carrying no channels *and* no categories renders
@@ -314,20 +321,74 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
       _hydrateVoiceRosters(cached);
       unawaited(_loadOwnPermissions(guildId, cached.ownerId));
     }
-    try {
-      final guild = await repository.fetchGuild(guildId);
-      if (_isStale(guildId)) return;
-      setState(() => _guild = guild);
-      _hydrateVoiceRosters(guild);
-      unawaited(_loadOwnPermissions(guildId, guild.ownerId));
-    } catch (_) {
-      // Keep whatever was cached; the realtime-driven refetch will retry.
+    // Retried rather than attempted once. The guild this screen opens on has
+    // often just been joined - the invite popup lands straight here - and for
+    // the first moments after that, the read this depends on can still answer
+    // as though the account were not a member. A single failed attempt left
+    // `_guild` null with nothing to retry it: the server rendered as a nameless
+    // shell with no channels in it until the user backed out and came in again,
+    // which is what made "the invite took me to an empty server" reproducible
+    // and its own reopening the workaround.
+    const retryDelays = [Duration(milliseconds: 300), Duration(seconds: 1)];
+    for (var attempt = 0; attempt <= retryDelays.length; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(retryDelays[attempt - 1]);
+        if (_isStale(guildId)) return;
+      }
+      try {
+        final guild = await repository.fetchGuild(guildId);
+        if (_isStale(guildId)) return;
+        setState(() {
+          _guild = guild;
+          _loadFailed = false;
+        });
+        _hydrateVoiceRosters(guild);
+        unawaited(_loadOwnPermissions(guildId, guild.ownerId));
+        // A guild that answers with neither channels nor categories is either
+        // genuinely empty or was read before its contents were visible to the
+        // query - and only a second look tells them apart. Painted either way
+        // (the name and the app bar are already worth showing), then quietly
+        // replaced if the second answer carries more.
+        if (guild.channels.isEmpty && guild.categories.isEmpty) {
+          unawaited(_refetchIfStillEmpty(guildId));
+        }
+        break;
+      } catch (_) {
+        if (_isStale(guildId)) return;
+        // Out of attempts: say so rather than sitting on the skeleton forever.
+        // Only when there is nothing on screen - a paintable cache entry has
+        // already been painted above and stale channels beat an error page.
+        // Deliberately *not* falling back to an unpaintable cache entry: that
+        // entry is the nameless, channel-less shell this whole path exists to
+        // stop rendering, and showing it would only disguise the failure as an
+        // empty server again.
+        if (attempt == retryDelays.length) {
+          setState(() => _loadFailed = _guild == null);
+        }
+      }
     }
     if (_isStale(guildId)) return;
     unawaited(_checkOnboarding(guildId));
     // Detached and last: badges are the least of what this screen is for, and
     // nothing above waits on them.
     unawaited(_loadUnread(guildId));
+  }
+
+  /// One delayed second look for a guild that came back empty - see [_load].
+  /// Adopts the result only when it actually carries something, so a server
+  /// that really has no channels doesn't flicker.
+  Future<void> _refetchIfStillEmpty(String guildId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (_isStale(guildId)) return;
+    try {
+      final guild = await getIt<GuildRepository>().fetchGuild(guildId);
+      if (_isStale(guildId)) return;
+      if (guild.channels.isEmpty && guild.categories.isEmpty) return;
+      setState(() => _guild = guild);
+      _hydrateVoiceRosters(guild);
+    } catch (_) {
+      // Nothing lost - what the first read produced is still on screen.
+    }
   }
 
   /// Cheap enough to call on every guild-open per the backend guide.
@@ -607,6 +668,11 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
   Widget build(BuildContext context) {
     final guild = _guild;
     if (guild == null) {
+      // A server that could not be read is a state of its own, not an
+      // indefinite skeleton: the skeleton says "any moment now" and says it
+      // forever, which is exactly how a failed load after joining read as an
+      // empty server. [_load] has already retried by the time this shows.
+      if (_loadFailed) return _GuildUnavailable(onRetry: _load);
       return Scaffold(
         body: AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
@@ -735,6 +801,13 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
               for (final channel in byCategory[category.id] ?? const [])
                 _channelEntry(guild, channel, canManageChannels),
             ],
+            // Said out loud rather than left as blank space below the app bar.
+            // A server with nothing in it and a server that failed to load look
+            // identical when neither says anything, and this is the screen an
+            // invite lands on - the one place a member is most likely to be
+            // seeing a server for the very first time.
+            if (uncategorized.isEmpty && sortedCategories.isEmpty)
+              _NoChannelsYet(canCreate: canManageChannels),
           ],
         ),
       ),
@@ -745,6 +818,108 @@ class _GuildDetailScreenState extends State<GuildDetailScreen> {
               child: const Icon(Icons.add),
             )
           : null,
+    );
+  }
+}
+
+/// Shown in place of the channel list when every attempt to read the guild
+/// failed - see [_GuildDetailScreenState._load], which has already retried.
+///
+/// Has its own app bar, unlike the skeleton: the back arrow is the way out of a
+/// server that won't load, and without one the only affordance was the system
+/// gesture.
+class _GuildUnavailable extends StatelessWidget {
+  const _GuildUnavailable({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        leading: const AppBackButton(fallbackLocation: RoutePaths.home),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.l),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.cloud_off_outlined,
+                size: 40,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+              const SizedBox(height: AppSpacing.m),
+              Text(
+                'Couldn\'t load this server',
+                style: theme.textTheme.titleSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'If you\'ve only just joined it, give it a moment and try again.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.l),
+              FilledButton(onPressed: onRetry, child: const Text('Try again')),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The channel list's empty state. A server really can have nothing in it -
+/// every channel deleted, or a member who can see none of them - and blank
+/// space under the app bar reads as a broken screen rather than as an answer.
+class _NoChannelsYet extends StatelessWidget {
+  const _NoChannelsYet({required this.canCreate});
+
+  /// Whether this member may do something about it, which decides whether the
+  /// copy points at the create button or explains the silence.
+  final bool canCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.l,
+        AppSpacing.xl,
+        AppSpacing.l,
+        AppSpacing.l,
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.forum_outlined,
+            size: 36,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: AppSpacing.m),
+          Text(
+            'No channels yet',
+            style: theme.textTheme.titleSmall,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            canCreate
+                ? 'Create one with the button below.'
+                : 'Nothing here is visible to you yet.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }

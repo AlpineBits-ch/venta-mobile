@@ -840,6 +840,10 @@ class GuildRepository {
 
   Future<InviteDto> previewInvite(String code) => api.getInviteByCode(code);
 
+  /// Where the guild's icon image lives - see [GuildApi.iconUrl] for why this
+  /// is built from the id rather than read off `GuildDto.iconUrl`.
+  String iconUrl(String guildId) => api.iconUrl(guildId);
+
   /// Redeems the invite, then refetches the guild list so callers can
   /// navigate straight to the guild they just joined.
   ///
@@ -850,11 +854,57 @@ class GuildRepository {
   /// fetched by id afterwards regardless, through [fetchGuild] rather than the
   /// api directly - that is what puts it in the cache and emits it, which is
   /// what the rail and the guild screen are both reading.
+  ///
+  /// That read is retried, because the join being *done* and the join being
+  /// *readable* are not the same instant: the membership row is what
+  /// `GET /guilds/{id}` authorizes against, and for the first moments after
+  /// redeeming, that check can still answer as though this account had never
+  /// joined (a `403`) or hand back the guild without its channels. One attempt
+  /// therefore decided the whole landing: a caller that got the early answer
+  /// either reported a join that had actually succeeded as a failure, or
+  /// navigated to a server with no name and no channels in it. Retried here
+  /// rather than at the screen so every entry point - the invite popup, the
+  /// rail's Join sheet - gets the same behaviour.
   Future<GuildDto> redeemInvite(String code) async {
     final invite = await api.getInviteByCode(code);
     await api.redeemInvite(invite.id);
     await fetch();
-    return fetchGuild(invite.guildId);
+    return fetchJoinedGuild(invite.guildId);
+  }
+
+  /// [fetchGuild] with the just-joined guild's read-visibility lag absorbed:
+  /// retries while the read fails outright, and while it answers with a guild
+  /// that carries neither channels nor categories, which is what a membership
+  /// the read side can't see yet looks like when it doesn't 403.
+  ///
+  /// Settles for whatever the last attempt produced rather than throwing on a
+  /// guild that really is empty - a server whose channels have all been deleted
+  /// is a real, if unusual, state, and the join itself has already succeeded by
+  /// the time this runs.
+  Future<GuildDto> fetchJoinedGuild(String guildId) async {
+    const delays = [
+      Duration(milliseconds: 250),
+      Duration(milliseconds: 600),
+      Duration(milliseconds: 1200),
+    ];
+    Object? lastError;
+    for (var attempt = 0; attempt <= delays.length; attempt++) {
+      if (attempt > 0) await Future<void>.delayed(delays[attempt - 1]);
+      try {
+        final guild = await fetchGuild(guildId);
+        if (guild.channels.isNotEmpty || guild.categories.isNotEmpty) {
+          return guild;
+        }
+        lastError = null;
+        if (attempt == delays.length) return guild;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    // Every attempt failed. The join stands, but nothing readable came back -
+    // let the caller decide what to say about it.
+    throw lastError ??
+        StateError('Could not read guild $guildId after joining');
   }
 
   void dispose() {

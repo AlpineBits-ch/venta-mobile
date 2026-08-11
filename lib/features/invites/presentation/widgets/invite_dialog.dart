@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
-import '../../../../core/network/api_client.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../guilds/data/guild_api.dart';
@@ -64,8 +63,12 @@ class _InviteDialogState extends State<InviteDialog> {
       setState(() => _state = _DialogState.joined);
       await Future<void>.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
+      // Resolved before the pop, not after: `context.push` looks the router up
+      // through this dialog's own element, which the pop has just started
+      // taking out of the tree.
+      final router = GoRouter.of(context);
       Navigator.of(context).pop();
-      context.push(RoutePaths.serverPath(guild.id));
+      router.push(RoutePaths.serverPath(guild.id));
     } on VerificationLevelNotMetException catch (e) {
       if (mounted) {
         setState(() {
@@ -89,8 +92,7 @@ class _InviteDialogState extends State<InviteDialog> {
     Navigator.of(context).pop();
   }
 
-  String? _iconUrl(String guildId) =>
-      getIt<ApiClient>().url('/api/v1/guild/guilds/$guildId/icon');
+  String _iconUrl(String guildId) => getIt<GuildRepository>().iconUrl(guildId);
 
   String _initials(String name) {
     final words = name.trim().split(RegExp(r'\s+'));

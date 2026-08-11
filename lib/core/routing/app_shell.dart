@@ -340,7 +340,16 @@ class _AppShellState extends State<AppShell> {
                                 label: guild.name.isNotEmpty
                                     ? guild.name[0].toUpperCase()
                                     : '?',
-                                imageUrl: guild.iconUrl,
+                                // Built from the id rather than read off the
+                                // guild: `iconUrl` is still never sent, so the
+                                // rail drew a letter for every server - even one
+                                // whose icon the invite popup had shown a second
+                                // earlier, which is where "the server I joined
+                                // has no icon" came from. `ServerRailIcon` falls
+                                // back to the letter when the route 404s.
+                                imageUrl:
+                                    guild.iconUrl ??
+                                    getIt<GuildRepository>().iconUrl(guild.id),
                                 backgroundColor: guild.id == currentGuildId
                                     ? theme.colorScheme.primary
                                     : null,

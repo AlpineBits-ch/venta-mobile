@@ -66,6 +66,21 @@ class GuildApi {
     return GuildDto.fromJson(response.data!);
   }
 
+  /// Where a guild's icon image lives.
+  ///
+  /// Always returns a URL - like the profile-avatar route, this one **404s**
+  /// when the guild has never had an icon uploaded rather than being absent
+  /// from the guild payload, so callers must render their own fallback on an
+  /// image error instead of branching on null. It is deliberately not derived
+  /// from `GuildDto.iconUrl`, which the backend still doesn't send: that field
+  /// being null is why the server rail drew a bare letter for every server,
+  /// including one whose icon the invite popup had just shown.
+  ///
+  /// Anonymous (the redirect it answers with is a presigned S3 URL), so it
+  /// works from a plain image widget with no auth header - and from the invite
+  /// popup, where the viewer isn't a member yet.
+  String iconUrl(String guildId) => '$_base/guilds/$guildId/icon';
+
   Future<void> leaveGuild(String guildId) async {
     await client.dio.delete<void>('$_base/guilds/$guildId/members/me');
   }
