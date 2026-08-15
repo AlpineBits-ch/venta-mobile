@@ -6,7 +6,9 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../media/camera_permission.dart';
 import '../media/screen_share_service.dart';
+import 'tile_heights.dart';
 import 'track_naming.dart';
+import 'video_layers.dart';
 import 'voice_media_api.dart';
 import 'voice_media_dto.dart';
 
@@ -45,6 +47,16 @@ class VoiceWebRtcService {
   VoiceWebRtcService();
 
   final ScreenShareService _screenShareService = ScreenShareService();
+
+  /// Reported to the server rather than acted on locally: which layer this
+  /// client is served is the server's decision, and the tile size is the only
+  /// input it has for making it. Posts through whatever [VoiceMediaApi] is
+  /// current, so a report that arrives before [connectTo] - or after
+  /// [disconnect] - is simply dropped rather than throwing at a UI callback.
+  late final VoiceTileHeights _tileHeights = VoiceTileHeights(
+    send: (heights) async =>
+        _media?.updateSubscriber(tileHeights: heights) ?? Future.value(),
+  );
 
   VoiceMediaApi? _media;
   RTCPeerConnection? _pc;
@@ -246,6 +258,10 @@ class VoiceWebRtcService {
     _pendingTracks.clear();
     _pendingSubscribes.clear();
     _subscribedKeys.clear();
+    // Cleared rather than flushed: the session these sizes described is gone,
+    // and the server drops a departed subscriber's entry anyway. A rebuilt
+    // transport is reported to from the next layout.
+    _tileHeights.clear();
     _deafened = false;
     _negotiationChain = Future.value();
   }
@@ -267,7 +283,11 @@ class VoiceWebRtcService {
     final track = stream.getVideoTracks().first;
     _localVideoStream = stream;
     _localVideoTrack = track;
-    await _publishTrack(track: track, trackName: TrackNaming.camera);
+    await _publishTrack(
+      track: track,
+      trackName: TrackNaming.camera,
+      encodings: VideoLayers.camera,
+    );
   }
 
   Future<void> stopLocalVideo() async {
@@ -309,9 +329,17 @@ class VoiceWebRtcService {
     _activeShareId = shareId;
 
     await _publishTracks([
-      (track: videoTrack, trackName: TrackNaming.screenTrack(shareId)),
+      (
+        track: videoTrack,
+        trackName: TrackNaming.screenTrack(shareId),
+        encodings: VideoLayers.screen,
+      ),
       if (audioTrack != null)
-        (track: audioTrack, trackName: TrackNaming.screenAudioTrack(shareId)),
+        (
+          track: audioTrack,
+          trackName: TrackNaming.screenAudioTrack(shareId),
+          encodings: null,
+        ),
     ]);
   }
 
@@ -363,12 +391,26 @@ class VoiceWebRtcService {
   Future<void> _publishTrack({
     required MediaStreamTrack track,
     required String trackName,
-  }) => _publishTracks([(track: track, trackName: trackName)]);
+    List<RTCRtpEncoding>? encodings,
+  }) => _publishTracks([
+    (track: track, trackName: trackName, encodings: encodings),
+  ]);
 
   /// Publishes one or more already-captured local tracks in a single
   /// negotiation.
+  ///
+  /// [encodings] is the simulcast ladder for a video track - see [VideoLayers].
+  /// Audio carries none: it is not simulcast, and the server never asks for a
+  /// layer of it.
   Future<void> _publishTracks(
-    List<({MediaStreamTrack track, String trackName})> tracks,
+    List<
+      ({
+        MediaStreamTrack track,
+        String trackName,
+        List<RTCRtpEncoding>? encodings,
+      })
+    >
+    tracks,
   ) async {
     final pc = _pc;
     if (pc == null || tracks.isEmpty) return;
@@ -377,7 +419,10 @@ class VoiceWebRtcService {
     for (final t in tracks) {
       transceivers[t.trackName] = await pc.addTransceiver(
         track: t.track,
-        init: RTCRtpTransceiverInit(direction: TransceiverDirection.SendOnly),
+        init: RTCRtpTransceiverInit(
+          direction: TransceiverDirection.SendOnly,
+          sendEncodings: t.encodings,
+        ),
       );
     }
 
@@ -664,6 +709,28 @@ class VoiceWebRtcService {
       .where((e) => e.value == userId)
       .map((e) => e.key)
       .toList();
+
+  // ── What this client is drawing ───────────────────────────────────────────
+
+  /// Reports the rendered height of one tile, in device pixels, so the server
+  /// can serve that publisher's video at a layer the tile can actually use.
+  ///
+  /// Safe to call on every layout: [VoiceTileHeights] debounces and only posts
+  /// when the resulting map changes. [tileId] identifies the tile rather than
+  /// the publisher - see there for why that distinction matters.
+  void reportTileHeight({
+    required String tileId,
+    required String userId,
+    required int devicePixels,
+  }) => _tileHeights.set(
+    tileId: tileId,
+    userId: userId,
+    devicePixels: devicePixels,
+  );
+
+  /// The tile is gone from the layout - the participant left the grid, or the
+  /// screen it was on was closed.
+  void forgetTile(String tileId) => _tileHeights.remove(tileId);
 
   // ── Local controls ────────────────────────────────────────────────────────
 

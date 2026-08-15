@@ -705,6 +705,21 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   MediaStreamTrack? remoteScreenTrackForShare(String shareId) =>
       _webRtc?.remoteScreenTrackForShare(shareId);
 
+  /// How large this client is drawing [userId], which is what the server picks
+  /// their simulcast layer from. Reported by the tiles themselves; safe to call
+  /// on every layout, and a no-op before the transport exists.
+  void reportTileHeight({
+    required String tileId,
+    required String userId,
+    required int devicePixels,
+  }) => _webRtc?.reportTileHeight(
+    tileId: tileId,
+    userId: userId,
+    devicePixels: devicePixels,
+  );
+
+  void forgetTile(String tileId) => _webRtc?.forgetTile(tileId);
+
   // ── Events ────────────────────────────────────────────────────────────────
 
   void _handleEvent(GuildVoiceEvent event) {

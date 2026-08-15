@@ -20,6 +20,8 @@ class VideoParticipantTile extends StatefulWidget {
     this.width = 160,
     this.height = 120,
     this.mirror = false,
+    this.onHeightChanged,
+    this.onHidden,
   });
 
   final MediaStreamTrack? track;
@@ -30,6 +32,20 @@ class VideoParticipantTile extends StatefulWidget {
   /// self-preview so it behaves like every other camera app.
   final bool mirror;
 
+  /// Called with this tile's height in **device pixels** whenever it changes,
+  /// including the first layout. The server picks the simulcast layer this
+  /// publisher is served at from it, so a tile that never reports is served
+  /// the safe maximum - full quality into a thumbnail.
+  ///
+  /// Device pixels rather than logical ones because the layer is a question
+  /// about the picture, and two phones drawing "120 logical pixels" want
+  /// different amounts of video.
+  final ValueChanged<int>? onHeightChanged;
+
+  /// Called when the tile leaves the layout, so whoever is reporting can stop
+  /// claiming a size for a picture that is no longer drawn.
+  final VoidCallback? onHidden;
+
   @override
   State<VideoParticipantTile> createState() => _VideoParticipantTileState();
 }
@@ -38,6 +54,7 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
   final _renderer = RTCVideoRenderer();
   MediaStream? _wrapperStream;
   bool _rendererReady = false;
+  int? _reportedHeight;
 
   @override
   void initState() {
@@ -56,11 +73,33 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Here rather than in `initState` because the device pixel ratio comes from
+    // the media query, which is not available in `initState` and changes when
+    // the tile moves to another display.
+    _reportHeight();
+  }
+
+  @override
   void didUpdateWidget(covariant VideoParticipantTile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.track?.id != widget.track?.id) {
       unawaited(_attachTrack(widget.track));
     }
+    if (oldWidget.height != widget.height) _reportHeight();
+  }
+
+  /// The height is a laid-out constant rather than a measured `RenderBox`: this
+  /// widget is given its size, so there is nothing to wait a frame for.
+  void _reportHeight() {
+    final report = widget.onHeightChanged;
+    if (report == null) return;
+    final devicePixels =
+        (widget.height * MediaQuery.devicePixelRatioOf(context)).round();
+    if (devicePixels == _reportedHeight) return;
+    _reportedHeight = devicePixels;
+    report(devicePixels);
   }
 
   Future<void> _attachTrack(MediaStreamTrack? track) async {
@@ -84,6 +123,7 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
 
   @override
   void dispose() {
+    widget.onHidden?.call();
     _renderer.dispose();
     _wrapperStream?.dispose();
     super.dispose();

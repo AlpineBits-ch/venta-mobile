@@ -162,6 +162,21 @@ abstract class VoiceMediaApi {
     required List<String> trackNames,
   });
 
+  /// Reports what this client can actually see, so the server can decide what
+  /// to serve it.
+  ///
+  /// [tileHeights] maps a publisher's user id to the height in **device
+  /// pixels** of the largest tile this client draws them in, and it drives the
+  /// simulcast layer each of their video tracks is served at. The map is
+  /// authoritative rather than a delta: a publisher missing from it is one this
+  /// client is not drawing.
+  ///
+  /// The reply is this client's own subscription set, which nothing here reads
+  /// yet - the subscription-set contract is not implemented, and a small room
+  /// is not sent one at all. Reporting is still worth doing on its own: it is
+  /// the only measurement behind layer selection.
+  Future<void> updateSubscriber({Map<String, int>? tileHeights});
+
   /// Claims a viewer slot on a screen share. Expires after 90 seconds, so it
   /// is re-posted on the heartbeat timer rather than once.
   Future<void> watchShare(String shareId);

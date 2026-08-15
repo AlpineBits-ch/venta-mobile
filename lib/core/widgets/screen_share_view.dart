@@ -14,11 +14,21 @@ class ScreenShareView extends StatelessWidget {
     required this.userId,
     required this.track,
     required this.isSelf,
+    this.onHeightChanged,
+    this.onHidden,
   });
 
   final String userId;
   final MediaStreamTrack? track;
   final bool isSelf;
+
+  /// See `VideoParticipantTile.onHeightChanged`. A share is the largest thing
+  /// on the screen and the most expensive thing in the room, so it is the tile
+  /// where reporting a size is worth the most.
+  final ValueChanged<int>? onHeightChanged;
+
+  /// See `VideoParticipantTile.onHidden`.
+  final VoidCallback? onHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +42,8 @@ class ScreenShareView extends StatelessWidget {
               track: track,
               width: width,
               height: width * 9 / 16,
+              onHeightChanged: onHeightChanged,
+              onHidden: onHidden,
             ),
             Padding(
               padding: const EdgeInsets.all(8),

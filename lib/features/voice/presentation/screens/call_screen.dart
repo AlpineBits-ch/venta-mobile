@@ -157,6 +157,10 @@ class _ActiveCallView extends StatelessWidget {
     final others = state.participants
         .where((p) => p.userId != myUserId)
         .toList();
+    // Held rather than read per tile because the tiles report their size back
+    // through it, and one of those reports happens while the tile is being
+    // disposed - where the element's `context` is no longer usable.
+    final cubit = context.read<CallCubit>();
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.l),
@@ -207,10 +211,21 @@ class _ActiveCallView extends StatelessWidget {
                 userId: sharer.userId,
                 isSelf: sharer.userId == myUserId,
                 track: sharer.userId == myUserId
-                    ? context.read<CallCubit>().localScreenTrack
-                    : context.read<CallCubit>().remoteScreenTrackFor(
-                        sharer.userId,
+                    ? cubit.localScreenTrack
+                    : cubit.remoteScreenTrackFor(sharer.userId),
+                // Only somebody else's share is worth a size: the server picks
+                // a layer for what this client *pulls*, and nobody pulls their
+                // own picture.
+                onHeightChanged: sharer.userId == myUserId
+                    ? null
+                    : (devicePixels) => cubit.reportTileHeight(
+                        tileId: 'share:${sharer.userId}',
+                        userId: sharer.userId,
+                        devicePixels: devicePixels,
                       ),
+                onHidden: sharer.userId == myUserId
+                    ? null
+                    : () => cubit.forgetTile('share:${sharer.userId}'),
               ),
             ),
           Expanded(
@@ -220,9 +235,9 @@ class _ActiveCallView extends StatelessWidget {
                 runSpacing: AppSpacing.l,
                 alignment: WrapAlignment.center,
                 children: [
-                  if (context.read<CallCubit>().isCameraOn)
+                  if (cubit.isCameraOn)
                     VideoParticipantTile(
-                      track: context.read<CallCubit>().localVideoTrack,
+                      track: cubit.localVideoTrack,
                       mirror: true,
                     ),
                   if (others.isEmpty)
@@ -236,9 +251,15 @@ class _ActiveCallView extends StatelessWidget {
                     for (final participant in others)
                       if (participant.hasCamera)
                         VideoParticipantTile(
-                          track: context.read<CallCubit>().remoteVideoTrackFor(
-                            participant.userId,
-                          ),
+                          track: cubit.remoteVideoTrackFor(participant.userId),
+                          onHeightChanged: (devicePixels) =>
+                              cubit.reportTileHeight(
+                                tileId: 'camera:${participant.userId}',
+                                userId: participant.userId,
+                                devicePixels: devicePixels,
+                              ),
+                          onHidden: () =>
+                              cubit.forgetTile('camera:${participant.userId}'),
                         )
                       else
                         CallParticipantTile(

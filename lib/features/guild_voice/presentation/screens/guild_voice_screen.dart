@@ -103,6 +103,22 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                             : getIt<GuildVoiceCubit>().remoteScreenTrackFor(
                                 sharer.userId,
                               ),
+                        // Only somebody else's share is worth a size: the
+                        // server picks a layer for what this client *pulls*,
+                        // and nobody pulls their own picture.
+                        onHeightChanged: sharer.userId == myUserId
+                            ? null
+                            : (devicePixels) =>
+                                  getIt<GuildVoiceCubit>().reportTileHeight(
+                                    tileId: 'share:${sharer.userId}',
+                                    userId: sharer.userId,
+                                    devicePixels: devicePixels,
+                                  ),
+                        onHidden: sharer.userId == myUserId
+                            ? null
+                            : () => getIt<GuildVoiceCubit>().forgetTile(
+                                'share:${sharer.userId}',
+                              ),
                       ),
                     ),
                   Expanded(
@@ -134,6 +150,18 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                                       track: getIt<GuildVoiceCubit>()
                                           .remoteVideoTrackFor(
                                             participant.userId,
+                                          ),
+                                      onHeightChanged: (devicePixels) =>
+                                          getIt<GuildVoiceCubit>()
+                                              .reportTileHeight(
+                                                tileId:
+                                                    'camera:${participant.userId}',
+                                                userId: participant.userId,
+                                                devicePixels: devicePixels,
+                                              ),
+                                      onHidden: () =>
+                                          getIt<GuildVoiceCubit>().forgetTile(
+                                            'camera:${participant.userId}',
                                           ),
                                     )
                                   else

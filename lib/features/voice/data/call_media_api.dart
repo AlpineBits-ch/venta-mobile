@@ -55,6 +55,10 @@ class CallMediaApi implements VoiceMediaApi {
   );
 
   @override
+  Future<void> updateSubscriber({Map<String, int>? tileHeights}) =>
+      api.updateSubscriber(callId: callId, tileHeights: tileHeights);
+
+  @override
   Future<void> watchShare(String shareId) => api.watchShare(callId, shareId);
 
   @override

@@ -240,6 +240,20 @@ class VoiceApi {
     );
   });
 
+  /// Reports this client's own rendering - today only tile sizes, which are
+  /// what layer selection is chosen from. Omitted fields are left alone
+  /// server-side, so this is a body with `tileHeights` in it and nothing else.
+  Future<void> updateSubscriber({
+    required String callId,
+    Map<String, int>? tileHeights,
+  }) => mapMediaErrors('subscriptions', () async {
+    await client.dio.post<void>(
+      client.url('$_base/calls/$callId/subscriptions'),
+      data: {'tileHeights': ?tileHeights},
+      options: _deviceOptions,
+    );
+  });
+
   // ── Screen share viewership ───────────────────────────────────────────────
 
   /// Claims a viewer slot. Watching is announced explicitly because a

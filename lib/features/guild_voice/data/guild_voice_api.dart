@@ -157,6 +157,21 @@ class GuildVoiceApi {
     );
   });
 
+  /// Reports this client's own rendering - today only tile sizes, which are
+  /// what layer selection is chosen from. Omitted fields are left alone
+  /// server-side, so this is a body with `tileHeights` in it and nothing else.
+  Future<void> updateSubscriber({
+    required String guildId,
+    required String channelId,
+    Map<String, int>? tileHeights,
+  }) => mapMediaErrors('subscriptions', () async {
+    await client.dio.post<void>(
+      '${_base(guildId, channelId)}/subscriptions',
+      data: {'tileHeights': ?tileHeights},
+      options: _deviceOptions,
+    );
+  });
+
   // ── Screen share viewership ───────────────────────────────────────────────
 
   /// Claims a viewer slot; expires after 90 seconds, so it is re-posted on the

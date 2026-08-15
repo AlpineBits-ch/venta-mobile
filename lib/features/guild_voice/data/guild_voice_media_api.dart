@@ -64,6 +64,14 @@ class GuildVoiceMediaApi implements VoiceMediaApi {
   );
 
   @override
+  Future<void> updateSubscriber({Map<String, int>? tileHeights}) =>
+      api.updateSubscriber(
+        guildId: guildId,
+        channelId: channelId,
+        tileHeights: tileHeights,
+      );
+
+  @override
   Future<void> watchShare(String shareId) =>
       api.watchShare(guildId, channelId, shareId);
 
