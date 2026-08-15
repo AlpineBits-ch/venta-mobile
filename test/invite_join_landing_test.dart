@@ -159,7 +159,7 @@ void main() {
       return (404, null);
     });
 
-    final guild = await repository.redeemInvite(_code);
+    final guild = (await repository.redeemInvite(_code)).guild;
 
     expect(guild.id, _guildId);
     expect(guild.name, 'Echo');
@@ -183,7 +183,7 @@ void main() {
       return (404, null);
     });
 
-    final guild = await repository.redeemInvite(_code);
+    final guild = (await repository.redeemInvite(_code)).guild;
 
     expect(guild.name, 'Echo', reason: 'a 200 is not the same as an answer');
     expect(guild.channels, hasLength(1));
@@ -204,7 +204,7 @@ void main() {
       return (404, null);
     });
 
-    final guild = await repository.redeemInvite(_code);
+    final guild = (await repository.redeemInvite(_code)).guild;
 
     expect(guild.id, _guildId, reason: 'the join succeeded, so this must not throw');
     expect(guildReads, 4, reason: 'bounded: three retries behind the first read');

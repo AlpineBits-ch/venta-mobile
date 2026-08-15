@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../features/billing/data/models/entitlement_degradation_dto.dart';
+
 part 'voice_media_dto.freezed.dart';
 part 'voice_media_dto.g.dart';
 
@@ -54,12 +56,27 @@ sealed class VoiceTrackResultDto with _$VoiceTrackResultDto {
       _$VoiceTrackResultDtoFromJson(json);
 }
 
+/// The answer to a negotiation, including the case where it succeeded smaller.
+///
+/// [degradations] is what a clamped publish looks like: a `200` carrying the
+/// normal body plus the reduction that was applied. **Nothing here rolls back
+/// on one.** The publish worked, at a lower rung than was asked for, and a
+/// client that treated the array as a failure would have turned "degrade, do
+/// not deny" into a denial with extra steps.
+///
+/// It is read here as well as by `DegradationInterceptor` because the two do
+/// different jobs. The interceptor files every reduction the app sees into the
+/// session log, which is what lets Settings account for one later; this hands
+/// the same object to the room that caused it, while the person is still
+/// looking at the room.
 @freezed
 sealed class VoiceNegotiateResponseDto with _$VoiceNegotiateResponseDto {
   const factory VoiceNegotiateResponseDto({
     required Map<String, dynamic> sessionDescription,
     @Default(<VoiceTrackResultDto>[]) List<VoiceTrackResultDto> tracks,
     @Default(false) bool requiresImmediateRenegotiation,
+    @Default(<EntitlementDegradationDto>[])
+    List<EntitlementDegradationDto> degradations,
   }) = _VoiceNegotiateResponseDto;
 
   factory VoiceNegotiateResponseDto.fromJson(Map<String, dynamic> json) =>

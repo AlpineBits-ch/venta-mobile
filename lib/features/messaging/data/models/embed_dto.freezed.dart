@@ -15,7 +15,14 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$EmbedDto implements DiagnosticableTreeMixin {
 
-@JsonKey(unknownEnumValue: EmbedType.unknown) EmbedType get type; String? get title; String? get description; String? get url;/// The *content's* own date (a publication date, say) - not when the
+@JsonKey(unknownEnumValue: EmbedType.unknown) EmbedType get type;/// `type` again, unparsed.
+///
+/// Needed because a `venta.*` kind added after this build decodes to
+/// [EmbedType.unknown], which is indistinguishable from any other unknown
+/// type once the enum has swallowed the string - and the two want opposite
+/// treatment: an unknown ordinary type falls back to the link card, an
+/// unknown internal-link type draws nothing at all.
+@JsonKey(name: 'type', includeToJson: false) String get rawType; String? get title; String? get description; String? get url;/// The *content's* own date (a publication date, say) - not when the
 /// preview was generated.
  DateTime? get timestamp;/// `#rrggbb`, and the card's left accent bar. Null for most generated
 /// previews; bots set it deliberately.
@@ -25,7 +32,12 @@ mixin _$EmbedDto implements DiagnosticableTreeMixin {
 /// an embeddable iframe document, which this client has no sandboxed frame
 /// to put it in - see `MessageEmbedsView`, which degrades to a play badge
 /// that opens the original externally.
- EmbedMediaDto? get video; List<EmbedFieldDto> get fields; EmbedFooterDto? get footer;/// Bitfield. Bit 16 (65536) marks a card the server unfurled from a link
+ EmbedMediaDto? get video; List<EmbedFieldDto> get fields; EmbedFooterDto? get footer;/// The identifiers behind a `venta.*` card.
+///
+/// **Only trustworthy when [EmbedDtoX.isGenerated].** A bot authors its own
+/// embeds and may put any `venta` block it likes in one; see
+/// [EmbedDtoX.isServerVouchedVenta].
+ EmbedVentaDto? get venta;/// Bitfield. Bit 16 (65536) marks a card the server unfurled from a link
 /// rather than one its author wrote.
  int get flags;
 /// Create a copy of EmbedDto
@@ -41,21 +53,21 @@ $EmbedDtoCopyWith<EmbedDto> get copyWith => _$EmbedDtoCopyWithImpl<EmbedDto>(thi
 void debugFillProperties(DiagnosticPropertiesBuilder properties) {
   properties
     ..add(DiagnosticsProperty('type', 'EmbedDto'))
-    ..add(DiagnosticsProperty('type', type))..add(DiagnosticsProperty('title', title))..add(DiagnosticsProperty('description', description))..add(DiagnosticsProperty('url', url))..add(DiagnosticsProperty('timestamp', timestamp))..add(DiagnosticsProperty('color', color))..add(DiagnosticsProperty('provider', provider))..add(DiagnosticsProperty('author', author))..add(DiagnosticsProperty('thumbnail', thumbnail))..add(DiagnosticsProperty('image', image))..add(DiagnosticsProperty('video', video))..add(DiagnosticsProperty('fields', fields))..add(DiagnosticsProperty('footer', footer))..add(DiagnosticsProperty('flags', flags));
+    ..add(DiagnosticsProperty('type', type))..add(DiagnosticsProperty('rawType', rawType))..add(DiagnosticsProperty('title', title))..add(DiagnosticsProperty('description', description))..add(DiagnosticsProperty('url', url))..add(DiagnosticsProperty('timestamp', timestamp))..add(DiagnosticsProperty('color', color))..add(DiagnosticsProperty('provider', provider))..add(DiagnosticsProperty('author', author))..add(DiagnosticsProperty('thumbnail', thumbnail))..add(DiagnosticsProperty('image', image))..add(DiagnosticsProperty('video', video))..add(DiagnosticsProperty('fields', fields))..add(DiagnosticsProperty('footer', footer))..add(DiagnosticsProperty('venta', venta))..add(DiagnosticsProperty('flags', flags));
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is EmbedDto&&(identical(other.type, type) || other.type == type)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&(identical(other.url, url) || other.url == url)&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp)&&(identical(other.color, color) || other.color == color)&&(identical(other.provider, provider) || other.provider == provider)&&(identical(other.author, author) || other.author == author)&&(identical(other.thumbnail, thumbnail) || other.thumbnail == thumbnail)&&(identical(other.image, image) || other.image == image)&&(identical(other.video, video) || other.video == video)&&const DeepCollectionEquality().equals(other.fields, fields)&&(identical(other.footer, footer) || other.footer == footer)&&(identical(other.flags, flags) || other.flags == flags));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is EmbedDto&&(identical(other.type, type) || other.type == type)&&(identical(other.rawType, rawType) || other.rawType == rawType)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&(identical(other.url, url) || other.url == url)&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp)&&(identical(other.color, color) || other.color == color)&&(identical(other.provider, provider) || other.provider == provider)&&(identical(other.author, author) || other.author == author)&&(identical(other.thumbnail, thumbnail) || other.thumbnail == thumbnail)&&(identical(other.image, image) || other.image == image)&&(identical(other.video, video) || other.video == video)&&const DeepCollectionEquality().equals(other.fields, fields)&&(identical(other.footer, footer) || other.footer == footer)&&(identical(other.venta, venta) || other.venta == venta)&&(identical(other.flags, flags) || other.flags == flags));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,type,title,description,url,timestamp,color,provider,author,thumbnail,image,video,const DeepCollectionEquality().hash(fields),footer,flags);
+int get hashCode => Object.hash(runtimeType,type,rawType,title,description,url,timestamp,color,provider,author,thumbnail,image,video,const DeepCollectionEquality().hash(fields),footer,venta,flags);
 
 @override
 String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
-  return 'EmbedDto(type: $type, title: $title, description: $description, url: $url, timestamp: $timestamp, color: $color, provider: $provider, author: $author, thumbnail: $thumbnail, image: $image, video: $video, fields: $fields, footer: $footer, flags: $flags)';
+  return 'EmbedDto(type: $type, rawType: $rawType, title: $title, description: $description, url: $url, timestamp: $timestamp, color: $color, provider: $provider, author: $author, thumbnail: $thumbnail, image: $image, video: $video, fields: $fields, footer: $footer, venta: $venta, flags: $flags)';
 }
 
 
@@ -66,11 +78,11 @@ abstract mixin class $EmbedDtoCopyWith<$Res>  {
   factory $EmbedDtoCopyWith(EmbedDto value, $Res Function(EmbedDto) _then) = _$EmbedDtoCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(unknownEnumValue: EmbedType.unknown) EmbedType type, String? title, String? description, String? url, DateTime? timestamp, String? color, EmbedProviderDto? provider, EmbedAuthorDto? author, EmbedMediaDto? thumbnail, EmbedMediaDto? image, EmbedMediaDto? video, List<EmbedFieldDto> fields, EmbedFooterDto? footer, int flags
+@JsonKey(unknownEnumValue: EmbedType.unknown) EmbedType type,@JsonKey(name: 'type', includeToJson: false) String rawType, String? title, String? description, String? url, DateTime? timestamp, String? color, EmbedProviderDto? provider, EmbedAuthorDto? author, EmbedMediaDto? thumbnail, EmbedMediaDto? image, EmbedMediaDto? video, List<EmbedFieldDto> fields, EmbedFooterDto? footer, EmbedVentaDto? venta, int flags
 });
 
 
-$EmbedProviderDtoCopyWith<$Res>? get provider;$EmbedAuthorDtoCopyWith<$Res>? get author;$EmbedMediaDtoCopyWith<$Res>? get thumbnail;$EmbedMediaDtoCopyWith<$Res>? get image;$EmbedMediaDtoCopyWith<$Res>? get video;$EmbedFooterDtoCopyWith<$Res>? get footer;
+$EmbedProviderDtoCopyWith<$Res>? get provider;$EmbedAuthorDtoCopyWith<$Res>? get author;$EmbedMediaDtoCopyWith<$Res>? get thumbnail;$EmbedMediaDtoCopyWith<$Res>? get image;$EmbedMediaDtoCopyWith<$Res>? get video;$EmbedFooterDtoCopyWith<$Res>? get footer;$EmbedVentaDtoCopyWith<$Res>? get venta;
 
 }
 /// @nodoc
@@ -83,10 +95,11 @@ class _$EmbedDtoCopyWithImpl<$Res>
 
 /// Create a copy of EmbedDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? type = null,Object? title = freezed,Object? description = freezed,Object? url = freezed,Object? timestamp = freezed,Object? color = freezed,Object? provider = freezed,Object? author = freezed,Object? thumbnail = freezed,Object? image = freezed,Object? video = freezed,Object? fields = null,Object? footer = freezed,Object? flags = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? type = null,Object? rawType = null,Object? title = freezed,Object? description = freezed,Object? url = freezed,Object? timestamp = freezed,Object? color = freezed,Object? provider = freezed,Object? author = freezed,Object? thumbnail = freezed,Object? image = freezed,Object? video = freezed,Object? fields = null,Object? footer = freezed,Object? venta = freezed,Object? flags = null,}) {
   return _then(_self.copyWith(
 type: null == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
-as EmbedType,title: freezed == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
+as EmbedType,rawType: null == rawType ? _self.rawType : rawType // ignore: cast_nullable_to_non_nullable
+as String,title: freezed == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
 as String?,description: freezed == description ? _self.description : description // ignore: cast_nullable_to_non_nullable
 as String?,url: freezed == url ? _self.url : url // ignore: cast_nullable_to_non_nullable
 as String?,timestamp: freezed == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
@@ -98,7 +111,8 @@ as EmbedMediaDto?,image: freezed == image ? _self.image : image // ignore: cast_
 as EmbedMediaDto?,video: freezed == video ? _self.video : video // ignore: cast_nullable_to_non_nullable
 as EmbedMediaDto?,fields: null == fields ? _self.fields : fields // ignore: cast_nullable_to_non_nullable
 as List<EmbedFieldDto>,footer: freezed == footer ? _self.footer : footer // ignore: cast_nullable_to_non_nullable
-as EmbedFooterDto?,flags: null == flags ? _self.flags : flags // ignore: cast_nullable_to_non_nullable
+as EmbedFooterDto?,venta: freezed == venta ? _self.venta : venta // ignore: cast_nullable_to_non_nullable
+as EmbedVentaDto?,flags: null == flags ? _self.flags : flags // ignore: cast_nullable_to_non_nullable
 as int,
   ));
 }
@@ -173,6 +187,18 @@ $EmbedFooterDtoCopyWith<$Res>? get footer {
 
   return $EmbedFooterDtoCopyWith<$Res>(_self.footer!, (value) {
     return _then(_self.copyWith(footer: value));
+  });
+}/// Create a copy of EmbedDto
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$EmbedVentaDtoCopyWith<$Res>? get venta {
+    if (_self.venta == null) {
+    return null;
+  }
+
+  return $EmbedVentaDtoCopyWith<$Res>(_self.venta!, (value) {
+    return _then(_self.copyWith(venta: value));
   });
 }
 }
@@ -253,10 +279,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedType.unknown)  EmbedType type,  String? title,  String? description,  String? url,  DateTime? timestamp,  String? color,  EmbedProviderDto? provider,  EmbedAuthorDto? author,  EmbedMediaDto? thumbnail,  EmbedMediaDto? image,  EmbedMediaDto? video,  List<EmbedFieldDto> fields,  EmbedFooterDto? footer,  int flags)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedType.unknown)  EmbedType type, @JsonKey(name: 'type', includeToJson: false)  String rawType,  String? title,  String? description,  String? url,  DateTime? timestamp,  String? color,  EmbedProviderDto? provider,  EmbedAuthorDto? author,  EmbedMediaDto? thumbnail,  EmbedMediaDto? image,  EmbedMediaDto? video,  List<EmbedFieldDto> fields,  EmbedFooterDto? footer,  EmbedVentaDto? venta,  int flags)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _EmbedDto() when $default != null:
-return $default(_that.type,_that.title,_that.description,_that.url,_that.timestamp,_that.color,_that.provider,_that.author,_that.thumbnail,_that.image,_that.video,_that.fields,_that.footer,_that.flags);case _:
+return $default(_that.type,_that.rawType,_that.title,_that.description,_that.url,_that.timestamp,_that.color,_that.provider,_that.author,_that.thumbnail,_that.image,_that.video,_that.fields,_that.footer,_that.venta,_that.flags);case _:
   return orElse();
 
 }
@@ -274,10 +300,10 @@ return $default(_that.type,_that.title,_that.description,_that.url,_that.timesta
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedType.unknown)  EmbedType type,  String? title,  String? description,  String? url,  DateTime? timestamp,  String? color,  EmbedProviderDto? provider,  EmbedAuthorDto? author,  EmbedMediaDto? thumbnail,  EmbedMediaDto? image,  EmbedMediaDto? video,  List<EmbedFieldDto> fields,  EmbedFooterDto? footer,  int flags)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedType.unknown)  EmbedType type, @JsonKey(name: 'type', includeToJson: false)  String rawType,  String? title,  String? description,  String? url,  DateTime? timestamp,  String? color,  EmbedProviderDto? provider,  EmbedAuthorDto? author,  EmbedMediaDto? thumbnail,  EmbedMediaDto? image,  EmbedMediaDto? video,  List<EmbedFieldDto> fields,  EmbedFooterDto? footer,  EmbedVentaDto? venta,  int flags)  $default,) {final _that = this;
 switch (_that) {
 case _EmbedDto():
-return $default(_that.type,_that.title,_that.description,_that.url,_that.timestamp,_that.color,_that.provider,_that.author,_that.thumbnail,_that.image,_that.video,_that.fields,_that.footer,_that.flags);}
+return $default(_that.type,_that.rawType,_that.title,_that.description,_that.url,_that.timestamp,_that.color,_that.provider,_that.author,_that.thumbnail,_that.image,_that.video,_that.fields,_that.footer,_that.venta,_that.flags);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -291,10 +317,10 @@ return $default(_that.type,_that.title,_that.description,_that.url,_that.timesta
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(unknownEnumValue: EmbedType.unknown)  EmbedType type,  String? title,  String? description,  String? url,  DateTime? timestamp,  String? color,  EmbedProviderDto? provider,  EmbedAuthorDto? author,  EmbedMediaDto? thumbnail,  EmbedMediaDto? image,  EmbedMediaDto? video,  List<EmbedFieldDto> fields,  EmbedFooterDto? footer,  int flags)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(unknownEnumValue: EmbedType.unknown)  EmbedType type, @JsonKey(name: 'type', includeToJson: false)  String rawType,  String? title,  String? description,  String? url,  DateTime? timestamp,  String? color,  EmbedProviderDto? provider,  EmbedAuthorDto? author,  EmbedMediaDto? thumbnail,  EmbedMediaDto? image,  EmbedMediaDto? video,  List<EmbedFieldDto> fields,  EmbedFooterDto? footer,  EmbedVentaDto? venta,  int flags)?  $default,) {final _that = this;
 switch (_that) {
 case _EmbedDto() when $default != null:
-return $default(_that.type,_that.title,_that.description,_that.url,_that.timestamp,_that.color,_that.provider,_that.author,_that.thumbnail,_that.image,_that.video,_that.fields,_that.footer,_that.flags);case _:
+return $default(_that.type,_that.rawType,_that.title,_that.description,_that.url,_that.timestamp,_that.color,_that.provider,_that.author,_that.thumbnail,_that.image,_that.video,_that.fields,_that.footer,_that.venta,_that.flags);case _:
   return null;
 
 }
@@ -306,10 +332,18 @@ return $default(_that.type,_that.title,_that.description,_that.url,_that.timesta
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _EmbedDto with DiagnosticableTreeMixin implements EmbedDto {
-  const _EmbedDto({@JsonKey(unknownEnumValue: EmbedType.unknown) this.type = EmbedType.link, this.title, this.description, this.url, this.timestamp, this.color, this.provider, this.author, this.thumbnail, this.image, this.video, final  List<EmbedFieldDto> fields = const <EmbedFieldDto>[], this.footer, this.flags = 0}): _fields = fields;
+  const _EmbedDto({@JsonKey(unknownEnumValue: EmbedType.unknown) this.type = EmbedType.link, @JsonKey(name: 'type', includeToJson: false) this.rawType = '', this.title, this.description, this.url, this.timestamp, this.color, this.provider, this.author, this.thumbnail, this.image, this.video, final  List<EmbedFieldDto> fields = const <EmbedFieldDto>[], this.footer, this.venta, this.flags = 0}): _fields = fields;
   factory _EmbedDto.fromJson(Map<String, dynamic> json) => _$EmbedDtoFromJson(json);
 
 @override@JsonKey(unknownEnumValue: EmbedType.unknown) final  EmbedType type;
+/// `type` again, unparsed.
+///
+/// Needed because a `venta.*` kind added after this build decodes to
+/// [EmbedType.unknown], which is indistinguishable from any other unknown
+/// type once the enum has swallowed the string - and the two want opposite
+/// treatment: an unknown ordinary type falls back to the link card, an
+/// unknown internal-link type draws nothing at all.
+@override@JsonKey(name: 'type', includeToJson: false) final  String rawType;
 @override final  String? title;
 @override final  String? description;
 @override final  String? url;
@@ -338,6 +372,12 @@ class _EmbedDto with DiagnosticableTreeMixin implements EmbedDto {
 }
 
 @override final  EmbedFooterDto? footer;
+/// The identifiers behind a `venta.*` card.
+///
+/// **Only trustworthy when [EmbedDtoX.isGenerated].** A bot authors its own
+/// embeds and may put any `venta` block it likes in one; see
+/// [EmbedDtoX.isServerVouchedVenta].
+@override final  EmbedVentaDto? venta;
 /// Bitfield. Bit 16 (65536) marks a card the server unfurled from a link
 /// rather than one its author wrote.
 @override@JsonKey() final  int flags;
@@ -356,21 +396,21 @@ Map<String, dynamic> toJson() {
 void debugFillProperties(DiagnosticPropertiesBuilder properties) {
   properties
     ..add(DiagnosticsProperty('type', 'EmbedDto'))
-    ..add(DiagnosticsProperty('type', type))..add(DiagnosticsProperty('title', title))..add(DiagnosticsProperty('description', description))..add(DiagnosticsProperty('url', url))..add(DiagnosticsProperty('timestamp', timestamp))..add(DiagnosticsProperty('color', color))..add(DiagnosticsProperty('provider', provider))..add(DiagnosticsProperty('author', author))..add(DiagnosticsProperty('thumbnail', thumbnail))..add(DiagnosticsProperty('image', image))..add(DiagnosticsProperty('video', video))..add(DiagnosticsProperty('fields', fields))..add(DiagnosticsProperty('footer', footer))..add(DiagnosticsProperty('flags', flags));
+    ..add(DiagnosticsProperty('type', type))..add(DiagnosticsProperty('rawType', rawType))..add(DiagnosticsProperty('title', title))..add(DiagnosticsProperty('description', description))..add(DiagnosticsProperty('url', url))..add(DiagnosticsProperty('timestamp', timestamp))..add(DiagnosticsProperty('color', color))..add(DiagnosticsProperty('provider', provider))..add(DiagnosticsProperty('author', author))..add(DiagnosticsProperty('thumbnail', thumbnail))..add(DiagnosticsProperty('image', image))..add(DiagnosticsProperty('video', video))..add(DiagnosticsProperty('fields', fields))..add(DiagnosticsProperty('footer', footer))..add(DiagnosticsProperty('venta', venta))..add(DiagnosticsProperty('flags', flags));
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EmbedDto&&(identical(other.type, type) || other.type == type)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&(identical(other.url, url) || other.url == url)&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp)&&(identical(other.color, color) || other.color == color)&&(identical(other.provider, provider) || other.provider == provider)&&(identical(other.author, author) || other.author == author)&&(identical(other.thumbnail, thumbnail) || other.thumbnail == thumbnail)&&(identical(other.image, image) || other.image == image)&&(identical(other.video, video) || other.video == video)&&const DeepCollectionEquality().equals(other._fields, _fields)&&(identical(other.footer, footer) || other.footer == footer)&&(identical(other.flags, flags) || other.flags == flags));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EmbedDto&&(identical(other.type, type) || other.type == type)&&(identical(other.rawType, rawType) || other.rawType == rawType)&&(identical(other.title, title) || other.title == title)&&(identical(other.description, description) || other.description == description)&&(identical(other.url, url) || other.url == url)&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp)&&(identical(other.color, color) || other.color == color)&&(identical(other.provider, provider) || other.provider == provider)&&(identical(other.author, author) || other.author == author)&&(identical(other.thumbnail, thumbnail) || other.thumbnail == thumbnail)&&(identical(other.image, image) || other.image == image)&&(identical(other.video, video) || other.video == video)&&const DeepCollectionEquality().equals(other._fields, _fields)&&(identical(other.footer, footer) || other.footer == footer)&&(identical(other.venta, venta) || other.venta == venta)&&(identical(other.flags, flags) || other.flags == flags));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,type,title,description,url,timestamp,color,provider,author,thumbnail,image,video,const DeepCollectionEquality().hash(_fields),footer,flags);
+int get hashCode => Object.hash(runtimeType,type,rawType,title,description,url,timestamp,color,provider,author,thumbnail,image,video,const DeepCollectionEquality().hash(_fields),footer,venta,flags);
 
 @override
 String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
-  return 'EmbedDto(type: $type, title: $title, description: $description, url: $url, timestamp: $timestamp, color: $color, provider: $provider, author: $author, thumbnail: $thumbnail, image: $image, video: $video, fields: $fields, footer: $footer, flags: $flags)';
+  return 'EmbedDto(type: $type, rawType: $rawType, title: $title, description: $description, url: $url, timestamp: $timestamp, color: $color, provider: $provider, author: $author, thumbnail: $thumbnail, image: $image, video: $video, fields: $fields, footer: $footer, venta: $venta, flags: $flags)';
 }
 
 
@@ -381,11 +421,11 @@ abstract mixin class _$EmbedDtoCopyWith<$Res> implements $EmbedDtoCopyWith<$Res>
   factory _$EmbedDtoCopyWith(_EmbedDto value, $Res Function(_EmbedDto) _then) = __$EmbedDtoCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(unknownEnumValue: EmbedType.unknown) EmbedType type, String? title, String? description, String? url, DateTime? timestamp, String? color, EmbedProviderDto? provider, EmbedAuthorDto? author, EmbedMediaDto? thumbnail, EmbedMediaDto? image, EmbedMediaDto? video, List<EmbedFieldDto> fields, EmbedFooterDto? footer, int flags
+@JsonKey(unknownEnumValue: EmbedType.unknown) EmbedType type,@JsonKey(name: 'type', includeToJson: false) String rawType, String? title, String? description, String? url, DateTime? timestamp, String? color, EmbedProviderDto? provider, EmbedAuthorDto? author, EmbedMediaDto? thumbnail, EmbedMediaDto? image, EmbedMediaDto? video, List<EmbedFieldDto> fields, EmbedFooterDto? footer, EmbedVentaDto? venta, int flags
 });
 
 
-@override $EmbedProviderDtoCopyWith<$Res>? get provider;@override $EmbedAuthorDtoCopyWith<$Res>? get author;@override $EmbedMediaDtoCopyWith<$Res>? get thumbnail;@override $EmbedMediaDtoCopyWith<$Res>? get image;@override $EmbedMediaDtoCopyWith<$Res>? get video;@override $EmbedFooterDtoCopyWith<$Res>? get footer;
+@override $EmbedProviderDtoCopyWith<$Res>? get provider;@override $EmbedAuthorDtoCopyWith<$Res>? get author;@override $EmbedMediaDtoCopyWith<$Res>? get thumbnail;@override $EmbedMediaDtoCopyWith<$Res>? get image;@override $EmbedMediaDtoCopyWith<$Res>? get video;@override $EmbedFooterDtoCopyWith<$Res>? get footer;@override $EmbedVentaDtoCopyWith<$Res>? get venta;
 
 }
 /// @nodoc
@@ -398,10 +438,11 @@ class __$EmbedDtoCopyWithImpl<$Res>
 
 /// Create a copy of EmbedDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? type = null,Object? title = freezed,Object? description = freezed,Object? url = freezed,Object? timestamp = freezed,Object? color = freezed,Object? provider = freezed,Object? author = freezed,Object? thumbnail = freezed,Object? image = freezed,Object? video = freezed,Object? fields = null,Object? footer = freezed,Object? flags = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? type = null,Object? rawType = null,Object? title = freezed,Object? description = freezed,Object? url = freezed,Object? timestamp = freezed,Object? color = freezed,Object? provider = freezed,Object? author = freezed,Object? thumbnail = freezed,Object? image = freezed,Object? video = freezed,Object? fields = null,Object? footer = freezed,Object? venta = freezed,Object? flags = null,}) {
   return _then(_EmbedDto(
 type: null == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
-as EmbedType,title: freezed == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
+as EmbedType,rawType: null == rawType ? _self.rawType : rawType // ignore: cast_nullable_to_non_nullable
+as String,title: freezed == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
 as String?,description: freezed == description ? _self.description : description // ignore: cast_nullable_to_non_nullable
 as String?,url: freezed == url ? _self.url : url // ignore: cast_nullable_to_non_nullable
 as String?,timestamp: freezed == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
@@ -413,7 +454,8 @@ as EmbedMediaDto?,image: freezed == image ? _self.image : image // ignore: cast_
 as EmbedMediaDto?,video: freezed == video ? _self.video : video // ignore: cast_nullable_to_non_nullable
 as EmbedMediaDto?,fields: null == fields ? _self._fields : fields // ignore: cast_nullable_to_non_nullable
 as List<EmbedFieldDto>,footer: freezed == footer ? _self.footer : footer // ignore: cast_nullable_to_non_nullable
-as EmbedFooterDto?,flags: null == flags ? _self.flags : flags // ignore: cast_nullable_to_non_nullable
+as EmbedFooterDto?,venta: freezed == venta ? _self.venta : venta // ignore: cast_nullable_to_non_nullable
+as EmbedVentaDto?,flags: null == flags ? _self.flags : flags // ignore: cast_nullable_to_non_nullable
 as int,
   ));
 }
@@ -490,6 +532,18 @@ $EmbedFooterDtoCopyWith<$Res>? get footer {
   return $EmbedFooterDtoCopyWith<$Res>(_self.footer!, (value) {
     return _then(_self.copyWith(footer: value));
   });
+}/// Create a copy of EmbedDto
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$EmbedVentaDtoCopyWith<$Res>? get venta {
+    if (_self.venta == null) {
+    return null;
+  }
+
+  return $EmbedVentaDtoCopyWith<$Res>(_self.venta!, (value) {
+    return _then(_self.copyWith(venta: value));
+  });
 }
 }
 
@@ -499,12 +553,12 @@ mixin _$EmbedMediaDto implements DiagnosticableTreeMixin {
 
 /// The origin's own URL. Never rendered directly - see [displayUrl].
  String? get url;/// Our re-hosted copy: absolute, unauthenticated, immutable. Render this.
- String? get proxyUrl;/// True measured pixels, used to reserve layout space before the bytes
+@JsonKey(name: 'proxy_url') String? get proxyUrl;/// True measured pixels, used to reserve layout space before the bytes
 /// land so an arriving card doesn't reflow the timeline.
- int? get width; int? get height; String? get contentType;/// BlurHash, shown blurred underneath the image while it loads.
+ int? get width; int? get height;@JsonKey(name: 'content_type') String? get contentType;/// BlurHash, shown blurred underneath the image while it loads.
  String? get placeholder;/// Which encoding [placeholder] uses. `1` is BlurHash, and the only one
 /// this build can decode - see [blurHash].
- int? get placeholderVersion;
+@JsonKey(name: 'placeholder_version') int? get placeholderVersion;
 /// Create a copy of EmbedMediaDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -543,7 +597,7 @@ abstract mixin class $EmbedMediaDtoCopyWith<$Res>  {
   factory $EmbedMediaDtoCopyWith(EmbedMediaDto value, $Res Function(EmbedMediaDto) _then) = _$EmbedMediaDtoCopyWithImpl;
 @useResult
 $Res call({
- String? url, String? proxyUrl, int? width, int? height, String? contentType, String? placeholder, int? placeholderVersion
+ String? url,@JsonKey(name: 'proxy_url') String? proxyUrl, int? width, int? height,@JsonKey(name: 'content_type') String? contentType, String? placeholder,@JsonKey(name: 'placeholder_version') int? placeholderVersion
 });
 
 
@@ -651,7 +705,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? url,  String? proxyUrl,  int? width,  int? height,  String? contentType,  String? placeholder,  int? placeholderVersion)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? url, @JsonKey(name: 'proxy_url')  String? proxyUrl,  int? width,  int? height, @JsonKey(name: 'content_type')  String? contentType,  String? placeholder, @JsonKey(name: 'placeholder_version')  int? placeholderVersion)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _EmbedMediaDto() when $default != null:
 return $default(_that.url,_that.proxyUrl,_that.width,_that.height,_that.contentType,_that.placeholder,_that.placeholderVersion);case _:
@@ -672,7 +726,7 @@ return $default(_that.url,_that.proxyUrl,_that.width,_that.height,_that.contentT
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? url,  String? proxyUrl,  int? width,  int? height,  String? contentType,  String? placeholder,  int? placeholderVersion)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? url, @JsonKey(name: 'proxy_url')  String? proxyUrl,  int? width,  int? height, @JsonKey(name: 'content_type')  String? contentType,  String? placeholder, @JsonKey(name: 'placeholder_version')  int? placeholderVersion)  $default,) {final _that = this;
 switch (_that) {
 case _EmbedMediaDto():
 return $default(_that.url,_that.proxyUrl,_that.width,_that.height,_that.contentType,_that.placeholder,_that.placeholderVersion);}
@@ -689,7 +743,7 @@ return $default(_that.url,_that.proxyUrl,_that.width,_that.height,_that.contentT
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? url,  String? proxyUrl,  int? width,  int? height,  String? contentType,  String? placeholder,  int? placeholderVersion)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? url, @JsonKey(name: 'proxy_url')  String? proxyUrl,  int? width,  int? height, @JsonKey(name: 'content_type')  String? contentType,  String? placeholder, @JsonKey(name: 'placeholder_version')  int? placeholderVersion)?  $default,) {final _that = this;
 switch (_that) {
 case _EmbedMediaDto() when $default != null:
 return $default(_that.url,_that.proxyUrl,_that.width,_that.height,_that.contentType,_that.placeholder,_that.placeholderVersion);case _:
@@ -704,23 +758,23 @@ return $default(_that.url,_that.proxyUrl,_that.width,_that.height,_that.contentT
 @JsonSerializable()
 
 class _EmbedMediaDto with DiagnosticableTreeMixin implements EmbedMediaDto {
-  const _EmbedMediaDto({this.url, this.proxyUrl, this.width, this.height, this.contentType, this.placeholder, this.placeholderVersion});
+  const _EmbedMediaDto({this.url, @JsonKey(name: 'proxy_url') this.proxyUrl, this.width, this.height, @JsonKey(name: 'content_type') this.contentType, this.placeholder, @JsonKey(name: 'placeholder_version') this.placeholderVersion});
   factory _EmbedMediaDto.fromJson(Map<String, dynamic> json) => _$EmbedMediaDtoFromJson(json);
 
 /// The origin's own URL. Never rendered directly - see [displayUrl].
 @override final  String? url;
 /// Our re-hosted copy: absolute, unauthenticated, immutable. Render this.
-@override final  String? proxyUrl;
+@override@JsonKey(name: 'proxy_url') final  String? proxyUrl;
 /// True measured pixels, used to reserve layout space before the bytes
 /// land so an arriving card doesn't reflow the timeline.
 @override final  int? width;
 @override final  int? height;
-@override final  String? contentType;
+@override@JsonKey(name: 'content_type') final  String? contentType;
 /// BlurHash, shown blurred underneath the image while it loads.
 @override final  String? placeholder;
 /// Which encoding [placeholder] uses. `1` is BlurHash, and the only one
 /// this build can decode - see [blurHash].
-@override final  int? placeholderVersion;
+@override@JsonKey(name: 'placeholder_version') final  int? placeholderVersion;
 
 /// Create a copy of EmbedMediaDto
 /// with the given fields replaced by the non-null parameter values.
@@ -761,7 +815,7 @@ abstract mixin class _$EmbedMediaDtoCopyWith<$Res> implements $EmbedMediaDtoCopy
   factory _$EmbedMediaDtoCopyWith(_EmbedMediaDto value, $Res Function(_EmbedMediaDto) _then) = __$EmbedMediaDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String? url, String? proxyUrl, int? width, int? height, String? contentType, String? placeholder, int? placeholderVersion
+ String? url,@JsonKey(name: 'proxy_url') String? proxyUrl, int? width, int? height,@JsonKey(name: 'content_type') String? contentType, String? placeholder,@JsonKey(name: 'placeholder_version') int? placeholderVersion
 });
 
 
@@ -787,6 +841,320 @@ as int?,height: freezed == height ? _self.height : height // ignore: cast_nullab
 as int?,contentType: freezed == contentType ? _self.contentType : contentType // ignore: cast_nullable_to_non_nullable
 as String?,placeholder: freezed == placeholder ? _self.placeholder : placeholder // ignore: cast_nullable_to_non_nullable
 as String?,placeholderVersion: freezed == placeholderVersion ? _self.placeholderVersion : placeholderVersion // ignore: cast_nullable_to_non_nullable
+as int?,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$EmbedVentaDto implements DiagnosticableTreeMixin {
+
+@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) EmbedVentaKind get kind;/// Whether the server filled the human-readable fields in from the real
+/// record, or deliberately left them out. False means the card is a stub -
+/// see the wiki card, where a title is refused by design.
+ bool get resolved;@JsonKey(name: 'guild_id') String? get guildId;/// The invite's short shareable code, not its id. Always the canonical
+/// generated code even when the pasted link was a vanity URL, so it
+/// survives a vanity rename.
+@JsonKey(name: 'invite_code') String? get inviteCode;/// The channel a joiner lands on, when the invite names one. Id only -
+/// never a name.
+@JsonKey(name: 'channel_id') String? get channelId;@JsonKey(name: 'page_id') String? get pageId;/// Absent for an invite that never expires. Safe to freeze into the card:
+/// an absolute instant does not go stale the way "expired" does.
+@JsonKey(name: 'expires_at') DateTime? get expiresAt;/// Absent for unlimited. The running *use* count is deliberately not
+/// carried - re-resolve if you want to show it.
+@JsonKey(name: 'max_uses') int? get maxUses;
+/// Create a copy of EmbedVentaDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$EmbedVentaDtoCopyWith<EmbedVentaDto> get copyWith => _$EmbedVentaDtoCopyWithImpl<EmbedVentaDto>(this as EmbedVentaDto, _$identity);
+
+  /// Serializes this EmbedVentaDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+@override
+void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+  properties
+    ..add(DiagnosticsProperty('type', 'EmbedVentaDto'))
+    ..add(DiagnosticsProperty('kind', kind))..add(DiagnosticsProperty('resolved', resolved))..add(DiagnosticsProperty('guildId', guildId))..add(DiagnosticsProperty('inviteCode', inviteCode))..add(DiagnosticsProperty('channelId', channelId))..add(DiagnosticsProperty('pageId', pageId))..add(DiagnosticsProperty('expiresAt', expiresAt))..add(DiagnosticsProperty('maxUses', maxUses));
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is EmbedVentaDto&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.resolved, resolved) || other.resolved == resolved)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.inviteCode, inviteCode) || other.inviteCode == inviteCode)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.pageId, pageId) || other.pageId == pageId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,kind,resolved,guildId,inviteCode,channelId,pageId,expiresAt,maxUses);
+
+@override
+String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
+  return 'EmbedVentaDto(kind: $kind, resolved: $resolved, guildId: $guildId, inviteCode: $inviteCode, channelId: $channelId, pageId: $pageId, expiresAt: $expiresAt, maxUses: $maxUses)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $EmbedVentaDtoCopyWith<$Res>  {
+  factory $EmbedVentaDtoCopyWith(EmbedVentaDto value, $Res Function(EmbedVentaDto) _then) = _$EmbedVentaDtoCopyWithImpl;
+@useResult
+$Res call({
+@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) EmbedVentaKind kind, bool resolved,@JsonKey(name: 'guild_id') String? guildId,@JsonKey(name: 'invite_code') String? inviteCode,@JsonKey(name: 'channel_id') String? channelId,@JsonKey(name: 'page_id') String? pageId,@JsonKey(name: 'expires_at') DateTime? expiresAt,@JsonKey(name: 'max_uses') int? maxUses
+});
+
+
+
+
+}
+/// @nodoc
+class _$EmbedVentaDtoCopyWithImpl<$Res>
+    implements $EmbedVentaDtoCopyWith<$Res> {
+  _$EmbedVentaDtoCopyWithImpl(this._self, this._then);
+
+  final EmbedVentaDto _self;
+  final $Res Function(EmbedVentaDto) _then;
+
+/// Create a copy of EmbedVentaDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? kind = null,Object? resolved = null,Object? guildId = freezed,Object? inviteCode = freezed,Object? channelId = freezed,Object? pageId = freezed,Object? expiresAt = freezed,Object? maxUses = freezed,}) {
+  return _then(_self.copyWith(
+kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
+as EmbedVentaKind,resolved: null == resolved ? _self.resolved : resolved // ignore: cast_nullable_to_non_nullable
+as bool,guildId: freezed == guildId ? _self.guildId : guildId // ignore: cast_nullable_to_non_nullable
+as String?,inviteCode: freezed == inviteCode ? _self.inviteCode : inviteCode // ignore: cast_nullable_to_non_nullable
+as String?,channelId: freezed == channelId ? _self.channelId : channelId // ignore: cast_nullable_to_non_nullable
+as String?,pageId: freezed == pageId ? _self.pageId : pageId // ignore: cast_nullable_to_non_nullable
+as String?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,maxUses: freezed == maxUses ? _self.maxUses : maxUses // ignore: cast_nullable_to_non_nullable
+as int?,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [EmbedVentaDto].
+extension EmbedVentaDtoPatterns on EmbedVentaDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _EmbedVentaDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _EmbedVentaDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _EmbedVentaDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _EmbedVentaDto():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _EmbedVentaDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _EmbedVentaDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedVentaKind.unknown)  EmbedVentaKind kind,  bool resolved, @JsonKey(name: 'guild_id')  String? guildId, @JsonKey(name: 'invite_code')  String? inviteCode, @JsonKey(name: 'channel_id')  String? channelId, @JsonKey(name: 'page_id')  String? pageId, @JsonKey(name: 'expires_at')  DateTime? expiresAt, @JsonKey(name: 'max_uses')  int? maxUses)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _EmbedVentaDto() when $default != null:
+return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.channelId,_that.pageId,_that.expiresAt,_that.maxUses);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedVentaKind.unknown)  EmbedVentaKind kind,  bool resolved, @JsonKey(name: 'guild_id')  String? guildId, @JsonKey(name: 'invite_code')  String? inviteCode, @JsonKey(name: 'channel_id')  String? channelId, @JsonKey(name: 'page_id')  String? pageId, @JsonKey(name: 'expires_at')  DateTime? expiresAt, @JsonKey(name: 'max_uses')  int? maxUses)  $default,) {final _that = this;
+switch (_that) {
+case _EmbedVentaDto():
+return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.channelId,_that.pageId,_that.expiresAt,_that.maxUses);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(unknownEnumValue: EmbedVentaKind.unknown)  EmbedVentaKind kind,  bool resolved, @JsonKey(name: 'guild_id')  String? guildId, @JsonKey(name: 'invite_code')  String? inviteCode, @JsonKey(name: 'channel_id')  String? channelId, @JsonKey(name: 'page_id')  String? pageId, @JsonKey(name: 'expires_at')  DateTime? expiresAt, @JsonKey(name: 'max_uses')  int? maxUses)?  $default,) {final _that = this;
+switch (_that) {
+case _EmbedVentaDto() when $default != null:
+return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.channelId,_that.pageId,_that.expiresAt,_that.maxUses);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+@ApiDateTimeConverter()
+class _EmbedVentaDto with DiagnosticableTreeMixin implements EmbedVentaDto {
+  const _EmbedVentaDto({@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) this.kind = EmbedVentaKind.unknown, this.resolved = false, @JsonKey(name: 'guild_id') this.guildId, @JsonKey(name: 'invite_code') this.inviteCode, @JsonKey(name: 'channel_id') this.channelId, @JsonKey(name: 'page_id') this.pageId, @JsonKey(name: 'expires_at') this.expiresAt, @JsonKey(name: 'max_uses') this.maxUses});
+  factory _EmbedVentaDto.fromJson(Map<String, dynamic> json) => _$EmbedVentaDtoFromJson(json);
+
+@override@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) final  EmbedVentaKind kind;
+/// Whether the server filled the human-readable fields in from the real
+/// record, or deliberately left them out. False means the card is a stub -
+/// see the wiki card, where a title is refused by design.
+@override@JsonKey() final  bool resolved;
+@override@JsonKey(name: 'guild_id') final  String? guildId;
+/// The invite's short shareable code, not its id. Always the canonical
+/// generated code even when the pasted link was a vanity URL, so it
+/// survives a vanity rename.
+@override@JsonKey(name: 'invite_code') final  String? inviteCode;
+/// The channel a joiner lands on, when the invite names one. Id only -
+/// never a name.
+@override@JsonKey(name: 'channel_id') final  String? channelId;
+@override@JsonKey(name: 'page_id') final  String? pageId;
+/// Absent for an invite that never expires. Safe to freeze into the card:
+/// an absolute instant does not go stale the way "expired" does.
+@override@JsonKey(name: 'expires_at') final  DateTime? expiresAt;
+/// Absent for unlimited. The running *use* count is deliberately not
+/// carried - re-resolve if you want to show it.
+@override@JsonKey(name: 'max_uses') final  int? maxUses;
+
+/// Create a copy of EmbedVentaDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$EmbedVentaDtoCopyWith<_EmbedVentaDto> get copyWith => __$EmbedVentaDtoCopyWithImpl<_EmbedVentaDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$EmbedVentaDtoToJson(this, );
+}
+@override
+void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+  properties
+    ..add(DiagnosticsProperty('type', 'EmbedVentaDto'))
+    ..add(DiagnosticsProperty('kind', kind))..add(DiagnosticsProperty('resolved', resolved))..add(DiagnosticsProperty('guildId', guildId))..add(DiagnosticsProperty('inviteCode', inviteCode))..add(DiagnosticsProperty('channelId', channelId))..add(DiagnosticsProperty('pageId', pageId))..add(DiagnosticsProperty('expiresAt', expiresAt))..add(DiagnosticsProperty('maxUses', maxUses));
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EmbedVentaDto&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.resolved, resolved) || other.resolved == resolved)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.inviteCode, inviteCode) || other.inviteCode == inviteCode)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.pageId, pageId) || other.pageId == pageId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,kind,resolved,guildId,inviteCode,channelId,pageId,expiresAt,maxUses);
+
+@override
+String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
+  return 'EmbedVentaDto(kind: $kind, resolved: $resolved, guildId: $guildId, inviteCode: $inviteCode, channelId: $channelId, pageId: $pageId, expiresAt: $expiresAt, maxUses: $maxUses)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$EmbedVentaDtoCopyWith<$Res> implements $EmbedVentaDtoCopyWith<$Res> {
+  factory _$EmbedVentaDtoCopyWith(_EmbedVentaDto value, $Res Function(_EmbedVentaDto) _then) = __$EmbedVentaDtoCopyWithImpl;
+@override @useResult
+$Res call({
+@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) EmbedVentaKind kind, bool resolved,@JsonKey(name: 'guild_id') String? guildId,@JsonKey(name: 'invite_code') String? inviteCode,@JsonKey(name: 'channel_id') String? channelId,@JsonKey(name: 'page_id') String? pageId,@JsonKey(name: 'expires_at') DateTime? expiresAt,@JsonKey(name: 'max_uses') int? maxUses
+});
+
+
+
+
+}
+/// @nodoc
+class __$EmbedVentaDtoCopyWithImpl<$Res>
+    implements _$EmbedVentaDtoCopyWith<$Res> {
+  __$EmbedVentaDtoCopyWithImpl(this._self, this._then);
+
+  final _EmbedVentaDto _self;
+  final $Res Function(_EmbedVentaDto) _then;
+
+/// Create a copy of EmbedVentaDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? kind = null,Object? resolved = null,Object? guildId = freezed,Object? inviteCode = freezed,Object? channelId = freezed,Object? pageId = freezed,Object? expiresAt = freezed,Object? maxUses = freezed,}) {
+  return _then(_EmbedVentaDto(
+kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
+as EmbedVentaKind,resolved: null == resolved ? _self.resolved : resolved // ignore: cast_nullable_to_non_nullable
+as bool,guildId: freezed == guildId ? _self.guildId : guildId // ignore: cast_nullable_to_non_nullable
+as String?,inviteCode: freezed == inviteCode ? _self.inviteCode : inviteCode // ignore: cast_nullable_to_non_nullable
+as String?,channelId: freezed == channelId ? _self.channelId : channelId // ignore: cast_nullable_to_non_nullable
+as String?,pageId: freezed == pageId ? _self.pageId : pageId // ignore: cast_nullable_to_non_nullable
+as String?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,maxUses: freezed == maxUses ? _self.maxUses : maxUses // ignore: cast_nullable_to_non_nullable
 as int?,
   ));
 }
@@ -1073,7 +1441,7 @@ as bool,
 /// @nodoc
 mixin _$EmbedAuthorDto implements DiagnosticableTreeMixin {
 
- String get name; String? get url; String? get iconUrl; String? get proxyIconUrl;
+ String get name; String? get url;@JsonKey(name: 'icon_url') String? get iconUrl;@JsonKey(name: 'proxy_icon_url') String? get proxyIconUrl;
 /// Create a copy of EmbedAuthorDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1112,7 +1480,7 @@ abstract mixin class $EmbedAuthorDtoCopyWith<$Res>  {
   factory $EmbedAuthorDtoCopyWith(EmbedAuthorDto value, $Res Function(EmbedAuthorDto) _then) = _$EmbedAuthorDtoCopyWithImpl;
 @useResult
 $Res call({
- String name, String? url, String? iconUrl, String? proxyIconUrl
+ String name, String? url,@JsonKey(name: 'icon_url') String? iconUrl,@JsonKey(name: 'proxy_icon_url') String? proxyIconUrl
 });
 
 
@@ -1217,7 +1585,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String? url,  String? iconUrl,  String? proxyIconUrl)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String? url, @JsonKey(name: 'icon_url')  String? iconUrl, @JsonKey(name: 'proxy_icon_url')  String? proxyIconUrl)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _EmbedAuthorDto() when $default != null:
 return $default(_that.name,_that.url,_that.iconUrl,_that.proxyIconUrl);case _:
@@ -1238,7 +1606,7 @@ return $default(_that.name,_that.url,_that.iconUrl,_that.proxyIconUrl);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String? url,  String? iconUrl,  String? proxyIconUrl)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String? url, @JsonKey(name: 'icon_url')  String? iconUrl, @JsonKey(name: 'proxy_icon_url')  String? proxyIconUrl)  $default,) {final _that = this;
 switch (_that) {
 case _EmbedAuthorDto():
 return $default(_that.name,_that.url,_that.iconUrl,_that.proxyIconUrl);}
@@ -1255,7 +1623,7 @@ return $default(_that.name,_that.url,_that.iconUrl,_that.proxyIconUrl);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String? url,  String? iconUrl,  String? proxyIconUrl)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String? url, @JsonKey(name: 'icon_url')  String? iconUrl, @JsonKey(name: 'proxy_icon_url')  String? proxyIconUrl)?  $default,) {final _that = this;
 switch (_that) {
 case _EmbedAuthorDto() when $default != null:
 return $default(_that.name,_that.url,_that.iconUrl,_that.proxyIconUrl);case _:
@@ -1270,13 +1638,13 @@ return $default(_that.name,_that.url,_that.iconUrl,_that.proxyIconUrl);case _:
 @JsonSerializable()
 
 class _EmbedAuthorDto with DiagnosticableTreeMixin implements EmbedAuthorDto {
-  const _EmbedAuthorDto({this.name = '', this.url, this.iconUrl, this.proxyIconUrl});
+  const _EmbedAuthorDto({this.name = '', this.url, @JsonKey(name: 'icon_url') this.iconUrl, @JsonKey(name: 'proxy_icon_url') this.proxyIconUrl});
   factory _EmbedAuthorDto.fromJson(Map<String, dynamic> json) => _$EmbedAuthorDtoFromJson(json);
 
 @override@JsonKey() final  String name;
 @override final  String? url;
-@override final  String? iconUrl;
-@override final  String? proxyIconUrl;
+@override@JsonKey(name: 'icon_url') final  String? iconUrl;
+@override@JsonKey(name: 'proxy_icon_url') final  String? proxyIconUrl;
 
 /// Create a copy of EmbedAuthorDto
 /// with the given fields replaced by the non-null parameter values.
@@ -1317,7 +1685,7 @@ abstract mixin class _$EmbedAuthorDtoCopyWith<$Res> implements $EmbedAuthorDtoCo
   factory _$EmbedAuthorDtoCopyWith(_EmbedAuthorDto value, $Res Function(_EmbedAuthorDto) _then) = __$EmbedAuthorDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String name, String? url, String? iconUrl, String? proxyIconUrl
+ String name, String? url,@JsonKey(name: 'icon_url') String? iconUrl,@JsonKey(name: 'proxy_icon_url') String? proxyIconUrl
 });
 
 
@@ -1623,7 +1991,7 @@ as String?,
 /// @nodoc
 mixin _$EmbedFooterDto implements DiagnosticableTreeMixin {
 
- String get text; String? get iconUrl; String? get proxyIconUrl;
+ String get text;@JsonKey(name: 'icon_url') String? get iconUrl;@JsonKey(name: 'proxy_icon_url') String? get proxyIconUrl;
 /// Create a copy of EmbedFooterDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1662,7 +2030,7 @@ abstract mixin class $EmbedFooterDtoCopyWith<$Res>  {
   factory $EmbedFooterDtoCopyWith(EmbedFooterDto value, $Res Function(EmbedFooterDto) _then) = _$EmbedFooterDtoCopyWithImpl;
 @useResult
 $Res call({
- String text, String? iconUrl, String? proxyIconUrl
+ String text,@JsonKey(name: 'icon_url') String? iconUrl,@JsonKey(name: 'proxy_icon_url') String? proxyIconUrl
 });
 
 
@@ -1766,7 +2134,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String text,  String? iconUrl,  String? proxyIconUrl)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String text, @JsonKey(name: 'icon_url')  String? iconUrl, @JsonKey(name: 'proxy_icon_url')  String? proxyIconUrl)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _EmbedFooterDto() when $default != null:
 return $default(_that.text,_that.iconUrl,_that.proxyIconUrl);case _:
@@ -1787,7 +2155,7 @@ return $default(_that.text,_that.iconUrl,_that.proxyIconUrl);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String text,  String? iconUrl,  String? proxyIconUrl)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String text, @JsonKey(name: 'icon_url')  String? iconUrl, @JsonKey(name: 'proxy_icon_url')  String? proxyIconUrl)  $default,) {final _that = this;
 switch (_that) {
 case _EmbedFooterDto():
 return $default(_that.text,_that.iconUrl,_that.proxyIconUrl);}
@@ -1804,7 +2172,7 @@ return $default(_that.text,_that.iconUrl,_that.proxyIconUrl);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String text,  String? iconUrl,  String? proxyIconUrl)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String text, @JsonKey(name: 'icon_url')  String? iconUrl, @JsonKey(name: 'proxy_icon_url')  String? proxyIconUrl)?  $default,) {final _that = this;
 switch (_that) {
 case _EmbedFooterDto() when $default != null:
 return $default(_that.text,_that.iconUrl,_that.proxyIconUrl);case _:
@@ -1819,12 +2187,12 @@ return $default(_that.text,_that.iconUrl,_that.proxyIconUrl);case _:
 @JsonSerializable()
 
 class _EmbedFooterDto with DiagnosticableTreeMixin implements EmbedFooterDto {
-  const _EmbedFooterDto({this.text = '', this.iconUrl, this.proxyIconUrl});
+  const _EmbedFooterDto({this.text = '', @JsonKey(name: 'icon_url') this.iconUrl, @JsonKey(name: 'proxy_icon_url') this.proxyIconUrl});
   factory _EmbedFooterDto.fromJson(Map<String, dynamic> json) => _$EmbedFooterDtoFromJson(json);
 
 @override@JsonKey() final  String text;
-@override final  String? iconUrl;
-@override final  String? proxyIconUrl;
+@override@JsonKey(name: 'icon_url') final  String? iconUrl;
+@override@JsonKey(name: 'proxy_icon_url') final  String? proxyIconUrl;
 
 /// Create a copy of EmbedFooterDto
 /// with the given fields replaced by the non-null parameter values.
@@ -1865,7 +2233,7 @@ abstract mixin class _$EmbedFooterDtoCopyWith<$Res> implements $EmbedFooterDtoCo
   factory _$EmbedFooterDtoCopyWith(_EmbedFooterDto value, $Res Function(_EmbedFooterDto) _then) = __$EmbedFooterDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String text, String? iconUrl, String? proxyIconUrl
+ String text,@JsonKey(name: 'icon_url') String? iconUrl,@JsonKey(name: 'proxy_icon_url') String? proxyIconUrl
 });
 
 

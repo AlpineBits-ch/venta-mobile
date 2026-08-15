@@ -2,6 +2,9 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../format/api_date_time.dart';
 import 'track_naming.dart';
+import 'voice_limits.dart';
+
+export 'voice_limits.dart' show VoiceRoomLimitsDto;
 
 part 'voice_snapshot_dto.freezed.dart';
 part 'voice_snapshot_dto.g.dart';
@@ -126,6 +129,13 @@ sealed class VoiceRoomSnapshotDto with _$VoiceRoomSnapshotDto {
     @Default(0) int version,
     @Default(<VoiceParticipantSnapshotDto>[])
     List<VoiceParticipantSnapshotDto> participants,
+
+    /// What this room may carry. Absent on a room whose limits have never been
+    /// computed, and on every server that predates them - which is why it is
+    /// nullable rather than defaulted: an empty [VoiceRoomLimitsDto] would say
+    /// "no ceilings" where the truth is "nobody said".
+    @JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson)
+    VoiceRoomLimitsDto? limits,
   }) = _VoiceRoomSnapshotDto;
 
   const VoiceRoomSnapshotDto._();

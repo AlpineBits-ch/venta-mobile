@@ -9,6 +9,7 @@ import '../../features/auth/data/identity_api.dart';
 import '../../features/billing/data/billing_api.dart';
 import '../../features/billing/data/degradation_log.dart';
 import '../../features/billing/data/entitlement_api.dart';
+import '../../features/billing/data/entitlement_reader.dart';
 import '../../features/billing/data/plan_repository.dart';
 import '../../features/conversations/data/conversation_api.dart';
 import '../../features/conversations/data/conversation_repository.dart';
@@ -17,7 +18,10 @@ import '../../features/friends/data/relationship_repository.dart';
 import '../../features/guild_voice/bloc/guild_voice_activity_cubit.dart';
 import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
 import '../../features/guild_voice/data/guild_voice_api.dart';
+import '../../features/guild_voice/bloc/voice_ring_cubit.dart';
 import '../../features/guild_voice/data/guild_voice_repository.dart';
+import '../../features/guild_voice/data/voice_ring_api.dart';
+import '../../features/guild_voice/data/voice_ring_repository.dart';
 import '../../features/guild_voice/webrtc/guild_voice_webrtc_service.dart';
 import '../../features/guilds/data/guild_api.dart';
 import '../../features/guilds/data/guild_repository.dart';
@@ -398,6 +402,14 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   getIt.registerLazySingleton<EntitlementApi>(
     () => EntitlementApi(client: getIt()),
   );
+  // Ceilings, read on the way past by surfaces that are doing something else -
+  // the composer asking how large a file may be before it spends the transfer.
+  // Held for `ttlSeconds` and in memory only, and in
+  // `resetSessionScopedCaches`, because a ceiling belongs to whoever it was
+  // resolved for.
+  getIt.registerLazySingleton<EntitlementReader>(
+    () => EntitlementReader(api: getIt()),
+  );
   getIt.registerLazySingleton<PlanRepository>(
     () => PlanRepository(
       entitlements: getIt(),
@@ -466,6 +478,18 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   getIt.registerLazySingleton<GuildVoiceActivityCubit>(
     () => GuildVoiceActivityCubit(repository: getIt()),
   );
+  // The ring is deliberately its own object rather than a corner of
+  // GuildVoiceCubit: it holds no media session and no roster slot, its audience
+  // is somebody who is *not* in the room, and it outlives no connection.
+  getIt.registerLazySingleton<VoiceRingApi>(
+    () => VoiceRingApi(client: getIt(), deviceIdService: getIt()),
+  );
+  getIt.registerLazySingleton<VoiceRingRepository>(
+    () => VoiceRingRepository(api: getIt(), realtimeService: getIt()),
+  );
+  getIt.registerLazySingleton<VoiceRingCubit>(
+    () => VoiceRingCubit(repository: getIt(), deviceIdService: getIt()),
+  );
   getIt.registerLazySingleton<WikiApi>(() => WikiApi(client: getIt()));
   getIt.registerLazySingleton<WikiRepository>(
     () => WikiRepository(api: getIt(), realtimeService: getIt()),
@@ -532,6 +556,10 @@ void resetSessionScopedCaches() {
   // place, the plan screen would tell the next person to sign in on this
   // handset that their video was capped by somebody else's server plan.
   getIt<DegradationLog>().clear();
+  // And the ceilings behind it. A cached upload limit resolved for the previous
+  // account would have this handset refusing the next person's file against a
+  // number that was never theirs.
+  getIt<EntitlementReader>().clear();
   // MLS is deliberately *not* reset here. It is per account too, and more
   // sharply so - an identity is credentialed to one user id - but this function
   // is synchronous and unloading group state is not, so doing it here would race
@@ -592,6 +620,13 @@ Future<void> startAuthenticatedServices({String? password}) async {
   // have promptly and worth holding nothing up for. Live updates take over from
   // the guild-wide presence events once this lands.
   unawaited(getIt<GuildVoiceActivityCubit>().load());
+  // The ring's catch-up read, for the same reason CallCubit needs one above:
+  // `guild.VoiceRingIncoming` is a live broadcast that is never replayed and the
+  // push is best-effort, so a client that was not connected when a ring went out
+  // has no other way to find out it was asked. The cubit also re-runs this on
+  // every reconnect; this covers the launch, where the socket connected before
+  // the cubit existed to hear it.
+  unawaited(getIt<VoiceRingCubit>().catchUp());
   getIt<MlsRealtimeBridge>().start();
   // Detached, and after registration: publishing a certificate needs the device
   // row to exist, and none of it is worth holding a launch on. Failure here is

@@ -15,6 +15,7 @@ import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/screen_share_view.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/widgets/video_participant_tile.dart';
+import '../../../../core/widgets/voice_limits_bar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../bloc/call_cubit.dart';
 
@@ -203,7 +204,17 @@ class _ActiveCallView extends StatelessWidget {
               ],
             ),
           ],
-          const SizedBox(height: AppSpacing.xl),
+          // Under the call's own header, where a denominator belongs. A call
+          // has no server plan behind it, so anything here came from an
+          // operator ceiling - which is why the notice below is a sentence and
+          // never a control.
+          const SizedBox(height: AppSpacing.m),
+          VoiceLimitsBar(
+            limits: state.limits,
+            participantCount: state.participants.length,
+            videoNotice: state.videoNotice,
+          ),
+          const SizedBox(height: AppSpacing.l),
           for (final sharer in state.participants.where((p) => p.isStreaming))
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.l),
@@ -301,31 +312,29 @@ class _ActiveCallView extends StatelessWidget {
                 onTap: () => context.read<CallCubit>().toggleSpeaker(),
               ),
               CallActionButton(
-                icon: context.read<CallCubit>().isCameraOn
-                    ? Icons.videocam
-                    : Icons.videocam_off,
+                icon: cubit.isCameraOn ? Icons.videocam : Icons.videocam_off,
                 label: 'Camera',
-                background: context.read<CallCubit>().isCameraOn
-                    ? Colors.white
-                    : Colors.white24,
-                iconColor: context.read<CallCubit>().isCameraOn
-                    ? Colors.black
-                    : Colors.white,
-                onTap: () => context.read<CallCubit>().toggleCamera(),
+                background: cubit.isCameraOn ? Colors.white : Colors.white24,
+                iconColor: cubit.isCameraOn ? Colors.black : Colors.white,
+                // Only for turning it on. Whatever the ceiling has become, the
+                // person already publishing must always be able to stop.
+                enabled: cubit.isCameraOn || !cubit.isVideoBlocked,
+                onTap: () => cubit.toggleCamera(),
               ),
               if (Platform.isAndroid)
                 CallActionButton(
-                  icon: context.read<CallCubit>().isScreenSharing
+                  icon: cubit.isScreenSharing
                       ? Icons.stop_screen_share
                       : Icons.screen_share,
                   label: 'Share',
-                  background: context.read<CallCubit>().isScreenSharing
+                  background: cubit.isScreenSharing
                       ? Colors.white
                       : Colors.white24,
-                  iconColor: context.read<CallCubit>().isScreenSharing
+                  iconColor: cubit.isScreenSharing
                       ? Colors.black
                       : Colors.white,
-                  onTap: () => context.read<CallCubit>().toggleScreenShare(),
+                  enabled: cubit.isScreenSharing || !cubit.isVideoBlocked,
+                  onTap: () => cubit.toggleScreenShare(),
                 ),
               CallActionButton(
                 icon: Icons.call_end,

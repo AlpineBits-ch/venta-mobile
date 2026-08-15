@@ -12,6 +12,9 @@ import '../../../core/voice/voice_heartbeat.dart';
 import '../../../core/voice/voice_participant_state.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../billing/data/entitlement_reader.dart';
+import '../../billing/data/models/entitlement_degradation_dto.dart';
+import '../../billing/data/models/entitlement_denial.dart';
 import '../data/guild_voice_repository.dart';
 import '../webrtc/guild_voice_webrtc_service.dart';
 
@@ -31,6 +34,8 @@ class GuildVoiceState extends Equatable {
     this.rosters = const {},
     this.errorMessage,
     this.videoRevision = 0,
+    this.limits,
+    this.videoNotice,
   });
 
   final GuildVoicePhase phase;
@@ -64,6 +69,21 @@ class GuildVoiceState extends Equatable {
   /// rely on this counter changing to know when to re-pull and rebuild.
   final int videoRevision;
 
+  /// What the joined channel may carry, as of the last snapshot. Null on a
+  /// server that does not send limits and on a channel whose limits have never
+  /// been computed - which is "nobody said", not "no limits", so nothing here
+  /// substitutes a permissive default.
+  final VoiceRoomLimitsDto? limits;
+
+  /// One sentence about this device's own video, in the moment: the rung a
+  /// publish was clamped to, or why one could not happen at all.
+  ///
+  /// Explanation only. There is no companion field for what would lift it and
+  /// no action attached to it anywhere it renders - see `EntitlementNotice`.
+  /// Cleared when the camera and the share are both off, because it describes
+  /// a picture that is no longer being sent.
+  final String? videoNotice;
+
   bool get isInVoice => phase != GuildVoicePhase.idle;
 
   List<VoiceParticipantState> rosterFor(String channelId) =>
@@ -85,6 +105,9 @@ class GuildVoiceState extends Equatable {
     Map<String, List<VoiceParticipantState>>? rosters,
     String? errorMessage,
     int? videoRevision,
+    VoiceRoomLimitsDto? limits,
+    String? videoNotice,
+    bool clearVideoNotice = false,
   }) => GuildVoiceState(
     phase: phase ?? this.phase,
     guildId: guildId ?? this.guildId,
@@ -98,6 +121,11 @@ class GuildVoiceState extends Equatable {
     rosters: rosters ?? this.rosters,
     errorMessage: errorMessage,
     videoRevision: videoRevision ?? this.videoRevision,
+    limits: limits ?? this.limits,
+    // Coalesces rather than following [errorMessage], because a mute toggle
+    // must not wipe the sentence explaining why the camera is off. Clearing it
+    // is therefore explicit, and only the two places that turn video off do it.
+    videoNotice: clearVideoNotice ? null : (videoNotice ?? this.videoNotice),
   );
 
   @override
@@ -114,6 +142,8 @@ class GuildVoiceState extends Equatable {
     rosters,
     errorMessage,
     videoRevision,
+    limits,
+    videoNotice,
   ];
 }
 
@@ -272,7 +302,26 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     // renders whatever it read before the media existed - see
     // [GuildVoiceState.videoRevision].
     webRtc.onTracksChanged = _bumpVideoRevision;
+    // A reduction is a success, so this is wired next to the two failure
+    // callbacks and behaves nothing like them: it changes no media state and
+    // tears nothing down. It only puts the sentence where the person who is
+    // publishing can read it.
+    webRtc.onPublishReduced = _noteReduction;
     return webRtc;
+  }
+
+  /// Files a clamped publish where the room can render it.
+  ///
+  /// One sentence rather than a list: two reductions on one publish would be a
+  /// paragraph on a call screen, and the video ceiling is the one that
+  /// describes what the user is now sending. The rest are still recorded in the
+  /// session log by the interceptor, which is where a complete account belongs.
+  void _noteReduction(List<EntitlementDegradationDto> degradations) {
+    final video = degradations.firstWhere(
+      (d) => d.key == EntitlementKeys.voiceVideoCeiling,
+      orElse: () => degradations.first,
+    );
+    emitIfOpen(state.copyWith(videoNotice: video.notice));
   }
 
   /// Guards [_rebuildMedia]: every pending subscribe fails at once when a session dies, so the
@@ -330,6 +379,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
           ? p.copyWith(hasCamera: false)
           : p.copyWith(hasCamera: false).withoutShare(shareId),
     );
+    _clearVideoNoticeIfIdle();
     _bumpVideoRevision();
     try {
       await repository.invokeCameraChanged(
@@ -406,6 +456,17 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     _setRoster(channelId, participants);
 
     if (!isJoinedChannel) return;
+    // Only for the channel this device is actually in. A sidebar roster read
+    // for a channel nobody joined carries that channel's limits, and adopting
+    // one would have the call controls describing a room the user is not in.
+    //
+    // Absent limits leave the last known set alone rather than blanking it: a
+    // room that stops reporting has not stopped having ceilings, and a control
+    // that re-enables itself because a field went missing is the one direction
+    // this must not fail in.
+    if (snapshot.limits != null) {
+      emitIfOpen(state.copyWith(limits: snapshot.limits));
+    }
     final webRtc = _webRtc;
     if (webRtc == null) return;
 
@@ -611,18 +672,42 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   /// participants' badges read from.
   bool get isCameraOn => _self?.hasCamera ?? false;
 
+  /// Whether asking to publish video here would only be refused.
+  ///
+  /// Drawn from the room's own limits, so it follows a plan that lapses
+  /// mid-call. False when no limits have been reported: a control disabled on
+  /// the strength of a field nobody sent is worse than one that is pressed and
+  /// answered.
+  bool get isVideoBlocked => !(state.limits?.canPublishVideo ?? true);
+
   Future<void> toggleCamera() async {
     if (state.phase != GuildVoicePhase.active) return;
     final channelId = state.channelId;
     final webRtc = _webRtc;
     if (channelId == null || webRtc == null) return;
     final turningOn = !isCameraOn;
+
+    // Pre-empted rather than attempted. The control is already disabled where
+    // this is true, so reaching here means the room changed under the button -
+    // and the sentence matters more in that case, not less.
+    final blocked = turningOn ? state.limits?.videoBlockedSentence : null;
+    if (blocked != null) {
+      emitIfOpen(state.copyWith(videoNotice: blocked));
+      return;
+    }
+
     try {
       if (turningOn) {
         await webRtc.publishLocalVideo();
       } else {
         await webRtc.stopLocalVideo();
       }
+    } on EntitlementDenialException catch (e) {
+      // A publish the server would not carry out at any size. Explained, and
+      // not retried: an entitlement refusal answered by asking again is one
+      // refusal turned into three.
+      emitIfOpen(state.copyWith(videoNotice: e.denial.sentence));
+      return;
     } catch (_) {
       return; // Capture failed (denied permission, no camera, etc.) - bail.
     }
@@ -631,11 +716,24 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       _myUserId,
       (p) => p.copyWith(hasCamera: turningOn),
     );
+    if (!turningOn) _clearVideoNoticeIfIdle();
     _bumpVideoRevision();
     await repository.invokeCameraChanged(
       channelId: channelId,
       isCameraOn: turningOn,
     );
+  }
+
+  /// Drops the video notice once nothing is being published.
+  ///
+  /// It describes the picture this device is sending, so it outlives neither
+  /// the camera nor the share - and it has to survive one of them ending while
+  /// the other runs, which is why this asks about both rather than clearing on
+  /// either.
+  void _clearVideoNoticeIfIdle() {
+    if (isCameraOn || isScreenSharing) return;
+    if (state.videoNotice == null) return;
+    emitIfOpen(state.copyWith(clearVideoNotice: true));
   }
 
   /// Whether this device is live - screen sharing.
@@ -663,6 +761,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
           _myUserId,
           (p) => p.withoutShare(shareId),
         );
+        _clearVideoNoticeIfIdle();
         _bumpVideoRevision();
         await repository.invokeScreenShareStopped(
           channelId: channelId,
@@ -672,10 +771,19 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       return;
     }
 
+    final blocked = state.limits?.videoBlockedSentence;
+    if (blocked != null) {
+      emitIfOpen(state.copyWith(videoNotice: blocked));
+      return;
+    }
+
     final shareId =
         '${DateTime.now().microsecondsSinceEpoch}-${identityHashCode(this)}';
     try {
       await webRtc.startScreenShare(shareId);
+    } on EntitlementDenialException catch (e) {
+      emitIfOpen(state.copyWith(videoNotice: e.denial.sentence));
+      return;
     } catch (_) {
       return; // Permission denied/cancelled the system picker - bail.
     }

@@ -14,6 +14,8 @@ import 'message_notifier.dart';
 import 'message_push_decryptor.dart';
 import 'message_push_payload.dart';
 import 'push_token_api.dart';
+import 'voice_ring_notifier.dart';
+import 'voice_ring_push_payload.dart';
 
 /// Marks a push as call-signaling rather than a normal notification - see
 /// `docs/native-call-push-backend-spec.md`. Anything with this data type is
@@ -32,6 +34,22 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await showCallKitFromPushData(message.data);
     return;
   }
+  // A voice ring is an ordinary alert push and explicitly **not** the CallKit
+  // path above: a VoIP payload obliges iOS to report a call to CallKit for every
+  // one received, which would put a fullscreen system call UI and a phone-log
+  // entry behind an invitation nobody is waiting on the line for.
+  //
+  // The invite half already has its notification drawn by the OS, like a
+  // household alert. The cancel half is data-only and has no notification at
+  // all, which is exactly why it reaches here: taking the card off the lock
+  // screen is the whole of its job, and it is the one thing the OS will not do
+  // on its own.
+  final ring = VoiceRingPushPayload.tryParse(message.data);
+  if (ring != null) {
+    if (ring.isCancel) await VoiceRingNotifier.cancel(ring);
+    return;
+  }
+
   // Household pushes carry a real notification block, so the OS has already
   // drawn this one by the time the isolate runs. Anything shown here would be
   // the second copy of it.
@@ -77,6 +95,15 @@ class PushNotificationService {
   /// [DeepLinkHandler] already resolves.
   Stream<String> get onNotificationTap => _navigationController.stream;
 
+  final _voiceRingTapController = StreamController<String>.broadcast();
+
+  /// Ring ids whose notification the user tapped.
+  ///
+  /// A ring id rather than a route, because a ring has no screen of its own -
+  /// the card is an overlay wherever the app already is. Tapping it opens the
+  /// card and joins nothing.
+  Stream<String> get onVoiceRingTap => _voiceRingTapController.stream;
+
   StreamSubscription<RemoteMessage>? _foregroundSub;
   StreamSubscription<RemoteMessage>? _openedAppSub;
   StreamSubscription<String>? _tokenRefreshSub;
@@ -102,6 +129,25 @@ class PushNotificationService {
         showCallKitFromPushData(message.data);
         return;
       }
+      // Same split as the background isolate, and for the same reason: never
+      // CallKit. The realtime event is what actually raises the in-app card
+      // while the app is open; this only draws the tray entry neither platform
+      // will, and honours the cancel.
+      final ring = VoiceRingPushPayload.tryParse(message.data);
+      if (ring != null) {
+        if (ring.isCancel) {
+          // The device that answered already knows, and it is addressed anyway
+          // because a push token only knows which device it belongs to if it
+          // was registered after the device-identity consolidation.
+          if (!ring.isSelfCancel(deviceIdService.deviceIdOrNull)) {
+            unawaited(VoiceRingNotifier.cancel(ring));
+          }
+        } else {
+          unawaited(VoiceRingNotifier.show(ring));
+        }
+        return;
+      }
+
       // A household alert that lands while the app is in front is shown by
       // neither platform, so this is the only place it can come from.
       final household = HouseholdPushPayload.tryParse(message.data);
@@ -159,6 +205,15 @@ class PushNotificationService {
       _navigationController.add(route);
       return;
     }
+    // **Tapping a ring opens the card, it does not join anything.** The card
+    // lives wherever the app happens to be, so this only has to bring the app
+    // forward and let the catch-up read raise it - which is why there is no
+    // route here and no navigation. A cancel is silent and never tappable.
+    final ring = VoiceRingPushPayload.tryParse(message.data);
+    if (ring != null) {
+      if (!ring.isCancel) _voiceRingTapController.add(ring.ringId);
+      return;
+    }
     // Routed on `kind`'s payload rather than on the kind itself: every
     // household notification is about a row on a board, and the board is where
     // you want to be regardless of which module sent it.
@@ -209,5 +264,6 @@ class PushNotificationService {
     await _openedAppSub?.cancel();
     await _tokenRefreshSub?.cancel();
     await _navigationController.close();
+    await _voiceRingTapController.close();
   }
 }

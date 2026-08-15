@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import '../../features/billing/data/models/entitlement_denial.dart';
+import 'video_layers.dart';
 import 'voice_media_dto.dart';
 import 'voice_room_key.dart';
 import 'voice_snapshot_dto.dart';
@@ -146,10 +148,17 @@ abstract class VoiceMediaApi {
   Future<VoiceSessionDto> createSession({bool primary});
 
   /// Publishes and/or subscribes tracks in one negotiation.
+  ///
+  /// [video] declares what this client intends to send, as
+  /// `{ height, framerate }` - see [VideoPublishIntent]. Additive and optional:
+  /// a server that predates it ignores it, and a publish that carries no video
+  /// track sends nothing, because an audio-only publish is never affected by a
+  /// video ceiling.
   Future<VoiceNegotiateResponseDto> negotiate({
     required String mediaSessionId,
     required Map<String, dynamic> sessionDescription,
     required List<Map<String, dynamic>> tracks,
+    Map<String, dynamic>? video,
   });
 
   Future<VoiceRenegotiateResponseDto> renegotiate({
@@ -189,10 +198,23 @@ abstract class VoiceMediaApi {
 
 /// Runs [operation], turning any Dio failure into a [VoiceMediaException] so
 /// callers can branch on the contract's status codes rather than on Dio's.
+///
+/// With one exception, checked first: a `403` carrying the entitlement refusal
+/// body is an [EntitlementDenialException] instead. That is a publish the
+/// server would not carry out at any size - a `none` rung, or no publisher slot
+/// free - and it is the one refusal on these routes that has a plain
+/// explanation attached to it. Folded into [VoiceMediaException] it would
+/// arrive as `isFatal`, indistinguishable from "no such room", and the camera
+/// button would fail silently.
+///
+/// Nothing else about the 403 handling moves: a refusal without that body is
+/// still an ordinary fatal media error.
 Future<T> mapMediaErrors<T>(String name, Future<T> Function() operation) async {
   try {
     return await operation();
   } on DioException catch (e) {
+    final denial = entitlementDenialOf(e);
+    if (denial != null) throw EntitlementDenialException(denial);
     throw VoiceMediaException.from(e, name);
   }
 }

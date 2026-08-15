@@ -114,6 +114,7 @@ class GuildVoiceApi {
     required String mediaSessionId,
     required Map<String, dynamic> sessionDescription,
     required List<Map<String, dynamic>> tracks,
+    Map<String, dynamic>? video,
   }) => mapMediaErrors('tracks', () async {
     final response = await client.dio.post<Map<String, dynamic>>(
       '${_base(guildId, channelId)}/tracks',
@@ -121,6 +122,7 @@ class GuildVoiceApi {
         'mediaSessionId': mediaSessionId,
         'sessionDescription': sessionDescription,
         'tracks': tracks,
+        'video': ?video,
       },
       options: _deviceOptions,
     );

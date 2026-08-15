@@ -33,12 +33,14 @@ class GuildVoiceMediaApi implements VoiceMediaApi {
     required String mediaSessionId,
     required Map<String, dynamic> sessionDescription,
     required List<Map<String, dynamic>> tracks,
+    Map<String, dynamic>? video,
   }) => api.negotiate(
     guildId: guildId,
     channelId: channelId,
     mediaSessionId: mediaSessionId,
     sessionDescription: sessionDescription,
     tracks: tracks,
+    video: video,
   );
 
   @override

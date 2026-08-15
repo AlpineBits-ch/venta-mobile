@@ -46,6 +46,14 @@ _VoiceNegotiateResponseDto _$VoiceNegotiateResponseDtoFromJson(
       const <VoiceTrackResultDto>[],
   requiresImmediateRenegotiation:
       json['requiresImmediateRenegotiation'] as bool? ?? false,
+  degradations:
+      (json['degradations'] as List<dynamic>?)
+          ?.map(
+            (e) =>
+                EntitlementDegradationDto.fromJson(e as Map<String, dynamic>),
+          )
+          .toList() ??
+      const <EntitlementDegradationDto>[],
 );
 
 Map<String, dynamic> _$VoiceNegotiateResponseDtoToJson(
@@ -54,6 +62,7 @@ Map<String, dynamic> _$VoiceNegotiateResponseDtoToJson(
   'sessionDescription': instance.sessionDescription,
   'tracks': instance.tracks,
   'requiresImmediateRenegotiation': instance.requiresImmediateRenegotiation,
+  'degradations': instance.degradations,
 };
 
 _VoiceRenegotiateResponseDto _$VoiceRenegotiateResponseDtoFromJson(

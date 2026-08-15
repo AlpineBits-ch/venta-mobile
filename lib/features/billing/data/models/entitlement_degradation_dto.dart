@@ -69,6 +69,34 @@ enum DegradationBoundBy {
   unknown,
 }
 
+/// The reason vocabulary, read from a wire code.
+///
+/// A separate lookup from the generated enum map because a hard denial (§4)
+/// carries the same vocabulary under a different field name and arrives on an
+/// error response, where there is no generated decoder to reach for. One table
+/// serves both, which is the whole reason the server made the two vocabularies
+/// the same.
+DegradationReason degradationReasonOf(Object? code) => switch (code) {
+  'guild_plan_limit' => DegradationReason.guildPlanLimit,
+  'user_plan_limit' => DegradationReason.userPlanLimit,
+  'paired_ceiling' => DegradationReason.pairedCeiling,
+  'operator_ceiling' => DegradationReason.operatorCeiling,
+  _ => DegradationReason.unknown,
+};
+
+/// Which side bound, or null when the payload named no side at all.
+///
+/// Absent and unreadable are different: an operator ceiling carries no side
+/// because there is no party behind it, and a value this build cannot read is
+/// one it must not guess at. Both end up in the same sentence, but only because
+/// that sentence names neither side.
+DegradationBoundBy? degradationBoundByOf(Object? code) => switch (code) {
+  null => null,
+  'guild' => DegradationBoundBy.guild,
+  'user' => DegradationBoundBy.user,
+  _ => DegradationBoundBy.unknown,
+};
+
 extension DegradationReasonX on DegradationReason {
   /// What applied the limit, in one clause. Attribution and nothing else.
   ///
@@ -148,5 +176,24 @@ sealed class EntitlementDegradationDto with _$EntitlementDegradationDto {
     if (from == to) return null;
     return '${describeEntitlementValue(key, from)} was reduced to '
         '${describeEntitlementValue(key, to)}';
+  }
+
+  /// The one line to put in front of somebody at the surface that caused this,
+  /// while they are still looking at it.
+  ///
+  /// Shorter than the session log's three lines, and in the present tense,
+  /// because it describes what the user is looking at rather than something
+  /// that happened earlier: "Video quality: 720p30. Limited by this server's
+  /// plan." The log says what changed; this says what they have got.
+  ///
+  /// Falls back to the attribution alone when the payload named no grant. A
+  /// half-sentence about a number that is not there reads as a bug, and the
+  /// attribution on its own is still true.
+  String get notice {
+    final applied = granted;
+    if (applied == null) return reason.sentence(boundBy);
+    return '${entitlementKeyLabel(key)}: '
+        '${describeEntitlementValue(key, applied)}. '
+        '${reason.sentence(boundBy)}';
   }
 }

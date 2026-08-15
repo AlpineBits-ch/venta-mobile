@@ -27,11 +27,13 @@ class CallMediaApi implements VoiceMediaApi {
     required String mediaSessionId,
     required Map<String, dynamic> sessionDescription,
     required List<Map<String, dynamic>> tracks,
+    Map<String, dynamic>? video,
   }) => api.negotiate(
     callId: callId,
     mediaSessionId: mediaSessionId,
     sessionDescription: sessionDescription,
     tracks: tracks,
+    video: video,
   );
 
   @override

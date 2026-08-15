@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../../features/billing/data/models/entitlement_degradation_dto.dart';
 import '../media/camera_permission.dart';
 import '../media/screen_share_service.dart';
 import 'tile_heights.dart';
@@ -154,6 +155,16 @@ class VoiceWebRtcService {
   /// luck.
   void Function()? onTracksChanged;
 
+  /// Called when a publish succeeded with less than it asked for.
+  ///
+  /// **This is a success callback, not an error one.** A clamped publish is a
+  /// `200` with the whole normal body in it: the track is up, the picture is
+  /// flowing, and the only thing that differs is the rung. Nothing here rolls
+  /// back on it and the owner must not either - it exists so the room can say
+  /// "you are sharing at 720p30" while somebody is looking at the room, which
+  /// is a sentence with a short shelf life and no other delivery.
+  void Function(List<EntitlementDegradationDto> degradations)? onPublishReduced;
+
   /// Keys of subscribe requests currently deferred. Exposed because the flush
   /// itself can only run against a live peer connection (platform channels),
   /// so the queueing half is what unit tests can reach.
@@ -271,6 +282,15 @@ class VoiceWebRtcService {
   /// Starts local camera capture and publishes it under [TrackNaming.camera].
   /// The server classifies it as `kind: "video"` from the name alone, so
   /// nothing else is needed. No-ops if the camera is already on.
+  ///
+  /// The capture size is stated rather than left to the platform, so the
+  /// [VideoPublishIntent.camera] declared on the publish body is true rather
+  /// than a guess at what the handset happened to open the camera at.
+  ///
+  /// **Releases the camera if the publish is refused.** A refusal is the one
+  /// path where capture succeeded and publication did not, and a camera left
+  /// running against a track the server never accepted is a lit indicator light
+  /// over nothing.
   Future<void> publishLocalVideo() async {
     if (_localVideoTrack != null) return;
     if (!await ensureCameraPermission()) {
@@ -278,16 +298,25 @@ class VoiceWebRtcService {
     }
     final stream = await navigator.mediaDevices.getUserMedia({
       'audio': false,
-      'video': true,
+      'video': VideoLayers.cameraCapture,
     });
     final track = stream.getVideoTracks().first;
     _localVideoStream = stream;
     _localVideoTrack = track;
-    await _publishTrack(
-      track: track,
-      trackName: TrackNaming.camera,
-      encodings: VideoLayers.camera,
-    );
+    try {
+      await _publishTrack(
+        track: track,
+        trackName: TrackNaming.camera,
+        encodings: VideoLayers.camera,
+        video: VideoPublishIntent.camera,
+      );
+    } catch (_) {
+      _localVideoTrack = null;
+      track.stop();
+      await _localVideoStream?.dispose();
+      _localVideoStream = null;
+      rethrow;
+    }
   }
 
   Future<void> stopLocalVideo() async {
@@ -328,19 +357,34 @@ class VoiceWebRtcService {
     _localScreenTrack = videoTrack;
     _activeShareId = shareId;
 
-    await _publishTracks([
-      (
-        track: videoTrack,
-        trackName: TrackNaming.screenTrack(shareId),
-        encodings: VideoLayers.screen,
-      ),
-      if (audioTrack != null)
+    try {
+      // No `video` declaration: a share captures this handset's own display at
+      // whatever size that display is, which this client neither chooses nor
+      // knows before capture. A number invented to fill the field would be a
+      // false statement rather than a missing one - see [VideoPublishIntent].
+      await _publishTracks([
         (
-          track: audioTrack,
-          trackName: TrackNaming.screenAudioTrack(shareId),
-          encodings: null,
+          track: videoTrack,
+          trackName: TrackNaming.screenTrack(shareId),
+          encodings: VideoLayers.screen,
         ),
-    ]);
+        if (audioTrack != null)
+          (
+            track: audioTrack,
+            trackName: TrackNaming.screenAudioTrack(shareId),
+            encodings: null,
+          ),
+      ]);
+    } catch (_) {
+      _localScreenTrack = null;
+      _activeShareId = null;
+      videoTrack.stop();
+      audioTrack?.stop();
+      await _localScreenStream?.dispose();
+      _localScreenStream = null;
+      if (Platform.isAndroid) await _screenShareService.stop();
+      rethrow;
+    }
   }
 
   /// Stops the local share and closes its tracks on the SFU.
@@ -392,9 +436,10 @@ class VoiceWebRtcService {
     required MediaStreamTrack track,
     required String trackName,
     List<RTCRtpEncoding>? encodings,
+    VideoPublishIntent? video,
   }) => _publishTracks([
     (track: track, trackName: trackName, encodings: encodings),
-  ]);
+  ], video: video);
 
   /// Publishes one or more already-captured local tracks in a single
   /// negotiation.
@@ -402,6 +447,12 @@ class VoiceWebRtcService {
   /// [encodings] is the simulcast ladder for a video track - see [VideoLayers].
   /// Audio carries none: it is not simulcast, and the server never asks for a
   /// layer of it.
+  ///
+  /// [video] declares the picture this publish carries, and is null for an
+  /// audio-only one. That is not merely an omission to save bytes: an
+  /// audio-only publish is never affected by a video ceiling, and declaring a
+  /// height on the microphone's own negotiation would invite the server to
+  /// answer a question nobody asked.
   Future<void> _publishTracks(
     List<
       ({
@@ -410,8 +461,9 @@ class VoiceWebRtcService {
         List<RTCRtpEncoding>? encodings,
       })
     >
-    tracks,
-  ) async {
+    tracks, {
+    VideoPublishIntent? video,
+  }) async {
     final pc = _pc;
     if (pc == null || tracks.isEmpty) return;
 
@@ -436,7 +488,7 @@ class VoiceWebRtcService {
         });
       }
       return payload;
-    });
+    }, video: video);
   }
 
   // ── Subscribing ───────────────────────────────────────────────────────────
@@ -780,19 +832,21 @@ class VoiceWebRtcService {
 
   Future<List<Map<String, dynamic>>> _offerAnswerCycle(
     Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc)
-    buildTracks,
-  ) {
+    buildTracks, {
+    VideoPublishIntent? video,
+  }) {
     final next = _negotiationChain
         .catchError((_) {})
-        .then((_) => _doOfferAnswer(buildTracks));
+        .then((_) => _doOfferAnswer(buildTracks, video: video));
     _negotiationChain = next.catchError((_) => const <Map<String, dynamic>>[]);
     return next;
   }
 
   Future<List<Map<String, dynamic>>> _doOfferAnswer(
     Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc)
-    buildTracks,
-  ) async {
+    buildTracks, {
+    VideoPublishIntent? video,
+  }) async {
     final pc = _pc;
     final media = _media;
     final mediaSessionId = _mediaSessionId;
@@ -805,7 +859,16 @@ class VoiceWebRtcService {
       mediaSessionId: mediaSessionId,
       sessionDescription: {'type': offer.type, 'sdp': offer.sdp},
       tracks: await buildTracks(pc),
+      video: video?.toJson(),
     );
+
+    // Before the SDP is applied, because the announcement is about a publish
+    // that has already succeeded and the remaining work is plumbing. Announcing
+    // it after would tie a sentence about the picture to whether the transport
+    // finished setting it up.
+    if (response.degradations.isNotEmpty) {
+      onPublishReduced?.call(response.degradations);
+    }
 
     await pc.setRemoteDescription(
       _toSessionDescription(response.sessionDescription),

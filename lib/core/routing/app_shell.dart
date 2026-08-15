@@ -1,14 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/widgets/session_not_persisted_banner.dart';
+import '../../features/guilds/data/guild_api.dart';
 import '../../features/guilds/data/guild_repository.dart';
 import '../../features/guilds/data/models/guild_dto.dart';
 import '../../features/guilds/data/models/guild_template_dto.dart';
 import '../../features/guilds/presentation/screens/create_guild_screen.dart';
 import '../../features/guild_voice/bloc/guild_voice_activity_cubit.dart';
 import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
+import '../../features/guild_voice/bloc/voice_ring_cubit.dart';
+import '../../features/guild_voice/presentation/widgets/voice_ring_cards.dart';
 import '../../features/guild_voice/presentation/widgets/voice_status_bar.dart';
 import '../../features/mls/presentation/widgets/recovery_code_banner.dart';
 import '../../features/voice/bloc/call_cubit.dart';
@@ -103,8 +108,27 @@ class _AppShellState extends State<AppShell> {
         if (input == null || input.trim().isEmpty || !mounted) return;
         final code = _extractInviteCode(input.trim());
         try {
-          final guild = await getIt<GuildRepository>().redeemInvite(code);
-          if (mounted) context.push(RoutePaths.serverPath(guild.id));
+          final outcome = await getIt<GuildRepository>().redeemInvite(code);
+          if (!mounted) return;
+          if (outcome.isTemporaryMembership) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'You will leave this server when you go offline, unless you '
+                  'are given a role.',
+                ),
+              ),
+            );
+          }
+          context.push(RoutePaths.serverPath(outcome.guild.id));
+        } on InvitePreviewRateLimitedException catch (e) {
+          // Not "that invite doesn't look valid" - nothing is wrong with the
+          // code, the lookup route is simply budgeted.
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(e.message)));
+          }
         } catch (_) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -239,9 +263,56 @@ class _AppShellState extends State<AppShell> {
         listener: (context, state) => ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(state.errorMessage!))),
-        child: _buildShellScaffold(theme, onHome, currentGuildId),
+        child: BlocListener<VoiceRingCubit, VoiceRingState>(
+          bloc: getIt<VoiceRingCubit>(),
+          listenWhen: (previous, current) =>
+              current.notice != null || current.acceptedChannel != null,
+          listener: _handleVoiceRing,
+          child: _buildShellScaffold(theme, onHome, currentGuildId),
+        ),
       ),
     );
+  }
+
+  /// **Accepting a ring does not join anybody to anything.** It closes the
+  /// invitation and hands back the channel's coordinates; the join is the
+  /// ordinary one, made here, which already handles device resolution, media
+  /// negotiation, leaving whatever channel you were in, and reporting
+  /// entitlement degradations. Two calls, in that order, and no second join
+  /// path.
+  ///
+  /// If this join fails, the invitation is still correctly closed - the right
+  /// offer then is a plain Join in the channel list, not a second accept.
+  void _handleVoiceRing(BuildContext context, VoiceRingState state) {
+    final notice = state.notice;
+    if (notice != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(notice)));
+    }
+
+    final accepted = state.acceptedChannel;
+    if (accepted != null) {
+      final guild = getIt<GuildRepository>().cachedById(accepted.guildId);
+      // The accept response names the channel; the cache is the fallback for a
+      // guild this client already knows, and an empty label is better than
+      // holding the join up to go and look one up.
+      final cachedName = guild?.channels
+          .where((c) => c.id == accepted.channelId)
+          .firstOrNull
+          ?.name;
+
+      unawaited(
+        getIt<GuildVoiceCubit>().join(
+          guildId: accepted.guildId,
+          channelId: accepted.channelId,
+          channelName: accepted.channelName ?? cachedName ?? '',
+          guildName: guild?.name ?? '',
+        ),
+      );
+    }
+
+    getIt<VoiceRingCubit>().acknowledge();
   }
 
   Widget _buildShellScaffold(
@@ -279,7 +350,15 @@ class _AppShellState extends State<AppShell> {
                   bottom: 0,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [VoiceStatusBar(), UserBanner()],
+                    children: [
+                      // Inline and above the voice bar, never fullscreen. An
+                      // invitation nobody is waiting on the line for does not
+                      // get to take the screen over - which is the same reason
+                      // its push is an ordinary alert rather than a VoIP one.
+                      VoiceRingCardStack(),
+                      VoiceStatusBar(),
+                      UserBanner(),
+                    ],
                   ),
                 ),
               ],

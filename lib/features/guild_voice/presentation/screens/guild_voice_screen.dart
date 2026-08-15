@@ -11,6 +11,7 @@ import '../../../../core/widgets/call_participant_tile.dart';
 import '../../../../core/widgets/elapsed_time_label.dart';
 import '../../../../core/widgets/screen_share_view.dart';
 import '../../../../core/widgets/video_participant_tile.dart';
+import '../../../../core/widgets/voice_limits_bar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../bloc/guild_voice_cubit.dart';
 
@@ -91,7 +92,18 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: AppSpacing.xl),
+                  // Between the room's identity and its contents, which is
+                  // where a denominator belongs: "6 of 10" is a fact about the
+                  // channel named directly above it, and the counts are what
+                  // make a dimmed camera button explain itself rather than read
+                  // as broken.
+                  const SizedBox(height: AppSpacing.m),
+                  VoiceLimitsBar(
+                    limits: state.limits,
+                    participantCount: participants.length,
+                    videoNotice: state.videoNotice,
+                  ),
+                  const SizedBox(height: AppSpacing.l),
                   for (final sharer in participants.where((p) => p.isStreaming))
                     Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.l),
@@ -227,6 +239,13 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                         iconColor: getIt<GuildVoiceCubit>().isCameraOn
                             ? Colors.black
                             : Colors.white,
+                        // Only for turning it on. Whatever the room's ceiling
+                        // has become, the person already publishing must always
+                        // be able to stop - a limit that traps a camera on is a
+                        // far worse failure than one that keeps it off.
+                        enabled:
+                            getIt<GuildVoiceCubit>().isCameraOn ||
+                            !getIt<GuildVoiceCubit>().isVideoBlocked,
                         onTap: () => getIt<GuildVoiceCubit>().toggleCamera(),
                       ),
                       if (Platform.isAndroid)
@@ -241,6 +260,9 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                           iconColor: getIt<GuildVoiceCubit>().isScreenSharing
                               ? Colors.black
                               : Colors.white,
+                          enabled:
+                              getIt<GuildVoiceCubit>().isScreenSharing ||
+                              !getIt<GuildVoiceCubit>().isVideoBlocked,
                           onTap: () =>
                               getIt<GuildVoiceCubit>().toggleScreenShare(),
                         ),

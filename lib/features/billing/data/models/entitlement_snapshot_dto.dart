@@ -23,12 +23,18 @@
 ///   instance has a plan catalogue to describe, which is a fact about the
 ///   instance rather than about the reader. See `PlanRepository.ensureProbed`.
 /// * `ladders` - every rung of every ladder with its pixel and framerate
-///   metrics. Read by a quality picker that clamps itself; a plan card renders
-///   the rung's name and needs none of it.
-/// * `ttlSeconds`, `version`, `resolvedAt` - the caching contract. Nothing here
-///   caches: the snapshot is read when the screen opens and thrown away when it
-///   closes, which is well inside any TTL and is what the guide asks for
-///   anyway ("never persist an entitlement set to disk").
+///   metrics. Read by a quality picker that clamps itself, and this client has
+///   none: the camera publishes at one capture size and the server clamps it
+///   and says so. Modelling metrics nothing reads would be the first half of
+///   somebody inventing the rung-to-resolution mapping the server owns.
+/// * `resolvedAt` - when the server resolved it. `EntitlementReader` times its
+///   own entries from when they arrived, which is the number that decides
+///   whether it may still be used.
+///
+/// [ttlSeconds] and [version] *are* modelled, and were not until something
+/// cached: they are the caching contract, and a cache that ignores them is the
+/// specific failure the contract exists to prevent. The plan screen still
+/// reads a fresh snapshot per open and uses neither.
 library;
 
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -127,6 +133,17 @@ sealed class EntitlementSnapshotDto with _$EntitlementSnapshotDto {
 
     /// Null when no plan resolved these numbers. See [EntitlementPlanDto].
     EntitlementPlanDto? plan,
+
+    /// How long this may be held for. Never longer than the server's own cache
+    /// backstop, which is what makes a dropped event self-heal: caching past it
+    /// keeps a repaired value broken locally for as long as the entry lives.
+    @Default(60) int ttlSeconds,
+
+    /// Monotonic per subject. `0` on every instance until Billing owns a
+    /// counter; comparing it is still correct and starts working the day it
+    /// moves, which is why a late response is discarded against it now rather
+    /// than after somebody notices.
+    @Default(0) int version,
 
     /// Ceilings only, never consumption. How many emoji slots a server has and
     /// how many are used are two different payloads with opposite caching

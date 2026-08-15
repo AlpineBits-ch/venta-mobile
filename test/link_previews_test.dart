@@ -30,6 +30,14 @@ class _MockPrivacyRepository extends Mock implements PrivacyRepository {}
 const _messageId = 'msg-1';
 
 /// One `link` card, as the server encodes it: a JSON string, not an object.
+///
+/// The multi-word fields inside an embed are **snake_case**, as Discord's own
+/// embed object has them, and unlike the camelCase message fields around them -
+/// `embedsJson` is an opaque string produced by a different serializer, so
+/// `message.editedAt` and `embed.proxy_url` are both correct in one payload.
+/// This fixture spelled them camel-cased, which is why it passed while the
+/// client silently never populated `proxyUrl` and hot-linked every third-party
+/// origin instead.
 String _embedsJson({String title = 'Example Domain'}) => jsonEncode([
   {
     'type': 'link',
@@ -39,11 +47,11 @@ String _embedsJson({String title = 'Example Domain'}) => jsonEncode([
     'provider': {'name': 'example.com'},
     'thumbnail': {
       'url': 'https://example.com/hero.png',
-      'proxyUrl': 'https://api.venta.gg/api/v1/previews/media/abc123',
+      'proxy_url': 'https://api.venta.gg/api/v1/previews/media/abc123',
       'width': 1200,
       'height': 630,
       'placeholder': 'LEHV6nWB2yk8pyo0adR*.7kCMdnj',
-      'placeholderVersion': 1,
+      'placeholder_version': 1,
     },
     'flags': 1 << 16,
   },

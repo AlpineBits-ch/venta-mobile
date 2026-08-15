@@ -818,9 +818,13 @@ class GuildRepository {
     int take = 50,
   }) => api.getAuditLog(guildId, skip: skip, take: take);
 
-  Future<List<InviteDto>> getInvites(String guildId) => api.getInvites(guildId);
+  Future<List<InviteDto>> getInvites(
+    String guildId, {
+    bool includeRevoked = false,
+  }) => api.getInvites(guildId, includeRevoked: includeRevoked);
 
-  Future<void> deleteInvite(String inviteId) => api.deleteInvite(inviteId);
+  Future<InviteDto?> deleteInvite(String inviteId) =>
+      api.deleteInvite(inviteId);
 
   void _replaceCached(GuildDto updated) {
     final index = _guilds.indexWhere((g) => g.id == updated.id);
@@ -836,7 +840,21 @@ class GuildRepository {
     String guildId, {
     String? channelId,
     InviteType type = InviteType.permanent,
-  }) => api.createInvite(guildId: guildId, channelId: channelId, type: type);
+    DateTime? expiresAt,
+    int? maxUses,
+    bool temporary = false,
+    InviteTargetType targetType = InviteTargetType.none,
+    String? targetUserId,
+  }) => api.createInvite(
+    guildId: guildId,
+    channelId: channelId,
+    type: type,
+    expiresAt: expiresAt,
+    maxUses: maxUses,
+    temporary: temporary,
+    targetType: targetType,
+    targetUserId: targetUserId,
+  );
 
   Future<InviteDto> previewInvite(String code) => api.getInviteByCode(code);
 
@@ -865,11 +883,15 @@ class GuildRepository {
   /// navigated to a server with no name and no channels in it. Retried here
   /// rather than at the screen so every entry point - the invite popup, the
   /// rail's Join sheet - gets the same behaviour.
-  Future<GuildDto> redeemInvite(String code) async {
+  /// The `202` body comes back alongside the guild. It is additive - the route
+  /// answered with nothing at all before - so [RedeemOutcome.result] is null
+  /// against an older server and every caller has to read it that way.
+  Future<RedeemOutcome> redeemInvite(String code) async {
     final invite = await api.getInviteByCode(code);
-    await api.redeemInvite(invite.id);
+    final result = await api.redeemInvite(invite.id);
     await fetch();
-    return fetchJoinedGuild(invite.guildId);
+    final guild = await fetchJoinedGuild(invite.guildId);
+    return RedeemOutcome(guild: guild, result: result);
   }
 
   /// [fetchGuild] with the just-joined guild's read-visibility lag absorbed:
@@ -911,5 +933,38 @@ class GuildRepository {
     _realtimeSub.cancel();
     _guildsController.close();
     _emojiUpdatesController.close();
+  }
+}
+
+/// What [GuildRepository.redeemInvite] settled on: the guild to land in, and
+/// whatever the redeem call said about how to land.
+class RedeemOutcome {
+  const RedeemOutcome({required this.guild, this.result});
+
+  final GuildDto guild;
+
+  /// Null against a server that still answers the `202` with an empty body, or
+  /// when the body would not parse. Everything on it is additive, so a null one
+  /// means "behave exactly as this client did before".
+  final RedeemResultDto? result;
+
+  /// The membership ends when this account goes offline, unless it is given a
+  /// role. Worth saying out loud at join time: a member who is not told will
+  /// simply find themselves gone.
+  bool get isTemporaryMembership => result?.temporaryMembership ?? false;
+
+  bool get needsOnboarding => result?.onboardingRequired ?? false;
+
+  /// The voice channel to connect to after landing, or null.
+  ///
+  /// Driven by `joinVoice` rather than by `targetType`, because the server sets
+  /// it false when the target channel has been deleted or has stopped being a
+  /// voice channel since the link was made - the join still succeeds, only the
+  /// landing is dropped.
+  String? get voiceChannelToJoin {
+    final redeem = result;
+    if (redeem == null || !redeem.joinVoice) return null;
+    final channelId = redeem.channelId;
+    return (channelId != null && channelId.isNotEmpty) ? channelId : null;
   }
 }

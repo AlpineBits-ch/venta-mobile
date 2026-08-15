@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/rate_limit_interceptor.dart';
 import 'models/audit_log_entry_dto.dart';
 import 'models/auto_mod_config_dto.dart';
 import 'models/ban_dto.dart';
@@ -563,17 +564,43 @@ class GuildApi {
         .toList();
   }
 
-  Future<List<InviteDto>> getInvites(String guildId) async {
+  /// Every invite a guild has. **Requires `ManageGuild`** - it used to take
+  /// `ManageChannel`, which is the wrong scope (channel, not guild) and the
+  /// wrong level of trust for the guild's entire set of live join credentials.
+  ///
+  /// Revoked invites are excluded unless [includeRevoked] is set, which is what
+  /// keeps the default list the shape it was before revocation existed.
+  Future<List<InviteDto>> getInvites(
+    String guildId, {
+    bool includeRevoked = false,
+  }) async {
     final response = await client.dio.get<List<dynamic>>(
       '$_base/guilds/$guildId/invites',
+      queryParameters: includeRevoked ? const {'includeRevoked': true} : null,
     );
     return response.data!
         .map((json) => InviteDto.fromJson(json as Map<String, dynamic>))
         .toList();
   }
 
-  Future<void> deleteInvite(String inviteId) async {
-    await client.dio.delete<void>('$_base/invites/$inviteId');
+  /// Revokes an invite. Still `DELETE`, still answers the invite - but the row
+  /// survives now, moved to `state: Revoked` with a `revokedAt`, because
+  /// `guildMember.inviteId` points at it and deleting it once took every member
+  /// who had joined through it with it.
+  ///
+  /// Idempotent: revoking an already-revoked invite answers the same body and
+  /// writes no second audit entry.
+  Future<InviteDto?> deleteInvite(String inviteId) async {
+    final response = await client.dio.delete<Map<String, dynamic>>(
+      '$_base/invites/$inviteId',
+    );
+    final data = response.data;
+    if (data == null) return null;
+    try {
+      return InviteDto.fromJson(data);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<ChannelDto> createChannel({
@@ -720,34 +747,87 @@ class GuildApi {
     return GuildSelfPermissions.fromJson(response.data!);
   }
 
+  /// Mints an invite.
+  ///
+  /// [maxUses] and [expiresAt] were both accepted by this endpoint before
+  /// anything sent them. `null` means unlimited / never; **`0` is refused with
+  /// a `400`**, because an invite that is exhausted the moment it exists is a
+  /// link somebody is about to share.
+  ///
+  /// A [targetType] of [InviteTargetType.voiceChannel] requires [channelId] and
+  /// that the channel be a voice channel in this guild - all validated at
+  /// creation rather than at redemption, because the person who can still fix a
+  /// bad target is the one filling in the form.
   Future<InviteDto> createInvite({
     required String guildId,
     InviteType type = InviteType.permanent,
     String? channelId,
+    DateTime? expiresAt,
+    int? maxUses,
+    bool temporary = false,
+    InviteTargetType targetType = InviteTargetType.none,
+    String? targetUserId,
   }) async {
     final response = await client.dio.post<Map<String, dynamic>>(
       '$_base/guilds/$guildId/invite',
       data: {
-        'type': type == InviteType.oneTime ? 'OneTime' : 'Permanent',
+        'type': _inviteTypeWireValue(type),
         'channelId': channelId,
+        'expiresAt': expiresAt?.toUtc().toIso8601String(),
+        'maxUses': maxUses,
+        'temporary': temporary,
+        'targetType': _inviteTargetTypeWireValue(targetType),
+        'targetUserId': targetUserId,
       },
     );
     return InviteDto.fromJson(response.data!);
   }
 
+  /// Throws [InvitePreviewRateLimitedException] on the preview routes' own
+  /// budget - they are the only unauthenticated surface that will say whether a
+  /// code exists, so they carry one on top of the gateway's.
   Future<InviteDto> getInviteByCode(String code) async {
-    final response = await client.dio.get<Map<String, dynamic>>(
-      '$_base/invites/code/$code',
-    );
-    return InviteDto.fromJson(response.data!);
+    try {
+      final response = await client.dio.get<Map<String, dynamic>>(
+        '$_base/invites/code/$code',
+        options: _invitePreviewOptions,
+      );
+      return InviteDto.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw _mapInvitePreviewError(e);
+    }
   }
+
+  /// Opts the preview routes out of the generic `429` retry.
+  ///
+  /// Their budget is their own - 30 a minute, burst 60, **a miss spends a token
+  /// too** - and it is not the gateway's shared bucket. Retrying it three times
+  /// automatically spends three tokens answering one question, and its
+  /// `global`-less body would park every other request in the app behind one
+  /// invite lookup. The retry the guidance actually asks for is one the user
+  /// presses, which is what the dialog offers.
+  Options get _invitePreviewOptions =>
+      Options(extra: const {RateLimitInterceptor.ownBudgetKey: true});
 
   /// Throws [VerificationLevelNotMetException] when the guild's
   /// `verificationLevel` blocks this account from joining (structured `403`
   /// body: `{error: "verification_level_not_met", requiredLevel}`).
-  Future<void> redeemInvite(String inviteId) async {
+  ///
+  /// Still a `202`, now with a body. Every field of [RedeemResultDto] is
+  /// additive - this route answered with nothing at all before - so a body that
+  /// will not parse must never cost the join that has already happened.
+  Future<RedeemResultDto?> redeemInvite(String inviteId) async {
     try {
-      await client.dio.post<void>('$_base/invites/$inviteId/redeem');
+      final response = await client.dio.post<Map<String, dynamic>>(
+        '$_base/invites/$inviteId/redeem',
+      );
+      final data = response.data;
+      if (data == null) return null;
+      try {
+        return RedeemResultDto.fromJson(data);
+      } catch (_) {
+        return null;
+      }
     } on DioException catch (e) {
       final data = e.response?.data;
       if (e.response?.statusCode == 403 &&
@@ -760,6 +840,34 @@ class GuildApi {
       rethrow;
     }
   }
+
+  /// A `429` from a preview route is "ask again in a moment", which is a
+  /// different thing to say than "this invite is not real" - and the dialog
+  /// showed the second for both until this was told apart.
+  Object _mapInvitePreviewError(DioException e) {
+    final data = e.response?.data;
+    if (e.response?.statusCode == 429 &&
+        data is Map &&
+        data['error'] == 'rate_limited') {
+      return InvitePreviewRateLimitedException(
+        data['message'] as String? ??
+            'Too many invite lookups; try again shortly.',
+      );
+    }
+    return e;
+  }
+
+  String _inviteTypeWireValue(InviteType type) => switch (type) {
+    InviteType.oneTime => 'OneTime',
+    // An invite this build cannot name is not a shape to send back; permanent
+    // is what the endpoint defaults to anyway.
+    InviteType.permanent || InviteType.unknown => 'Permanent',
+  };
+
+  String _inviteTargetTypeWireValue(InviteTargetType type) => switch (type) {
+    InviteTargetType.voiceChannel => 'VoiceChannel',
+    InviteTargetType.none || InviteTargetType.unknown => 'None',
+  };
 
   String _channelTypeWireValue(ChannelType type) => switch (type) {
     ChannelType.text => 'Text',
@@ -1103,4 +1211,20 @@ class ForumTagNameTakenException implements Exception {
 class VerificationLevelNotMetException implements Exception {
   const VerificationLevelNotMetException(this.requiredLevel);
   final String requiredLevel;
+}
+
+/// Thrown by the invite preview routes on their own `429`.
+///
+/// Those routes are the only unauthenticated surface that will tell anybody
+/// whether a code exists, so they carry a budget on top of the gateway's - 30 a
+/// minute, burst 60, and **a miss spends a token too**, because a miss is the
+/// request worth pricing: it is the one that probes the code space.
+///
+/// Worth a distinct type rather than a bare `DioException`, because the only
+/// thing a caller could do with the latter is show the same "this invite is not
+/// valid" panel a `404` gets - which is wrong, and permanently wrong-looking,
+/// for a condition that clears itself in seconds.
+class InvitePreviewRateLimitedException implements Exception {
+  const InvitePreviewRateLimitedException(this.message);
+  final String message;
 }

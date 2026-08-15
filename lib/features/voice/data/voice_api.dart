@@ -199,6 +199,7 @@ class VoiceApi {
     required String mediaSessionId,
     required Map<String, dynamic> sessionDescription,
     required List<Map<String, dynamic>> tracks,
+    Map<String, dynamic>? video,
   }) => mapMediaErrors('tracks', () async {
     final response = await client.dio.post<Map<String, dynamic>>(
       client.url('$_base/calls/$callId/tracks'),
@@ -206,6 +207,7 @@ class VoiceApi {
         'mediaSessionId': mediaSessionId,
         'sessionDescription': sessionDescription,
         'tracks': tracks,
+        'video': ?video,
       },
       options: _deviceOptions,
     );

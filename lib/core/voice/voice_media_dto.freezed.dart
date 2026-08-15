@@ -541,7 +541,7 @@ as String?,
 /// @nodoc
 mixin _$VoiceNegotiateResponseDto {
 
- Map<String, dynamic> get sessionDescription; List<VoiceTrackResultDto> get tracks; bool get requiresImmediateRenegotiation;
+ Map<String, dynamic> get sessionDescription; List<VoiceTrackResultDto> get tracks; bool get requiresImmediateRenegotiation; List<EntitlementDegradationDto> get degradations;
 /// Create a copy of VoiceNegotiateResponseDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -554,16 +554,16 @@ $VoiceNegotiateResponseDtoCopyWith<VoiceNegotiateResponseDto> get copyWith => _$
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceNegotiateResponseDto&&const DeepCollectionEquality().equals(other.sessionDescription, sessionDescription)&&const DeepCollectionEquality().equals(other.tracks, tracks)&&(identical(other.requiresImmediateRenegotiation, requiresImmediateRenegotiation) || other.requiresImmediateRenegotiation == requiresImmediateRenegotiation));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceNegotiateResponseDto&&const DeepCollectionEquality().equals(other.sessionDescription, sessionDescription)&&const DeepCollectionEquality().equals(other.tracks, tracks)&&(identical(other.requiresImmediateRenegotiation, requiresImmediateRenegotiation) || other.requiresImmediateRenegotiation == requiresImmediateRenegotiation)&&const DeepCollectionEquality().equals(other.degradations, degradations));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(sessionDescription),const DeepCollectionEquality().hash(tracks),requiresImmediateRenegotiation);
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(sessionDescription),const DeepCollectionEquality().hash(tracks),requiresImmediateRenegotiation,const DeepCollectionEquality().hash(degradations));
 
 @override
 String toString() {
-  return 'VoiceNegotiateResponseDto(sessionDescription: $sessionDescription, tracks: $tracks, requiresImmediateRenegotiation: $requiresImmediateRenegotiation)';
+  return 'VoiceNegotiateResponseDto(sessionDescription: $sessionDescription, tracks: $tracks, requiresImmediateRenegotiation: $requiresImmediateRenegotiation, degradations: $degradations)';
 }
 
 
@@ -574,7 +574,7 @@ abstract mixin class $VoiceNegotiateResponseDtoCopyWith<$Res>  {
   factory $VoiceNegotiateResponseDtoCopyWith(VoiceNegotiateResponseDto value, $Res Function(VoiceNegotiateResponseDto) _then) = _$VoiceNegotiateResponseDtoCopyWithImpl;
 @useResult
 $Res call({
- Map<String, dynamic> sessionDescription, List<VoiceTrackResultDto> tracks, bool requiresImmediateRenegotiation
+ Map<String, dynamic> sessionDescription, List<VoiceTrackResultDto> tracks, bool requiresImmediateRenegotiation, List<EntitlementDegradationDto> degradations
 });
 
 
@@ -591,12 +591,13 @@ class _$VoiceNegotiateResponseDtoCopyWithImpl<$Res>
 
 /// Create a copy of VoiceNegotiateResponseDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? sessionDescription = null,Object? tracks = null,Object? requiresImmediateRenegotiation = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? sessionDescription = null,Object? tracks = null,Object? requiresImmediateRenegotiation = null,Object? degradations = null,}) {
   return _then(_self.copyWith(
 sessionDescription: null == sessionDescription ? _self.sessionDescription : sessionDescription // ignore: cast_nullable_to_non_nullable
 as Map<String, dynamic>,tracks: null == tracks ? _self.tracks : tracks // ignore: cast_nullable_to_non_nullable
 as List<VoiceTrackResultDto>,requiresImmediateRenegotiation: null == requiresImmediateRenegotiation ? _self.requiresImmediateRenegotiation : requiresImmediateRenegotiation // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,degradations: null == degradations ? _self.degradations : degradations // ignore: cast_nullable_to_non_nullable
+as List<EntitlementDegradationDto>,
   ));
 }
 
@@ -678,10 +679,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( Map<String, dynamic> sessionDescription,  List<VoiceTrackResultDto> tracks,  bool requiresImmediateRenegotiation)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( Map<String, dynamic> sessionDescription,  List<VoiceTrackResultDto> tracks,  bool requiresImmediateRenegotiation,  List<EntitlementDegradationDto> degradations)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _VoiceNegotiateResponseDto() when $default != null:
-return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRenegotiation);case _:
+return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRenegotiation,_that.degradations);case _:
   return orElse();
 
 }
@@ -699,10 +700,10 @@ return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRen
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( Map<String, dynamic> sessionDescription,  List<VoiceTrackResultDto> tracks,  bool requiresImmediateRenegotiation)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( Map<String, dynamic> sessionDescription,  List<VoiceTrackResultDto> tracks,  bool requiresImmediateRenegotiation,  List<EntitlementDegradationDto> degradations)  $default,) {final _that = this;
 switch (_that) {
 case _VoiceNegotiateResponseDto():
-return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRenegotiation);}
+return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRenegotiation,_that.degradations);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -716,10 +717,10 @@ return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRen
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( Map<String, dynamic> sessionDescription,  List<VoiceTrackResultDto> tracks,  bool requiresImmediateRenegotiation)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( Map<String, dynamic> sessionDescription,  List<VoiceTrackResultDto> tracks,  bool requiresImmediateRenegotiation,  List<EntitlementDegradationDto> degradations)?  $default,) {final _that = this;
 switch (_that) {
 case _VoiceNegotiateResponseDto() when $default != null:
-return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRenegotiation);case _:
+return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRenegotiation,_that.degradations);case _:
   return null;
 
 }
@@ -731,7 +732,7 @@ return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRen
 @JsonSerializable()
 
 class _VoiceNegotiateResponseDto implements VoiceNegotiateResponseDto {
-  const _VoiceNegotiateResponseDto({required final  Map<String, dynamic> sessionDescription, final  List<VoiceTrackResultDto> tracks = const <VoiceTrackResultDto>[], this.requiresImmediateRenegotiation = false}): _sessionDescription = sessionDescription,_tracks = tracks;
+  const _VoiceNegotiateResponseDto({required final  Map<String, dynamic> sessionDescription, final  List<VoiceTrackResultDto> tracks = const <VoiceTrackResultDto>[], this.requiresImmediateRenegotiation = false, final  List<EntitlementDegradationDto> degradations = const <EntitlementDegradationDto>[]}): _sessionDescription = sessionDescription,_tracks = tracks,_degradations = degradations;
   factory _VoiceNegotiateResponseDto.fromJson(Map<String, dynamic> json) => _$VoiceNegotiateResponseDtoFromJson(json);
 
  final  Map<String, dynamic> _sessionDescription;
@@ -749,6 +750,13 @@ class _VoiceNegotiateResponseDto implements VoiceNegotiateResponseDto {
 }
 
 @override@JsonKey() final  bool requiresImmediateRenegotiation;
+ final  List<EntitlementDegradationDto> _degradations;
+@override@JsonKey() List<EntitlementDegradationDto> get degradations {
+  if (_degradations is EqualUnmodifiableListView) return _degradations;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_degradations);
+}
+
 
 /// Create a copy of VoiceNegotiateResponseDto
 /// with the given fields replaced by the non-null parameter values.
@@ -763,16 +771,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceNegotiateResponseDto&&const DeepCollectionEquality().equals(other._sessionDescription, _sessionDescription)&&const DeepCollectionEquality().equals(other._tracks, _tracks)&&(identical(other.requiresImmediateRenegotiation, requiresImmediateRenegotiation) || other.requiresImmediateRenegotiation == requiresImmediateRenegotiation));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceNegotiateResponseDto&&const DeepCollectionEquality().equals(other._sessionDescription, _sessionDescription)&&const DeepCollectionEquality().equals(other._tracks, _tracks)&&(identical(other.requiresImmediateRenegotiation, requiresImmediateRenegotiation) || other.requiresImmediateRenegotiation == requiresImmediateRenegotiation)&&const DeepCollectionEquality().equals(other._degradations, _degradations));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_sessionDescription),const DeepCollectionEquality().hash(_tracks),requiresImmediateRenegotiation);
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_sessionDescription),const DeepCollectionEquality().hash(_tracks),requiresImmediateRenegotiation,const DeepCollectionEquality().hash(_degradations));
 
 @override
 String toString() {
-  return 'VoiceNegotiateResponseDto(sessionDescription: $sessionDescription, tracks: $tracks, requiresImmediateRenegotiation: $requiresImmediateRenegotiation)';
+  return 'VoiceNegotiateResponseDto(sessionDescription: $sessionDescription, tracks: $tracks, requiresImmediateRenegotiation: $requiresImmediateRenegotiation, degradations: $degradations)';
 }
 
 
@@ -783,7 +791,7 @@ abstract mixin class _$VoiceNegotiateResponseDtoCopyWith<$Res> implements $Voice
   factory _$VoiceNegotiateResponseDtoCopyWith(_VoiceNegotiateResponseDto value, $Res Function(_VoiceNegotiateResponseDto) _then) = __$VoiceNegotiateResponseDtoCopyWithImpl;
 @override @useResult
 $Res call({
- Map<String, dynamic> sessionDescription, List<VoiceTrackResultDto> tracks, bool requiresImmediateRenegotiation
+ Map<String, dynamic> sessionDescription, List<VoiceTrackResultDto> tracks, bool requiresImmediateRenegotiation, List<EntitlementDegradationDto> degradations
 });
 
 
@@ -800,12 +808,13 @@ class __$VoiceNegotiateResponseDtoCopyWithImpl<$Res>
 
 /// Create a copy of VoiceNegotiateResponseDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? sessionDescription = null,Object? tracks = null,Object? requiresImmediateRenegotiation = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? sessionDescription = null,Object? tracks = null,Object? requiresImmediateRenegotiation = null,Object? degradations = null,}) {
   return _then(_VoiceNegotiateResponseDto(
 sessionDescription: null == sessionDescription ? _self._sessionDescription : sessionDescription // ignore: cast_nullable_to_non_nullable
 as Map<String, dynamic>,tracks: null == tracks ? _self._tracks : tracks // ignore: cast_nullable_to_non_nullable
 as List<VoiceTrackResultDto>,requiresImmediateRenegotiation: null == requiresImmediateRenegotiation ? _self.requiresImmediateRenegotiation : requiresImmediateRenegotiation // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,degradations: null == degradations ? _self._degradations : degradations // ignore: cast_nullable_to_non_nullable
+as List<EntitlementDegradationDto>,
   ));
 }
 

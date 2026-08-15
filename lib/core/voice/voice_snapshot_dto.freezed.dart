@@ -580,7 +580,11 @@ mixin _$VoiceRoomSnapshotDto {
  String get roomId; String get kind;/// Null for calls, exactly as the server leaves it absent there.
  String? get guildId;/// Identifies this incarnation of the room. A blank instance is an empty
 /// room the server does not actually have - never adopt it as a baseline.
- String get instanceId; int get version; List<VoiceParticipantSnapshotDto> get participants;
+ String get instanceId; int get version; List<VoiceParticipantSnapshotDto> get participants;/// What this room may carry. Absent on a room whose limits have never been
+/// computed, and on every server that predates them - which is why it is
+/// nullable rather than defaulted: an empty [VoiceRoomLimitsDto] would say
+/// "no ceilings" where the truth is "nobody said".
+@JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson) VoiceRoomLimitsDto? get limits;
 /// Create a copy of VoiceRoomSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -593,16 +597,16 @@ $VoiceRoomSnapshotDtoCopyWith<VoiceRoomSnapshotDto> get copyWith => _$VoiceRoomS
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceRoomSnapshotDto&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.instanceId, instanceId) || other.instanceId == instanceId)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other.participants, participants));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceRoomSnapshotDto&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.instanceId, instanceId) || other.instanceId == instanceId)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other.participants, participants)&&(identical(other.limits, limits) || other.limits == limits));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,roomId,kind,guildId,instanceId,version,const DeepCollectionEquality().hash(participants));
+int get hashCode => Object.hash(runtimeType,roomId,kind,guildId,instanceId,version,const DeepCollectionEquality().hash(participants),limits);
 
 @override
 String toString() {
-  return 'VoiceRoomSnapshotDto(roomId: $roomId, kind: $kind, guildId: $guildId, instanceId: $instanceId, version: $version, participants: $participants)';
+  return 'VoiceRoomSnapshotDto(roomId: $roomId, kind: $kind, guildId: $guildId, instanceId: $instanceId, version: $version, participants: $participants, limits: $limits)';
 }
 
 
@@ -613,7 +617,7 @@ abstract mixin class $VoiceRoomSnapshotDtoCopyWith<$Res>  {
   factory $VoiceRoomSnapshotDtoCopyWith(VoiceRoomSnapshotDto value, $Res Function(VoiceRoomSnapshotDto) _then) = _$VoiceRoomSnapshotDtoCopyWithImpl;
 @useResult
 $Res call({
- String roomId, String kind, String? guildId, String instanceId, int version, List<VoiceParticipantSnapshotDto> participants
+ String roomId, String kind, String? guildId, String instanceId, int version, List<VoiceParticipantSnapshotDto> participants,@JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson) VoiceRoomLimitsDto? limits
 });
 
 
@@ -630,7 +634,7 @@ class _$VoiceRoomSnapshotDtoCopyWithImpl<$Res>
 
 /// Create a copy of VoiceRoomSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? roomId = null,Object? kind = null,Object? guildId = freezed,Object? instanceId = null,Object? version = null,Object? participants = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? roomId = null,Object? kind = null,Object? guildId = freezed,Object? instanceId = null,Object? version = null,Object? participants = null,Object? limits = freezed,}) {
   return _then(_self.copyWith(
 roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
 as String,kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
@@ -638,7 +642,8 @@ as String,guildId: freezed == guildId ? _self.guildId : guildId // ignore: cast_
 as String?,instanceId: null == instanceId ? _self.instanceId : instanceId // ignore: cast_nullable_to_non_nullable
 as String,version: null == version ? _self.version : version // ignore: cast_nullable_to_non_nullable
 as int,participants: null == participants ? _self.participants : participants // ignore: cast_nullable_to_non_nullable
-as List<VoiceParticipantSnapshotDto>,
+as List<VoiceParticipantSnapshotDto>,limits: freezed == limits ? _self.limits : limits // ignore: cast_nullable_to_non_nullable
+as VoiceRoomLimitsDto?,
   ));
 }
 
@@ -720,10 +725,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String roomId,  String kind,  String? guildId,  String instanceId,  int version,  List<VoiceParticipantSnapshotDto> participants)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String roomId,  String kind,  String? guildId,  String instanceId,  int version,  List<VoiceParticipantSnapshotDto> participants, @JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson)  VoiceRoomLimitsDto? limits)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _VoiceRoomSnapshotDto() when $default != null:
-return $default(_that.roomId,_that.kind,_that.guildId,_that.instanceId,_that.version,_that.participants);case _:
+return $default(_that.roomId,_that.kind,_that.guildId,_that.instanceId,_that.version,_that.participants,_that.limits);case _:
   return orElse();
 
 }
@@ -741,10 +746,10 @@ return $default(_that.roomId,_that.kind,_that.guildId,_that.instanceId,_that.ver
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String roomId,  String kind,  String? guildId,  String instanceId,  int version,  List<VoiceParticipantSnapshotDto> participants)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String roomId,  String kind,  String? guildId,  String instanceId,  int version,  List<VoiceParticipantSnapshotDto> participants, @JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson)  VoiceRoomLimitsDto? limits)  $default,) {final _that = this;
 switch (_that) {
 case _VoiceRoomSnapshotDto():
-return $default(_that.roomId,_that.kind,_that.guildId,_that.instanceId,_that.version,_that.participants);}
+return $default(_that.roomId,_that.kind,_that.guildId,_that.instanceId,_that.version,_that.participants,_that.limits);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -758,10 +763,10 @@ return $default(_that.roomId,_that.kind,_that.guildId,_that.instanceId,_that.ver
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String roomId,  String kind,  String? guildId,  String instanceId,  int version,  List<VoiceParticipantSnapshotDto> participants)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String roomId,  String kind,  String? guildId,  String instanceId,  int version,  List<VoiceParticipantSnapshotDto> participants, @JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson)  VoiceRoomLimitsDto? limits)?  $default,) {final _that = this;
 switch (_that) {
 case _VoiceRoomSnapshotDto() when $default != null:
-return $default(_that.roomId,_that.kind,_that.guildId,_that.instanceId,_that.version,_that.participants);case _:
+return $default(_that.roomId,_that.kind,_that.guildId,_that.instanceId,_that.version,_that.participants,_that.limits);case _:
   return null;
 
 }
@@ -773,7 +778,7 @@ return $default(_that.roomId,_that.kind,_that.guildId,_that.instanceId,_that.ver
 @JsonSerializable()
 
 class _VoiceRoomSnapshotDto extends VoiceRoomSnapshotDto {
-  const _VoiceRoomSnapshotDto({required this.roomId, required this.kind, this.guildId, this.instanceId = '', this.version = 0, final  List<VoiceParticipantSnapshotDto> participants = const <VoiceParticipantSnapshotDto>[]}): _participants = participants,super._();
+  const _VoiceRoomSnapshotDto({required this.roomId, required this.kind, this.guildId, this.instanceId = '', this.version = 0, final  List<VoiceParticipantSnapshotDto> participants = const <VoiceParticipantSnapshotDto>[], @JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson) this.limits}): _participants = participants,super._();
   factory _VoiceRoomSnapshotDto.fromJson(Map<String, dynamic> json) => _$VoiceRoomSnapshotDtoFromJson(json);
 
 @override final  String roomId;
@@ -791,6 +796,11 @@ class _VoiceRoomSnapshotDto extends VoiceRoomSnapshotDto {
   return EqualUnmodifiableListView(_participants);
 }
 
+/// What this room may carry. Absent on a room whose limits have never been
+/// computed, and on every server that predates them - which is why it is
+/// nullable rather than defaulted: an empty [VoiceRoomLimitsDto] would say
+/// "no ceilings" where the truth is "nobody said".
+@override@JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson) final  VoiceRoomLimitsDto? limits;
 
 /// Create a copy of VoiceRoomSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
@@ -805,16 +815,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceRoomSnapshotDto&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.instanceId, instanceId) || other.instanceId == instanceId)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other._participants, _participants));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceRoomSnapshotDto&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.instanceId, instanceId) || other.instanceId == instanceId)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other._participants, _participants)&&(identical(other.limits, limits) || other.limits == limits));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,roomId,kind,guildId,instanceId,version,const DeepCollectionEquality().hash(_participants));
+int get hashCode => Object.hash(runtimeType,roomId,kind,guildId,instanceId,version,const DeepCollectionEquality().hash(_participants),limits);
 
 @override
 String toString() {
-  return 'VoiceRoomSnapshotDto(roomId: $roomId, kind: $kind, guildId: $guildId, instanceId: $instanceId, version: $version, participants: $participants)';
+  return 'VoiceRoomSnapshotDto(roomId: $roomId, kind: $kind, guildId: $guildId, instanceId: $instanceId, version: $version, participants: $participants, limits: $limits)';
 }
 
 
@@ -825,7 +835,7 @@ abstract mixin class _$VoiceRoomSnapshotDtoCopyWith<$Res> implements $VoiceRoomS
   factory _$VoiceRoomSnapshotDtoCopyWith(_VoiceRoomSnapshotDto value, $Res Function(_VoiceRoomSnapshotDto) _then) = __$VoiceRoomSnapshotDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String roomId, String kind, String? guildId, String instanceId, int version, List<VoiceParticipantSnapshotDto> participants
+ String roomId, String kind, String? guildId, String instanceId, int version, List<VoiceParticipantSnapshotDto> participants,@JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson) VoiceRoomLimitsDto? limits
 });
 
 
@@ -842,7 +852,7 @@ class __$VoiceRoomSnapshotDtoCopyWithImpl<$Res>
 
 /// Create a copy of VoiceRoomSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? roomId = null,Object? kind = null,Object? guildId = freezed,Object? instanceId = null,Object? version = null,Object? participants = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? roomId = null,Object? kind = null,Object? guildId = freezed,Object? instanceId = null,Object? version = null,Object? participants = null,Object? limits = freezed,}) {
   return _then(_VoiceRoomSnapshotDto(
 roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
 as String,kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
@@ -850,7 +860,8 @@ as String,guildId: freezed == guildId ? _self.guildId : guildId // ignore: cast_
 as String?,instanceId: null == instanceId ? _self.instanceId : instanceId // ignore: cast_nullable_to_non_nullable
 as String,version: null == version ? _self.version : version // ignore: cast_nullable_to_non_nullable
 as int,participants: null == participants ? _self._participants : participants // ignore: cast_nullable_to_non_nullable
-as List<VoiceParticipantSnapshotDto>,
+as List<VoiceParticipantSnapshotDto>,limits: freezed == limits ? _self.limits : limits // ignore: cast_nullable_to_non_nullable
+as VoiceRoomLimitsDto?,
   ));
 }
 

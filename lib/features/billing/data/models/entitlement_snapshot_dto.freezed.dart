@@ -564,7 +564,14 @@ as int?,
 mixin _$EntitlementSnapshotDto {
 
  EntitlementSubjectDto get subject;/// Null when no plan resolved these numbers. See [EntitlementPlanDto].
- EntitlementPlanDto? get plan;/// Ceilings only, never consumption. How many emoji slots a server has and
+ EntitlementPlanDto? get plan;/// How long this may be held for. Never longer than the server's own cache
+/// backstop, which is what makes a dropped event self-heal: caching past it
+/// keeps a repaired value broken locally for as long as the entry lives.
+ int get ttlSeconds;/// Monotonic per subject. `0` on every instance until Billing owns a
+/// counter; comparing it is still correct and starts working the day it
+/// moves, which is why a late response is discarded against it now rather
+/// than after somebody notices.
+ int get version;/// Ceilings only, never consumption. How many emoji slots a server has and
 /// how many are used are two different payloads with opposite caching
 /// properties, and the usage half is not implemented server-side yet.
  Map<String, EntitlementValueDto> get entitlements;
@@ -580,16 +587,16 @@ $EntitlementSnapshotDtoCopyWith<EntitlementSnapshotDto> get copyWith => _$Entitl
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is EntitlementSnapshotDto&&(identical(other.subject, subject) || other.subject == subject)&&(identical(other.plan, plan) || other.plan == plan)&&const DeepCollectionEquality().equals(other.entitlements, entitlements));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is EntitlementSnapshotDto&&(identical(other.subject, subject) || other.subject == subject)&&(identical(other.plan, plan) || other.plan == plan)&&(identical(other.ttlSeconds, ttlSeconds) || other.ttlSeconds == ttlSeconds)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other.entitlements, entitlements));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,subject,plan,const DeepCollectionEquality().hash(entitlements));
+int get hashCode => Object.hash(runtimeType,subject,plan,ttlSeconds,version,const DeepCollectionEquality().hash(entitlements));
 
 @override
 String toString() {
-  return 'EntitlementSnapshotDto(subject: $subject, plan: $plan, entitlements: $entitlements)';
+  return 'EntitlementSnapshotDto(subject: $subject, plan: $plan, ttlSeconds: $ttlSeconds, version: $version, entitlements: $entitlements)';
 }
 
 
@@ -600,7 +607,7 @@ abstract mixin class $EntitlementSnapshotDtoCopyWith<$Res>  {
   factory $EntitlementSnapshotDtoCopyWith(EntitlementSnapshotDto value, $Res Function(EntitlementSnapshotDto) _then) = _$EntitlementSnapshotDtoCopyWithImpl;
 @useResult
 $Res call({
- EntitlementSubjectDto subject, EntitlementPlanDto? plan, Map<String, EntitlementValueDto> entitlements
+ EntitlementSubjectDto subject, EntitlementPlanDto? plan, int ttlSeconds, int version, Map<String, EntitlementValueDto> entitlements
 });
 
 
@@ -617,11 +624,13 @@ class _$EntitlementSnapshotDtoCopyWithImpl<$Res>
 
 /// Create a copy of EntitlementSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? subject = null,Object? plan = freezed,Object? entitlements = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? subject = null,Object? plan = freezed,Object? ttlSeconds = null,Object? version = null,Object? entitlements = null,}) {
   return _then(_self.copyWith(
 subject: null == subject ? _self.subject : subject // ignore: cast_nullable_to_non_nullable
 as EntitlementSubjectDto,plan: freezed == plan ? _self.plan : plan // ignore: cast_nullable_to_non_nullable
-as EntitlementPlanDto?,entitlements: null == entitlements ? _self.entitlements : entitlements // ignore: cast_nullable_to_non_nullable
+as EntitlementPlanDto?,ttlSeconds: null == ttlSeconds ? _self.ttlSeconds : ttlSeconds // ignore: cast_nullable_to_non_nullable
+as int,version: null == version ? _self.version : version // ignore: cast_nullable_to_non_nullable
+as int,entitlements: null == entitlements ? _self.entitlements : entitlements // ignore: cast_nullable_to_non_nullable
 as Map<String, EntitlementValueDto>,
   ));
 }
@@ -725,10 +734,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  Map<String, EntitlementValueDto> entitlements)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  int ttlSeconds,  int version,  Map<String, EntitlementValueDto> entitlements)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _EntitlementSnapshotDto() when $default != null:
-return $default(_that.subject,_that.plan,_that.entitlements);case _:
+return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.entitlements);case _:
   return orElse();
 
 }
@@ -746,10 +755,10 @@ return $default(_that.subject,_that.plan,_that.entitlements);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  Map<String, EntitlementValueDto> entitlements)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  int ttlSeconds,  int version,  Map<String, EntitlementValueDto> entitlements)  $default,) {final _that = this;
 switch (_that) {
 case _EntitlementSnapshotDto():
-return $default(_that.subject,_that.plan,_that.entitlements);}
+return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.entitlements);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -763,10 +772,10 @@ return $default(_that.subject,_that.plan,_that.entitlements);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  Map<String, EntitlementValueDto> entitlements)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  int ttlSeconds,  int version,  Map<String, EntitlementValueDto> entitlements)?  $default,) {final _that = this;
 switch (_that) {
 case _EntitlementSnapshotDto() when $default != null:
-return $default(_that.subject,_that.plan,_that.entitlements);case _:
+return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.entitlements);case _:
   return null;
 
 }
@@ -778,12 +787,21 @@ return $default(_that.subject,_that.plan,_that.entitlements);case _:
 @JsonSerializable()
 
 class _EntitlementSnapshotDto implements EntitlementSnapshotDto {
-  const _EntitlementSnapshotDto({this.subject = const EntitlementSubjectDto(), this.plan, final  Map<String, EntitlementValueDto> entitlements = const <String, EntitlementValueDto>{}}): _entitlements = entitlements;
+  const _EntitlementSnapshotDto({this.subject = const EntitlementSubjectDto(), this.plan, this.ttlSeconds = 60, this.version = 0, final  Map<String, EntitlementValueDto> entitlements = const <String, EntitlementValueDto>{}}): _entitlements = entitlements;
   factory _EntitlementSnapshotDto.fromJson(Map<String, dynamic> json) => _$EntitlementSnapshotDtoFromJson(json);
 
 @override@JsonKey() final  EntitlementSubjectDto subject;
 /// Null when no plan resolved these numbers. See [EntitlementPlanDto].
 @override final  EntitlementPlanDto? plan;
+/// How long this may be held for. Never longer than the server's own cache
+/// backstop, which is what makes a dropped event self-heal: caching past it
+/// keeps a repaired value broken locally for as long as the entry lives.
+@override@JsonKey() final  int ttlSeconds;
+/// Monotonic per subject. `0` on every instance until Billing owns a
+/// counter; comparing it is still correct and starts working the day it
+/// moves, which is why a late response is discarded against it now rather
+/// than after somebody notices.
+@override@JsonKey() final  int version;
 /// Ceilings only, never consumption. How many emoji slots a server has and
 /// how many are used are two different payloads with opposite caching
 /// properties, and the usage half is not implemented server-side yet.
@@ -811,16 +829,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EntitlementSnapshotDto&&(identical(other.subject, subject) || other.subject == subject)&&(identical(other.plan, plan) || other.plan == plan)&&const DeepCollectionEquality().equals(other._entitlements, _entitlements));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EntitlementSnapshotDto&&(identical(other.subject, subject) || other.subject == subject)&&(identical(other.plan, plan) || other.plan == plan)&&(identical(other.ttlSeconds, ttlSeconds) || other.ttlSeconds == ttlSeconds)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other._entitlements, _entitlements));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,subject,plan,const DeepCollectionEquality().hash(_entitlements));
+int get hashCode => Object.hash(runtimeType,subject,plan,ttlSeconds,version,const DeepCollectionEquality().hash(_entitlements));
 
 @override
 String toString() {
-  return 'EntitlementSnapshotDto(subject: $subject, plan: $plan, entitlements: $entitlements)';
+  return 'EntitlementSnapshotDto(subject: $subject, plan: $plan, ttlSeconds: $ttlSeconds, version: $version, entitlements: $entitlements)';
 }
 
 
@@ -831,7 +849,7 @@ abstract mixin class _$EntitlementSnapshotDtoCopyWith<$Res> implements $Entitlem
   factory _$EntitlementSnapshotDtoCopyWith(_EntitlementSnapshotDto value, $Res Function(_EntitlementSnapshotDto) _then) = __$EntitlementSnapshotDtoCopyWithImpl;
 @override @useResult
 $Res call({
- EntitlementSubjectDto subject, EntitlementPlanDto? plan, Map<String, EntitlementValueDto> entitlements
+ EntitlementSubjectDto subject, EntitlementPlanDto? plan, int ttlSeconds, int version, Map<String, EntitlementValueDto> entitlements
 });
 
 
@@ -848,11 +866,13 @@ class __$EntitlementSnapshotDtoCopyWithImpl<$Res>
 
 /// Create a copy of EntitlementSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? subject = null,Object? plan = freezed,Object? entitlements = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? subject = null,Object? plan = freezed,Object? ttlSeconds = null,Object? version = null,Object? entitlements = null,}) {
   return _then(_EntitlementSnapshotDto(
 subject: null == subject ? _self.subject : subject // ignore: cast_nullable_to_non_nullable
 as EntitlementSubjectDto,plan: freezed == plan ? _self.plan : plan // ignore: cast_nullable_to_non_nullable
-as EntitlementPlanDto?,entitlements: null == entitlements ? _self._entitlements : entitlements // ignore: cast_nullable_to_non_nullable
+as EntitlementPlanDto?,ttlSeconds: null == ttlSeconds ? _self.ttlSeconds : ttlSeconds // ignore: cast_nullable_to_non_nullable
+as int,version: null == version ? _self.version : version // ignore: cast_nullable_to_non_nullable
+as int,entitlements: null == entitlements ? _self._entitlements : entitlements // ignore: cast_nullable_to_non_nullable
 as Map<String, EntitlementValueDto>,
   ));
 }

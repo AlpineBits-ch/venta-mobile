@@ -61,6 +61,19 @@ class VideoLayers {
   /// pull, which is a case the transport already handles: the subscribe asks
   /// the SFU to fall back to a layer the publisher actually sends rather than
   /// to send nothing. That costs the saving on that one tile and nothing else.
+  /// What the camera is asked to capture, and therefore what [VideoPublishIntent.camera]
+  /// declares.
+  ///
+  /// Stated rather than left to the platform default so the declaration on the
+  /// publish body is true. `ideal` and not `exact`: a handset that cannot hit
+  /// 720p should give its best rather than fail capture outright, and the
+  /// server clamps from its own side regardless.
+  static const Map<String, dynamic> cameraCapture = {
+    'width': {'ideal': 1280},
+    'height': {'ideal': 720},
+    'frameRate': {'ideal': 30, 'max': 30},
+  };
+
   static List<RTCRtpEncoding> get screen => [
     RTCRtpEncoding(
       rid: high,
@@ -73,4 +86,35 @@ class VideoLayers {
       maxBitrate: 900 * 1000,
     ),
   ];
+}
+
+/// What this client tells the server it is about to send, so the server can
+/// clamp against a stated number instead of guessing from an SDP.
+///
+/// **A statement of intent, not a request for a rung.** It says "this is the
+/// picture I am publishing"; the server answers by publishing it, or by
+/// publishing less and saying so with a `voice.video_ceiling` degradation.
+/// Deciding locally that a given capture size maps to a given rung would be a
+/// pricing decision written in Dart, which is the one thing the ladder being on
+/// the wire exists to prevent.
+///
+/// There is no screen-share equivalent, and its absence is deliberate. A share
+/// captures the handset's own display at whatever size that display is; this
+/// client neither chooses nor knows it before capture, and a number invented to
+/// fill the field would be a false declaration rather than a missing one. The
+/// server clamps a share from its own side and reports it the same way.
+class VideoPublishIntent {
+  const VideoPublishIntent({required this.height, required this.framerate});
+
+  final int height;
+  final int framerate;
+
+  /// Matches [VideoLayers.cameraCapture]. The two move together or the
+  /// declaration stops being true.
+  static const camera = VideoPublishIntent(height: 720, framerate: 30);
+
+  Map<String, dynamic> toJson() => {
+    'height': height,
+    'framerate': framerate,
+  };
 }

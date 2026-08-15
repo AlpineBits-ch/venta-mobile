@@ -28,6 +28,19 @@ void main() {
   final androidPlaceholder = RegExp(r'%(\d+)\$s');
   final iosPlaceholder = RegExp(r'%(\d+)\$@');
 
+  /// The platform files carry more than one feature's copy now - the
+  /// voice-ring keys live in the same `strings.xml` and the same
+  /// `Localizable.strings`, checked by `voice_strings_test.dart` against their
+  /// own Dart table. So every set comparison below is scoped to this feature's
+  /// prefix rather than to the whole file, and the two tests stay independent:
+  /// adding a key to one feature must not fail the other's test.
+  bool isHousehold(String key) => key.startsWith('household_');
+
+  Map<String, String> onlyHousehold(Map<String, String> table) => {
+    for (final entry in table.entries)
+      if (isHousehold(entry.key)) entry.key: entry.value,
+  };
+
   Map<String, String> parseAndroid(String path) {
     final xml = File(path).readAsStringSync();
     final entries = RegExp(
@@ -35,7 +48,7 @@ void main() {
       dotAll: true,
     ).allMatches(xml);
 
-    return {
+    return onlyHousehold({
       for (final m in entries)
         m.group(1)!: m
             .group(2)!
@@ -45,7 +58,7 @@ void main() {
             .replaceAll('&amp;', '&')
             .replaceAll('&lt;', '<')
             .replaceAll('&gt;', '>'),
-    };
+    });
   }
 
   final iosEntry = RegExp(r'"([^"]+)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;');
@@ -66,10 +79,10 @@ void main() {
     final text = File(path).readAsStringSync();
     final body = text.replaceAll(RegExp(r'/\*.*?\*/', dotAll: true), '');
 
-    return {
+    return onlyHousehold({
       for (final m in iosEntry.allMatches(body))
         m.group(1)!: m.group(2)!.replaceAll(r'\"', '"'),
-    };
+    });
   }
 
   final android = {

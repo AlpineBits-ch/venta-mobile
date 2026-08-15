@@ -42,6 +42,8 @@ _EntitlementSnapshotDto _$EntitlementSnapshotDtoFromJson(
   plan: json['plan'] == null
       ? null
       : EntitlementPlanDto.fromJson(json['plan'] as Map<String, dynamic>),
+  ttlSeconds: (json['ttlSeconds'] as num?)?.toInt() ?? 60,
+  version: (json['version'] as num?)?.toInt() ?? 0,
   entitlements:
       (json['entitlements'] as Map<String, dynamic>?)?.map(
         (k, e) => MapEntry(
@@ -57,5 +59,7 @@ Map<String, dynamic> _$EntitlementSnapshotDtoToJson(
 ) => <String, dynamic>{
   'subject': instance.subject,
   'plan': instance.plan,
+  'ttlSeconds': instance.ttlSeconds,
+  'version': instance.version,
   'entitlements': instance.entitlements,
 };

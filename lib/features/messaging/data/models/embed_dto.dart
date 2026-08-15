@@ -25,9 +25,31 @@ enum EmbedType {
   @JsonValue('gifv')
   gifv,
 
+  /// A link back to this instance, resolved in-process rather than fetched.
+  /// Namespaced so it can never collide with a type Discord adds later.
+  @JsonValue('venta.invite')
+  ventaInvite,
+  @JsonValue('venta.wiki_page')
+  ventaWikiPage,
+
   /// A layout this build has never heard of. Falls back to the [link] card,
   /// which degrades to "whatever fields happen to be present" and so renders
   /// something sane for any future type.
+  ///
+  /// The one exception is a `venta.*` type we do not recognise - see
+  /// [EmbedDtoX.isUnrecognisedVenta]. A future internal-link kind will arrive
+  /// before this build is replaced, and a half-drawn card claiming to be
+  /// server-vouched is worse than no card.
+  unknown,
+}
+
+/// Which internal-link card a [EmbedType.ventaInvite] / [EmbedType.ventaWikiPage]
+/// embed is, without the `venta.` prefix, so there is one value to switch on.
+enum EmbedVentaKind {
+  @JsonValue('invite')
+  invite,
+  @JsonValue('wiki_page')
+  wikiPage,
   unknown,
 }
 
@@ -38,6 +60,15 @@ sealed class EmbedDto with _$EmbedDto {
     @Default(EmbedType.link)
     @JsonKey(unknownEnumValue: EmbedType.unknown)
     EmbedType type,
+
+    /// `type` again, unparsed.
+    ///
+    /// Needed because a `venta.*` kind added after this build decodes to
+    /// [EmbedType.unknown], which is indistinguishable from any other unknown
+    /// type once the enum has swallowed the string - and the two want opposite
+    /// treatment: an unknown ordinary type falls back to the link card, an
+    /// unknown internal-link type draws nothing at all.
+    @JsonKey(name: 'type', includeToJson: false) @Default('') String rawType,
     String? title,
     String? description,
     String? url,
@@ -66,6 +97,13 @@ sealed class EmbedDto with _$EmbedDto {
     @Default(<EmbedFieldDto>[]) List<EmbedFieldDto> fields,
     EmbedFooterDto? footer,
 
+    /// The identifiers behind a `venta.*` card.
+    ///
+    /// **Only trustworthy when [EmbedDtoX.isGenerated].** A bot authors its own
+    /// embeds and may put any `venta` block it likes in one; see
+    /// [EmbedDtoX.isServerVouchedVenta].
+    EmbedVentaDto? venta,
+
     /// Bitfield. Bit 16 (65536) marks a card the server unfurled from a link
     /// rather than one its author wrote.
     @Default(0) int flags,
@@ -75,6 +113,17 @@ sealed class EmbedDto with _$EmbedDto {
       _$EmbedDtoFromJson(json);
 }
 
+/// The multi-word fields on an embed are **snake_case on the wire**, as
+/// Discord's own embed object has them, and unlike the camelCase message fields
+/// around them - `embedsJson` is an opaque string produced by a different
+/// serializer, so `message.editedAt` and `embed.proxy_url` are both correct in
+/// the same payload.
+///
+/// This build read them camel-cased until now, which meant [proxyUrl] was never
+/// populated: every card silently hot-linked the third-party origin instead of
+/// our proxy, handing that origin the IP address and read time of everyone who
+/// scrolled past a link one other person posted. The placeholder and the
+/// measured dimensions were lost the same way.
 @freezed
 sealed class EmbedMediaDto with _$EmbedMediaDto {
   const factory EmbedMediaDto({
@@ -82,24 +131,70 @@ sealed class EmbedMediaDto with _$EmbedMediaDto {
     String? url,
 
     /// Our re-hosted copy: absolute, unauthenticated, immutable. Render this.
-    String? proxyUrl,
+    @JsonKey(name: 'proxy_url') String? proxyUrl,
 
     /// True measured pixels, used to reserve layout space before the bytes
     /// land so an arriving card doesn't reflow the timeline.
     int? width,
     int? height,
-    String? contentType,
+    @JsonKey(name: 'content_type') String? contentType,
 
     /// BlurHash, shown blurred underneath the image while it loads.
     String? placeholder,
 
     /// Which encoding [placeholder] uses. `1` is BlurHash, and the only one
     /// this build can decode - see [blurHash].
-    int? placeholderVersion,
+    @JsonKey(name: 'placeholder_version') int? placeholderVersion,
   }) = _EmbedMediaDto;
 
   factory EmbedMediaDto.fromJson(Map<String, dynamic> json) =>
       _$EmbedMediaDtoFromJson(json);
+}
+
+/// The identifiers behind a `venta.*` card - what the link points at, so a
+/// client can act on it without parsing the URL.
+///
+/// **Identifiers only, never a URL to call.** The obvious shape was a `refresh`
+/// field carrying the endpoint to hit; it is deliberately absent, because a bot
+/// authors its own embeds and a client that fetched a server-supplied URL with
+/// the user's credentials would hand any bot author a credential harvester.
+/// Compose the request from [RoutePaths]-style route tables of our own, and
+/// only for an embed carrying the server-generated flag.
+@freezed
+sealed class EmbedVentaDto with _$EmbedVentaDto {
+  @ApiDateTimeConverter()
+  const factory EmbedVentaDto({
+    @JsonKey(unknownEnumValue: EmbedVentaKind.unknown)
+    @Default(EmbedVentaKind.unknown)
+    EmbedVentaKind kind,
+
+    /// Whether the server filled the human-readable fields in from the real
+    /// record, or deliberately left them out. False means the card is a stub -
+    /// see the wiki card, where a title is refused by design.
+    @Default(false) bool resolved,
+    @JsonKey(name: 'guild_id') String? guildId,
+
+    /// The invite's short shareable code, not its id. Always the canonical
+    /// generated code even when the pasted link was a vanity URL, so it
+    /// survives a vanity rename.
+    @JsonKey(name: 'invite_code') String? inviteCode,
+
+    /// The channel a joiner lands on, when the invite names one. Id only -
+    /// never a name.
+    @JsonKey(name: 'channel_id') String? channelId,
+    @JsonKey(name: 'page_id') String? pageId,
+
+    /// Absent for an invite that never expires. Safe to freeze into the card:
+    /// an absolute instant does not go stale the way "expired" does.
+    @JsonKey(name: 'expires_at') DateTime? expiresAt,
+
+    /// Absent for unlimited. The running *use* count is deliberately not
+    /// carried - re-resolve if you want to show it.
+    @JsonKey(name: 'max_uses') int? maxUses,
+  }) = _EmbedVentaDto;
+
+  factory EmbedVentaDto.fromJson(Map<String, dynamic> json) =>
+      _$EmbedVentaDtoFromJson(json);
 }
 
 @freezed
@@ -119,8 +214,8 @@ sealed class EmbedAuthorDto with _$EmbedAuthorDto {
   const factory EmbedAuthorDto({
     @Default('') String name,
     String? url,
-    String? iconUrl,
-    String? proxyIconUrl,
+    @JsonKey(name: 'icon_url') String? iconUrl,
+    @JsonKey(name: 'proxy_icon_url') String? proxyIconUrl,
   }) = _EmbedAuthorDto;
 
   factory EmbedAuthorDto.fromJson(Map<String, dynamic> json) =>
@@ -140,8 +235,8 @@ sealed class EmbedProviderDto with _$EmbedProviderDto {
 sealed class EmbedFooterDto with _$EmbedFooterDto {
   const factory EmbedFooterDto({
     @Default('') String text,
-    String? iconUrl,
-    String? proxyIconUrl,
+    @JsonKey(name: 'icon_url') String? iconUrl,
+    @JsonKey(name: 'proxy_icon_url') String? proxyIconUrl,
   }) = _EmbedFooterDto;
 
   factory EmbedFooterDto.fromJson(Map<String, dynamic> json) =>
@@ -208,10 +303,42 @@ extension EmbedDtoX on EmbedDto {
   /// the bot that posted it" from "this card is a preview of somebody's link".
   bool get isGenerated => (flags & _generatedFromContent) != 0;
 
+  /// Whether this claims to be an internal-link card at all, recognised or not.
+  /// Read off [rawType] rather than [type] so a kind added after this build
+  /// still counts as one.
+  bool get isVentaType => rawType.startsWith(_ventaTypePrefix);
+
+  /// An internal-link kind this build has a layout for.
+  bool get isKnownVentaKind =>
+      type == EmbedType.ventaInvite || type == EmbedType.ventaWikiPage;
+
+  /// An internal-link card this build may actually draw as one.
+  ///
+  /// The flag check is the whole of it. Without it the embed was written by
+  /// whoever posted the message, and a bot can author one carrying any `venta`
+  /// block it likes. It buys an attacker nothing - every action a card offers
+  /// runs through an authenticated, permission-checked endpoint, so a
+  /// fabricated `page_id` fails exactly as a real one the viewer cannot see
+  /// does - but a card that *looks* server-vouched when it is not is a phishing
+  /// surface, and this is a one-line check.
+  bool get isServerVouchedVenta =>
+      isKnownVentaKind && isGenerated && venta != null;
+
+  /// A `venta.*` card whose kind this build does not know.
+  ///
+  /// Drawn as nothing rather than falling through to the link layout. A future
+  /// internal-link kind will arrive before this build is replaced, and a
+  /// half-rendered card is worse than no card.
+  bool get isUnrecognisedVenta => isVentaType && !isKnownVentaKind;
+
   /// A card with nothing to draw. The server shouldn't send one, but every
   /// field on an embed comes from a third-party page that may have supplied
   /// nothing at all, so an empty shell is reachable.
+  ///
+  /// A server-vouched wiki stub is deliberately exempt: it carries no title and
+  /// no description by design, and is still a card worth drawing.
   bool get isEmpty =>
+      !isServerVouchedVenta &&
       (title?.isEmpty ?? true) &&
       (description?.isEmpty ?? true) &&
       (provider?.name.isEmpty ?? true) &&
@@ -223,6 +350,7 @@ extension EmbedDtoX on EmbedDto {
       video == null;
 
   static const _generatedFromContent = 1 << 16;
+  static const _ventaTypePrefix = 'venta.';
 }
 
 /// Decodes `MessageDto.embedsJson`, which is a JSON-encoded **string** rather

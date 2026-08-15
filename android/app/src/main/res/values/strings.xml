@@ -75,4 +75,18 @@
     <!-- Hidden content (privacy spec T2-23) -->
     <string name="household_hidden_title">Home</string>
     <string name="household_hidden_body">Something needs your attention at home</string>
+
+    <!--
+        Voice-channel rings. A separate table from the household one above,
+        mirrored by `lib/core/push/voice_strings.dart` and by the voice section
+        of each `Localizable.strings`, because the two features ship on
+        different releases and a build must be able to carry one and not the
+        other. `test/voice_strings_test.dart` asserts those three agree.
+
+        The inviter's display name has no key and never will - it is what
+        somebody called themselves, and it reads the same in every language.
+    -->
+    <string name="voice_ring_invite_body">Asked you to join %1$s.</string>
+    <string name="voice_ring_hidden_title">Voice invite</string>
+    <string name="voice_ring_hidden_body">Someone asked you to join a voice channel</string>
 </resources>

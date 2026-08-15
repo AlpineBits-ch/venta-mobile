@@ -19,6 +19,11 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/mls/mls_coverage_service.dart';
 import '../../../../core/mls/mls_sync_service.dart';
 import '../../../../core/theme/hex_color.dart';
+import '../../../billing/data/entitlement_reader.dart';
+import '../../../billing/data/models/entitlement_denial.dart';
+import '../../../billing/data/models/entitlement_value.dart';
+import '../../../billing/data/upload_preflight.dart';
+import '../../../billing/presentation/widgets/entitlement_notice.dart';
 import '../../../mls/presentation/widgets/channel_access_banner.dart';
 import '../../../mls/presentation/widgets/mls_join_request_review.dart';
 import '../../../mls/presentation/widgets/encrypted_badge.dart';
@@ -26,7 +31,6 @@ import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/channel_dto.dart';
 import '../../../guilds/data/models/guild_member_dto.dart';
 import '../../../guilds/data/models/role_dto.dart';
-import '../../../invites/presentation/widgets/invite_dialog.dart';
 import '../../../profile/data/profile_repository.dart';
 import '../../bloc/message_thread_bloc.dart';
 import '../../data/message_repository.dart';
@@ -51,8 +55,6 @@ import '../../../support/data/models/report_evidence.dart';
 import '../../../support/presentation/widgets/report_sheet.dart';
 
 const _imageExtensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'bmp'};
-
-final _inviteUrlRe = RegExp(r'https://venta\.gg/invite/([A-Za-z0-9_-]+)');
 
 /// Client-only commands that don't hit a bot - matches desktop's
 /// `COMMANDS` in `commands.ts`.
@@ -105,6 +107,17 @@ class _PendingAttachment {
   AttachmentDto? uploaded;
   bool uploading = true;
   bool failed = false;
+
+  /// Why this file will not be sent, when the reason is a ceiling rather than a
+  /// failure.
+  ///
+  /// Distinct from [failed], which is "something went wrong, try again". A
+  /// refusal is a decision with a plain explanation behind it and retrying
+  /// cannot change it, so it gets its own state and its own sentence instead of
+  /// the same error icon as a dropped connection.
+  String? refusal;
+
+  bool get isRefused => refusal != null;
 }
 
 /// The message list + composer, shared by DM conversations and guild
@@ -924,6 +937,10 @@ class _ThreadViewState extends State<ThreadView> {
       );
       return;
     }
+    // A refused file has no `uploaded` and is simply not among them. The
+    // message still sends with everything that did upload - refusing the batch
+    // because one file was too large is the rollback the contract exists to
+    // stop, and it punishes four files for the fifth.
     final attachments = [
       for (final pending in _pendingAttachments)
         if (pending.uploaded != null) pending.uploaded!,
@@ -948,18 +965,45 @@ class _ThreadViewState extends State<ThreadView> {
     });
   }
 
-  void _addPendingAttachment({
+  /// Adds one file to the strip and starts it, unless it will not fit.
+  ///
+  /// The size check happens here rather than inside [_upload] so an oversized
+  /// file never becomes a transfer at all. On a handset that matters more than
+  /// on a desktop: the round trip it saves is minutes of somebody's mobile data
+  /// spent to be told no at the end of it.
+  ///
+  /// **Per file, never per batch.** An oversized file is refused on its own and
+  /// leaves the rest of the strip uploading, because the alternative - rolling
+  /// the batch back - punishes four files for the fifth.
+  Future<void> _addPendingAttachment({
     required List<int> bytes,
     required String fileName,
     required bool isImage,
-  }) {
+  }) async {
     final pending = _PendingAttachment(
       bytes: bytes,
       fileName: fileName,
       isImage: isImage,
     );
     setState(() => _pendingAttachments.add(pending));
-    _upload(pending);
+
+    final oversized = checkUploadSize(
+      fileName: fileName,
+      sizeBytes: bytes.length,
+      ceiling: await getIt<EntitlementReader>().uploadCeiling(
+        guildId: widget.guildId,
+      ),
+    );
+    if (!mounted) return;
+    if (oversized != null) {
+      setState(() {
+        pending.uploading = false;
+        pending.refusal = oversized.sentence;
+      });
+      return;
+    }
+
+    await _upload(pending);
   }
 
   Future<void> _upload(_PendingAttachment pending) async {
@@ -973,13 +1017,44 @@ class _ThreadViewState extends State<ThreadView> {
         pending.uploaded = attachment;
         pending.uploading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      // The ceiling can move between the check above and the transfer, and the
+      // check can have been skipped entirely because the lookup failed. The
+      // server's own refusal is the enforcement, and it carries the same
+      // explanation - so it renders as a refusal rather than as the generic
+      // "that didn't upload", which would send somebody into a retry loop
+      // against a decision.
+      final denial = entitlementDenialOf(e);
       setState(() {
         pending.uploading = false;
-        pending.failed = true;
+        if (denial == null) {
+          pending.failed = true;
+        } else {
+          pending.refusal = _refusalSentence(pending, denial);
+        }
       });
     }
+  }
+
+  /// The server's refusal, in the same two-facts-and-no-advice shape the
+  /// pre-flight uses, plus the one thing the pre-flight cannot know: which side
+  /// applied the limit.
+  ///
+  /// The attribution is only ever the server's own. A pre-flight check reads
+  /// two paired ceilings and takes the lower without being told which won, so
+  /// it says nothing about whose limit it was - guessing there is how a member
+  /// paying for their own plan gets told their server limited them.
+  static String _refusalSentence(
+    _PendingAttachment pending,
+    EntitlementDenial denial,
+  ) {
+    final ceiling = denial.ceiling;
+    final size = formatByteCeiling(pending.bytes.length);
+    return ceiling == null
+        ? '${pending.fileName} is $size. ${denial.sentence}'
+        : '${pending.fileName} is $size, and files here are capped at '
+              '$ceiling. ${denial.sentence}';
   }
 
   void _removePendingAttachment(_PendingAttachment pending) {
@@ -991,7 +1066,11 @@ class _ThreadViewState extends State<ThreadView> {
     if (file == null) return;
     final bytes = await file.readAsBytes();
     if (!mounted) return;
-    _addPendingAttachment(bytes: bytes, fileName: file.name, isImage: true);
+    await _addPendingAttachment(
+      bytes: bytes,
+      fileName: file.name,
+      isImage: true,
+    );
   }
 
   Future<void> _pickFile() async {
@@ -999,7 +1078,7 @@ class _ThreadViewState extends State<ThreadView> {
     final file = result?.files.firstOrNull;
     if (file == null || file.bytes == null) return;
     final ext = file.extension?.toLowerCase();
-    _addPendingAttachment(
+    await _addPendingAttachment(
       bytes: file.bytes!,
       fileName: file.name,
       isImage: ext != null && _imageExtensions.contains(ext),
@@ -1105,6 +1184,16 @@ class _ThreadViewState extends State<ThreadView> {
   }
 
   Future<void> _showAttachMenu() async {
+    // Read before the sheet opens rather than inside it: it is cached for as
+    // long as the server says it may be, so this is a round trip on the first
+    // open of a session and nothing after that. Null when the lookup has not
+    // landed or the ceiling is unlimited, and the sheet simply says nothing -
+    // a limit stated as "unknown" is worse than one not stated at all.
+    final ceiling = uploadCeilingLine(
+      await getIt<EntitlementReader>().uploadCeiling(guildId: widget.guildId),
+    );
+    if (!mounted) return;
+
     final choice = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
@@ -1130,6 +1219,25 @@ class _ThreadViewState extends State<ThreadView> {
               title: const Text('GIF'),
               onTap: () => Navigator.pop(context, 'gif'),
             ),
+            // Last, quiet, and where somebody is looking at the moment they
+            // choose a file - which is the only moment the number is useful.
+            if (ceiling != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.m,
+                  AppSpacing.xs,
+                  AppSpacing.m,
+                  AppSpacing.m,
+                ),
+                child: Text(
+                  ceiling,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -1467,6 +1575,25 @@ class _ThreadViewState extends State<ThreadView> {
                         ),
                       ),
                     ),
+                  // One line per refused file, directly under the thumbnail it
+                  // is about and above the box the message is being typed in.
+                  // A snackbar was the obvious alternative and is the wrong
+                  // one: it is gone in four seconds, and the file it was about
+                  // is still sitting in the strip.
+                  //
+                  // Named per file rather than summarised, because a batch can
+                  // hold one file that is too large and three that are fine,
+                  // and "some files were refused" makes the user work out
+                  // which.
+                  for (final pending in _pendingAttachments)
+                    if (pending.refusal case final String refusal)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                        child: EntitlementNotice(
+                          message: refusal,
+                          icon: Icons.info_outline,
+                        ),
+                      ),
                   if (_isLockedPost)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -1777,6 +1904,17 @@ class _PendingAttachmentChip extends StatelessWidget {
                 child: Icon(Icons.error_outline, color: Colors.white),
               ),
             ),
+          // Deliberately not the error icon. Nothing went wrong here and
+          // nothing is worth retrying - the file does not fit, the sentence
+          // under the strip says why, and the only useful action is the remove
+          // button this chip already has.
+          if (pending.isRefused)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black45,
+                child: Icon(Icons.block_outlined, color: Colors.white),
+              ),
+            ),
           Positioned(
             top: -6,
             right: -6,
@@ -2021,11 +2159,18 @@ class _MessageBody extends StatelessWidget {
     // that instead of showing the user the bytes.
     if (message.isUndecryptable) return const UndecryptableMessageBody();
 
-    if (message.type == MessageType.invite) {
-      final match = _inviteUrlRe.firstMatch(text);
-      final code = match?.group(1) ?? text.trim();
-      if (code.isNotEmpty) return _InviteMessageCard(code: code);
-    }
+    // There was a `MessageType.invite` branch here that scanned the body for an
+    // invite URL and drew its own card. It never once fired: the type exists in
+    // the enum and is plumbed end to end, and nothing has ever produced it. It
+    // stays in the enum (the value is a persisted ordinal, so removing it would
+    // renumber every other message type on every stored row) and it stays
+    // unproduced - a message containing an invite is an ordinary message with
+    // prose around the link, and typing it `Invite` would suppress every other
+    // preview on it.
+    //
+    // The card belongs to the link, not to the message. The server recognises
+    // its own links now and ships a `venta.invite` embed, which arrives through
+    // `MessageEmbedsView` at the bottom of this column like every other card.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2500,57 +2645,6 @@ class _SystemMessageRow extends StatelessWidget {
     final remainder = seconds % 60;
     if (minutes == 0) return '${remainder}s';
     return '${minutes}m ${remainder}s';
-  }
-}
-
-/// Compact inline card for an invite-type message - reuses the existing
-/// [InviteDialog] for preview/join instead of duplicating that flow here.
-class _InviteMessageCard extends StatelessWidget {
-  const _InviteMessageCard({required this.code});
-
-  final String code;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(AppRadii.card),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadii.card),
-        onTap: () => showDialog(
-          context: context,
-          builder: (_) => InviteDialog(code: code),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.m,
-            vertical: AppSpacing.s,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadii.chip),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.groups_outlined,
-                  size: 18,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.s),
-              const Text('Server Invite - tap to view'),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 

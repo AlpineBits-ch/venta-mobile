@@ -9,6 +9,7 @@ import '../../../../core/theme/hex_color.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../data/models/embed_dto.dart';
 import 'message_link_launcher.dart';
+import 'venta_embed_card.dart';
 
 /// Widest a card is allowed to get, so a preview on a tablet doesn't stretch
 /// to the full column the way body text does. Discord caps its embeds at a
@@ -45,7 +46,13 @@ class MessageEmbedsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final renderable = embeds.where((e) => !e.isEmpty).toList();
+    // An internal-link kind this build does not know is dropped rather than
+    // falling through to the link layout. A future `venta.*` kind will arrive
+    // before this build is replaced, and a card drawn from half a contract is
+    // worse than no card.
+    final renderable = embeds
+        .where((e) => !e.isEmpty && !e.isUnrecognisedVenta)
+        .toList();
     if (renderable.isEmpty) return const SizedBox.shrink();
 
     return Padding(
@@ -90,6 +97,14 @@ class _EmbedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A link back to this instance, vouched for by the server. Gated on bit 16
+    // rather than on the type alone: a bot authors its own embeds and can put
+    // any `venta` block it likes in one, and a card that looks server-vouched
+    // when it is not is a phishing surface. Without the flag the embed falls
+    // through to the ordinary card below and renders as what it is - something
+    // the message's author wrote.
+    if (embed.isServerVouchedVenta) return VentaEmbedCard(embed: embed);
+
     // "Just the image, no chrome" - a link straight to an image file, or a GIF
     // the origin serves as a video. Wrapping either in a titled card would be
     // all frame and no picture.

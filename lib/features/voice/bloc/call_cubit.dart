@@ -12,6 +12,9 @@ import '../../../core/voice/voice_heartbeat.dart';
 import '../../../core/voice/voice_participant_state.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../billing/data/entitlement_reader.dart';
+import '../../billing/data/models/entitlement_degradation_dto.dart';
+import '../../billing/data/models/entitlement_denial.dart';
 import '../data/models/call_dto.dart';
 import '../data/models/ongoing_call_dto.dart';
 import '../data/voice_repository.dart';
@@ -37,6 +40,8 @@ class CallState extends Equatable {
     this.aloneDeadline,
     this.videoRevision = 0,
     this.ongoingByConversation = const {},
+    this.limits,
+    this.videoNotice,
   });
 
   final CallPhase phase;
@@ -83,6 +88,19 @@ class CallState extends Equatable {
   /// rely on this counter changing to know when to re-pull and rebuild.
   final int videoRevision;
 
+  /// What this call may carry, as of the last snapshot. Null on a server that
+  /// does not send limits, which is "nobody said" rather than "no limits".
+  ///
+  /// A call has no server plan behind it, so the only thing that can reduce one
+  /// is an operator ceiling - a self-hoster who has capped what their own box
+  /// will carry. That is the one reason no amount of money moves, which is
+  /// exactly why the surface below renders a sentence and never a control.
+  final VoiceRoomLimitsDto? limits;
+
+  /// One sentence about this device's own video, in the moment. See the
+  /// matching field on `GuildVoiceState`.
+  final String? videoNotice;
+
   /// [errorMessage]/[disconnectNotice] are always set as given (including
   /// `null`), never falling back to the current value - every emitting call
   /// site recomputes them, and `null` there means "nothing to show", not
@@ -104,6 +122,9 @@ class CallState extends Equatable {
     bool clearAloneDeadline = false,
     int? videoRevision,
     Map<String, OngoingCallDto>? ongoingByConversation,
+    VoiceRoomLimitsDto? limits,
+    String? videoNotice,
+    bool clearVideoNotice = false,
   }) => CallState(
     ongoingByConversation: ongoingByConversation ?? this.ongoingByConversation,
     phase: phase ?? this.phase,
@@ -119,6 +140,12 @@ class CallState extends Equatable {
         ? null
         : (aloneDeadline ?? this.aloneDeadline),
     videoRevision: videoRevision ?? this.videoRevision,
+    limits: limits ?? this.limits,
+    // Coalesces like [aloneDeadline] rather than resetting like
+    // [errorMessage]: a mute toggle must not wipe the sentence explaining why
+    // the camera is off, so clearing it is explicit and only the paths that
+    // stop publishing do it.
+    videoNotice: clearVideoNotice ? null : (videoNotice ?? this.videoNotice),
   );
 
   @override
@@ -135,6 +162,8 @@ class CallState extends Equatable {
     aloneDeadline,
     videoRevision,
     ongoingByConversation,
+    limits,
+    videoNotice,
   ];
 }
 
@@ -334,7 +363,23 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     // renders whatever it read before the media existed - see
     // [CallState.videoRevision].
     webRtc.onTracksChanged = _bumpVideoRevision;
+    // A reduction is a success. Nothing is torn down here - the sentence is
+    // put where the person publishing can read it, and that is all.
+    webRtc.onPublishReduced = _noteReduction;
     return webRtc;
+  }
+
+  /// Files a clamped publish where the call screen can render it.
+  ///
+  /// The video ceiling is preferred over any other reduction on the same
+  /// publish because it is the one that describes what is now being sent; the
+  /// rest still reach the session log through the interceptor.
+  void _noteReduction(List<EntitlementDegradationDto> degradations) {
+    final video = degradations.firstWhere(
+      (d) => d.key == EntitlementKeys.voiceVideoCeiling,
+      orElse: () => degradations.first,
+    );
+    emitIfOpen(state.copyWith(videoNotice: video.notice));
   }
 
   /// Guards [_rebuildMedia]: every pending subscribe fails at once when a session dies.
@@ -447,6 +492,11 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
         participants: participants,
         clearAloneDeadline: participants.length > 1,
         videoRevision: state.videoRevision + 1,
+        // Absent limits leave the last known set alone rather than blanking
+        // it: a room that stops reporting has not stopped having ceilings, and
+        // a control that re-enables itself because a field went missing is the
+        // one direction this must not fail in.
+        limits: snapshot.limits,
       ),
     );
 
@@ -617,18 +667,39 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   /// truth other participants' badges read from.
   bool get isCameraOn => _self?.hasCamera ?? false;
 
+  /// Whether asking to publish video here would only be refused.
+  ///
+  /// False when no limits have been reported: a control disabled on the
+  /// strength of a field nobody sent is worse than one that is pressed and
+  /// answered.
+  bool get isVideoBlocked => !(state.limits?.canPublishVideo ?? true);
+
   Future<void> toggleCamera() async {
     if (state.phase != CallPhase.active) return;
     final webRtc = _webRtc;
     final callId = state.call?.id;
     if (webRtc == null || callId == null) return;
     final turningOn = !isCameraOn;
+
+    // Pre-empted rather than attempted. The control is already disabled where
+    // this is true, so reaching here means the room changed under the button.
+    final blocked = turningOn ? state.limits?.videoBlockedSentence : null;
+    if (blocked != null) {
+      emitIfOpen(state.copyWith(videoNotice: blocked));
+      return;
+    }
+
     try {
       if (turningOn) {
         await webRtc.publishLocalVideo();
       } else {
         await webRtc.stopLocalVideo();
       }
+    } on EntitlementDenialException catch (e) {
+      // Explained, and not retried: an entitlement refusal answered by asking
+      // again is one refusal turned into three.
+      emitIfOpen(state.copyWith(videoNotice: e.denial.sentence));
+      return;
     } catch (_) {
       return; // Capture failed (denied permission, no camera, etc.) - bail.
     }
@@ -638,7 +709,19 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
         videoRevision: state.videoRevision + 1,
       ),
     );
+    if (!turningOn) _clearVideoNoticeIfIdle();
     await repository.invokeCameraChanged(callId: callId, isCameraOn: turningOn);
+  }
+
+  /// Drops the video notice once nothing is being published.
+  ///
+  /// It describes the picture this device is sending, so it has to survive one
+  /// of the two publications ending while the other runs - which is why this
+  /// asks about both rather than clearing on either.
+  void _clearVideoNoticeIfIdle() {
+    if (isCameraOn || isScreenSharing) return;
+    if (state.videoNotice == null) return;
+    emitIfOpen(state.copyWith(clearVideoNotice: true));
   }
 
   /// Whether this device is live - screen sharing.
@@ -668,6 +751,7 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
           videoRevision: state.videoRevision + 1,
         ),
       );
+      _clearVideoNoticeIfIdle();
       if (shareId != null) {
         await repository.invokeScreenShareStopped(
           callId: callId,
@@ -677,10 +761,19 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
       return;
     }
 
+    final blocked = state.limits?.videoBlockedSentence;
+    if (blocked != null) {
+      emitIfOpen(state.copyWith(videoNotice: blocked));
+      return;
+    }
+
     final shareId =
         '${DateTime.now().microsecondsSinceEpoch}-${identityHashCode(this)}';
     try {
       await webRtc.startScreenShare(shareId);
+    } on EntitlementDenialException catch (e) {
+      emitIfOpen(state.copyWith(videoNotice: e.denial.sentence));
+      return;
     } catch (_) {
       return; // Permission denied/cancelled the system picker - bail.
     }

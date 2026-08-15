@@ -104,6 +104,16 @@ class RealtimeService {
     'guild.GuildUpdated',
     'guild.RolesReordered',
     'guild.MemberJoined',
+    // The voice-channel ring. Deliberately under the plain `guild.` prefix and
+    // not `guild.voice.*`, which is reserved for voice *room state* - every
+    // client has to be able to rebuild that from a version number after missing
+    // an event, and a ring is not room state: its audience is somebody who is
+    // not in the room and may never be. So it sits alongside
+    // `guild.MemberJoined` and `guild.HouseholdAlert` instead.
+    'guild.VoiceRingIncoming',
+    'guild.VoiceRingSent',
+    'guild.VoiceRingResolved',
+    'guild.VoiceRingDismissed',
     'guild.MemberLeft',
     'guild.MemberBanned',
     'guild.MemberKicked',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -5,12 +7,28 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guilds/data/guild_api.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/invite_dto.dart';
 import '../../../guilds/data/models/welcome_screen_dto.dart';
 
-enum _DialogState { loading, ready, joining, joined, error }
+enum _DialogState {
+  loading,
+  ready,
+  joining,
+  joined,
+  error,
+
+  /// The preview route's own budget, not a verdict on the code.
+  ///
+  /// Distinct from [error] because the two want opposite copy and opposite
+  /// affordances: an invalid code is final and offers only Dismiss, while this
+  /// clears itself in seconds and wants a Try again. Rendering it as "this
+  /// invite is invalid" - which is what a bare `catch` did - tells somebody
+  /// holding a perfectly good link that it is broken.
+  rateLimited,
+}
 
 /// Modal invite popup - landing target for `venta://invite/{code}`, shown
 /// via `showDialog` from the app-level deep link listener (see `app.dart`).
@@ -31,6 +49,14 @@ class _InviteDialogState extends State<InviteDialog> {
   _DialogState _state = _DialogState.loading;
   bool _iconFailed = false;
   String? _joinError;
+  String? _rateLimitMessage;
+
+  /// One retry, offered to the user rather than taken automatically.
+  ///
+  /// The preview routes cost a token per request **including a miss**, and a
+  /// dialog that retried on its own timer would be exactly the polling loop the
+  /// budget exists to price. A button the reader presses is not a loop.
+  bool _retriedAfterRateLimit = false;
 
   @override
   void initState() {
@@ -39,6 +65,7 @@ class _InviteDialogState extends State<InviteDialog> {
   }
 
   Future<void> _load() async {
+    setState(() => _state = _DialogState.loading);
     try {
       final invite = await getIt<GuildRepository>().previewInvite(widget.code);
       if (!mounted) return;
@@ -46,9 +73,22 @@ class _InviteDialogState extends State<InviteDialog> {
         _invite = invite;
         _state = _DialogState.ready;
       });
+    } on InvitePreviewRateLimitedException catch (e) {
+      if (mounted) {
+        setState(() {
+          _state = _DialogState.rateLimited;
+          _rateLimitMessage = e.message;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _state = _DialogState.error);
     }
+  }
+
+  Future<void> _retryPreview() async {
+    if (_retriedAfterRateLimit) return;
+    _retriedAfterRateLimit = true;
+    await _load();
   }
 
   Future<void> _join() async {
@@ -58,9 +98,23 @@ class _InviteDialogState extends State<InviteDialog> {
       _joinError = null;
     });
     try {
-      final guild = await getIt<GuildRepository>().redeemInvite(widget.code);
+      final outcome = await getIt<GuildRepository>().redeemInvite(widget.code);
       if (!mounted) return;
       setState(() => _state = _DialogState.joined);
+
+      // A member who is not told simply finds themselves gone later, so this is
+      // said before the dialog closes rather than left to be discovered.
+      if (outcome.isTemporaryMembership) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'You will leave this server when you go offline, unless you are '
+              'given a role.',
+            ),
+          ),
+        );
+      }
+
       await Future<void>.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
       // Resolved before the pop, not after: `context.push` looks the router up
@@ -68,7 +122,13 @@ class _InviteDialogState extends State<InviteDialog> {
       // taking out of the tree.
       final router = GoRouter.of(context);
       Navigator.of(context).pop();
-      router.push(RoutePaths.serverPath(guild.id));
+      router.push(RoutePaths.serverPath(outcome.guild.id));
+
+      // `onboardingRequired` is deliberately not acted on here: the guild
+      // screen we have just pushed reads the member's own onboarding status and
+      // raises the wizard itself, and doing it twice would put two of them up.
+
+      _connectVoiceTarget(outcome);
     } on VerificationLevelNotMetException catch (e) {
       if (mounted) {
         setState(() {
@@ -85,6 +145,38 @@ class _InviteDialogState extends State<InviteDialog> {
         });
       }
     }
+  }
+
+  /// Lands the joiner in the voice channel the invite pointed at, when it still
+  /// points at one.
+  ///
+  /// Driven by `joinVoice` rather than by `targetType`: the server clears it
+  /// when the channel has been deleted or has stopped being a voice channel
+  /// since the link was made, and the join still succeeds in that case - only
+  /// the landing is dropped. Deriving "should I connect" from the target type
+  /// would mean trying to connect to a room that is not there.
+  ///
+  /// Best-effort: the person is in the guild either way, and a failed connect
+  /// is not a failed join.
+  void _connectVoiceTarget(RedeemOutcome outcome) {
+    final channelId = outcome.voiceChannelToJoin;
+    if (channelId == null) return;
+
+    final channel = outcome.guild.channels
+        .where((c) => c.id == channelId)
+        .firstOrNull;
+    if (channel == null) return;
+
+    unawaited(
+      getIt<GuildVoiceCubit>()
+          .join(
+            guildId: outcome.guild.id,
+            channelId: channelId,
+            channelName: channel.name,
+            guildName: outcome.guild.name,
+          )
+          .catchError((_) {}),
+    );
   }
 
   void _dismiss() {
@@ -161,9 +253,7 @@ class _InviteDialogState extends State<InviteDialog> {
                       child: const Text('Dismiss'),
                     ),
                     const SizedBox(width: AppSpacing.s),
-                    if (_state != _DialogState.error &&
-                        _invite?.state != InviteState.expired)
-                      _buildActionButton(theme),
+                    if (_showsAction) _buildActionButton(theme),
                   ],
                 ),
               ],
@@ -233,6 +323,44 @@ class _InviteDialogState extends State<InviteDialog> {
             ),
           ],
         );
+      case _DialogState.rateLimited:
+        // Not the error panel. Nothing is wrong with the link - the preview
+        // route is simply the only unauthenticated surface that will say
+        // whether a code exists, so it is budgeted, and this clears in seconds.
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(AppRadii.dialog),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.hourglass_empty,
+                size: 32,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Text(
+              'One moment',
+              style: theme.textTheme.titleSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _rateLimitMessage ??
+                  'Too many invite lookups; try again shortly.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        );
       case _DialogState.ready:
       case _DialogState.joining:
       case _DialogState.joined:
@@ -289,10 +417,16 @@ class _InviteDialogState extends State<InviteDialog> {
                 textAlign: TextAlign.center,
               ),
             ],
-            if (invite.state == InviteState.expired) ...[
+            if (invite.state.badgeLabel != null) ...[
               const SizedBox(height: 6),
               Text(
-                'Invite expired',
+                // Rendered from the server's own verdict. Both clients used to
+                // re-derive expiry from `expiresAt < now` because nothing wrote
+                // `Expired` to the row; every read path computes it now, and a
+                // second source of truth can only disagree - notably on a
+                // consumed one-time invite, where there is no `maxUses` to
+                // compare against and only the server knows.
+                'Invite ${invite.state.badgeLabel!.toLowerCase()}',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.error,
                 ),
@@ -370,7 +504,26 @@ class _InviteDialogState extends State<InviteDialog> {
     ];
   }
 
+  /// Whether the footer offers anything but Dismiss.
+  ///
+  /// The join button is hidden for every state the invite is not [Active] in -
+  /// including a state this build does not recognise, which is the safe way
+  /// round: a link whose disposition we cannot read is not one to offer a
+  /// button for.
+  bool get _showsAction {
+    if (_state == _DialogState.error) return false;
+    if (_state == _DialogState.rateLimited) return !_retriedAfterRateLimit;
+    final state = _invite?.state;
+    return state == null || state == InviteState.active;
+  }
+
   Widget _buildActionButton(ThemeData theme) {
+    if (_state == _DialogState.rateLimited) {
+      return FilledButton(
+        onPressed: _retryPreview,
+        child: const Text('Try again'),
+      );
+    }
     if (_state == _DialogState.joined) {
       return FilledButton.icon(
         onPressed: null,

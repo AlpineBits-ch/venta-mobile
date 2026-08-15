@@ -50,3 +50,8 @@
 /* Hidden content (privacy spec T2-23) */
 "household_hidden_title" = "Zuhause";
 "household_hidden_body" = "Zu Hause braucht etwas deine Aufmerksamkeit";
+
+/* Voice-channel rings */
+"voice_ring_invite_body" = "Möchte, dass du zu %1$@ dazukommst.";
+"voice_ring_hidden_title" = "Sprach-Einladung";
+"voice_ring_hidden_body" = "Jemand möchte dich in einem Sprachkanal dabeihaben";

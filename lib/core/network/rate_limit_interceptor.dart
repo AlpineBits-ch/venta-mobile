@@ -49,6 +49,25 @@ class RateLimitInterceptor extends Interceptor {
   /// for whatever it is told can be parked indefinitely by one bad response.
   static const _maxWait = Duration(seconds: 30);
 
+  /// Marks a request whose `429` is **not** the gateway's shared bucket.
+  ///
+  /// The invite preview routes carry a budget of their own, on top of this one,
+  /// because they are the only unauthenticated surface that will say whether a
+  /// code exists. Their refusal is a statement about that route and that caller,
+  /// not about the whole client, and it must not be treated as either half of
+  /// what this interceptor does:
+  ///
+  /// * **Not retried.** Every request there spends a token *including a miss*,
+  ///   so three automatic attempts spend three tokens to answer one question,
+  ///   and the guidance for that route is one retry the user asks for.
+  /// * **Not global.** Its body carries no `global` key, which this interceptor
+  ///   reads - correctly, for the gateway - as "hold everything back". Parking
+  ///   every other request in the app behind one invite lookup is precisely the
+  ///   wrong response.
+  ///
+  /// Set it with `Options(extra: {RateLimitInterceptor.ownBudgetKey: true})`.
+  static const ownBudgetKey = 'rateLimitOwnBudget';
+
   /// When the shared budget is expected to have recovered. Null when there is
   /// no backoff in force.
   DateTime? _globalUntil;
@@ -68,6 +87,12 @@ class RateLimitInterceptor extends Interceptor {
     ErrorInterceptorHandler handler,
   ) async {
     if (err.response?.statusCode != 429) {
+      handler.next(err);
+      return;
+    }
+
+    // A route with its own budget answers for itself - see [ownBudgetKey].
+    if (err.requestOptions.extra[ownBudgetKey] == true) {
       handler.next(err);
       return;
     }
