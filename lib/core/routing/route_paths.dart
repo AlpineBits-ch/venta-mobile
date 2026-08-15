@@ -105,6 +105,16 @@ abstract final class RoutePaths {
   /// instance, not about you.
   static const platformStatus = '/settings/status';
 
+  /// What this account's plan is, what it includes, and what other plans
+  /// include. Read-only: there is no upgrade, change or purchase path on this
+  /// platform and there must not be one.
+  ///
+  /// Under Account Settings rather than App Settings, and a flat sibling of
+  /// the rest so `parentOf`'s existing `['settings', ...]` case already sends
+  /// the system back button to the index. Its row is absent entirely on an
+  /// instance that sells nothing - see `SettingsScreen`.
+  static const plan = '/settings/plan';
+
   /// Scanning a desktop/web client's login QR code. Nothing here is about
   /// *this* device's session - see `QrLoginScreen`.
   static const qrLogin = '/settings/qr-login';

@@ -11,6 +11,7 @@ import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/settings_tiles.dart';
 import '../../../auth/data/account_repository.dart';
 import '../../../auth/data/models/user_dto.dart';
+import '../../../billing/data/plan_repository.dart';
 import '../../../privacy/data/models/legal_document_dto.dart';
 import '../../../status/data/models/platform_status_dto.dart';
 import '../../../status/data/status_repository.dart';
@@ -138,6 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadAccount();
+    _probePlanSurface();
   }
 
   @override
@@ -160,6 +162,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// review - see `UserDto.consentRequired`.
   List<ConsentRequirementDto> get _consentRequired =>
       _account?.consentRequired ?? const [];
+
+  /// Whether this instance publishes a plan catalogue.
+  ///
+  /// Deliberately that question and not "can this account buy anything". The
+  /// row's presence is visible to the user, so gating it on purchasability
+  /// would make the row itself a statement that purchasing is possible - the
+  /// same signal a button gives, delivered by something existing. See
+  /// `PlanRepository.available`.
+  ///
+  /// Null until the answer arrives, and null hides the row. A row that shows up
+  /// a moment late is a row somebody finds on their next visit; a row that
+  /// shows up where there is no catalogue opens a screen with nothing on it.
+  ///
+  /// Guarded like `_platformStatusTrailing` below - a launch where dependency
+  /// registration failed must not lose the user the whole settings screen over
+  /// one row.
+  Future<void> _probePlanSurface() async {
+    final PlanRepository repository;
+    try {
+      repository = getIt<PlanRepository>();
+    } catch (_) {
+      return;
+    }
+    await repository.ensureProbed();
+    if (mounted) setState(() {});
+  }
+
+  bool get _planSurfaceAvailable {
+    try {
+      return getIt<PlanRepository>().available.value ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> _confirmLogOut() async {
     final confirmed = await showDialog<bool>(
@@ -219,6 +255,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       path: RoutePaths.qrLogin,
       keywords: 'log in desktop web computer browser approve sign in camera',
     ),
+    // Absent, not disabled, on an instance with no plan catalogue - which is
+    // every self-hosted one, where the billing service does not run and the
+    // gateway filters the route. The absence needs no explanation.
+    //
+    // Note the gate is "does this instance have plans", never "could this
+    // account buy one". A row conditioned on the second would announce that
+    // buying is possible by being there.
+    //
+    // Keywords carry what a person would actually search for when they are
+    // looking for a limit rather than for the word "plan" - "storage", "upload
+    // size", "why is my video blurry".
+    if (_planSurfaceAvailable)
+      const _Entry(
+        section: 'Account Settings',
+        title: 'Your Plan',
+        // A neutral document icon rather than a badge or a crown. An icon that
+        // reads as a premium marker is the same offer as a word.
+        icon: Icons.receipt_long_outlined,
+        path: RoutePaths.plan,
+        keywords:
+            'plan plans tier limits entitlements quota storage upload size '
+            'video quality emoji slots bots devices subscription',
+      ),
     _Entry(
       section: 'Account Settings',
       title: 'Privacy',

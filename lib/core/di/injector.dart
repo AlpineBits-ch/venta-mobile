@@ -6,6 +6,10 @@ import '../../features/auth/data/account_repository.dart';
 import '../../features/auth/data/auth_api.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/data/identity_api.dart';
+import '../../features/billing/data/billing_api.dart';
+import '../../features/billing/data/degradation_log.dart';
+import '../../features/billing/data/entitlement_api.dart';
+import '../../features/billing/data/plan_repository.dart';
 import '../../features/conversations/data/conversation_api.dart';
 import '../../features/conversations/data/conversation_repository.dart';
 import '../../features/friends/data/relationship_api.dart';
@@ -119,9 +123,21 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   // to the account. Somebody who set this to Italian and then switched accounts
   // did not thereby ask to read German again.
   getIt.registerLazySingleton<LocaleCubit>(() => LocaleCubit());
+  // Registered before `ApiClient`, which takes it directly: it holds a list and
+  // depends on nothing, so there is no cycle to break with a callback.
+  //
+  // In `resetSessionScopedCaches`: a reduction belongs to whoever made the
+  // request, and carrying one across a sign-in would tell the next person about
+  // somebody else's plan.
+  getIt.registerLazySingleton<DegradationLog>(() => DegradationLog());
   getIt.registerLazySingleton<ApiClient>(
     () => ApiClient(
       authRepository: getIt(),
+      // Every enforcement site in the API reports a reduction the same way -
+      // as a `degradations` array on the 200 it was reduced on - so this is
+      // collected once here rather than at each call site that could ever be
+      // reduced. See `DegradationInterceptor`.
+      degradations: getIt<DegradationLog>(),
       // Read per request, not captured: this client is built once at startup
       // and lives as long as the app, so a value taken here would pin the
       // header to the language in force at launch.
@@ -370,6 +386,30 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       realtimeService: getIt(),
     ),
   );
+  // The read-only plan surface. There is no billing *write* client anywhere in
+  // this app and there must not be one: this platform describes the plan an
+  // account is on and the plans that exist, and says nothing about whether or
+  // where any of them could be obtained.
+  //
+  // `PlanRepository` is not in `resetSessionScopedCaches`. The only state it
+  // holds is `available`, which answers "does this instance publish a plan
+  // catalogue" - a property of the deployment, not of whoever is signed in.
+  getIt.registerLazySingleton<BillingApi>(() => BillingApi(client: getIt()));
+  getIt.registerLazySingleton<EntitlementApi>(
+    () => EntitlementApi(client: getIt()),
+  );
+  getIt.registerLazySingleton<PlanRepository>(
+    () => PlanRepository(
+      entitlements: getIt(),
+      billing: getIt(),
+      // Read from the guild list this app already holds rather than fetched: a
+      // subscription names a server by id, and the only reason to resolve it is
+      // to put a name on a row. A server the reader has since left resolves to
+      // null and gets the generic description.
+      guildName: (guildId) =>
+          getIt<GuildRepository>().cachedById(guildId)?.name,
+    ),
+  );
   getIt.registerLazySingleton<InboxApi>(() => InboxApi(client: getIt()));
   getIt.registerLazySingleton<InboxRepository>(
     () => InboxRepository(api: getIt(), realtimeService: getIt(), mls: getIt()),
@@ -488,6 +528,10 @@ void resetSessionScopedCaches() {
   // registered for the previous user means nothing to the next one, and every
   // call/voice action would be rejected until it registers again.
   getIt<DeviceRegistrationService>().reset();
+  // A reduction is a statement about one request made by one account. Left in
+  // place, the plan screen would tell the next person to sign in on this
+  // handset that their video was capped by somebody else's server plan.
+  getIt<DegradationLog>().clear();
   // MLS is deliberately *not* reset here. It is per account too, and more
   // sharply so - an identity is credentialed to one user id - but this function
   // is synchronous and unloading group state is not, so doing it here would race

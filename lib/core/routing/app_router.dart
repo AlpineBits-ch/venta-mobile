@@ -10,6 +10,7 @@ import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/server_setup_screen.dart';
+import '../../features/billing/presentation/screens/plan_screen.dart';
 import '../../features/conversations/presentation/screens/home_screen.dart';
 import '../../features/friends/bloc/friends_bloc.dart';
 import '../../features/friends/presentation/screens/friends_screen.dart';
@@ -398,6 +399,7 @@ GoRouter buildAppRouter(SessionCubit sessionCubit) {
         RoutePaths.platformStatus,
         (context, state) => const PlatformStatusScreen(),
       ),
+      _route(RoutePaths.plan, (context, state) => const PlanScreen()),
       _route(RoutePaths.qrLogin, (context, state) => const QrLoginScreen()),
       _route(RoutePaths.devices, (context, state) => const DevicesScreen()),
       _route(
