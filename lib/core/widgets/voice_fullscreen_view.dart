@@ -1,10 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../orientation/viewer_orientation.dart';
 import '../theme/app_colors.dart';
 import 'profile_resolver.dart';
+import 'tilt_rotation.dart';
 import 'video_participant_tile.dart';
 
 /// One incoming camera or screen share, filling the screen.
@@ -32,6 +35,12 @@ import 'video_participant_tile.dart';
 /// [updates] is the cubit that owns the media. `MediaStreamTrack`s cannot live
 /// in cubit state, so [track] re-reads the current one imperatively on every
 /// emission - the same arrangement the grid tiles use, for the same reason.
+///
+/// This is also the one screen in the app that is allowed to be sideways. It
+/// turns its own contents rather than asking the platform to turn the window -
+/// see [TiltRotation] for why that is the only version that works for everyone
+/// - and the window is pinned to a single portrait orientation while it is open
+/// so the tilt reading and the window agree on which way is up.
 class VoiceFullscreenView extends StatefulWidget {
   const VoiceFullscreenView({
     super.key,
@@ -77,10 +86,20 @@ class VoiceFullscreenView extends StatefulWidget {
 }
 
 class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
+  late ViewerOrientationMode _mode = ViewerOrientationPrefs.mode;
+
   @override
   void initState() {
     super.initState();
     unawaited(widget.onEnter());
+    // `main()` allows both portrait orientations. Both would be fine on their
+    // own, but the tilt reading is interpreted relative to the window: a window
+    // that has flipped to reverse portrait while a sideways picture is on
+    // screen turns that picture upside down. One orientation, restored on the
+    // way out.
+    unawaited(
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
+    );
   }
 
   @override
@@ -89,40 +108,68 @@ class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
     // away either way, and a pin left claimed keeps a subscription this viewer
     // no longer has anywhere to draw.
     unawaited(widget.onExit());
+    unawaited(
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]),
+    );
     super.dispose();
+  }
+
+  void _setMode(ViewerOrientationMode mode) {
+    setState(() => _mode = mode);
+    ViewerOrientationPrefs.mode = mode;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: AppColors.darkTextPrimary,
-        title: ProfileResolver(
-          userId: widget.userId,
-          builder: (context, profile) {
-            final name = profile?.userName ?? '…';
-            return Text(
-              widget.isShare ? '$name is sharing' : name,
-              overflow: TextOverflow.ellipsis,
-            );
-          },
-        ),
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => StreamBuilder<Object?>(
-            stream: widget.updates,
-            builder: (context, _) => Center(
-              child: VideoParticipantTile(
-                track: widget.track(),
-                width: constraints.maxWidth,
-                height: constraints.maxHeight,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
-                borderRadius: 0,
-                onHeightChanged: widget.onHeightChanged,
-                onHidden: widget.onHidden,
+    return ColoredBox(
+      color: Colors.black,
+      // Outside the rotation: cutouts and system bars belong to the device, so
+      // their insets are only in the right place while they are still being
+      // read in the device's own coordinates. Inside, they would pad whichever
+      // edge happened to be the content's top.
+      child: SafeArea(
+        child: TiltRotation(
+          mode: _mode,
+          child: Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              foregroundColor: AppColors.darkTextPrimary,
+              // See `AppTheme` - built title, kept leading-aligned on both
+              // platforms.
+              centerTitle: false,
+              title: ProfileResolver(
+                userId: widget.userId,
+                builder: (context, profile) {
+                  final name = profile?.userName ?? '…';
+                  return Text(
+                    widget.isShare ? '$name is sharing' : name,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
+              ),
+              actions: [
+                ViewerOrientationButton(mode: _mode, onChanged: _setMode),
+              ],
+            ),
+            body: LayoutBuilder(
+              builder: (context, constraints) => StreamBuilder<Object?>(
+                stream: widget.updates,
+                builder: (context, _) => Center(
+                  child: VideoParticipantTile(
+                    track: widget.track(),
+                    width: constraints.maxWidth,
+                    height: constraints.maxHeight,
+                    objectFit:
+                        RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                    borderRadius: 0,
+                    onHeightChanged: widget.onHeightChanged,
+                    onHidden: widget.onHidden,
+                  ),
+                ),
               ),
             ),
           ),

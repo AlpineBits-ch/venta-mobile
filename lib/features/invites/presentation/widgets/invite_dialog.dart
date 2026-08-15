@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guilds/data/guild_api.dart';
 import '../../../guilds/data/guild_repository.dart';
@@ -534,13 +535,10 @@ class _InviteDialogState extends State<InviteDialog> {
     return FilledButton(
       onPressed: _state == _DialogState.loading ? null : _join,
       child: _state == _DialogState.joining
-          ? SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: theme.colorScheme.onPrimary,
-              ),
+          ? AdaptiveProgressIndicator(
+              size: 16,
+              strokeWidth: 2,
+              color: theme.colorScheme.onPrimary,
             )
           : const Text('Join Server'),
     );

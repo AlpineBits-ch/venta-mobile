@@ -134,8 +134,9 @@ class _GuildDmPrivacyScreenState extends State<GuildDmPrivacyScreen> {
             ),
           ),
         ),
-        (_, null, _) ||
-        (_, _, null) => const Center(child: CircularProgressIndicator()),
+        (_, null, _) || (_, _, null) => const Center(
+          child: CircularProgressIndicator.adaptive(),
+        ),
         (_, final List<GuildDto> list, final PrivacySettingsDto s) => ListView(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.m,
@@ -166,7 +167,7 @@ class _GuildDmPrivacyScreenState extends State<GuildDmPrivacyScreen> {
                 child: Column(
                   children: [
                     for (final guild in list)
-                      SwitchListTile(
+                      SwitchListTile.adaptive(
                         title: Text(guild.name),
                         // Absent means "no override", which follows the global
                         // policy - and under this policy that is "allowed".

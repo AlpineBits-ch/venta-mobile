@@ -6,6 +6,7 @@ import '../../../../core/format/date_time_format.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/profile_resolver.dart';
@@ -115,7 +116,7 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
     if (_error != null && revisions == null) {
       body = LoadFailureView(message: _error!, onRetry: _load);
     } else if (revisions == null) {
-      body = const Center(child: CircularProgressIndicator());
+      body = const Center(child: CircularProgressIndicator.adaptive());
     } else if (revisions.isEmpty) {
       body = Center(
         child: Padding(
@@ -146,7 +147,7 @@ class _WikiHistoryScreenState extends State<WikiHistoryScreen> {
         ),
       );
     } else {
-      body = RefreshIndicator(
+      body = RefreshIndicator.adaptive(
         onRefresh: _load,
         child: ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
@@ -357,10 +358,9 @@ class _RevisionTile extends StatelessWidget {
                   child: FilledButton.tonalIcon(
                     onPressed: restoring ? null : onRestore,
                     icon: restoring
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                        ? const AdaptiveProgressIndicator(
+                            size: 14,
+                            strokeWidth: 2,
                           )
                         : const Icon(Icons.restore, size: 18),
                     label: const Text('Restore this version'),

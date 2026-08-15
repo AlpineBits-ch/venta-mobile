@@ -357,7 +357,7 @@ class _WikiPageViewScreenState extends State<WikiPageViewScreen> {
             (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
           ));
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _refresh,
       child: CustomScrollView(
         controller: _scrollController,

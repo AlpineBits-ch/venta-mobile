@@ -332,7 +332,7 @@ class _AwayScreenState extends State<AwayScreen> {
                   'whoever is actually here. It also stops the fairness board '
                   'reading a fortnight abroad as being behind.',
             )
-          : RefreshIndicator(
+          : RefreshIndicator.adaptive(
               onRefresh: _load,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(

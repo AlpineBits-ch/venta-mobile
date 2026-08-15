@@ -123,6 +123,9 @@ class _WikiHomeScreenState extends State<WikiHomeScreen> {
           fallbackLocation: RoutePaths.serverPath(widget.guildId),
         ),
         titleSpacing: 0,
+        // See `AppTheme` - custom multi-line title, not a candidate for the
+        // iOS centred nav title.
+        centerTitle: false,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -181,7 +184,7 @@ class _WikiHomeScreenState extends State<WikiHomeScreen> {
     final pinned = wiki.pages.where((page) => page.isPinned).toList()
       ..sort(_byRecency);
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: CustomScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,

@@ -261,7 +261,7 @@ class _OnboardingPromptEditorScreenState
                         setState(() => _singleSelect = value.first),
                   ),
                 ),
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   title: const Text('Ask when someone joins'),
                   subtitle: const Text('Off: only offered in Channels & Roles'),
                   value: _inOnboarding,
@@ -271,7 +271,7 @@ class _OnboardingPromptEditorScreenState
                     if (!value) _isRequired = false;
                   }),
                 ),
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   title: const Text('Required'),
                   subtitle: const Text('Must be answered to finish onboarding'),
                   value: _isRequired,

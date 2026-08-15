@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/format/date_time_format.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/settings_tiles.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/guild_dto.dart';
@@ -257,7 +258,7 @@ class _HouseSettingsTabState extends State<HouseSettingsTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (_guild == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator.adaptive());
     }
     if (!_hasQuietHours && !_hasGuestAccess) {
       return const HouseEmptyState(
@@ -282,7 +283,7 @@ class _HouseSettingsTabState extends State<HouseSettingsTab> {
             label: 'Quiet hours',
             child: Column(
               children: [
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   title: const Text('Keep the house quiet at night'),
                   subtitle: const Text(
                     'Chore reminders that would land in the window wait until '
@@ -344,11 +345,7 @@ class _HouseSettingsTabState extends State<HouseSettingsTab> {
                     ? _saveQuietHours
                     : null,
                 child: _savingQuietHours
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const AdaptiveProgressIndicator(size: 18, strokeWidth: 2)
                     : const Text('Save quiet hours'),
               ),
             ),

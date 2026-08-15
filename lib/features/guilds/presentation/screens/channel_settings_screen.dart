@@ -208,7 +208,7 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
         title: const Text('Channel Settings'),
       ),
       body: channel == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : ListView(
               padding: const EdgeInsets.all(AppSpacing.m),
               children: [
@@ -226,7 +226,7 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s),
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Private channel'),
                   subtitle: const Text(
@@ -239,7 +239,7 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
                 // household channel holds rows rather than messages - there's
                 // nothing for either of them to act on.
                 if (channel.type.hasMessages) ...[
-                  SwitchListTile(
+                  SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Age-restricted'),
                     value: _isAgeRestricted,
@@ -337,7 +337,9 @@ class _ChannelSettingsScreenState extends State<ChannelSettingsScreen> {
                   if (_followers == null)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: AppSpacing.s),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Center(
+                        child: CircularProgressIndicator.adaptive(),
+                      ),
                     )
                   else if (_followers!.isEmpty)
                     Text(

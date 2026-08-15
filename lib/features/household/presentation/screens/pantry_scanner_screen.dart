@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/media/camera_permission.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../data/household_api_wave2.dart';
 import '../../data/models/pantry_dto.dart';
 import '../widgets/household_widgets.dart';
@@ -1400,13 +1401,10 @@ class _StatusStrip extends StatelessWidget {
   }
 
   Widget _leading(Color foreground) => switch (status.phase) {
-    _Phase.working => SizedBox(
-      width: 18,
-      height: 18,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        valueColor: AlwaysStoppedAnimation<Color>(foreground),
-      ),
+    _Phase.working => AdaptiveProgressIndicator(
+      size: 18,
+      strokeWidth: 2,
+      color: foreground,
     ),
     _Phase.done => Icon(Icons.check_rounded, size: 18, color: foreground),
     _Phase.failed => Icon(
@@ -1846,13 +1844,10 @@ class _CameraStarting extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-              ),
+            const AdaptiveProgressIndicator(
+              size: 22,
+              strokeWidth: 2,
+              color: Colors.white70,
             ),
             const SizedBox(height: AppSpacing.m),
             Text(

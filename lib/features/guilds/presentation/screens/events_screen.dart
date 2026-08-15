@@ -200,7 +200,7 @@ class _EventsScreenState extends State<EventsScreen> {
       body: _loadFailed
           ? LoadFailureView(message: 'Couldn\'t load events.', onRetry: _load)
           : events == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : events.isEmpty
           ? Center(
               child: Text(
@@ -210,7 +210,7 @@ class _EventsScreenState extends State<EventsScreen> {
                 ),
               ),
             )
-          : RefreshIndicator(
+          : RefreshIndicator.adaptive(
               onRefresh: _load,
               child: ListView.separated(
                 padding: const EdgeInsets.all(AppSpacing.m),

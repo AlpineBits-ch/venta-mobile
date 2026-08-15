@@ -145,7 +145,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
         title: const Text('Privacy'),
       ),
       body: switch ((_loading, _loadError, _settings)) {
-        (true, _, _) => const Center(child: CircularProgressIndicator()),
+        (true, _, _) => const Center(
+          child: CircularProgressIndicator.adaptive(),
+        ),
         (_, final String error, _) => _LoadFailure(
           message: error,
           onRetry: _load,
@@ -226,7 +228,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
           label: 'How people find you',
           child: Column(
             children: [
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 title: const Text('By username'),
                 subtitle: const Text('An exact-username search finds you'),
                 value: s.discoverableByUsername,
@@ -320,7 +322,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
           label: 'Activity and voice',
           child: Column(
             children: [
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 title: const Text('Share what I\'m playing'),
                 subtitle: const Text('Shows on your profile and in servers'),
                 value: s.shareActivity,
@@ -330,7 +332,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                         'shareActivity': v,
                       }, optimistic: s.copyWith(shareActivity: v)),
               ),
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 title: const Text('Proximity voice'),
                 subtitle: const Text(
                   'Lets in-game voice be heard by players near you',
@@ -368,7 +370,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
           label: 'Messages',
           child: Column(
             children: [
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 title: const Text('Send read receipts'),
                 subtitle: const Text(
                   'Off means you don\'t see others\' either',
@@ -380,7 +382,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                         'sendReadReceipts': v,
                       }, optimistic: s.copyWith(sendReadReceipts: v)),
               ),
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 title: const Text('Send typing indicators'),
                 subtitle: const Text(
                   'Off means you don\'t see others\' either',
@@ -450,7 +452,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
         const SizedBox(height: AppSpacing.l),
         SettingsSection(
           label: 'Notifications',
-          child: SwitchListTile(
+          child: SwitchListTile.adaptive(
             title: const Text('Hide content in notifications'),
             subtitle: const Text(
               'Push notifications show only that something arrived',
@@ -470,7 +472,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
           label: 'How your data is used',
           child: Column(
             children: [
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 title: const Text('Diagnostics linked to my account'),
                 subtitle: const Text(
                   'Crash reports still get sent either way - this decides '
@@ -589,7 +591,7 @@ class _MinorLockableSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile(
+    return SwitchListTile.adaptive(
       title: Text(title),
       subtitle: switch ((locked, subtitle)) {
         (true, _) => const Text(_PrivacySettingsScreenState._minorNote),

@@ -133,7 +133,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         builder: (context, state) {
           final profile = state.profile;
           if (profile == null) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator.adaptive());
           }
           _seedBio(profile);
           final accentColor = profile.accentColor != null
@@ -404,7 +404,7 @@ class _FontPicker extends StatelessWidget {
       child: Column(
         children: [
           for (final font in ProfileFont.values)
-            RadioListTile<ProfileFont>(
+            RadioListTile<ProfileFont>.adaptive(
               contentPadding: EdgeInsets.zero,
               value: font,
               title: Text(

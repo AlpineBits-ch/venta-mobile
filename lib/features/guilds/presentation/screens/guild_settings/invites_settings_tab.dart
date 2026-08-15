@@ -127,7 +127,7 @@ class _InvitesSettingsTabState extends State<InvitesSettingsTab> {
     final theme = Theme.of(context);
 
     if (_permissions == null && _error == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator.adaptive());
     }
 
     // Said plainly rather than shown as a failed load. A moderator who lost
@@ -150,7 +150,7 @@ class _InvitesSettingsTabState extends State<InvitesSettingsTab> {
     if (_error != null) return Center(child: Text(_error!));
     final invites = _invites;
     if (invites == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator.adaptive());
     }
 
     return Column(
@@ -177,7 +177,7 @@ class _InvitesSettingsTabState extends State<InvitesSettingsTab> {
                   style: theme.textTheme.bodySmall,
                 ),
               ),
-              Switch(
+              Switch.adaptive(
                 value: _includeRevoked,
                 onChanged: (value) {
                   setState(() {
@@ -418,7 +418,7 @@ class _CreateInviteSheetState extends State<_CreateInviteSheet> {
             onChanged: (value) => setState(() => _maxUses = value),
           ),
           const SizedBox(height: AppSpacing.s),
-          SwitchListTile(
+          SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('One-time link'),
             subtitle: const Text('Stops working after the first person joins.'),

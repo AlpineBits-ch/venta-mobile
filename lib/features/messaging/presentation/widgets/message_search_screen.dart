@@ -87,6 +87,9 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        // See `AppTheme` - the title here is the search field itself, which
+        // wants the full bar rather than the narrower centred title slot.
+        centerTitle: false,
         title: TextField(
           controller: _controller,
           autofocus: !widget.isEncrypted,
@@ -134,7 +137,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
               ),
             )
           : _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : _error != null
           ? LoadFailureView(
               message: _error!,

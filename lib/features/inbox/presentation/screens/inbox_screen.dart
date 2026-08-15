@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/skeleton_list_tile.dart';
@@ -264,7 +265,7 @@ class _UnreadTab extends StatelessWidget {
           );
         }
         if (state.groups.isEmpty) {
-          return RefreshIndicator(
+          return RefreshIndicator.adaptive(
             onRefresh: cubit.refreshUnread,
             child: _EmptyState(
               icon: Icons.done_all,
@@ -289,7 +290,7 @@ class _UnreadTab extends StatelessWidget {
             ),
           );
         }
-        return RefreshIndicator(
+        return RefreshIndicator.adaptive(
           onRefresh: cubit.refreshUnread,
           child: _PagingList(
             onEndReached: cubit.loadMoreUnread,
@@ -380,7 +381,7 @@ class _MentionsTab extends StatelessWidget {
       );
     }
     if (state.mentions.isEmpty) {
-      return RefreshIndicator(
+      return RefreshIndicator.adaptive(
         onRefresh: cubit.refreshMentions,
         child: _EmptyState(
           icon: Icons.alternate_email,
@@ -405,7 +406,7 @@ class _MentionsTab extends StatelessWidget {
         ),
       );
     }
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: cubit.refreshMentions,
       child: _PagingList(
         onEndReached: cubit.loadMoreMentions,
@@ -479,7 +480,7 @@ class _WaitingTab extends StatelessWidget {
           );
         }
         if (state.tasks.isEmpty) {
-          return RefreshIndicator(
+          return RefreshIndicator.adaptive(
             onRefresh: cubit.refreshTasks,
             child: const _EmptyState(
               icon: Icons.home_outlined,
@@ -490,7 +491,7 @@ class _WaitingTab extends StatelessWidget {
             ),
           );
         }
-        return RefreshIndicator(
+        return RefreshIndicator.adaptive(
           onRefresh: cubit.refreshTasks,
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
@@ -741,11 +742,7 @@ class _LoadMoreFooter extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.m),
       child: Center(
         child: loading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+            ? const AdaptiveProgressIndicator(size: 20, strokeWidth: 2)
             : TextButton(onPressed: onPressed, child: const Text('Load more')),
       ),
     );
@@ -819,13 +816,13 @@ class _MentionFiltersSheetState extends State<_MentionFiltersSheet> {
             ),
             const SizedBox(height: AppSpacing.s),
             const Divider(height: 1),
-            SwitchListTile(
+            SwitchListTile.adaptive(
               title: const Text('@everyone'),
               value: _filters.includeEveryone,
               onChanged: (value) =>
                   _update(_filters.copyWith(includeEveryone: value)),
             ),
-            SwitchListTile(
+            SwitchListTile.adaptive(
               title: const Text('Role mentions'),
               subtitle: const Text(
                 'Only roles you already held when the message was sent.',
@@ -834,14 +831,14 @@ class _MentionFiltersSheetState extends State<_MentionFiltersSheet> {
               onChanged: (value) =>
                   _update(_filters.copyWith(includeRoles: value)),
             ),
-            SwitchListTile(
+            SwitchListTile.adaptive(
               title: const Text('Direct messages'),
               value: _filters.includeDms,
               onChanged: (value) =>
                   _update(_filters.copyWith(includeDms: value)),
             ),
             if (widget.guildName != null)
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 title: Text('Only ${widget.guildName}'),
                 value: _filters.guildScoped,
                 onChanged: (value) =>

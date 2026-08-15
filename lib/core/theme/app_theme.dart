@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
@@ -11,6 +12,18 @@ import 'widget_styles.dart';
 /// derives tones and would drift from Venta's exact brand hex values. Every
 /// role below is mapped by hand from Alpine's `--color-*` tokens.
 abstract final class AppTheme {
+  /// Whether to build the Cupertino-leaning variant of the theme.
+  ///
+  /// Reads [defaultTargetPlatform] rather than taking a parameter because
+  /// that is also what `ThemeData.platform` defaults to, and therefore what
+  /// every `.adaptive` widget constructor in the framework switches on - so
+  /// the theme and the widgets can never disagree about which platform this
+  /// is. `debugDefaultTargetPlatformOverride` moves both together, which is
+  /// what makes the iOS widget tests possible on a Windows machine.
+  static bool get _isApple =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+
   static ThemeData get dark {
     const colorScheme = ColorScheme(
       brightness: Brightness.dark,
@@ -86,14 +99,28 @@ abstract final class AppTheme {
       canvasColor: scaffoldBg,
       cardColor: cardColor,
       dividerColor: dividerColor,
-      splashFactory: InkRipple.splashFactory,
+      // The single loudest "this is an Android app" signal on iOS, where a tap
+      // fades rather than spreading a ripple from the touch point. `NoSplash`
+      // still leaves the highlight overlay, which is the closer analogue of
+      // iOS's pressed state - it's the *travelling* ink that reads as foreign.
+      splashFactory: _isApple
+          ? NoSplash.splashFactory
+          : InkRipple.splashFactory,
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: scaffoldBg,
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
-        centerTitle: false,
+        // Null rather than a value on iOS: unset is how `AppBar` is told to
+        // fall back to its own per-platform default, which centres the title
+        // on iOS/macOS and left-aligns everywhere else. Spelling `false` here
+        // was the one place the theme actively undid an adaptation Flutter
+        // would otherwise have made for free. The handful of screens whose
+        // title is a custom `Row`/`Column` rather than `Text` pin
+        // `centerTitle: false` on their own `AppBar`, since those don't
+        // survive being squeezed into the centre slot.
+        centerTitle: _isApple ? null : false,
         titleTextStyle: textTheme.titleMedium,
       ),
       drawerTheme: DrawerThemeData(backgroundColor: statusColors.sidebar),

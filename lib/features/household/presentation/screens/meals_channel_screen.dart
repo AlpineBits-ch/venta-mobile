@@ -274,7 +274,7 @@ class _MealsChannelScreenState
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -1163,7 +1163,9 @@ class _CookableSheetState extends State<_CookableSheet> {
                   : result == null
                   ? const Padding(
                       padding: EdgeInsets.all(AppSpacing.l),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Center(
+                        child: CircularProgressIndicator.adaptive(),
+                      ),
                     )
                   : result.items.isEmpty
                   ? Padding(

@@ -19,8 +19,17 @@ class AppBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Matches what `BackButtonIcon` picks per platform: iOS's back affordance
+    // is a thin chevron, not Material's filled arrow. Worth spelling out even
+    // though this is one file, because `AppBackButton` is the leading widget
+    // on every screen outside the shell - the arrow is on-screen more than
+    // any other icon in the app.
+    final platform = Theme.of(context).platform;
+    final isApple =
+        platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
+
     return IconButton(
-      icon: const Icon(Icons.arrow_back),
+      icon: Icon(isApple ? Icons.arrow_back_ios_new : Icons.arrow_back),
       tooltip: 'Back',
       onPressed: () => BackNavigation.goBack(context, fallbackLocation),
     );

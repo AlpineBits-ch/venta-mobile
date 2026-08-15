@@ -121,7 +121,9 @@ class _ModulesSettingsTabState extends State<ModulesSettingsTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final guild = _guild;
-    if (guild == null) return const Center(child: CircularProgressIndicator());
+    if (guild == null) {
+      return const Center(child: CircularProgressIndicator.adaptive());
+    }
     final features = guild.featureSet;
 
     return ListView(
@@ -142,7 +144,7 @@ class _ModulesSettingsTabState extends State<ModulesSettingsTab> {
             child: Column(
               children: [
                 for (final kind in GuildKind.values)
-                  RadioListTile<GuildKind>(
+                  RadioListTile<GuildKind>.adaptive(
                     value: kind,
                     title: Text(kind.label),
                     subtitle: Text(
@@ -168,7 +170,7 @@ class _ModulesSettingsTabState extends State<ModulesSettingsTab> {
           child: Column(
             children: [
               for (final module in GuildFeature.communityModules)
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   title: Text(GuildFeature.labels[module] ?? module),
                   subtitle: GuildFeature.descriptions[module] == null
                       ? null
@@ -190,7 +192,7 @@ class _ModulesSettingsTabState extends State<ModulesSettingsTab> {
           child: Column(
             children: [
               for (final module in GuildFeature.householdModules)
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   title: Text(GuildFeature.labels[module] ?? module),
                   subtitle: GuildFeature.descriptions[module] == null
                       ? null

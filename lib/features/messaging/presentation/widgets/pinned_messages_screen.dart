@@ -56,7 +56,7 @@ class _PinnedMessagesScreenState extends State<PinnedMessagesScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Pinned Messages')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : _error != null
           ? LoadFailureView(message: _error!, onRetry: _load)
           : pins == null || pins.isEmpty

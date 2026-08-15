@@ -124,14 +124,16 @@ class _AutoModSettingsTabState extends State<AutoModSettingsTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator.adaptive());
+    }
     final theme = Theme.of(context);
     final config = _config ?? const AutoModConfigDto();
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.m),
       children: [
-        SwitchListTile(
+        SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
           title: const Text('Auto-moderation'),
           subtitle: const Text(
@@ -179,7 +181,7 @@ class _AutoModSettingsTabState extends State<AutoModSettingsTab> {
         const SizedBox(height: AppSpacing.l),
         const Divider(),
         const SizedBox(height: AppSpacing.s),
-        SwitchListTile(
+        SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
           title: const Text('Rate limit'),
           subtitle: const Text(

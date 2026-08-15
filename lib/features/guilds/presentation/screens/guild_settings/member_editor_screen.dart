@@ -455,7 +455,7 @@ class _MemberEditorScreenState extends State<MemberEditorScreen> {
               )
             else
               for (final role in roles)
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   dense: true,
                   secondary: _isFlatmatesRole(role)

@@ -175,7 +175,7 @@ class _WikiCategoryManagerScreenState extends State<WikiCategoryManagerScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Categories')),
       body: categories == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : categories.isEmpty
           ? _EmptyCategories(onCreate: _create)
           : Column(

@@ -197,13 +197,13 @@ class _AuditLogSettingsTabState extends State<AuditLogSettingsTab> {
     }
     final entries = _entries;
     if (entries == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator.adaptive());
     }
     if (entries.isEmpty) {
       return const Center(child: Text('No activity yet.'));
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),

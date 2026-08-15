@@ -4,6 +4,7 @@ import '../../../../core/crypto/master_key_service.dart';
 import '../../../../core/device/device_id_service.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../auth/data/auth_repository.dart';
 import 'recovery_code_screen.dart';
 
@@ -181,10 +182,9 @@ class _RecoveryCodeSetupScreenState extends State<RecoveryCodeSetupScreen> {
                 child: FilledButton(
                   onPressed: _busy ? null : _start,
                   child: _busy
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                      ? const AdaptiveProgressIndicator(
+                          size: 18,
+                          strokeWidth: 2,
                         )
                       : const Text('Show my recovery code'),
                 ),

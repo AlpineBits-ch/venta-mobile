@@ -69,14 +69,16 @@ class _MyReportsScreenState extends State<MyReportsScreen> {
         title: const Text('Reports you\'ve filed'),
       ),
       body: switch ((_loading, _error, reports)) {
-        (true, _, _) => const Center(child: CircularProgressIndicator()),
+        (true, _, _) => const Center(
+          child: CircularProgressIndicator.adaptive(),
+        ),
         (_, final String error, _) => LoadFailureView(
           message: error,
           onRetry: _load,
         ),
         (_, _, final List<FiledReportDto> rows) when rows.isEmpty =>
           const _EmptyState(),
-        (_, _, final List<FiledReportDto> rows) => RefreshIndicator(
+        (_, _, final List<FiledReportDto> rows) => RefreshIndicator.adaptive(
           onRefresh: _load,
           child: ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.m),

@@ -392,7 +392,7 @@ class _ListChannelScreenState extends HouseholdChannelState<ListChannelScreen> {
         : const SizedBox.shrink();
 
     if (grouped) {
-      return RefreshIndicator(
+      return RefreshIndicator.adaptive(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(
@@ -427,7 +427,7 @@ class _ListChannelScreenState extends HouseholdChannelState<ListChannelScreen> {
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ReorderableListView.builder(
         padding: const EdgeInsets.fromLTRB(

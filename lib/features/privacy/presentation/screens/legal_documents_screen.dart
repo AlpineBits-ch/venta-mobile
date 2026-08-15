@@ -142,7 +142,7 @@ class _LegalDocumentsScreenState extends State<LegalDocumentsScreen> {
             ),
           ),
         ),
-        (_, null) => const Center(child: CircularProgressIndicator()),
+        (_, null) => const Center(child: CircularProgressIndicator.adaptive()),
         (_, final List<LegalDocumentDto> list) when list.isEmpty => Center(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.xl),

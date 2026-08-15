@@ -126,7 +126,7 @@ class _RecipesScreenState extends State<RecipesScreen> {
                     )
                   : null,
             )
-          : RefreshIndicator(
+          : RefreshIndicator.adaptive(
               onRefresh: _load,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(

@@ -66,7 +66,7 @@ class _PlatformStatusScreenState extends State<PlatformStatusScreen> {
       body: ValueListenableBuilder<PlatformStatusSnapshot>(
         valueListenable: _repository.snapshot,
         builder: (context, snapshot, _) {
-          return RefreshIndicator(
+          return RefreshIndicator.adaptive(
             onRefresh: _repository.refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -91,7 +91,7 @@ class _PlatformStatusScreenState extends State<PlatformStatusScreen> {
       return [
         const SizedBox(height: AppSpacing.xl),
         if (snapshot.checking)
-          const Center(child: CircularProgressIndicator())
+          const Center(child: CircularProgressIndicator.adaptive())
         else
           _UnverifiedCard(onRetry: _repository.refresh),
         const SizedBox(height: AppSpacing.l),

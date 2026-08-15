@@ -6,6 +6,7 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/format/phone_number.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/button_progress_indicator.dart';
 import '../../../../core/widgets/profile_resolver.dart';
@@ -367,10 +368,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                     icon: Icons.alternate_email,
                     title: 'Username',
                     trailing: profile == null
-                        ? const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                        ? const AdaptiveProgressIndicator(
+                            size: 12,
+                            strokeWidth: 2,
                           )
                         : Text(profile.userName),
                     showChevron: false,
@@ -738,13 +738,10 @@ class _PasswordChangeForm extends StatelessWidget {
           child: FilledButton(
             onPressed: formValid && !submitting ? onSubmit : null,
             child: submitting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
+                ? const AdaptiveProgressIndicator(
+                    size: 16,
+                    strokeWidth: 2,
+                    color: Colors.white,
                   )
                 : const Text('Change password'),
           ),

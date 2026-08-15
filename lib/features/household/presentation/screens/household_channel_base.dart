@@ -229,6 +229,10 @@ abstract class HouseholdChannelState<W extends StatefulWidget>
     return AppBar(
       leading: AppBackButton(fallbackLocation: RoutePaths.serverPath(guildId)),
       titleSpacing: 0,
+      // Overrides the iOS centring `AppTheme` otherwise leaves to `AppBar`:
+      // a stacked title/subtitle is laid out against the leading edge, and
+      // centring it fights `titleSpacing: 0` above.
+      centerTitle: false,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,

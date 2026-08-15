@@ -134,7 +134,7 @@ class _DecisionsChannelScreenState
               onRetry: _load,
             )
           : decisions == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : decisions.isEmpty
           ? HouseEmptyState(
               icon: Icons.how_to_vote_outlined,
@@ -151,7 +151,7 @@ class _DecisionsChannelScreenState
                     )
                   : null,
             )
-          : RefreshIndicator(
+          : RefreshIndicator.adaptive(
               onRefresh: _load,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
@@ -491,7 +491,7 @@ class _DecisionDetailScreenState extends State<DecisionDetailScreen> {
             ),
         ],
       ),
-      body: RefreshIndicator(
+      body: RefreshIndicator.adaptive(
         onRefresh: _refresh,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(

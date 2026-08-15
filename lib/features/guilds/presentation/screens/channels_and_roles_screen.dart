@@ -146,7 +146,7 @@ class _ChannelsAndRolesScreenState extends State<ChannelsAndRolesScreen> {
               onRetry: _load,
             )
           : prompts == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : prompts.isEmpty
           ? Center(
               child: Padding(

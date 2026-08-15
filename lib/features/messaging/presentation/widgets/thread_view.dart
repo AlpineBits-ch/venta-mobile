@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../../../../core/routing/route_paths.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/profile_resolver.dart';
@@ -1265,6 +1266,9 @@ class _ThreadViewState extends State<ThreadView> {
               ? RoutePaths.serverPath(widget.guildId!)
               : RoutePaths.home,
         ),
+        // See `AppTheme` - custom `Row` title, not a candidate for the iOS
+        // centred nav title.
+        centerTitle: false,
         title: Row(
           children: [
             // Guild channels are titled "#channel-name", which already
@@ -1346,7 +1350,7 @@ class _ThreadViewState extends State<ThreadView> {
                 if (state.isLoadingInitial) {
                   child = const Center(
                     key: ValueKey('loading'),
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator.adaptive(),
                   );
                 } else if (state.messages.isEmpty) {
                   child = Center(
@@ -1886,13 +1890,10 @@ class _PendingAttachmentChip extends StatelessWidget {
               child: ColoredBox(
                 color: Colors.black38,
                 child: Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
+                  child: AdaptiveProgressIndicator(
+                    size: 20,
+                    strokeWidth: 2,
+                    color: Colors.white,
                   ),
                 ),
               ),

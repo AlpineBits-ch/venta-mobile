@@ -202,7 +202,7 @@ class _MaintenanceChannelScreenState
     final rest = assets.where((a) => !a.needsSomebody).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -499,7 +499,7 @@ class _MaintenanceAssetScreenState extends State<MaintenanceAssetScreen> {
             if (records == null)
               const Padding(
                 padding: EdgeInsets.all(AppSpacing.m),
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: CircularProgressIndicator.adaptive()),
               )
             else if (records.isEmpty)
               Padding(

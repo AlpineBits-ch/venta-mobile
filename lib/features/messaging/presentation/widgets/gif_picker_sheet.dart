@@ -97,7 +97,7 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
                 child: _error != null
                     ? Center(child: Text(_error!))
                     : _results == null
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const Center(child: CircularProgressIndicator.adaptive())
                     : _results!.isEmpty
                     ? const Center(child: Text('No GIFs found'))
                     : GridView.builder(

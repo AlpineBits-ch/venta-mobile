@@ -4,6 +4,7 @@ import 'package:markdown/markdown.dart' as md;
 
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../data/wiki_content.dart';
 
 /// GitHub-flavoured markdown - task lists, tables, strikethrough, autolinks -
@@ -337,10 +338,9 @@ class _WikiImage extends StatelessWidget {
                       height: 160,
                       alignment: Alignment.center,
                       color: context.statusColors.hover,
-                      child: const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                      child: const AdaptiveProgressIndicator(
+                        size: 20,
+                        strokeWidth: 2,
                       ),
                     ),
               errorBuilder: (context, _, _) => Container(

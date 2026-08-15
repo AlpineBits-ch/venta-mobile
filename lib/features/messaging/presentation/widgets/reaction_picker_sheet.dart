@@ -174,7 +174,9 @@ class _ServerEmojiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (loading) return const Center(child: CircularProgressIndicator());
+    if (loading) {
+      return const Center(child: CircularProgressIndicator.adaptive());
+    }
     final list = emojis ?? const [];
     if (list.isEmpty) {
       return Center(

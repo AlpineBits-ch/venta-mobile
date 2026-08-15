@@ -39,6 +39,7 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/locale/locale_cubit.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/settings_tiles.dart';
 import '../../../settings/presentation/screens/ai_settings_screen.dart';
@@ -220,7 +221,7 @@ class _PantryVisionHarnessScreenState extends State<PantryVisionHarnessScreen> {
           const SizedBox(height: AppSpacing.l),
           SettingsSection(
             label: 'Resolution',
-            child: SwitchListTile(
+            child: SwitchListTile.adaptive(
               title: const Text('Small print'),
               subtitle: Text(
                 _detailed
@@ -238,11 +239,7 @@ class _PantryVisionHarnessScreenState extends State<PantryVisionHarnessScreen> {
           if (_running) ...[
             Row(
               children: [
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                const AdaptiveProgressIndicator(size: 18, strokeWidth: 2),
                 const SizedBox(width: AppSpacing.m),
                 Expanded(
                   child: Text(

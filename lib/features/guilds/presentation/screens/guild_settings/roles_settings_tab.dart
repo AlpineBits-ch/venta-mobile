@@ -95,7 +95,9 @@ class _RolesSettingsTabState extends State<RolesSettingsTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final roles = _roles;
-    if (roles == null) return const Center(child: CircularProgressIndicator());
+    if (roles == null) {
+      return const Center(child: CircularProgressIndicator.adaptive());
+    }
     return Scaffold(
       body: roles.isEmpty
           ? const Center(child: Text('No roles yet.'))

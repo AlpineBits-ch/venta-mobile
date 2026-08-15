@@ -76,7 +76,7 @@ class _ConversationEncryptionScreenState
     return Scaffold(
       appBar: AppBar(title: const Text('Encryption')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : ListView(
               padding: const EdgeInsets.all(AppSpacing.m),
               children: [

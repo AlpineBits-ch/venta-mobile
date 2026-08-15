@@ -90,6 +90,7 @@ import '../../../../core/locale/app_language.dart';
 import '../../../../core/locale/locale_cubit.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../settings/presentation/screens/ai_settings_screen.dart';
 import '../../data/household_api_wave2.dart';
 import '../../data/models/pantry_dto.dart';
@@ -1943,13 +1944,10 @@ class _StatusStrip extends StatelessWidget {
   }
 
   Widget _leading(Color foreground) => switch (status.phase) {
-    _Phase.working => SizedBox(
-      width: 18,
-      height: 18,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        valueColor: AlwaysStoppedAnimation<Color>(foreground),
-      ),
+    _Phase.working => AdaptiveProgressIndicator(
+      size: 18,
+      strokeWidth: 2,
+      color: foreground,
     ),
     _Phase.done => Icon(Icons.check_rounded, size: 18, color: foreground),
     _Phase.failed => Icon(

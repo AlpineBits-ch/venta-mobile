@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../bloc/auth_bloc.dart';
 import '../../data/auth_api.dart';
 import '../widgets/verification_code_form.dart';
@@ -209,13 +210,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ElevatedButton(
           onPressed: state.status == AuthStatus.loading ? null : _submit,
           child: state.status == AuthStatus.loading
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: theme.colorScheme.onPrimary,
-                  ),
+              ? AdaptiveProgressIndicator(
+                  size: 20,
+                  strokeWidth: 2,
+                  color: theme.colorScheme.onPrimary,
                 )
               : const Text('Create Account'),
         ),

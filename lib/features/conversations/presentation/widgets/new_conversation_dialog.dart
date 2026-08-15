@@ -228,7 +228,7 @@ class _NewConversationDialogState extends State<_NewConversationDialog> {
             const SizedBox(height: AppSpacing.s),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: CircularProgressIndicator.adaptive())
                   : _filtered.isEmpty
                   ? Center(
                       child: Text(
@@ -245,7 +245,7 @@ class _NewConversationDialogState extends State<_NewConversationDialog> {
                       itemBuilder: (context, index) {
                         final friend = _filtered[index];
                         final selected = _selectedIds.contains(friend.userId);
-                        return CheckboxListTile(
+                        return CheckboxListTile.adaptive(
                           value: selected,
                           onChanged: (_) => _toggle(friend.userId),
                           // Tapping a row here toggles the checkbox; the
@@ -302,7 +302,7 @@ class _EncryptionToggle extends StatelessWidget {
     final theme = Theme.of(context);
     final ready = getIt<MlsService>().isUnlocked;
 
-    return SwitchListTile(
+    return SwitchListTile.adaptive(
       contentPadding: EdgeInsets.zero,
       dense: true,
       secondary: Icon(

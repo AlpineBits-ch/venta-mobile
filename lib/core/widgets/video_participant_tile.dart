@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import 'adaptive_progress_indicator.dart';
+
 /// Renders one live camera/screen-share video track - the video-capable
 /// sibling of `CallParticipantTile`. Owns its own `RTCVideoRenderer` and
 /// wraps whatever [track] currently is in a throwaway local `MediaStream`
@@ -149,13 +151,10 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
           color: Colors.black,
           child: widget.track == null || !_rendererReady
               ? const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white54,
-                    ),
+                  child: AdaptiveProgressIndicator(
+                    size: 20,
+                    strokeWidth: 2,
+                    color: Colors.white54,
                   ),
                 )
               : RTCVideoView(

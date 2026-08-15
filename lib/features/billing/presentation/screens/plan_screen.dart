@@ -102,12 +102,14 @@ class _PlanScreenState extends State<PlanScreen> {
         title: const Text('Your plan'),
       ),
       body: switch ((_loading, _error, overview)) {
-        (true, _, null) => const Center(child: CircularProgressIndicator()),
+        (true, _, null) => const Center(
+          child: CircularProgressIndicator.adaptive(),
+        ),
         (_, final String error, null) => LoadFailureView(
           message: error,
           onRetry: _load,
         ),
-        (_, _, final PlanOverview loaded) => RefreshIndicator(
+        (_, _, final PlanOverview loaded) => RefreshIndicator.adaptive(
           onRefresh: _load,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),

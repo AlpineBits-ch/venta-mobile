@@ -335,7 +335,7 @@ class _ChoresChannelScreenState
               onRetry: _load,
             )
           : _occurrences == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : TabBarView(
               controller: _tabs,
               children: [_buildBoard(), _buildRota(), _buildFairness()],
@@ -408,7 +408,7 @@ class _ChoresChannelScreenState
         )
         .toList();
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -494,7 +494,7 @@ class _ChoresChannelScreenState
         body: 'Chores you add here generate turns automatically.',
       );
     }
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -557,7 +557,7 @@ class _ChoresChannelScreenState
         .map((e) => e.completedMinutes)
         .fold<int>(1, (a, b) => a > b ? a : b);
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -1366,7 +1366,7 @@ class _ChoreSheetState extends State<_ChoreSheet> {
         ),
         if (widget.existing != null) ...[
           const SizedBox(height: AppSpacing.s),
-          SwitchListTile(
+          SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('Paused'),
             subtitle: const Text('Stops generating new turns'),

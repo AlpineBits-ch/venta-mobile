@@ -6,6 +6,7 @@ import '../../../../core/routing/back_navigation.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/status_colors_extension.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../guilds/data/models/guild_permissions.dart';
 import '../../data/models/wiki_dto.dart';
@@ -364,7 +365,7 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
         ),
         body: _loadError != null
             ? LoadFailureView(message: _loadError!, onRetry: _load)
-            : const Center(child: CircularProgressIndicator()),
+            : const Center(child: CircularProgressIndicator.adaptive()),
       );
     }
 
@@ -403,11 +404,7 @@ class _WikiEditorScreenState extends State<WikiEditorScreen> {
                   minimumSize: const Size(0, 36),
                 ),
                 child: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const AdaptiveProgressIndicator(size: 16, strokeWidth: 2)
                     : const Text('Save'),
               ),
             ),
@@ -916,7 +913,7 @@ class _PageSettingsSheetState extends State<_PageSettingsSheet> {
             onTap: _pickParent,
           ),
 
-          SwitchListTile(
+          SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             secondary: const Icon(Icons.push_pin_outlined),
             title: const Text('Pinned'),
@@ -924,7 +921,7 @@ class _PageSettingsSheetState extends State<_PageSettingsSheet> {
             value: _isPinned,
             onChanged: (value) => _update(() => _isPinned = value),
           ),
-          SwitchListTile(
+          SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             secondary: const Icon(Icons.public),
             title: const Text('Public'),

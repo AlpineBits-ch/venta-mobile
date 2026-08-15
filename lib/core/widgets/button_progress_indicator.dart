@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'adaptive_progress_indicator.dart';
+
 /// The spinner that replaces a button's label while its action is in flight.
 ///
 /// Exists because the obvious inline spelling is wrong in two different ways.
@@ -20,13 +22,10 @@ class ButtonProgressIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 18,
-      height: 18,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        color: onColor ?? Theme.of(context).colorScheme.onPrimary,
-      ),
+    return AdaptiveProgressIndicator(
+      size: 18,
+      strokeWidth: 2,
+      color: onColor ?? Theme.of(context).colorScheme.onPrimary,
     );
   }
 }

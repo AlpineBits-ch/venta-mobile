@@ -12,6 +12,7 @@ import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/profile_resolver.dart';
@@ -706,11 +707,7 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
               onPressed: _creating ? null : _createPost,
               tooltip: 'New post',
               child: _creating
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const AdaptiveProgressIndicator(size: 20, strokeWidth: 2)
                   : const Icon(Icons.add),
             )
           : null,
@@ -758,7 +755,9 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
   }
 
   Widget _buildBody(ThemeData theme) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator.adaptive());
+    }
     if (_loadFailed) {
       return LoadFailureView(
         message: 'Couldn\'t load posts.',
@@ -767,7 +766,7 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
     }
     if (_posts.isEmpty) {
       return LayoutBuilder(
-        builder: (context, constraints) => RefreshIndicator(
+        builder: (context, constraints) => RefreshIndicator.adaptive(
           onRefresh: _loadPosts,
           child: ListView(
             children: [
@@ -798,7 +797,7 @@ class _ForumChannelScreenState extends State<ForumChannelScreen> {
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _loadPosts,
       child: NotificationListener<ScrollNotification>(
         onNotification: (notification) {
@@ -879,13 +878,7 @@ class _PageLoader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const Padding(
     padding: EdgeInsets.all(AppSpacing.m),
-    child: Center(
-      child: SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      ),
-    ),
+    child: Center(child: AdaptiveProgressIndicator(size: 20, strokeWidth: 2)),
   );
 }
 

@@ -217,7 +217,7 @@ class _QrLoginScreenState extends State<QrLoginScreen> {
   Widget _body(BuildContext context) {
     switch (_stage) {
       case _Stage.permission:
-        return const Center(child: CircularProgressIndicator());
+        return const Center(child: CircularProgressIndicator.adaptive());
       case _Stage.scanning:
       case _Stage.claiming:
         return _ScannerView(
@@ -353,7 +353,9 @@ class _ScannerView extends StatelessWidget {
                 left: 0,
                 right: 0,
                 top: window.bottom + AppSpacing.xl + AppSpacing.l,
-                child: const Center(child: CircularProgressIndicator()),
+                child: const Center(
+                  child: CircularProgressIndicator.adaptive(),
+                ),
               ),
           ],
         );

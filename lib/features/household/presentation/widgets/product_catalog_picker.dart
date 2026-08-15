@@ -41,6 +41,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../data/household_api_wave2.dart';
 import '../../data/models/pantry_dto.dart';
 import 'household_widgets.dart';
@@ -338,11 +339,7 @@ class _ProductCatalogPickerSheetState extends State<ProductCatalogPickerSheet> {
     }
     if (envelope == null) {
       return const Center(
-        child: SizedBox(
-          height: 22,
-          width: 22,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+        child: AdaptiveProgressIndicator(size: 22, strokeWidth: 2),
       );
     }
     if (envelope.isEmpty) {
@@ -413,11 +410,7 @@ class _HeaderLine extends StatelessWidget {
           ),
         ),
         if (loading && envelope != null)
-          const SizedBox(
-            height: 12,
-            width: 12,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
+          const AdaptiveProgressIndicator(size: 12, strokeWidth: 2),
       ],
     );
   }

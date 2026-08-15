@@ -533,7 +533,7 @@ class _PantryChannelScreenState
 
     final restockOff = _config?.restockListChannelId == null;
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -1501,7 +1501,7 @@ class _ExpiringSheetState extends State<_ExpiringSheet> {
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(AppSpacing.l),
-                        child: CircularProgressIndicator(),
+                        child: CircularProgressIndicator.adaptive(),
                       ),
                     )
                   : items.isEmpty

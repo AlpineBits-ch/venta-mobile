@@ -180,7 +180,7 @@ class _UserProfileView extends StatelessWidget {
                 ),
               );
             }
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator.adaptive());
           }
 
           final accentColor = profile.accentColor != null

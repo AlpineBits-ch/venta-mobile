@@ -141,7 +141,7 @@ class _VoiceRingInviteSheetState extends State<_VoiceRingInviteSheet> {
             const SizedBox(height: AppSpacing.s),
             Expanded(
               child: results == null
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: CircularProgressIndicator.adaptive())
                   : results.isEmpty
                   ? const Center(child: Text('Nobody to invite.'))
                   : ListView.builder(

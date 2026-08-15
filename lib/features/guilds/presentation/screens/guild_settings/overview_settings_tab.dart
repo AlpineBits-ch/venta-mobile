@@ -232,7 +232,9 @@ class _OverviewSettingsTabState extends State<OverviewSettingsTab> {
   @override
   Widget build(BuildContext context) {
     final guild = _guild;
-    if (guild == null) return const Center(child: CircularProgressIndicator());
+    if (guild == null) {
+      return const Center(child: CircularProgressIndicator.adaptive());
+    }
     final theme = Theme.of(context);
     final textChannels = guild.channels
         .where((c) => c.type == ChannelType.text)

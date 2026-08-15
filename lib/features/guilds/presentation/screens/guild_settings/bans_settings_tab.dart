@@ -109,7 +109,7 @@ class _BansSettingsTabState extends State<BansSettingsTab> {
       body: _error != null
           ? Center(child: Text(_error!))
           : _bans == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : _bans!.isEmpty
           ? const Center(child: Text('No bans.'))
           : ListView.builder(

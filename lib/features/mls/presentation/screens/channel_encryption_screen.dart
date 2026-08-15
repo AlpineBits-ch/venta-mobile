@@ -263,7 +263,7 @@ class _ChannelEncryptionScreenState extends State<ChannelEncryptionScreen> {
       // screens, which need AppBackButton's deep-link fallback.
       appBar: AppBar(title: const Text('Encryption')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : ListView(
               padding: const EdgeInsets.all(AppSpacing.m),
               children: [

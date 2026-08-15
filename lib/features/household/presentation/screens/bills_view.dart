@@ -189,7 +189,7 @@ class _BillsViewState extends State<BillsView> {
             .toList()
           ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(

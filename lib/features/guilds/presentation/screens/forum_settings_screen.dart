@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/settings_tiles.dart';
 import '../../../messaging/presentation/widgets/reaction_picker_sheet.dart';
@@ -255,7 +256,7 @@ class _ForumSettingsScreenState extends State<ForumSettingsScreen> {
         title: const Text('Tags & settings'),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : ListView(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.m,
@@ -330,7 +331,7 @@ class _ForumSettingsScreenState extends State<ForumSettingsScreen> {
                   label: 'Posting',
                   child: Column(
                     children: [
-                      SwitchListTile(
+                      SwitchListTile.adaptive(
                         title: const Text('Require a tag'),
                         // Greyed out with no tags to require - saying why
                         // beats letting it read as broken.
@@ -456,11 +457,7 @@ class _ForumSettingsScreenState extends State<ForumSettingsScreen> {
                 if (_savingConfig) ...[
                   const SizedBox(height: AppSpacing.m),
                   const Center(
-                    child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
+                    child: AdaptiveProgressIndicator(size: 16, strokeWidth: 2),
                   ),
                 ],
               ],
@@ -744,7 +741,7 @@ class _TagEditorDialogState extends State<_TagEditorDialog> {
               ],
             ),
             const SizedBox(height: AppSpacing.m),
-            SwitchListTile(
+            SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               title: const Text('Moderators only'),
               subtitle: const Text(

@@ -165,7 +165,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         title: const Text('Notifications'),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : ListView(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.m,
@@ -191,7 +191,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   label: 'Deliver',
                   child: Column(
                     children: [
-                      SwitchListTile(
+                      SwitchListTile.adaptive(
                         title: const Text('Notifications enabled'),
                         value: _settings.enabled,
                         onChanged: _saving ? null : _setEnabled,
@@ -200,21 +200,21 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                       // master is off: three live-looking switches under a
                       // dead master is the screen telling you two contrary
                       // things at once.
-                      SwitchListTile(
+                      SwitchListTile.adaptive(
                         title: const Text('Direct messages'),
                         value: _settings.dm,
                         onChanged: _saving || !_settings.enabled
                             ? null
                             : (v) => _apply(_settings.copyWith(dm: v)),
                       ),
-                      SwitchListTile(
+                      SwitchListTile.adaptive(
                         title: const Text('Mentions'),
                         value: _settings.mentions,
                         onChanged: _saving || !_settings.enabled
                             ? null
                             : (v) => _apply(_settings.copyWith(mentions: v)),
                       ),
-                      SwitchListTile(
+                      SwitchListTile.adaptive(
                         title: const Text('Sounds'),
                         value: _settings.sounds,
                         onChanged: _saving || !_settings.enabled
@@ -234,7 +234,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   label: 'Cooldown',
                   child: Column(
                     children: [
-                      SwitchListTile(
+                      SwitchListTile.adaptive(
                         title: const Text('Notification cooldown'),
                         subtitle: const Text(
                           'Limit how often notifications can repeat',

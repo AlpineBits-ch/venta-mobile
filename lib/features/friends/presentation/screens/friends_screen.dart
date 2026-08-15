@@ -80,7 +80,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
         },
         builder: (context, state) {
           if (state.status == FriendsStatus.loading) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator.adaptive());
           }
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.m),

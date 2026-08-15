@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/hex_color.dart';
 import '../../../../../core/theme/widget_styles.dart';
+import '../../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../data/guild_repository.dart';
 import '../../../data/models/guild_dto.dart';
 import '../../../data/models/guild_features.dart';
@@ -235,7 +236,7 @@ class _RoleEditorScreenState extends State<RoleEditorScreen> {
             getIt<GuildRepository>().cachedById(widget.guildId)?.featureSet ??
                 GuildFeatures.communityPreset,
           ))
-            SwitchListTile(
+            SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               dense: true,
               title: Text(GuildPermissions.labelFor(flag)),
@@ -259,7 +260,7 @@ class _RoleEditorScreenState extends State<RoleEditorScreen> {
           if (_members == null)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: AppSpacing.m),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: CircularProgressIndicator.adaptive()),
             )
           else if (_members!.isEmpty)
             Padding(
@@ -287,13 +288,10 @@ class _RoleEditorScreenState extends State<RoleEditorScreen> {
           FilledButton(
             onPressed: _saving ? null : _save,
             child: _saving
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: theme.colorScheme.onPrimary,
-                    ),
+                ? AdaptiveProgressIndicator(
+                    size: 16,
+                    strokeWidth: 2,
+                    color: theme.colorScheme.onPrimary,
                   )
                 : const Text('Save role'),
           ),
@@ -376,7 +374,7 @@ class _MemberPickerDialogState extends State<_MemberPickerDialog> {
             const SizedBox(height: AppSpacing.s),
             Expanded(
               child: _results == null
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: CircularProgressIndicator.adaptive())
                   : ListView.builder(
                       itemCount: _results!.length,
                       itemBuilder: (context, index) {

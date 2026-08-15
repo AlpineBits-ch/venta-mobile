@@ -8,6 +8,7 @@ import '../../../../core/format/date_time_format.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/session/session_cubit.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/settings_tiles.dart';
 import '../../../auth/data/account_repository.dart';
@@ -211,7 +212,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
     final sessions = _sessions;
     if (sessions == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator.adaptive());
     }
     if (sessions.isEmpty) {
       return const _CenteredMessage(
@@ -221,7 +222,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -273,11 +274,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                 destructive: true,
                 onTap: _forgetting ? null : _confirmForgetDevice,
                 trailing: _forgetting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const AdaptiveProgressIndicator(size: 18, strokeWidth: 2)
                     : null,
               ),
             ],
@@ -353,11 +350,7 @@ class _SessionRow extends StatelessWidget {
               ),
             )
           : revoking
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+          ? const AdaptiveProgressIndicator(size: 18, strokeWidth: 2)
           : IconButton(
               tooltip: 'Sign out this device',
               icon: Icon(Icons.logout, color: theme.colorScheme.error),

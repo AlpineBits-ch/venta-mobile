@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/settings_tiles.dart';
 import '../../data/models/data_export_dto.dart';
@@ -130,7 +131,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
         leading: const AppBackButton(fallbackLocation: RoutePaths.privacy),
         title: const Text('Your data'),
       ),
-      body: RefreshIndicator(
+      body: RefreshIndicator.adaptive(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(
@@ -194,7 +195,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(AppSpacing.xl),
-                  child: CircularProgressIndicator(),
+                  child: CircularProgressIndicator.adaptive(),
                 ),
               )
             else if (exports.isNotEmpty)
@@ -256,13 +257,10 @@ class _ExportRow extends StatelessWidget {
             ),
             // A spinner rather than a percentage: the saga reports no progress,
             // and an invented bar is a claim the server never made.
-            _ when export.status.isInProgress => SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
+            _ when export.status.isInProgress => AdaptiveProgressIndicator(
+              size: 16,
+              strokeWidth: 2,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
             _ => null,
           },

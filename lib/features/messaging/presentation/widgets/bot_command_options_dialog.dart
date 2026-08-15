@@ -136,7 +136,7 @@ class _BotCommandOptionsDialogState extends State<_BotCommandOptionsDialog> {
             for (final option in widget.command.options) ...[
               if (option.type == BotCommandOptionType.boolean)
                 StatefulBuilder(
-                  builder: (context, setInner) => SwitchListTile(
+                  builder: (context, setInner) => SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     title: Text(option.name),
                     subtitle: option.description != null

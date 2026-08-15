@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/shimmer_box.dart';
 import '../../../auth/data/auth_repository.dart';
@@ -439,10 +440,9 @@ class HouseSheet extends StatelessWidget {
                     child: FilledButton(
                       onPressed: busy ? null : onAction,
                       child: busy
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                          ? const AdaptiveProgressIndicator(
+                              size: 18,
+                              strokeWidth: 2,
                             )
                           : Text(actionLabel),
                     ),
@@ -787,11 +787,7 @@ class HousePrimaryButton extends StatelessWidget {
               )
             : null,
         child: busy
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+            ? const AdaptiveProgressIndicator(size: 20, strokeWidth: 2)
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

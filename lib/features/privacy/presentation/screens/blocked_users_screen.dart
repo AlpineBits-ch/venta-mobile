@@ -129,7 +129,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
             ),
           ),
         ),
-        (_, null) => const Center(child: CircularProgressIndicator()),
+        (_, null) => const Center(child: CircularProgressIndicator.adaptive()),
         (_, final List<BlockedUserDto> list) when list.isEmpty => Center(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.xl),
@@ -142,7 +142,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
             ),
           ),
         ),
-        (_, final List<BlockedUserDto> list) => RefreshIndicator(
+        (_, final List<BlockedUserDto> list) => RefreshIndicator.adaptive(
           onRefresh: _load,
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),

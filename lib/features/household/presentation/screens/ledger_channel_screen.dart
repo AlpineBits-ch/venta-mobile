@@ -9,6 +9,7 @@ import '../../../../core/format/date_time_format.dart';
 import '../../../../core/routing/household_deep_link.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/shimmer_box.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -573,11 +574,7 @@ class _LedgerChannelScreenState
           padding: const EdgeInsets.only(top: AppSpacing.s),
           child: Center(
             child: _loadingMore
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const AdaptiveProgressIndicator(size: 20, strokeWidth: 2)
                 : TextButton(
                     onPressed: _loadMore,
                     child: const Text('Older expenses'),
@@ -587,7 +584,7 @@ class _LedgerChannelScreenState
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -617,7 +614,7 @@ class _LedgerChannelScreenState
       ..sort((a, b) => b.netMinor.compareTo(a.netMinor));
     final suggestions = _suggestions ?? const <TransferSuggestionDto>[];
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _refreshBalances,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -834,14 +831,10 @@ class PhoneSharingCard extends StatelessWidget {
                 if (busy)
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    child: SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
+                    child: AdaptiveProgressIndicator(size: 20, strokeWidth: 2),
                   )
                 else
-                  Switch(
+                  Switch.adaptive(
                     value: sharing,
                     // Null rather than a switch that flips and does nothing.
                     // The row itself is tappable in this state and leads to
@@ -1659,7 +1652,7 @@ class _ExpenseSheetState extends State<_ExpenseSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (_splitKind == SplitKind.equal)
-          SwitchListTile(
+          SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('Everyone in the house'),
             subtitle: const Text(
@@ -1749,7 +1742,7 @@ class _SplitRow extends StatelessWidget {
         : member.nickname ?? member.profile?.userName ?? 'Someone';
     return Row(
       children: [
-        Checkbox(
+        Checkbox.adaptive(
           value: included,
           onChanged: (value) => onIncludedChanged(value ?? false),
         ),
@@ -1814,7 +1807,10 @@ class _CurrencySheet extends StatelessWidget {
             child: Column(
               children: [
                 for (final code in commonCurrencyCodes)
-                  RadioListTile<String>(value: code, title: Text(code)),
+                  RadioListTile<String>.adaptive(
+                    value: code,
+                    title: Text(code),
+                  ),
               ],
             ),
           ),

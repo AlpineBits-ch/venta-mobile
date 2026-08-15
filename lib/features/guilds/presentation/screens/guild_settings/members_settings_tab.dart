@@ -91,7 +91,7 @@ class _MembersSettingsTabState extends State<MembersSettingsTab> {
           child: _error != null
               ? Center(child: Text(_error!))
               : _members == null
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: CircularProgressIndicator.adaptive())
               : ListView.builder(
                   itemCount: _members!.length,
                   itemBuilder: (context, index) {

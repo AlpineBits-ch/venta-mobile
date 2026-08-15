@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../../core/di/injector.dart';
 import '../../../../../core/theme/widget_styles.dart';
+import '../../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../../core/widgets/load_failure_view.dart';
 import '../../../data/guild_repository.dart';
 import '../../../data/models/guild_emoji_dto.dart';
@@ -143,7 +144,9 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
     if (_loadFailed) {
       return LoadFailureView(message: 'Couldn\'t load emoji.', onRetry: _load);
     }
-    if (emojis == null) return const Center(child: CircularProgressIndicator());
+    if (emojis == null) {
+      return const Center(child: CircularProgressIndicator.adaptive());
+    }
     return Scaffold(
       body: emojis.isEmpty
           ? Center(
@@ -222,11 +225,7 @@ class _EmojiSettingsTabState extends State<EmojiSettingsTab> {
         onPressed: _uploading ? null : _uploadFlow,
         tooltip: 'Upload emoji',
         child: _uploading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+            ? const AdaptiveProgressIndicator(size: 20, strokeWidth: 2)
             : const Icon(Icons.add),
       ),
     );
@@ -275,7 +274,7 @@ class _NewEmojiDialogState extends State<_NewEmojiDialog> {
             onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(hintText: 'emoji_name'),
           ),
-          SwitchListTile(
+          SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('Animated'),
             value: _animated,

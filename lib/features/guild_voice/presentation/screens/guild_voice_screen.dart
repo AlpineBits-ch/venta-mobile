@@ -93,6 +93,8 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.darkTextPrimary),
+        // See `AppTheme` - built title, kept leading-aligned on both platforms.
+        centerTitle: false,
         title: BlocBuilder<GuildVoiceCubit, GuildVoiceState>(
           bloc: getIt<GuildVoiceCubit>(),
           builder: (context, state) => Text(

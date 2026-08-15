@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+93
+version: 1.0.0+94
 environment:
   sdk: ^3.12.2
 
@@ -84,6 +84,12 @@ dependencies:
   # because `lib/core/ai/vision_image_prep.dart` imports it, and a transitive
   # dependency can be dropped by an unrelated `pub upgrade`.
   image: ^4.5.4
+  # Raw accelerometer, for the full-screen video viewer only. The app itself is
+  # portrait-locked, so a phone turned on its side while watching a stream gets
+  # no orientation change from the platform - and on a device with rotation lock
+  # on, it would get none even if the app were not locked. Reading gravity
+  # ourselves is the only way to honour the tilt in both cases.
+  sensors_plus: ^7.0.0
 
 dev_dependencies:
   sentry_dart_plugin: ^3.4.0

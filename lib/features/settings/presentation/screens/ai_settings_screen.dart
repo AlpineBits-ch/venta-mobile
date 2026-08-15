@@ -267,7 +267,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
         title: const Text('AI'),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : ListView(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.m,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/theme/widget_styles.dart';
+import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../friends/data/relationship_repository.dart';
 import '../../data/models/report_dto.dart';
 import '../../data/models/report_evidence.dart';
@@ -255,7 +256,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                 child: Column(
                   children: [
                     for (final reason in ReportReason.values)
-                      RadioListTile<ReportReason>(
+                      RadioListTile<ReportReason>.adaptive(
                         value: reason,
                         contentPadding: EdgeInsets.zero,
                         dense: true,
@@ -294,11 +295,7 @@ class _ReportSheetState extends State<_ReportSheet> {
               FilledButton(
                 onPressed: _reason == null || _submitting ? null : _submit,
                 child: _submitting
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const AdaptiveProgressIndicator(size: 18, strokeWidth: 2)
                     : const Text('Submit report'),
               ),
               const SizedBox(height: AppSpacing.xs),

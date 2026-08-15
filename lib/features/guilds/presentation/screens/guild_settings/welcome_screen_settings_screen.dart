@@ -183,7 +183,7 @@ class _WelcomeScreenSettingsScreenState
     return Scaffold(
       appBar: AppBar(title: const Text('Welcome screen')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator.adaptive())
           : _loadFailed
           ? LoadFailureView(
               message: 'Couldn\'t load the welcome screen.',
@@ -192,7 +192,7 @@ class _WelcomeScreenSettingsScreenState
           : ListView(
               padding: const EdgeInsets.all(AppSpacing.m),
               children: [
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Show a welcome screen'),
                   subtitle: const Text(

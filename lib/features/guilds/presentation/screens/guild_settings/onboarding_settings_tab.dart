@@ -212,7 +212,9 @@ class _OnboardingSettingsTabState extends State<OnboardingSettingsTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator.adaptive());
+    }
     final theme = Theme.of(context);
     final channels =
         getIt<GuildRepository>()
@@ -234,7 +236,7 @@ class _OnboardingSettingsTabState extends State<OnboardingSettingsTab> {
       ),
       children: [
         SettingsSection(
-          child: SwitchListTile(
+          child: SwitchListTile.adaptive(
             title: const Text('Onboarding'),
             subtitle: const Text('Set up new members before they can chat'),
             value: enabled,
@@ -398,7 +400,7 @@ class _OnboardingSettingsTabState extends State<OnboardingSettingsTab> {
                       ? 'Advanced - channels behind questions count as visible'
                       : 'Default',
                 ),
-                trailing: Switch(
+                trailing: Switch.adaptive(
                   value: _config.mode == OnboardingMode.advanced,
                   onChanged: (value) => setState(
                     () => _config = _config.copyWith(

@@ -110,7 +110,7 @@ class _ChannelHostScreenState extends State<ChannelHostScreen> {
                 message: 'Couldn\'t open that channel.',
                 onRetry: _load,
               )
-            : const Center(child: CircularProgressIndicator()),
+            : const Center(child: CircularProgressIndicator.adaptive()),
       );
     }
 
