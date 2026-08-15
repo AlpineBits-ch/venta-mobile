@@ -14,12 +14,14 @@ _VoiceShareDto _$VoiceShareDtoFromJson(Map<String, dynamic> json) =>
               ?.map((e) => e as String)
               .toList() ??
           const <String>[],
+      mediaSessionId: json['mediaSessionId'] as String?,
     );
 
 Map<String, dynamic> _$VoiceShareDtoToJson(_VoiceShareDto instance) =>
     <String, dynamic>{
       'shareId': instance.shareId,
       'trackNames': instance.trackNames,
+      'mediaSessionId': instance.mediaSessionId,
     };
 
 _VoiceParticipantSnapshotDto _$VoiceParticipantSnapshotDtoFromJson(

@@ -33,9 +33,24 @@ class VoicePublishState {
 /// `screen-{shareId}`.
 @freezed
 sealed class VoiceShareDto with _$VoiceShareDto {
+  /// [mediaSessionId] is **the session this share is published on, which is not
+  /// necessarily the publisher's microphone session** - the server says so in
+  /// as many words, and the desktop client is the case that makes it true: its
+  /// microphone lives on one Cloudflare session and its screen on another.
+  ///
+  /// Dropping it and pulling the share from `participant.mediaSessionId`
+  /// instead asks Cloudflare for a track that session does not carry, which
+  /// comes back as `not_found_track_error` - a stale subscription, which is
+  /// answered by refetching the snapshot that just produced the same wrong
+  /// session id. The tile spins for as long as the viewer stays in the channel.
+  ///
+  /// Null on shares recorded before the server stored it, where the handle
+  /// exists only in the `TrackPublished` event; the participant's session is
+  /// the right fallback there and only there.
   const factory VoiceShareDto({
     required String shareId,
     @Default(<String>[]) List<String> trackNames,
+    String? mediaSessionId,
   }) = _VoiceShareDto;
 
   const VoiceShareDto._();

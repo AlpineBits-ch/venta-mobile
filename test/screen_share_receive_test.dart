@@ -96,14 +96,15 @@ const _shareId = 'share-1';
 /// A room that is already settled: one peer, publishing, one live share. The
 /// point of the fixture is that nothing about it is going to change again -
 /// exactly the room in which the bug is permanent rather than intermittent.
-VoiceRoomSnapshotDto _snapshot({int version = 4}) => VoiceRoomSnapshotDto(
+VoiceRoomSnapshotDto _snapshot({int version = 4, String? shareSessionId}) =>
+    VoiceRoomSnapshotDto(
   roomId: _channelId,
   kind: VoiceRoomKind.channel,
   guildId: _guildId,
   instanceId: 'inst-1',
   version: version,
-  participants: const [
-    VoiceParticipantSnapshotDto(userId: _me),
+  participants: [
+    const VoiceParticipantSnapshotDto(userId: _me),
     VoiceParticipantSnapshotDto(
       userId: _peer,
       mediaSessionId: 'sess-peer',
@@ -111,7 +112,14 @@ VoiceRoomSnapshotDto _snapshot({int version = 4}) => VoiceRoomSnapshotDto(
       publishState: VoicePublishState.publishing,
       isStreaming: true,
       shares: [
-        VoiceShareDto(shareId: _shareId, trackNames: ['screen-$_shareId']),
+        VoiceShareDto(
+          shareId: _shareId,
+          trackNames: const ['screen-$_shareId'],
+          // Null by default, which is the shape of a share the server recorded
+          // before it stored one - the only case where falling back to the
+          // participant's session is right.
+          mediaSessionId: shareSessionId,
+        ),
       ],
     ),
   ],
@@ -256,6 +264,38 @@ void main() {
       ),
     ).called(greaterThanOrEqualTo(1));
     expect(cubit.remoteScreenTrackFor(_peer), isNull);
+  });
+
+  /// A share is not necessarily published on the session that carries the
+  /// publisher's microphone, and the desktop client is the case that makes that
+  /// concrete: its microphone runs on the Rust engine's Cloudflare session and
+  /// its screen on the webview's. Pull the share from the participant's session
+  /// and Cloudflare answers `not_found_track_error` - a stale subscription,
+  /// answered by refetching the snapshot that just produced the same wrong
+  /// session id, forever. That loop is what a viewer sees as a share tile that
+  /// spins and never resolves.
+  test('a share is pulled from its own session, not the publisher\'s', () async {
+    clearInteractions(transport);
+
+    events.add(VoiceSnapshotReceived(_snapshot(shareSessionId: 'sess-share')));
+    await pumpEventQueue();
+
+    verify(
+      () => transport.subscribeToShare(
+        userId: _peer,
+        mediaSessionId: 'sess-share',
+        shareId: _shareId,
+        trackNames: ['screen-$_shareId'],
+      ),
+    ).called(greaterThanOrEqualTo(1));
+    verifyNever(
+      () => transport.subscribeToShare(
+        userId: any(named: 'userId'),
+        mediaSessionId: 'sess-peer',
+        shareId: any(named: 'shareId'),
+        trackNames: any(named: 'trackNames'),
+      ),
+    );
   });
 
   test('a screen track arriving makes the screen re-read it', () async {

@@ -474,6 +474,10 @@ void main() {
               {
                 'shareId': 'abc123',
                 'trackNames': ['screen-abc123', 'screen-audio-abc123'],
+                // Deliberately different from the participant's: a share is
+                // published on whichever session its publisher opened for it,
+                // and on the desktop client that is never the microphone's.
+                'mediaSessionId': 'cf-share',
               },
             ],
             'joinedAt': '2026-08-07T12:00:00Z',
@@ -486,6 +490,9 @@ void main() {
       final user = snapshot.find('user-1')!;
       expect(user.isPublishing, isTrue);
       expect(user.shares.single.trackNames, hasLength(2));
+      // Read rather than dropped. A client that ignores it pulls the share from
+      // the microphone's session, where the track does not exist.
+      expect(user.shares.single.mediaSessionId, 'cf-share');
       expect(user.joinedAt, isNotNull);
     });
   });

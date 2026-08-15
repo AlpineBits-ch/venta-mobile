@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$VoiceShareDto {
 
- String get shareId; List<String> get trackNames;
+ String get shareId; List<String> get trackNames; String? get mediaSessionId;
 /// Create a copy of VoiceShareDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $VoiceShareDtoCopyWith<VoiceShareDto> get copyWith => _$VoiceShareDtoCopyWithImp
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceShareDto&&(identical(other.shareId, shareId) || other.shareId == shareId)&&const DeepCollectionEquality().equals(other.trackNames, trackNames));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceShareDto&&(identical(other.shareId, shareId) || other.shareId == shareId)&&const DeepCollectionEquality().equals(other.trackNames, trackNames)&&(identical(other.mediaSessionId, mediaSessionId) || other.mediaSessionId == mediaSessionId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,shareId,const DeepCollectionEquality().hash(trackNames));
+int get hashCode => Object.hash(runtimeType,shareId,const DeepCollectionEquality().hash(trackNames),mediaSessionId);
 
 @override
 String toString() {
-  return 'VoiceShareDto(shareId: $shareId, trackNames: $trackNames)';
+  return 'VoiceShareDto(shareId: $shareId, trackNames: $trackNames, mediaSessionId: $mediaSessionId)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $VoiceShareDtoCopyWith<$Res>  {
   factory $VoiceShareDtoCopyWith(VoiceShareDto value, $Res Function(VoiceShareDto) _then) = _$VoiceShareDtoCopyWithImpl;
 @useResult
 $Res call({
- String shareId, List<String> trackNames
+ String shareId, List<String> trackNames, String? mediaSessionId
 });
 
 
@@ -65,11 +65,12 @@ class _$VoiceShareDtoCopyWithImpl<$Res>
 
 /// Create a copy of VoiceShareDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? shareId = null,Object? trackNames = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? shareId = null,Object? trackNames = null,Object? mediaSessionId = freezed,}) {
   return _then(_self.copyWith(
 shareId: null == shareId ? _self.shareId : shareId // ignore: cast_nullable_to_non_nullable
 as String,trackNames: null == trackNames ? _self.trackNames : trackNames // ignore: cast_nullable_to_non_nullable
-as List<String>,
+as List<String>,mediaSessionId: freezed == mediaSessionId ? _self.mediaSessionId : mediaSessionId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -151,10 +152,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String shareId,  List<String> trackNames)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String shareId,  List<String> trackNames,  String? mediaSessionId)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _VoiceShareDto() when $default != null:
-return $default(_that.shareId,_that.trackNames);case _:
+return $default(_that.shareId,_that.trackNames,_that.mediaSessionId);case _:
   return orElse();
 
 }
@@ -172,10 +173,10 @@ return $default(_that.shareId,_that.trackNames);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String shareId,  List<String> trackNames)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String shareId,  List<String> trackNames,  String? mediaSessionId)  $default,) {final _that = this;
 switch (_that) {
 case _VoiceShareDto():
-return $default(_that.shareId,_that.trackNames);}
+return $default(_that.shareId,_that.trackNames,_that.mediaSessionId);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -189,10 +190,10 @@ return $default(_that.shareId,_that.trackNames);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String shareId,  List<String> trackNames)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String shareId,  List<String> trackNames,  String? mediaSessionId)?  $default,) {final _that = this;
 switch (_that) {
 case _VoiceShareDto() when $default != null:
-return $default(_that.shareId,_that.trackNames);case _:
+return $default(_that.shareId,_that.trackNames,_that.mediaSessionId);case _:
   return null;
 
 }
@@ -204,7 +205,7 @@ return $default(_that.shareId,_that.trackNames);case _:
 @JsonSerializable()
 
 class _VoiceShareDto extends VoiceShareDto {
-  const _VoiceShareDto({required this.shareId, final  List<String> trackNames = const <String>[]}): _trackNames = trackNames,super._();
+  const _VoiceShareDto({required this.shareId, final  List<String> trackNames = const <String>[], this.mediaSessionId}): _trackNames = trackNames,super._();
   factory _VoiceShareDto.fromJson(Map<String, dynamic> json) => _$VoiceShareDtoFromJson(json);
 
 @override final  String shareId;
@@ -215,6 +216,7 @@ class _VoiceShareDto extends VoiceShareDto {
   return EqualUnmodifiableListView(_trackNames);
 }
 
+@override final  String? mediaSessionId;
 
 /// Create a copy of VoiceShareDto
 /// with the given fields replaced by the non-null parameter values.
@@ -229,16 +231,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceShareDto&&(identical(other.shareId, shareId) || other.shareId == shareId)&&const DeepCollectionEquality().equals(other._trackNames, _trackNames));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceShareDto&&(identical(other.shareId, shareId) || other.shareId == shareId)&&const DeepCollectionEquality().equals(other._trackNames, _trackNames)&&(identical(other.mediaSessionId, mediaSessionId) || other.mediaSessionId == mediaSessionId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,shareId,const DeepCollectionEquality().hash(_trackNames));
+int get hashCode => Object.hash(runtimeType,shareId,const DeepCollectionEquality().hash(_trackNames),mediaSessionId);
 
 @override
 String toString() {
-  return 'VoiceShareDto(shareId: $shareId, trackNames: $trackNames)';
+  return 'VoiceShareDto(shareId: $shareId, trackNames: $trackNames, mediaSessionId: $mediaSessionId)';
 }
 
 
@@ -249,7 +251,7 @@ abstract mixin class _$VoiceShareDtoCopyWith<$Res> implements $VoiceShareDtoCopy
   factory _$VoiceShareDtoCopyWith(_VoiceShareDto value, $Res Function(_VoiceShareDto) _then) = __$VoiceShareDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String shareId, List<String> trackNames
+ String shareId, List<String> trackNames, String? mediaSessionId
 });
 
 
@@ -266,11 +268,12 @@ class __$VoiceShareDtoCopyWithImpl<$Res>
 
 /// Create a copy of VoiceShareDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? shareId = null,Object? trackNames = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? shareId = null,Object? trackNames = null,Object? mediaSessionId = freezed,}) {
   return _then(_VoiceShareDto(
 shareId: null == shareId ? _self.shareId : shareId // ignore: cast_nullable_to_non_nullable
 as String,trackNames: null == trackNames ? _self._trackNames : trackNames // ignore: cast_nullable_to_non_nullable
-as List<String>,
+as List<String>,mediaSessionId: freezed == mediaSessionId ? _self.mediaSessionId : mediaSessionId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

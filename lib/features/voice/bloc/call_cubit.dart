@@ -496,7 +496,9 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
       }
       await webRtc.subscribeToShare(
         userId: publisher.userId,
-        mediaSessionId: publisher.mediaSessionId!,
+        // The share's own session, not the publisher's microphone one - they
+        // are the same session only by coincidence. See [VoiceShareDto].
+        mediaSessionId: share.mediaSessionId ?? publisher.mediaSessionId!,
         shareId: share.shareId,
         trackNames: share.trackNames,
       );
