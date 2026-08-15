@@ -52,6 +52,9 @@ _EntitlementSnapshotDto _$EntitlementSnapshotDtoFromJson(
         ),
       ) ??
       const <String, EntitlementValueDto>{},
+  ladders: json['ladders'] == null
+      ? const <String, List<EntitlementLadderRungDto>>{}
+      : entitlementLaddersFromJson(json['ladders'] as Map<String, dynamic>?),
 );
 
 Map<String, dynamic> _$EntitlementSnapshotDtoToJson(
@@ -62,4 +65,5 @@ Map<String, dynamic> _$EntitlementSnapshotDtoToJson(
   'ttlSeconds': instance.ttlSeconds,
   'version': instance.version,
   'entitlements': instance.entitlements,
+  'ladders': entitlementLaddersToJson(instance.ladders),
 };

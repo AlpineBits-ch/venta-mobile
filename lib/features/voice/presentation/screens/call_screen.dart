@@ -15,6 +15,7 @@ import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/screen_share_view.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/widgets/video_participant_tile.dart';
+import '../../../../core/widgets/voice_fullscreen_view.dart';
 import '../../../../core/widgets/voice_limits_bar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../bloc/call_cubit.dart';
@@ -147,6 +148,43 @@ class _IncomingCallView extends StatelessWidget {
   }
 }
 
+/// Opens one incoming picture full-screen.
+///
+/// The tile id is deliberately not the grid tile's. Both are on screen at once
+/// - the grid stays mounted under the pushed route - and the server is told the
+/// *largest* size a publisher is drawn at, so two ids let the full-screen one
+/// win while it is open and let removing it fall back to the thumbnail without
+/// either having to know about the other.
+void _openFullscreen(
+  BuildContext context,
+  CallCubit cubit, {
+  required String userId,
+  required String tileId,
+  String? shareId,
+}) {
+  final fullscreenTileId = 'full:$tileId';
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => VoiceFullscreenView(
+        userId: userId,
+        isShare: shareId != null,
+        updates: cubit.stream,
+        track: () => shareId == null
+            ? cubit.remoteVideoTrackFor(userId)
+            : cubit.remoteScreenTrackForShare(shareId),
+        onEnter: () => cubit.setFocus(userId: userId, shareId: shareId),
+        onExit: () => cubit.setFocus(),
+        onHeightChanged: (devicePixels) => cubit.reportTileHeight(
+          tileId: fullscreenTileId,
+          userId: userId,
+          devicePixels: devicePixels,
+        ),
+        onHidden: () => cubit.forgetTile(fullscreenTileId),
+      ),
+    ),
+  );
+}
+
 class _ActiveCallView extends StatelessWidget {
   const _ActiveCallView({required this.state, required this.myUserId});
   final CallState state;
@@ -237,6 +275,15 @@ class _ActiveCallView extends StatelessWidget {
                 onHidden: sharer.userId == myUserId
                     ? null
                     : () => cubit.forgetTile('share:${sharer.userId}'),
+                onTap: sharer.userId == myUserId
+                    ? null
+                    : () => _openFullscreen(
+                        context,
+                        cubit,
+                        userId: sharer.userId,
+                        tileId: 'share:${sharer.userId}',
+                        shareId: sharer.shares.firstOrNull?.shareId,
+                      ),
               ),
             ),
           Expanded(
@@ -261,16 +308,27 @@ class _ActiveCallView extends StatelessWidget {
                   else
                     for (final participant in others)
                       if (participant.hasCamera)
-                        VideoParticipantTile(
-                          track: cubit.remoteVideoTrackFor(participant.userId),
-                          onHeightChanged: (devicePixels) =>
-                              cubit.reportTileHeight(
-                                tileId: 'camera:${participant.userId}',
-                                userId: participant.userId,
-                                devicePixels: devicePixels,
-                              ),
-                          onHidden: () =>
-                              cubit.forgetTile('camera:${participant.userId}'),
+                        GestureDetector(
+                          onTap: () => _openFullscreen(
+                            context,
+                            cubit,
+                            userId: participant.userId,
+                            tileId: 'camera:${participant.userId}',
+                          ),
+                          child: VideoParticipantTile(
+                            track: cubit.remoteVideoTrackFor(
+                              participant.userId,
+                            ),
+                            onHeightChanged: (devicePixels) =>
+                                cubit.reportTileHeight(
+                                  tileId: 'camera:${participant.userId}',
+                                  userId: participant.userId,
+                                  devicePixels: devicePixels,
+                                ),
+                            onHidden: () => cubit.forgetTile(
+                              'camera:${participant.userId}',
+                            ),
+                          ),
                         )
                       else
                         CallParticipantTile(

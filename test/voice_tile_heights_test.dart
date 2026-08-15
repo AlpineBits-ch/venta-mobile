@@ -1,6 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
+import 'package:mocktail/mocktail.dart';
 import 'package:venta_mobile/core/voice/tile_heights.dart';
 import 'package:venta_mobile/core/voice/video_layers.dart';
+
+/// A track that reports whatever the platform would have. Only `getSettings`
+/// is reached, so nothing else is stubbed.
+class _FakeTrack extends Mock implements MediaStreamTrack {
+  _FakeTrack(this._settings);
+
+  final Map<String, dynamic> _settings;
+
+  @override
+  Map<String, dynamic> getSettings() => _settings;
+}
 
 /// The client half of simulcast layer selection: the rid names it publishes
 /// under, and the tile sizes it reports for the server to choose from.
@@ -21,13 +34,40 @@ void main() {
     });
 
     test('the camera ladder is three layers, largest first', () {
-      final rids = VideoLayers.camera.map((e) => e.rid).toList();
-      final scales = VideoLayers.camera
-          .map((e) => e.scaleResolutionDownBy)
-          .toList();
+      final ladder = VideoLayers.cameraFor(720);
+      final rids = ladder.map((e) => e.rid).toList();
+      final scales = ladder.map((e) => e.scaleResolutionDownBy).toList();
 
       expect(rids, [VideoLayers.high, VideoLayers.medium, VideoLayers.low]);
       expect(scales, [1, 2, 4]);
+    });
+
+    // The server's layer ceiling arithmetic assumes exactly this relationship,
+    // so the ladder has to hold its shape at whatever the top encode became.
+    // A 1080 capture published through a ladder written down against 720 would
+    // have the server serving viewers a layer it had mis-measured.
+    test('the 1:2:4 relationship survives a taller capture', () {
+      for (final height in [480, 720, 1080]) {
+        expect(
+          VideoLayers.cameraFor(height).map((e) => e.scaleResolutionDownBy),
+          [1, 2, 4],
+          reason: 'ladder for ${height}p',
+        );
+      }
+    });
+
+    test('the bitrate budget follows the capture size', () {
+      // Anchored at 720 and scaled by pixel area, so raising the capture does
+      // not push 1080 lines through a budget tuned for 720. `maxBitrate` is a
+      // ceiling rather than a target, so congestion control still settles below
+      // it on a link that cannot carry it.
+      final at720 = VideoLayers.cameraFor(720).first.maxBitrate!;
+      final at1080 = VideoLayers.cameraFor(1080).first.maxBitrate!;
+      final at480 = VideoLayers.cameraFor(480).first.maxBitrate!;
+
+      expect(at1080, greaterThan(at720));
+      expect(at480, lessThan(at720));
+      expect(at1080 / at720, closeTo(2.25, 0.01));
     });
 
     test('the screen ladder omits the quarter layer', () {
@@ -38,6 +78,79 @@ void main() {
         VideoLayers.high,
         VideoLayers.medium,
       ]);
+    });
+  });
+
+  /// What reaches the wire is what was captured, not what was asked for.
+  ///
+  /// The one direction it is safe to be wrong in is upward: a declaration above
+  /// what is really encoded earns a cap that was not needed, while one below it
+  /// leaves the publisher uncapped at the simulcast layer - and on a screen
+  /// share, uncapped means a 4K display fanned out at its top layer to every
+  /// viewer in the room.
+  group('what a capture declares', () {
+    test('the track is believed over the request', () {
+      final track = _FakeTrack({'width': 640, 'height': 480, 'frameRate': 24});
+
+      // A handset that could not reach 1080 encodes 480. Declaring the request
+      // would ask the server to cap a picture that is already small.
+      expect(
+        VideoPublishIntent.fromTrack(
+          track,
+          fallback: const VideoPublishIntent(height: 1080, framerate: 60),
+        ),
+        const VideoPublishIntent(height: 480, framerate: 24),
+      );
+    });
+
+    test('a platform that reports nothing falls back to the request', () {
+      expect(
+        VideoPublishIntent.fromTrack(
+          _FakeTrack(const {}),
+          fallback: VideoPublishIntent.conservative,
+        ),
+        VideoPublishIntent.conservative,
+      );
+    });
+
+    test('one readable axis is used and the other falls back', () {
+      // A non-positive number reads as "unstated" on the wire, so a zero here
+      // would silently drop that axis of the declaration rather than state it.
+      expect(
+        VideoPublishIntent.fromTrack(
+          _FakeTrack(const {'height': 1080}),
+          fallback: const VideoPublishIntent(height: 720, framerate: 30),
+        ),
+        const VideoPublishIntent(height: 1080, framerate: 30),
+      );
+    });
+
+    test('sizes arriving as strings or doubles are still numbers', () {
+      expect(
+        VideoPublishIntent.fromTrack(
+          _FakeTrack(const {'height': '1080', 'frameRate': 29.97}),
+          fallback: VideoPublishIntent.conservative,
+        ),
+        const VideoPublishIntent(height: 1080, framerate: 30),
+      );
+    });
+
+    test('nonsense in the settings map is not a declaration', () {
+      expect(
+        VideoPublishIntent.fromTrack(
+          _FakeTrack(const {'height': 'tall', 'frameRate': -1}),
+          fallback: VideoPublishIntent.conservative,
+        ),
+        VideoPublishIntent.conservative,
+      );
+    });
+
+    test('an intent stating neither axis is not worth sending', () {
+      expect(VideoPublishIntent.unstated.isStated, isFalse);
+      expect(
+        const VideoPublishIntent(height: 1080, framerate: 0).isStated,
+        isTrue,
+      );
     });
   });
 

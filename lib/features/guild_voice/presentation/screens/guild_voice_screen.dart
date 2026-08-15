@@ -11,6 +11,7 @@ import '../../../../core/widgets/call_participant_tile.dart';
 import '../../../../core/widgets/elapsed_time_label.dart';
 import '../../../../core/widgets/screen_share_view.dart';
 import '../../../../core/widgets/video_participant_tile.dart';
+import '../../../../core/widgets/voice_fullscreen_view.dart';
 import '../../../../core/widgets/voice_limits_bar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../bloc/guild_voice_cubit.dart';
@@ -46,6 +47,42 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
   void dispose() {
     getIt<GuildVoiceCubit>().setSharesVisible(false);
     super.dispose();
+  }
+
+  /// Opens one incoming picture full-screen.
+  ///
+  /// The tile id is deliberately not the grid tile's. Both are on screen at
+  /// once - the grid stays mounted under the pushed route - and the server is
+  /// told the *largest* size a publisher is drawn at, so two ids let the
+  /// full-screen one win while it is open and let removing it fall back to the
+  /// thumbnail without either having to know about the other.
+  void _openFullscreen({
+    required String userId,
+    required String tileId,
+    String? shareId,
+  }) {
+    final cubit = getIt<GuildVoiceCubit>();
+    final fullscreenTileId = 'full:$tileId';
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VoiceFullscreenView(
+          userId: userId,
+          isShare: shareId != null,
+          updates: cubit.stream,
+          track: () => shareId == null
+              ? cubit.remoteVideoTrackFor(userId)
+              : cubit.remoteScreenTrackForShare(shareId),
+          onEnter: () => cubit.setFocus(userId: userId, shareId: shareId),
+          onExit: () => cubit.setFocus(),
+          onHeightChanged: (devicePixels) => cubit.reportTileHeight(
+            tileId: fullscreenTileId,
+            userId: userId,
+            devicePixels: devicePixels,
+          ),
+          onHidden: () => cubit.forgetTile(fullscreenTileId),
+        ),
+      ),
+    );
   }
 
   @override
@@ -131,6 +168,13 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                             : () => getIt<GuildVoiceCubit>().forgetTile(
                                 'share:${sharer.userId}',
                               ),
+                        onTap: sharer.userId == myUserId
+                            ? null
+                            : () => _openFullscreen(
+                                userId: sharer.userId,
+                                tileId: 'share:${sharer.userId}',
+                                shareId: sharer.shares.firstOrNull?.shareId,
+                              ),
                       ),
                     ),
                   Expanded(
@@ -158,23 +202,30 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                                       mirror: true,
                                     )
                                   else if (participant.hasCamera)
-                                    VideoParticipantTile(
-                                      track: getIt<GuildVoiceCubit>()
-                                          .remoteVideoTrackFor(
-                                            participant.userId,
-                                          ),
-                                      onHeightChanged: (devicePixels) =>
-                                          getIt<GuildVoiceCubit>()
-                                              .reportTileHeight(
-                                                tileId:
-                                                    'camera:${participant.userId}',
-                                                userId: participant.userId,
-                                                devicePixels: devicePixels,
-                                              ),
-                                      onHidden: () =>
-                                          getIt<GuildVoiceCubit>().forgetTile(
+                                    GestureDetector(
+                                      onTap: () => _openFullscreen(
+                                        userId: participant.userId,
+                                        tileId:
                                             'camera:${participant.userId}',
-                                          ),
+                                      ),
+                                      child: VideoParticipantTile(
+                                        track: getIt<GuildVoiceCubit>()
+                                            .remoteVideoTrackFor(
+                                              participant.userId,
+                                            ),
+                                        onHeightChanged: (devicePixels) =>
+                                            getIt<GuildVoiceCubit>()
+                                                .reportTileHeight(
+                                                  tileId:
+                                                      'camera:${participant.userId}',
+                                                  userId: participant.userId,
+                                                  devicePixels: devicePixels,
+                                                ),
+                                        onHidden: () =>
+                                            getIt<GuildVoiceCubit>().forgetTile(
+                                              'camera:${participant.userId}',
+                                            ),
+                                      ),
                                     )
                                   else
                                     CallParticipantTile(

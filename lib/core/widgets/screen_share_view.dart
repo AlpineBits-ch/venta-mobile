@@ -16,11 +16,17 @@ class ScreenShareView extends StatelessWidget {
     required this.isSelf,
     this.onHeightChanged,
     this.onHidden,
+    this.onTap,
   });
 
   final String userId;
   final MediaStreamTrack? track;
   final bool isSelf;
+
+  /// Opens the share full-screen. Null for a share this device is publishing:
+  /// there is nothing to enlarge and nothing to pin, since nobody pulls their
+  /// own picture.
+  final VoidCallback? onTap;
 
   /// See `VideoParticipantTile.onHeightChanged`. A share is the largest thing
   /// on the screen and the most expensive thing in the room, so it is the tile
@@ -38,12 +44,15 @@ class ScreenShareView extends StatelessWidget {
         return Stack(
           alignment: Alignment.bottomLeft,
           children: [
-            VideoParticipantTile(
-              track: track,
-              width: width,
-              height: width * 9 / 16,
-              onHeightChanged: onHeightChanged,
-              onHidden: onHidden,
+            GestureDetector(
+              onTap: onTap,
+              child: VideoParticipantTile(
+                track: track,
+                width: width,
+                height: width * 9 / 16,
+                onHeightChanged: onHeightChanged,
+                onHidden: onHidden,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(8),

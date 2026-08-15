@@ -574,7 +574,15 @@ mixin _$EntitlementSnapshotDto {
  int get version;/// Ceilings only, never consumption. How many emoji slots a server has and
 /// how many are used are two different payloads with opposite caching
 /// properties, and the usage half is not implemented server-side yet.
- Map<String, EntitlementValueDto> get entitlements;
+ Map<String, EntitlementValueDto> get entitlements;/// Every rung of every ladder, with what each one permits.
+///
+/// This is the rung-to-pixels mapping, and it is modelled because something
+/// now reads it: the camera captures at the granted rung's `maxHeight` and
+/// `maxFramerate` rather than at a size compiled into this build. Inventing
+/// that mapping locally is the thing this field exists to prevent, and
+/// hardcoding it is how a rung added next quarter would be ignored by every
+/// shipped client.
+@JsonKey(fromJson: entitlementLaddersFromJson, toJson: entitlementLaddersToJson) Map<String, List<EntitlementLadderRungDto>> get ladders;
 /// Create a copy of EntitlementSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -587,16 +595,16 @@ $EntitlementSnapshotDtoCopyWith<EntitlementSnapshotDto> get copyWith => _$Entitl
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is EntitlementSnapshotDto&&(identical(other.subject, subject) || other.subject == subject)&&(identical(other.plan, plan) || other.plan == plan)&&(identical(other.ttlSeconds, ttlSeconds) || other.ttlSeconds == ttlSeconds)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other.entitlements, entitlements));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is EntitlementSnapshotDto&&(identical(other.subject, subject) || other.subject == subject)&&(identical(other.plan, plan) || other.plan == plan)&&(identical(other.ttlSeconds, ttlSeconds) || other.ttlSeconds == ttlSeconds)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other.entitlements, entitlements)&&const DeepCollectionEquality().equals(other.ladders, ladders));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,subject,plan,ttlSeconds,version,const DeepCollectionEquality().hash(entitlements));
+int get hashCode => Object.hash(runtimeType,subject,plan,ttlSeconds,version,const DeepCollectionEquality().hash(entitlements),const DeepCollectionEquality().hash(ladders));
 
 @override
 String toString() {
-  return 'EntitlementSnapshotDto(subject: $subject, plan: $plan, ttlSeconds: $ttlSeconds, version: $version, entitlements: $entitlements)';
+  return 'EntitlementSnapshotDto(subject: $subject, plan: $plan, ttlSeconds: $ttlSeconds, version: $version, entitlements: $entitlements, ladders: $ladders)';
 }
 
 
@@ -607,7 +615,7 @@ abstract mixin class $EntitlementSnapshotDtoCopyWith<$Res>  {
   factory $EntitlementSnapshotDtoCopyWith(EntitlementSnapshotDto value, $Res Function(EntitlementSnapshotDto) _then) = _$EntitlementSnapshotDtoCopyWithImpl;
 @useResult
 $Res call({
- EntitlementSubjectDto subject, EntitlementPlanDto? plan, int ttlSeconds, int version, Map<String, EntitlementValueDto> entitlements
+ EntitlementSubjectDto subject, EntitlementPlanDto? plan, int ttlSeconds, int version, Map<String, EntitlementValueDto> entitlements,@JsonKey(fromJson: entitlementLaddersFromJson, toJson: entitlementLaddersToJson) Map<String, List<EntitlementLadderRungDto>> ladders
 });
 
 
@@ -624,14 +632,15 @@ class _$EntitlementSnapshotDtoCopyWithImpl<$Res>
 
 /// Create a copy of EntitlementSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? subject = null,Object? plan = freezed,Object? ttlSeconds = null,Object? version = null,Object? entitlements = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? subject = null,Object? plan = freezed,Object? ttlSeconds = null,Object? version = null,Object? entitlements = null,Object? ladders = null,}) {
   return _then(_self.copyWith(
 subject: null == subject ? _self.subject : subject // ignore: cast_nullable_to_non_nullable
 as EntitlementSubjectDto,plan: freezed == plan ? _self.plan : plan // ignore: cast_nullable_to_non_nullable
 as EntitlementPlanDto?,ttlSeconds: null == ttlSeconds ? _self.ttlSeconds : ttlSeconds // ignore: cast_nullable_to_non_nullable
 as int,version: null == version ? _self.version : version // ignore: cast_nullable_to_non_nullable
 as int,entitlements: null == entitlements ? _self.entitlements : entitlements // ignore: cast_nullable_to_non_nullable
-as Map<String, EntitlementValueDto>,
+as Map<String, EntitlementValueDto>,ladders: null == ladders ? _self.ladders : ladders // ignore: cast_nullable_to_non_nullable
+as Map<String, List<EntitlementLadderRungDto>>,
   ));
 }
 /// Create a copy of EntitlementSnapshotDto
@@ -734,10 +743,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  int ttlSeconds,  int version,  Map<String, EntitlementValueDto> entitlements)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  int ttlSeconds,  int version,  Map<String, EntitlementValueDto> entitlements, @JsonKey(fromJson: entitlementLaddersFromJson, toJson: entitlementLaddersToJson)  Map<String, List<EntitlementLadderRungDto>> ladders)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _EntitlementSnapshotDto() when $default != null:
-return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.entitlements);case _:
+return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.entitlements,_that.ladders);case _:
   return orElse();
 
 }
@@ -755,10 +764,10 @@ return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.en
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  int ttlSeconds,  int version,  Map<String, EntitlementValueDto> entitlements)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  int ttlSeconds,  int version,  Map<String, EntitlementValueDto> entitlements, @JsonKey(fromJson: entitlementLaddersFromJson, toJson: entitlementLaddersToJson)  Map<String, List<EntitlementLadderRungDto>> ladders)  $default,) {final _that = this;
 switch (_that) {
 case _EntitlementSnapshotDto():
-return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.entitlements);}
+return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.entitlements,_that.ladders);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -772,10 +781,10 @@ return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.en
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  int ttlSeconds,  int version,  Map<String, EntitlementValueDto> entitlements)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( EntitlementSubjectDto subject,  EntitlementPlanDto? plan,  int ttlSeconds,  int version,  Map<String, EntitlementValueDto> entitlements, @JsonKey(fromJson: entitlementLaddersFromJson, toJson: entitlementLaddersToJson)  Map<String, List<EntitlementLadderRungDto>> ladders)?  $default,) {final _that = this;
 switch (_that) {
 case _EntitlementSnapshotDto() when $default != null:
-return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.entitlements);case _:
+return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.entitlements,_that.ladders);case _:
   return null;
 
 }
@@ -787,7 +796,7 @@ return $default(_that.subject,_that.plan,_that.ttlSeconds,_that.version,_that.en
 @JsonSerializable()
 
 class _EntitlementSnapshotDto implements EntitlementSnapshotDto {
-  const _EntitlementSnapshotDto({this.subject = const EntitlementSubjectDto(), this.plan, this.ttlSeconds = 60, this.version = 0, final  Map<String, EntitlementValueDto> entitlements = const <String, EntitlementValueDto>{}}): _entitlements = entitlements;
+  const _EntitlementSnapshotDto({this.subject = const EntitlementSubjectDto(), this.plan, this.ttlSeconds = 60, this.version = 0, final  Map<String, EntitlementValueDto> entitlements = const <String, EntitlementValueDto>{}, @JsonKey(fromJson: entitlementLaddersFromJson, toJson: entitlementLaddersToJson) final  Map<String, List<EntitlementLadderRungDto>> ladders = const <String, List<EntitlementLadderRungDto>>{}}): _entitlements = entitlements,_ladders = ladders;
   factory _EntitlementSnapshotDto.fromJson(Map<String, dynamic> json) => _$EntitlementSnapshotDtoFromJson(json);
 
 @override@JsonKey() final  EntitlementSubjectDto subject;
@@ -815,6 +824,29 @@ class _EntitlementSnapshotDto implements EntitlementSnapshotDto {
   return EqualUnmodifiableMapView(_entitlements);
 }
 
+/// Every rung of every ladder, with what each one permits.
+///
+/// This is the rung-to-pixels mapping, and it is modelled because something
+/// now reads it: the camera captures at the granted rung's `maxHeight` and
+/// `maxFramerate` rather than at a size compiled into this build. Inventing
+/// that mapping locally is the thing this field exists to prevent, and
+/// hardcoding it is how a rung added next quarter would be ignored by every
+/// shipped client.
+ final  Map<String, List<EntitlementLadderRungDto>> _ladders;
+/// Every rung of every ladder, with what each one permits.
+///
+/// This is the rung-to-pixels mapping, and it is modelled because something
+/// now reads it: the camera captures at the granted rung's `maxHeight` and
+/// `maxFramerate` rather than at a size compiled into this build. Inventing
+/// that mapping locally is the thing this field exists to prevent, and
+/// hardcoding it is how a rung added next quarter would be ignored by every
+/// shipped client.
+@override@JsonKey(fromJson: entitlementLaddersFromJson, toJson: entitlementLaddersToJson) Map<String, List<EntitlementLadderRungDto>> get ladders {
+  if (_ladders is EqualUnmodifiableMapView) return _ladders;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(_ladders);
+}
+
 
 /// Create a copy of EntitlementSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
@@ -829,16 +861,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EntitlementSnapshotDto&&(identical(other.subject, subject) || other.subject == subject)&&(identical(other.plan, plan) || other.plan == plan)&&(identical(other.ttlSeconds, ttlSeconds) || other.ttlSeconds == ttlSeconds)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other._entitlements, _entitlements));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EntitlementSnapshotDto&&(identical(other.subject, subject) || other.subject == subject)&&(identical(other.plan, plan) || other.plan == plan)&&(identical(other.ttlSeconds, ttlSeconds) || other.ttlSeconds == ttlSeconds)&&(identical(other.version, version) || other.version == version)&&const DeepCollectionEquality().equals(other._entitlements, _entitlements)&&const DeepCollectionEquality().equals(other._ladders, _ladders));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,subject,plan,ttlSeconds,version,const DeepCollectionEquality().hash(_entitlements));
+int get hashCode => Object.hash(runtimeType,subject,plan,ttlSeconds,version,const DeepCollectionEquality().hash(_entitlements),const DeepCollectionEquality().hash(_ladders));
 
 @override
 String toString() {
-  return 'EntitlementSnapshotDto(subject: $subject, plan: $plan, ttlSeconds: $ttlSeconds, version: $version, entitlements: $entitlements)';
+  return 'EntitlementSnapshotDto(subject: $subject, plan: $plan, ttlSeconds: $ttlSeconds, version: $version, entitlements: $entitlements, ladders: $ladders)';
 }
 
 
@@ -849,7 +881,7 @@ abstract mixin class _$EntitlementSnapshotDtoCopyWith<$Res> implements $Entitlem
   factory _$EntitlementSnapshotDtoCopyWith(_EntitlementSnapshotDto value, $Res Function(_EntitlementSnapshotDto) _then) = __$EntitlementSnapshotDtoCopyWithImpl;
 @override @useResult
 $Res call({
- EntitlementSubjectDto subject, EntitlementPlanDto? plan, int ttlSeconds, int version, Map<String, EntitlementValueDto> entitlements
+ EntitlementSubjectDto subject, EntitlementPlanDto? plan, int ttlSeconds, int version, Map<String, EntitlementValueDto> entitlements,@JsonKey(fromJson: entitlementLaddersFromJson, toJson: entitlementLaddersToJson) Map<String, List<EntitlementLadderRungDto>> ladders
 });
 
 
@@ -866,14 +898,15 @@ class __$EntitlementSnapshotDtoCopyWithImpl<$Res>
 
 /// Create a copy of EntitlementSnapshotDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? subject = null,Object? plan = freezed,Object? ttlSeconds = null,Object? version = null,Object? entitlements = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? subject = null,Object? plan = freezed,Object? ttlSeconds = null,Object? version = null,Object? entitlements = null,Object? ladders = null,}) {
   return _then(_EntitlementSnapshotDto(
 subject: null == subject ? _self.subject : subject // ignore: cast_nullable_to_non_nullable
 as EntitlementSubjectDto,plan: freezed == plan ? _self.plan : plan // ignore: cast_nullable_to_non_nullable
 as EntitlementPlanDto?,ttlSeconds: null == ttlSeconds ? _self.ttlSeconds : ttlSeconds // ignore: cast_nullable_to_non_nullable
 as int,version: null == version ? _self.version : version // ignore: cast_nullable_to_non_nullable
 as int,entitlements: null == entitlements ? _self._entitlements : entitlements // ignore: cast_nullable_to_non_nullable
-as Map<String, EntitlementValueDto>,
+as Map<String, EntitlementValueDto>,ladders: null == ladders ? _self._ladders : ladders // ignore: cast_nullable_to_non_nullable
+as Map<String, List<EntitlementLadderRungDto>>,
   ));
 }
 

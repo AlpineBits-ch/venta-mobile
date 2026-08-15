@@ -459,6 +459,7 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       authRepository: getIt(),
       soundService: getIt(),
       webRtcServiceFactory: () => CallWebRtcService(api: getIt()),
+      entitlements: getIt(),
     ),
   );
   getIt.registerLazySingleton<GuildVoiceApi>(
@@ -473,6 +474,7 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
       authRepository: getIt(),
       soundService: getIt(),
       webRtcServiceFactory: () => GuildVoiceWebRtcService(api: getIt()),
+      entitlements: getIt(),
     ),
   );
   getIt.registerLazySingleton<GuildVoiceActivityCubit>(

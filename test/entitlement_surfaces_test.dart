@@ -18,6 +18,8 @@ import 'package:venta_mobile/features/auth/data/auth_repository.dart';
 import 'package:venta_mobile/features/billing/data/entitlement_api.dart';
 import 'package:venta_mobile/features/billing/data/entitlement_reader.dart';
 import 'package:venta_mobile/features/billing/data/models/entitlement_degradation_dto.dart';
+import 'package:venta_mobile/features/billing/data/models/entitlement_ladder.dart';
+import 'package:venta_mobile/features/billing/data/models/entitlement_snapshot_dto.dart';
 import 'package:venta_mobile/features/billing/data/models/entitlement_denial.dart';
 import 'package:venta_mobile/features/billing/data/models/entitlement_value.dart';
 import 'package:venta_mobile/features/billing/data/upload_preflight.dart';
@@ -369,7 +371,7 @@ void main() {
     });
   });
 
-  group('what a publish declares', () {
+  group('what a negotiation declares', () {
     late _ScriptedAdapter adapter;
     late GuildVoiceApi api;
 
@@ -398,7 +400,7 @@ void main() {
         mediaSessionId: 'media-1',
         sessionDescription: const {},
         tracks: const [],
-        video: VideoPublishIntent.camera.toJson(),
+        video: VideoPublishIntent.conservative.toJson(),
       );
 
       expect(lastBody()['video'], {'height': 720, 'framerate': 30});
@@ -419,19 +421,149 @@ void main() {
       expect(lastBody().containsKey('video'), isFalse);
     });
 
-    // The declaration and the capture constraints move together or the
-    // declaration stops being true.
-    test('the declared picture is the one the camera is asked for', () {
-      final capture = VideoLayers.cameraCapture;
+    // The capture constraints and the target move together, whatever the rung
+    // resolved to. A frame rate left idealised but uncapped is how a camera
+    // opens at 60 on a rung that permits 30.
+    test('the camera is asked for exactly what the rung permits', () {
+      final capture = VideoLayers.captureFor(
+        const VideoPublishIntent(height: 1080, framerate: 60),
+      );
 
+      expect((capture['height'] as Map)['ideal'], 1080);
+      expect((capture['width'] as Map)['ideal'], 1920);
+      expect((capture['frameRate'] as Map)['ideal'], 60);
+      expect((capture['frameRate'] as Map)['max'], 60);
+    });
+
+    // `ideal` and not `exact` on purpose: a handset that cannot reach the rung
+    // should give its best rather than fail capture outright, and what it gave
+    // is read back off the track before anything is declared.
+    test('the capture constraints stay ideal rather than exact', () {
+      final capture = VideoLayers.captureFor(VideoPublishIntent.conservative);
+
+      expect((capture['height'] as Map).containsKey('exact'), isFalse);
+      expect((capture['width'] as Map).containsKey('exact'), isFalse);
+    });
+
+    // The cap is computed from the declaration, so one made at publish time
+    // stops describing this client the moment the encoding changes.
+    test('a renegotiation that changes the picture states it', () async {
+      await api.renegotiate(
+        guildId: 'g1',
+        channelId: 'c1',
+        mediaSessionId: 'media-1',
+        sessionDescription: const {},
+        video: VideoPublishIntent.conservative.toJson(),
+      );
+
+      expect(lastBody()['video'], {'height': 720, 'framerate': 30});
+    });
+
+    // Absent leaves the last declaration in force in both directions: an ICE
+    // restart or a reconnect must not lift a cap, and must not apply one.
+    test('a renegotiation that is not about video declares nothing', () async {
+      await api.renegotiate(
+        guildId: 'g1',
+        channelId: 'c1',
+        mediaSessionId: 'media-1',
+        sessionDescription: const {},
+      );
+
+      expect(lastBody().containsKey('video'), isFalse);
+    });
+  });
+
+  /// The rung is a name. What it permits is on the wire beside it, and the one
+  /// thing this client must never do is decide locally what `1080p30` means -
+  /// that is a pricing decision, and one compiled into a release is one nobody
+  /// can change without another release.
+  group('the rung decides what the camera captures', () {
+    List<EntitlementLadderRungDto> ladder() => entitlementLaddersFromJson({
+      'video_quality': [
+        {'rung': 'none', 'rank': 0, 'maxHeight': 0, 'maxFramerate': 0},
+        {'rung': '480p30', 'rank': 1, 'maxHeight': 480, 'maxFramerate': 30},
+        {'rung': '720p30', 'rank': 2, 'maxHeight': 720, 'maxFramerate': 30},
+        {'rung': '1080p30', 'rank': 3, 'maxHeight': 1080, 'maxFramerate': 30},
+        {'rung': '1080p60', 'rank': 4, 'maxHeight': 1080, 'maxFramerate': 60},
+      ],
+    })['video_quality']!;
+
+    test('the granted rung is captured at its own maximum', () {
       expect(
-        (capture['height'] as Map)['ideal'],
-        VideoPublishIntent.camera.height,
+        cameraTargetFor(rung: '1080p60', ladder: ladder()),
+        const VideoPublishIntent(height: 1080, framerate: 60),
       );
       expect(
-        (capture['frameRate'] as Map)['max'],
-        VideoPublishIntent.camera.framerate,
+        cameraTargetFor(rung: '480p30', ladder: ladder()),
+        const VideoPublishIntent(height: 480, framerate: 30),
       );
+    });
+
+    // A rung added after this build shipped is one this build has no metrics
+    // for. Guessing upward from the name would be the invented mapping again.
+    test('a rung the ladder does not list falls back rather than guesses', () {
+      expect(
+        cameraTargetFor(rung: '2160p120', ladder: ladder()),
+        VideoPublishIntent.conservative,
+      );
+    });
+
+    test('no ladder at all is the same answer', () {
+      expect(
+        cameraTargetFor(rung: '1080p60'),
+        VideoPublishIntent.conservative,
+      );
+      expect(cameraTargetFor(ladder: ladder()), VideoPublishIntent.conservative);
+    });
+
+    // `none` is a real rung and means audio-only. There is no picture to
+    // capture, which is not the same as "capture the default".
+    test('the bottom rung is nothing to capture', () {
+      expect(cameraTargetFor(rung: 'none', ladder: ladder()), isNull);
+    });
+
+    test('a rung listed without metrics is not read as zero', () {
+      final partial = entitlementLaddersFromJson({
+        'video_quality': [
+          {'rung': '720p30', 'rank': 2},
+        ],
+      })['video_quality'];
+
+      // Zero would be indistinguishable from `none`, which would silently turn
+      // a perfectly good rung into audio-only.
+      expect(
+        cameraTargetFor(rung: '720p30', ladder: partial),
+        VideoPublishIntent.conservative,
+      );
+    });
+
+    test('the ladder rides the snapshot and survives an unreadable rung', () {
+      final snapshot = EntitlementSnapshotDto.fromJson({
+        'subject': {'kind': 'user', 'id': 'user-1'},
+        'entitlements': <String, dynamic>{},
+        'ladders': {
+          'video_quality': [
+            {'rung': '720p30', 'rank': 2, 'maxHeight': 720, 'maxFramerate': 30},
+            {'colour': 'blue'},
+          ],
+        },
+      });
+
+      final rungs = snapshot.ladders['video_quality']!;
+      expect(rungs.first.maxHeight, 720);
+      // One unreadable entry must not take the ladder - or the snapshot it
+      // rides on, and every ceiling on that - offline.
+      expect(rungs, hasLength(2));
+      expect(rungs.last.maxHeight, isNull);
+    });
+
+    test('a snapshot with no ladders block reads as none rather than throwing', () {
+      final snapshot = EntitlementSnapshotDto.fromJson({
+        'subject': {'kind': 'user', 'id': 'user-1'},
+        'entitlements': <String, dynamic>{},
+      });
+
+      expect(snapshot.ladders, isEmpty);
     });
   });
 

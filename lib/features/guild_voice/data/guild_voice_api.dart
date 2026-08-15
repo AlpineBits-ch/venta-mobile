@@ -129,17 +129,22 @@ class GuildVoiceApi {
     return VoiceNegotiateResponseDto.fromJson(response.data!);
   });
 
+  /// [video] is sent only when this renegotiation changes the picture - see
+  /// `VoiceMediaApi.renegotiate`. Omitted, the server leaves whatever the last
+  /// declaration recorded in force.
   Future<VoiceRenegotiateResponseDto> renegotiate({
     required String guildId,
     required String channelId,
     required String mediaSessionId,
     required Map<String, dynamic> sessionDescription,
+    Map<String, dynamic>? video,
   }) => mapMediaErrors('negotiate', () async {
     final response = await client.dio.put<Map<String, dynamic>>(
       '${_base(guildId, channelId)}/negotiate',
       data: {
         'mediaSessionId': mediaSessionId,
         'sessionDescription': sessionDescription,
+        'video': ?video,
       },
       options: _deviceOptions,
     );
@@ -159,17 +164,23 @@ class GuildVoiceApi {
     );
   });
 
-  /// Reports this client's own rendering - today only tile sizes, which are
-  /// what layer selection is chosen from. Omitted fields are left alone
-  /// server-side, so this is a body with `tileHeights` in it and nothing else.
+  /// Reports this client's own rendering - tile sizes, pins and share audio.
+  /// Omitted fields are left alone server-side, so a tile resize is a body with
+  /// `tileHeights` in it and nothing else.
   Future<void> updateSubscriber({
     required String guildId,
     required String channelId,
     Map<String, int>? tileHeights,
+    List<String>? pinned,
+    List<String>? screenAudioShares,
   }) => mapMediaErrors('subscriptions', () async {
     await client.dio.post<void>(
       '${_base(guildId, channelId)}/subscriptions',
-      data: {'tileHeights': ?tileHeights},
+      data: {
+        'tileHeights': ?tileHeights,
+        'pinned': ?pinned,
+        'screenAudioShares': ?screenAudioShares,
+      },
       options: _deviceOptions,
     );
   });

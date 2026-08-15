@@ -8,6 +8,7 @@ import '../../../core/bloc/safe_emit.dart';
 import '../../../core/realtime/realtime_transport.dart';
 import '../../../core/sound/sound_service.dart';
 import '../../../core/voice/track_naming.dart';
+import '../../../core/voice/video_layers.dart';
 import '../../../core/voice/voice_heartbeat.dart';
 import '../../../core/voice/voice_participant_state.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
@@ -161,6 +162,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     required this.authRepository,
     required this.soundService,
     required GuildVoiceWebRtcService Function() webRtcServiceFactory,
+    this.entitlements,
   }) : _webRtcServiceFactory = webRtcServiceFactory,
        super(const GuildVoiceState()) {
     _sub = repository.events.listen(_handleEvent);
@@ -173,6 +175,13 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   final GuildVoiceRepository repository;
   final AuthRepository authRepository;
   final SoundService soundService;
+
+  /// Where the video ladder is read from, so the camera captures at what this
+  /// room's rung permits. Optional: without it the camera falls back to
+  /// [VideoPublishIntent.conservative], which is what it captured at before the
+  /// ladder was on the wire.
+  final EntitlementReader? entitlements;
+
   final GuildVoiceWebRtcService Function() _webRtcServiceFactory;
   late final StreamSubscription<GuildVoiceEvent> _sub;
   late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
@@ -698,7 +707,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
 
     try {
       if (turningOn) {
-        await webRtc.publishLocalVideo();
+        await webRtc.publishLocalVideo(target: await _cameraTarget());
       } else {
         await webRtc.stopLocalVideo();
       }
@@ -721,6 +730,28 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     await repository.invokeCameraChanged(
       channelId: channelId,
       isCameraOn: turningOn,
+    );
+  }
+
+  /// What to open the camera at here: this room's granted rung, resolved
+  /// against the ladder the server publishes.
+  ///
+  /// The rung comes from the room's own limits rather than from an account
+  /// snapshot, because the room's copy is the one that can change mid-call and
+  /// the one the server will actually enforce against. The ladder comes from the
+  /// account, because it is a property of the instance.
+  ///
+  /// **A rung that changes mid-call does not move an already-published camera.**
+  /// Nothing in this client can change an encoding without republishing, and
+  /// tearing a live picture down to re-open it smaller is a worse answer than
+  /// letting the server cap the layer - which it does, and says so in the
+  /// notice. The next publish picks the new rung up.
+  Future<VideoPublishIntent?> _cameraTarget() async {
+    final rung = state.limits?.videoRung;
+    if (rung == null) return null;
+    return cameraTargetFor(
+      rung: rung,
+      ladder: await entitlements?.videoQualityLadder(),
     );
   }
 
@@ -829,6 +860,12 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   );
 
   void forgetTile(String tileId) => _webRtc?.forgetTile(tileId);
+
+  /// One publisher this client is looking at full-screen, and optionally the
+  /// share whose audio it wants with them. Both null returns to the grid. See
+  /// `VoiceWebRtcService.setFocus`.
+  Future<void> setFocus({String? userId, String? shareId}) async =>
+      _webRtc?.setFocus(userId: userId, shareId: shareId);
 
   // ── Events ────────────────────────────────────────────────────────────────
 

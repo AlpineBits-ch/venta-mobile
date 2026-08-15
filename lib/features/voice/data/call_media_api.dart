@@ -40,10 +40,12 @@ class CallMediaApi implements VoiceMediaApi {
   Future<VoiceRenegotiateResponseDto> renegotiate({
     required String mediaSessionId,
     required Map<String, dynamic> sessionDescription,
+    Map<String, dynamic>? video,
   }) => api.renegotiate(
     callId: callId,
     mediaSessionId: mediaSessionId,
     sessionDescription: sessionDescription,
+    video: video,
   );
 
   @override
@@ -57,8 +59,16 @@ class CallMediaApi implements VoiceMediaApi {
   );
 
   @override
-  Future<void> updateSubscriber({Map<String, int>? tileHeights}) =>
-      api.updateSubscriber(callId: callId, tileHeights: tileHeights);
+  Future<void> updateSubscriber({
+    Map<String, int>? tileHeights,
+    List<String>? pinned,
+    List<String>? screenAudioShares,
+  }) => api.updateSubscriber(
+    callId: callId,
+    tileHeights: tileHeights,
+    pinned: pinned,
+    screenAudioShares: screenAudioShares,
+  );
 
   @override
   Future<void> watchShare(String shareId) => api.watchShare(callId, shareId);

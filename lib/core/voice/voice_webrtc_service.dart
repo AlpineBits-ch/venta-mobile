@@ -260,6 +260,8 @@ class VoiceWebRtcService {
     _localScreenTrack = null;
     _localScreenStream = null;
     _activeShareId = null;
+    _pinnedUserId = null;
+    _audibleShareId = null;
     _midOwners.clear();
     _remoteAudioTracks.clear();
     _remoteVideoTracks.clear();
@@ -283,32 +285,42 @@ class VoiceWebRtcService {
   /// The server classifies it as `kind: "video"` from the name alone, so
   /// nothing else is needed. No-ops if the camera is already on.
   ///
-  /// The capture size is stated rather than left to the platform, so the
-  /// [VideoPublishIntent.camera] declared on the publish body is true rather
-  /// than a guess at what the handset happened to open the camera at.
+  /// [target] is what the room's granted rung permits, resolved from the ladder
+  /// the server publishes - see `cameraTargetFor`. It drives three things that
+  /// have to agree: the capture constraints, the top rung of the simulcast
+  /// ladder, and the size declared on the publish body. Null falls back to
+  /// [VideoPublishIntent.conservative], which is what this client captured at
+  /// before any of it was gated.
+  ///
+  /// What reaches the wire is read back off the track rather than copied from
+  /// [target]. The constraints are `ideal`, so a handset that cannot reach the
+  /// target encodes less, and declaring the request instead of the picture
+  /// earns a cap that was not needed.
   ///
   /// **Releases the camera if the publish is refused.** A refusal is the one
   /// path where capture succeeded and publication did not, and a camera left
   /// running against a track the server never accepted is a lit indicator light
   /// over nothing.
-  Future<void> publishLocalVideo() async {
+  Future<void> publishLocalVideo({VideoPublishIntent? target}) async {
     if (_localVideoTrack != null) return;
     if (!await ensureCameraPermission()) {
       throw StateError('Camera permission denied');
     }
+    final asked = target ?? VideoPublishIntent.conservative;
     final stream = await navigator.mediaDevices.getUserMedia({
       'audio': false,
-      'video': VideoLayers.cameraCapture,
+      'video': VideoLayers.captureFor(asked),
     });
     final track = stream.getVideoTracks().first;
     _localVideoStream = stream;
     _localVideoTrack = track;
+    final declared = VideoPublishIntent.fromTrack(track, fallback: asked);
     try {
       await _publishTrack(
         track: track,
         trackName: TrackNaming.camera,
-        encodings: VideoLayers.camera,
-        video: VideoPublishIntent.camera,
+        encodings: VideoLayers.cameraFor(declared.height),
+        video: declared,
       );
     } catch (_) {
       _localVideoTrack = null;
@@ -357,11 +369,14 @@ class VoiceWebRtcService {
     _localScreenTrack = videoTrack;
     _activeShareId = shareId;
 
+    // A share is not chosen before capture, but it is knowable after it: the
+    // track carries the size the platform actually opened. An undeclared share
+    // is an uncapped one, and a share is the expensive half of the room - a 4K
+    // display fanned out at its top layer to every viewer is the bill this
+    // declaration exists to bound.
+    final declared = _screenIntent(videoTrack);
+
     try {
-      // No `video` declaration: a share captures this handset's own display at
-      // whatever size that display is, which this client neither chooses nor
-      // knows before capture. A number invented to fill the field would be a
-      // false statement rather than a missing one - see [VideoPublishIntent].
       await _publishTracks([
         (
           track: videoTrack,
@@ -374,7 +389,7 @@ class VoiceWebRtcService {
             trackName: TrackNaming.screenAudioTrack(shareId),
             encodings: null,
           ),
-      ]);
+      ], video: declared);
     } catch (_) {
       _localScreenTrack = null;
       _activeShareId = null;
@@ -385,6 +400,23 @@ class VoiceWebRtcService {
       if (Platform.isAndroid) await _screenShareService.stop();
       rethrow;
     }
+  }
+
+  /// What a share declares, from what the platform reports it captured.
+  ///
+  /// Three sources, in falling order of authority: the track's own settings,
+  /// this device's display size, and nothing. The middle one is not a guess -
+  /// a mobile share captures the display it runs on, so it is the same number
+  /// from the other side - and it exists because some platforms hand back a
+  /// track with no settings on it at all. When even that is unavailable the
+  /// field is omitted, because a number invented to fill it would be a false
+  /// statement rather than a missing one.
+  VideoPublishIntent? _screenIntent(MediaStreamTrack track) {
+    final declared = VideoPublishIntent.fromTrack(
+      track,
+      fallback: displayCaptureIntent() ?? VideoPublishIntent.unstated,
+    );
+    return declared.isStated ? declared : null;
   }
 
   /// Stops the local share and closes its tracks on the SFU.
@@ -784,6 +816,47 @@ class VoiceWebRtcService {
   /// screen it was on was closed.
   void forgetTile(String tileId) => _tileHeights.remove(tileId);
 
+  String? _pinnedUserId;
+  String? _audibleShareId;
+
+  /// One publisher this client is looking at to the exclusion of the rest, and
+  /// optionally the share whose audio it wants with them. Both null is "back to
+  /// the grid".
+  ///
+  /// Two separate things ride on one call because they turn on and off at the
+  /// same moment, and sending them separately would post the same body twice.
+  ///
+  ///  * **The pin** is what makes the picture arrive at all. In a room the
+  ///    server is being selective in, a subscription set is active speakers
+  ///    plus pins - so opening somebody who happens not to be talking asks for
+  ///    a track the set does not include, and that subscribe is refused.
+  ///  * **The share audio** is off by default for everybody, because most
+  ///    shares carry none and distributing it doubles the stream count of the
+  ///    most expensive thing in a room. Opening one full-screen is the clearest
+  ///    statement a viewer can make that they want it.
+  ///
+  /// Best-effort, and deliberately not reported back. The pin is capped
+  /// server-side and a pin over the cap is dropped silently rather than
+  /// refused, so "it did not take" has no answer here that differs from "it
+  /// did": the picture either arrives or the subscribe behind it is refused
+  /// with the stale-subscription 409 that [onStaleSubscription] already
+  /// answers by refetching and reconciling.
+  Future<void> setFocus({String? userId, String? shareId}) async {
+    if (_pinnedUserId == userId && _audibleShareId == shareId) return;
+    _pinnedUserId = userId;
+    _audibleShareId = shareId;
+    final media = _media;
+    if (media == null) return;
+    try {
+      await media.updateSubscriber(
+        pinned: [?userId],
+        screenAudioShares: [?shareId],
+      );
+    } catch (e) {
+      debugPrint('[Voice] focus on ${userId ?? 'nobody'} was not recorded: $e');
+    }
+  }
+
   // ── Local controls ────────────────────────────────────────────────────────
 
   void setMuted(bool isMuted) {
@@ -877,9 +950,14 @@ class VoiceWebRtcService {
     if (response.requiresImmediateRenegotiation) {
       final reOffer = await pc.createOffer();
       await pc.setLocalDescription(reOffer);
+      // The same declaration the publish above carried, because this is the
+      // second half of that one publish rather than a separate event. It is the
+      // offer the picture actually arrives on, and re-stating a size already
+      // recorded costs nothing; a subscribe-only cycle has none and sends none.
       final reneg = await media.renegotiate(
         mediaSessionId: mediaSessionId,
         sessionDescription: {'type': reOffer.type, 'sdp': reOffer.sdp},
+        video: video?.toJson(),
       );
       await pc.setRemoteDescription(
         _toSessionDescription(reneg.sessionDescription),

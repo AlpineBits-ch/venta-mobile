@@ -161,9 +161,20 @@ abstract class VoiceMediaApi {
     Map<String, dynamic>? video,
   });
 
+  /// Relays a fresh offer on an existing session.
+  ///
+  /// [video] carries the same `{ height, framerate }` as [negotiate] and is
+  /// only sent when this renegotiation changes what the picture actually is.
+  /// Absent leaves the last declaration exactly where it stands, in **both**
+  /// directions: omitting never lifts a cap and never applies one, so an ICE
+  /// restart, a reconnect or a track close sends the body it always sent.
+  ///
+  /// Nothing about this path can refuse. There is no `403` and no
+  /// `degradations[]` on a renegotiation, whatever is declared here.
   Future<VoiceRenegotiateResponseDto> renegotiate({
     required String mediaSessionId,
     required Map<String, dynamic> sessionDescription,
+    Map<String, dynamic>? video,
   });
 
   Future<void> closeTracks({
@@ -180,11 +191,30 @@ abstract class VoiceMediaApi {
   /// authoritative rather than a delta: a publisher missing from it is one this
   /// client is not drawing.
   ///
+  /// [pinned] names publishers to keep subscribed whatever the ranking decides.
+  /// In a room large enough for the server to be selective a subscription set is
+  /// active speakers plus pins, so fullscreening somebody who is not talking
+  /// without pinning them asks for a track the set does not include - and that
+  /// subscribe is refused. **Capped server-side** (3 by default), and a pin over
+  /// the cap is dropped rather than answered with an error.
+  ///
+  /// [screenAudioShares] names shares whose audio half to deliver. Share audio
+  /// is off by default because most shares carry none, and distributing it
+  /// doubles the stream count of the most expensive thing in a room.
+  ///
+  /// **Every field is optional and an omitted one is left alone**, so a tile
+  /// resize is a body with `tileHeights` in it and nothing else. An empty list
+  /// is not an omission: it clears that set.
+  ///
   /// The reply is this client's own subscription set, which nothing here reads
   /// yet - the subscription-set contract is not implemented, and a small room
   /// is not sent one at all. Reporting is still worth doing on its own: it is
   /// the only measurement behind layer selection.
-  Future<void> updateSubscriber({Map<String, int>? tileHeights});
+  Future<void> updateSubscriber({
+    Map<String, int>? tileHeights,
+    List<String>? pinned,
+    List<String>? screenAudioShares,
+  });
 
   /// Claims a viewer slot on a screen share. Expires after 90 seconds, so it
   /// is re-posted on the heartbeat timer rather than once.

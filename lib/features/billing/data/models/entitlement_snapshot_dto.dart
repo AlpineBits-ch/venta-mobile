@@ -22,11 +22,6 @@
 ///   thing as a button. What decides whether this surface exists is whether the
 ///   instance has a plan catalogue to describe, which is a fact about the
 ///   instance rather than about the reader. See `PlanRepository.ensureProbed`.
-/// * `ladders` - every rung of every ladder with its pixel and framerate
-///   metrics. Read by a quality picker that clamps itself, and this client has
-///   none: the camera publishes at one capture size and the server clamps it
-///   and says so. Modelling metrics nothing reads would be the first half of
-///   somebody inventing the rung-to-resolution mapping the server owns.
 /// * `resolvedAt` - when the server resolved it. `EntitlementReader` times its
 ///   own entries from when they arrived, which is the number that decides
 ///   whether it may still be used.
@@ -39,6 +34,7 @@ library;
 
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'entitlement_ladder.dart';
 import 'entitlement_value.dart';
 
 part 'entitlement_snapshot_dto.freezed.dart';
@@ -150,6 +146,21 @@ sealed class EntitlementSnapshotDto with _$EntitlementSnapshotDto {
     /// properties, and the usage half is not implemented server-side yet.
     @Default(<String, EntitlementValueDto>{})
     Map<String, EntitlementValueDto> entitlements,
+
+    /// Every rung of every ladder, with what each one permits.
+    ///
+    /// This is the rung-to-pixels mapping, and it is modelled because something
+    /// now reads it: the camera captures at the granted rung's `maxHeight` and
+    /// `maxFramerate` rather than at a size compiled into this build. Inventing
+    /// that mapping locally is the thing this field exists to prevent, and
+    /// hardcoding it is how a rung added next quarter would be ignored by every
+    /// shipped client.
+    @JsonKey(
+      fromJson: entitlementLaddersFromJson,
+      toJson: entitlementLaddersToJson,
+    )
+    @Default(<String, List<EntitlementLadderRungDto>>{})
+    Map<String, List<EntitlementLadderRungDto>> ladders,
   }) = _EntitlementSnapshotDto;
 
   factory EntitlementSnapshotDto.fromJson(Map<String, dynamic> json) =>

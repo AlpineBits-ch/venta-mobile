@@ -116,10 +116,74 @@ void main() {
       expect(VoiceTrackDirection.subscribe, 'subscribe');
     });
 
+    // The optional declaration is the same field on both bodies, and the call
+    // routes carry it as well as the guild ones.
+    test('a call renegotiation can restate the picture', () async {
+      await callApi.renegotiate(
+        callId: 'call-1',
+        mediaSessionId: 'media-1',
+        sessionDescription: const {},
+        video: const {'height': 1080, 'framerate': 60},
+      );
+
+      expect(bodyOf('/negotiate')['video'], {'height': 1080, 'framerate': 60});
+    });
+
     test('the microphone track name is still the wire constant', () {
       // Participant announcements key off this exact name, so it survived the
       // rename untouched and must keep doing so.
       expect(TrackNaming.audio, 'audio');
+    });
+  });
+
+  /// Everything on this body only ever *reduces* what the server sends, and
+  /// every field is optional with an omitted one left alone - so the shape has
+  /// to be exact in both directions. A pin that never arrives is a fullscreen
+  /// tile the subscription set does not include; a `pinned` riding a tile
+  /// resize would clear one nobody asked to clear.
+  group('subscriber reports', () {
+    test('a tile resize carries tile heights and nothing else', () async {
+      await guildApi.updateSubscriber(
+        guildId: 'g1',
+        channelId: 'c1',
+        tileHeights: const {'user-4': 180},
+      );
+
+      final body = bodyOf('/subscriptions');
+      expect(body['tileHeights'], {'user-4': 180});
+      expect(body.containsKey('pinned'), isFalse);
+      expect(body.containsKey('screenAudioShares'), isFalse);
+    });
+
+    test(
+      'going fullscreen pins the publisher and asks for its audio',
+      () async {
+        await callApi.updateSubscriber(
+          callId: 'call-1',
+          pinned: const ['user-1'],
+          screenAudioShares: const ['abc123'],
+        );
+
+        final body = bodyOf('/subscriptions');
+        expect(body['pinned'], ['user-1']);
+        expect(body['screenAudioShares'], ['abc123']);
+        expect(body.containsKey('tileHeights'), isFalse);
+      },
+    );
+
+    // An empty list is not an omission. Leaving fullscreen has to *clear* the
+    // pin, and a body that omitted the field would leave it claimed - a
+    // subscription held open for a tile nobody is drawing any more.
+    test('leaving fullscreen sends empty lists rather than nothing', () async {
+      await callApi.updateSubscriber(
+        callId: 'call-1',
+        pinned: const [],
+        screenAudioShares: const [],
+      );
+
+      final body = bodyOf('/subscriptions');
+      expect(body['pinned'], isEmpty);
+      expect(body['screenAudioShares'], isEmpty);
     });
   });
 

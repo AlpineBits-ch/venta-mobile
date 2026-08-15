@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'entitlement_api.dart';
+import 'models/entitlement_ladder.dart';
 import 'models/entitlement_snapshot_dto.dart';
 import 'models/entitlement_value.dart';
 
@@ -81,6 +82,22 @@ class EntitlementReader {
       results[0]?.entitlements[EntitlementKeys.guildUploadMaxBytes],
       results[1]?.entitlements[EntitlementKeys.guildUploadMaxBytes],
     );
+  }
+
+  /// What each video rung permits, or null when it could not be read.
+  ///
+  /// Read off this account's own snapshot rather than a room's, because the
+  /// ladder is a property of the instance and not of the subject: `720p30`
+  /// means the same number of lines in every room on the box. The *granted*
+  /// rung is the part that differs per room, and that one rides the room's own
+  /// snapshot where it can change mid-call.
+  ///
+  /// Null rather than an empty list, so a caller can tell "the server published
+  /// no ladder" from "the ladder lists nothing" without checking two things.
+  Future<List<EntitlementLadderRungDto>?> videoQualityLadder() async {
+    final snapshot = await mine();
+    final ladder = snapshot?.ladders[EntitlementLadders.videoQuality];
+    return ladder == null || ladder.isEmpty ? null : ladder;
   }
 
   /// Drops everything. Called when the signed-in account changes.

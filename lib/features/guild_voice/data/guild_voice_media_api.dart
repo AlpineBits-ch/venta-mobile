@@ -47,11 +47,13 @@ class GuildVoiceMediaApi implements VoiceMediaApi {
   Future<VoiceRenegotiateResponseDto> renegotiate({
     required String mediaSessionId,
     required Map<String, dynamic> sessionDescription,
+    Map<String, dynamic>? video,
   }) => api.renegotiate(
     guildId: guildId,
     channelId: channelId,
     mediaSessionId: mediaSessionId,
     sessionDescription: sessionDescription,
+    video: video,
   );
 
   @override
@@ -66,12 +68,17 @@ class GuildVoiceMediaApi implements VoiceMediaApi {
   );
 
   @override
-  Future<void> updateSubscriber({Map<String, int>? tileHeights}) =>
-      api.updateSubscriber(
-        guildId: guildId,
-        channelId: channelId,
-        tileHeights: tileHeights,
-      );
+  Future<void> updateSubscriber({
+    Map<String, int>? tileHeights,
+    List<String>? pinned,
+    List<String>? screenAudioShares,
+  }) => api.updateSubscriber(
+    guildId: guildId,
+    channelId: channelId,
+    tileHeights: tileHeights,
+    pinned: pinned,
+    screenAudioShares: screenAudioShares,
+  );
 
   @override
   Future<void> watchShare(String shareId) =>

@@ -22,11 +22,20 @@ class VideoParticipantTile extends StatefulWidget {
     this.mirror = false,
     this.onHeightChanged,
     this.onHidden,
+    this.objectFit = RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+    this.borderRadius = 12,
   });
 
   final MediaStreamTrack? track;
   final double width;
   final double height;
+
+  /// Cover for a grid tile, which is a fixed shape the picture has to fill.
+  /// Contain for a full-screen one, where cropping to the device's aspect
+  /// ratio would cut the sides off a 16:9 camera or a shared document.
+  final RTCVideoViewObjectFit objectFit;
+
+  final double borderRadius;
 
   /// Mirrors the video horizontally - used for the local front-camera
   /// self-preview so it behaves like every other camera app.
@@ -132,7 +141,7 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(widget.borderRadius),
       child: SizedBox(
         width: widget.width,
         height: widget.height,
@@ -151,7 +160,7 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
                 )
               : RTCVideoView(
                   _renderer,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  objectFit: widget.objectFit,
                   mirror: widget.mirror,
                 ),
         ),
