@@ -52,7 +52,17 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   List<GuildDto> _guilds = const [];
-  bool _callScreenShown = false;
+
+  /// The call screen's route while it is up, so ending a call can close *that*
+  /// route rather than whatever happens to be on top of the root navigator.
+  ///
+  /// `CallScreen` pushes its own fullscreen viewer onto this same navigator, so
+  /// a positional `pop()` closed the fullscreen instead whenever a call ended
+  /// while somebody was maximised - leaving `CallScreen` mounted at
+  /// `CallPhase.idle`, which draws nothing behind a `PopScope(canPop: false)`
+  /// and cannot be backed out of.
+  Route<void>? _callScreenRoute;
+  bool get _callScreenShown => _callScreenRoute != null;
 
   @override
   void initState() {
@@ -218,19 +228,25 @@ class _AppShellState extends State<AppShell> {
   void _syncCallScreen(BuildContext context, CallState state) {
     final shouldShow = state.phase != CallPhase.idle;
     if (shouldShow && !_callScreenShown) {
-      _callScreenShown = true;
+      final route = PageRouteBuilder<void>(
+        pageBuilder: (_, _, _) => const CallScreen(),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      );
+      _callScreenRoute = route;
       Navigator.of(context, rootNavigator: true)
-          .push(
-            PageRouteBuilder<void>(
-              pageBuilder: (_, _, _) => const CallScreen(),
-              transitionDuration: Duration.zero,
-              reverseTransitionDuration: Duration.zero,
-            ),
-          )
-          .then((_) => _callScreenShown = false);
+          .push(route)
+          // Covers the user backing out of it as well as the removal below, so
+          // the two can never disagree about whether the screen is up.
+          .then((_) => _callScreenRoute = null);
     } else if (!shouldShow && _callScreenShown) {
-      _callScreenShown = false;
-      Navigator.of(context, rootNavigator: true).pop();
+      final route = _callScreenRoute!;
+      _callScreenRoute = null;
+      // By identity, not by position: the fullscreen viewer may be above this,
+      // and removing the call screen from underneath it lets the viewer's own
+      // liveness check close itself in the same beat without the two racing to
+      // pop each other.
+      Navigator.of(context, rootNavigator: true).removeRoute(route);
     }
     // Shown from the shell's own context, not `CallScreen`'s - its route is
     // being popped in the same beat this fires, so a SnackBar raised from

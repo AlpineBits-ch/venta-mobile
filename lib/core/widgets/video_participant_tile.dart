@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'adaptive_progress_indicator.dart';
+import 'received_resolution_badge.dart';
 
 /// Renders one live camera/screen-share video track - the video-capable
 /// sibling of `CallParticipantTile`. Owns its own `RTCVideoRenderer` and
@@ -115,6 +116,11 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
 
   Future<void> _attachTrack(MediaStreamTrack? track) async {
     if (!_rendererReady) return;
+    // One renderer outlives several tracks here, and the platform emits a size
+    // event only when the size *changes*. A new track that never decodes would
+    // otherwise leave the previous track's resolution on screen - which is
+    // exactly the stale reading `ReceivedResolutionBadge` exists to rule out.
+    _renderer.value = RTCVideoValue.empty;
     final previousStream = _wrapperStream;
     _wrapperStream = null;
     if (track == null) {
@@ -157,10 +163,28 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
                     color: Colors.white54,
                   ),
                 )
-              : RTCVideoView(
-                  _renderer,
-                  objectFit: widget.objectFit,
-                  mirror: widget.mirror,
+              : Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RTCVideoView(
+                      _renderer,
+                      objectFit: widget.objectFit,
+                      mirror: widget.mirror,
+                    ),
+                    // Top right, because bottom left is already the sharer's
+                    // name label in `ScreenShareView`. Draws nothing at all
+                    // unless the diagnostics pref is on.
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: ReceivedResolutionBadge(
+                          renderer: _renderer,
+                          reportedDevicePixels: _reportedHeight,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
         ),
       ),

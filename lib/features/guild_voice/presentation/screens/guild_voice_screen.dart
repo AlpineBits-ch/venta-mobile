@@ -72,6 +72,21 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
           track: () => shareId == null
               ? cubit.remoteVideoTrackFor(userId)
               : cubit.remoteScreenTrackForShare(shareId),
+          // Asked of the roster rather than of the track, so every way a
+          // picture can end - stopped, left, evicted, or absent from a fresh
+          // snapshot - closes this route without being listed here.
+          isLive: () {
+            final channelId = cubit.state.channelId;
+            if (channelId == null) return false;
+            final sharer = cubit.state
+                .rosterFor(channelId)
+                .where((p) => p.userId == userId)
+                .firstOrNull;
+            if (sharer == null) return false;
+            return shareId == null
+                ? sharer.hasCamera
+                : sharer.shareById(shareId) != null;
+          },
           onEnter: () => cubit.setFocus(userId: userId, shareId: shareId),
           onExit: () => cubit.setFocus(),
           onHeightChanged: (devicePixels) => cubit.reportTileHeight(

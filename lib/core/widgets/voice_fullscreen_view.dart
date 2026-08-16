@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../diagnostics/video_diagnostics_prefs.dart';
 import '../orientation/viewer_orientation.dart';
 import '../theme/app_colors.dart';
 import 'profile_resolver.dart';
@@ -47,6 +48,7 @@ class VoiceFullscreenView extends StatefulWidget {
     required this.userId,
     required this.updates,
     required this.track,
+    required this.isLive,
     required this.onEnter,
     required this.onExit,
     this.isShare = false,
@@ -68,6 +70,22 @@ class VoiceFullscreenView extends StatefulWidget {
   /// The track to render right now, or null while none has arrived.
   final MediaStreamTrack? Function() track;
 
+  /// Whether the picture this route was opened on still exists in the roster.
+  ///
+  /// Read on every emission the same way [track] is, and for the same reason:
+  /// the roster is authoritative, and it can drop a share through half a dozen
+  /// routes - the publisher stopping it, leaving, being evicted by the server's
+  /// liveness sweep, or a snapshot arriving that simply no longer lists it.
+  /// Enumerating those events here would mean re-listing them every time the
+  /// server grows another one; asking the roster covers all of them by
+  /// construction, including the ones that do not exist yet.
+  ///
+  /// **A null [track] is deliberately not the test.** A track reads null for a
+  /// beat during renegotiation too, and closing the view on that would snatch
+  /// the picture away from a viewer whose stream was about to come back. Absent
+  /// from the roster is a fact; absent from the wire for a moment is not.
+  final bool Function() isLive;
+
   /// Claims the pin and any share audio. Called once, on open.
   final Future<void> Function() onEnter;
 
@@ -88,10 +106,22 @@ class VoiceFullscreenView extends StatefulWidget {
 class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
   late ViewerOrientationMode _mode = ViewerOrientationPrefs.mode;
 
+  /// Watches the roster for the picture disappearing underneath this route.
+  ///
+  /// Separate from the `StreamBuilder` in [build], which sees the same
+  /// emissions: that one decides what to *draw*, and drawing is the wrong place
+  /// to pop a route from - a `Navigator` call during a build is a framework
+  /// error. This listens for the same change and acts on it outside the frame.
+  StreamSubscription<Object?>? _liveness;
+
   @override
   void initState() {
     super.initState();
     unawaited(widget.onEnter());
+    _liveness = widget.updates.listen((_) {
+      if (!mounted || widget.isLive()) return;
+      _dismiss();
+    });
     // `main()` allows both portrait orientations. Both would be fine on their
     // own, but the tilt reading is interpreted relative to the window: a window
     // that has flipped to reverse portrait while a sideways picture is on
@@ -102,8 +132,23 @@ class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
     );
   }
 
+  /// Close this route because what it was showing no longer exists.
+  ///
+  /// Removes *this* route by identity rather than popping whatever is on top.
+  /// A bare `pop()` closes the topmost route, which is not necessarily this one
+  /// - a settings sheet, a dialog or the share-quality picker can sit above it,
+  /// and a share ending underneath would then dismiss that instead and leave
+  /// the dead fullscreen exactly where it was. `removeRoute` is also what keeps
+  /// this safe against the shell popping the call screen in the same beat.
+  void _dismiss() {
+    final route = ModalRoute.of(context);
+    if (route == null) return;
+    Navigator.of(context).removeRoute(route);
+  }
+
   @override
   void dispose() {
+    unawaited(_liveness?.cancel());
     // Not awaited and deliberately not gated on `mounted`: the screen is going
     // away either way, and a pin left claimed keeps a subscription this viewer
     // no longer has anywhere to draw.
@@ -152,6 +197,25 @@ class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
                 },
               ),
               actions: [
+                // The diagnostics switch lives here rather than in settings
+                // because this is the screen where the question gets asked -
+                // you are looking at a picture and wondering what you are
+                // actually being sent. The pref is global, so flipping it here
+                // also lights up the grid tiles underneath.
+                ValueListenableBuilder<bool>(
+                  valueListenable: VideoDiagnosticsPrefs.enabled,
+                  builder: (context, showing, _) => IconButton(
+                    onPressed: VideoDiagnosticsPrefs.toggle,
+                    tooltip: showing
+                        ? 'Hide received resolution'
+                        : 'Show received resolution',
+                    icon: Icon(
+                      showing
+                          ? Icons.analytics
+                          : Icons.analytics_outlined,
+                    ),
+                  ),
+                ),
                 ViewerOrientationButton(mode: _mode, onChanged: _setMode),
               ],
             ),

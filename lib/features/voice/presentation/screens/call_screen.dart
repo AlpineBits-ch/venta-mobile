@@ -172,6 +172,18 @@ void _openFullscreen(
         track: () => shareId == null
             ? cubit.remoteVideoTrackFor(userId)
             : cubit.remoteScreenTrackForShare(shareId),
+        // See the matching note in `GuildVoiceScreen`: the roster answers this,
+        // not the track, so a picture that ends any of the several ways it can
+        // closes this route without each of them being named here.
+        isLive: () {
+          final sharer = cubit.state.participants
+              .where((p) => p.userId == userId)
+              .firstOrNull;
+          if (sharer == null) return false;
+          return shareId == null
+              ? sharer.hasCamera
+              : sharer.shareById(shareId) != null;
+        },
         onEnter: () => cubit.setFocus(userId: userId, shareId: shareId),
         onExit: () => cubit.setFocus(),
         onHeightChanged: (devicePixels) => cubit.reportTileHeight(
