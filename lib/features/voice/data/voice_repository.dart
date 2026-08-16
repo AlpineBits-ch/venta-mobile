@@ -39,10 +39,18 @@ class CallResyncRequested extends VoiceRepositoryEvent {
   bool get isRoomGone => reason == 'roomGone';
 }
 
-/// Another of the user's own devices accepted this call - dismiss the local
-/// ringing UI on this device the same way a local decline would, no "call
-/// ended" messaging. No-op if this device isn't currently ringing for the
-/// call (e.g. it's the device that itself just accepted).
+/// Somebody accepted this call.
+///
+/// Two jobs, because the server broadcasts it to every participant's every
+/// session. On another of the user's own devices it dismisses the local ringing
+/// UI the same way a local decline would, with no "call ended" messaging. On the
+/// *caller* it ends the outgoing ringback - and it is the only answer-shaped
+/// signal there is. `call.ParticipantJoined` is not a substitute: it fires when
+/// the answering client publishes a microphone, reaches only people already in
+/// the voice room, and is never repeated.
+///
+/// No-op if this device is neither ringing nor calling for it (e.g. it is the
+/// device that itself just accepted).
 class CallAcceptedElsewhere extends VoiceRepositoryEvent {
   const CallAcceptedElsewhere(this.callId);
   final String callId;
@@ -66,9 +74,11 @@ class CallDeviceTakeover extends VoiceRepositoryEvent {
 }
 
 /// A participant left a still-active call via the `leave` endpoint - the call
-/// keeps running for everyone else. Distinct from [CallParticipantLeft] (the
-/// media-level presence event); both are handled the same way client-side
-/// since either may be the one that actually fires for a given leave.
+/// keeps running for everyone else. The only departure event a call carries:
+/// there used to be a second, media-level `call.ParticipantLeft` handled
+/// alongside it, but no such event exists server-side (see `VoiceEvents`) and
+/// nothing ever raised it. A departure the room notices instead arrives as
+/// `call.Resync` with `reason: participantLeft`.
 class CallLifecycleParticipantLeft extends VoiceRepositoryEvent {
   const CallLifecycleParticipantLeft(this.userId);
   final String userId;
@@ -102,10 +112,6 @@ class CallParticipantJoined extends VoiceRepositoryEvent {
   final String audioTrackName;
 }
 
-class CallParticipantLeft extends VoiceRepositoryEvent {
-  const CallParticipantLeft(this.userId);
-  final String userId;
-}
 
 class CallMuteChanged extends VoiceRepositoryEvent {
   const CallMuteChanged({
@@ -361,8 +367,6 @@ class VoiceRepository {
             audioTrackName: payload['audioTrackName'] as String,
           ),
         );
-      case 'call.ParticipantLeft':
-        _eventsController.add(CallParticipantLeft(payload['userId'] as String));
       case 'call.MuteChanged':
         _eventsController.add(
           CallMuteChanged(
@@ -394,9 +398,22 @@ class VoiceRepository {
           ),
         );
       case 'call.CallAccepted':
-        _eventsController.add(
-          CallAcceptedElsewhere(payload['callId'] as String),
-        );
+        {
+          // Read defensively rather than cast. This branch used to be
+          // `payload['callId'] as String` while the server was still sending
+          // the bare `Call`, whose id field is `id` - so it threw on every
+          // accept, the event never reached the cubit, and both the second
+          // device's ring and the caller's ringback carried on. The fallbacks
+          // also cover a client running against a backend that predates the
+          // payload fix.
+          final acceptedId =
+              payload['callId'] as String? ??
+              (payload['call'] as Map?)?['id'] as String? ??
+              payload['id'] as String?;
+          if (acceptedId != null) {
+            _eventsController.add(CallAcceptedElsewhere(acceptedId));
+          }
+        }
       case 'call.CallDeviceDismissed':
         _eventsController.add(CallDeviceDismissed(payload['callId'] as String));
       case 'call.CallDeviceTakeover':

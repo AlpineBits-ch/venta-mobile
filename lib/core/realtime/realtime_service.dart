@@ -158,7 +158,9 @@ class RealtimeService {
     'status.IncidentUpdated',
     'call.IncomingCall',
     'call.ParticipantJoined',
-    'call.ParticipantLeft',
+    // No `call.ParticipantLeft` here: the server has no such event (see
+    // Echo.Voice's VoiceEvents). Departures arrive as `call.CallParticipantLeft`
+    // below, and a room-level one as `call.Resync` with reason `participantLeft`.
     'call.MuteChanged',
     'call.CallEnded',
     // Multi-device calling (see docs/multi-device-calls-client-spec.md):

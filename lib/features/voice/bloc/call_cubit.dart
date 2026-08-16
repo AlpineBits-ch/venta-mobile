@@ -983,7 +983,6 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
           ),
         );
 
-      case CallParticipantLeft(:final userId):
       case CallLifecycleParticipantLeft(:final userId):
         emitIfOpen(
           state.copyWith(
