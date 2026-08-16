@@ -170,9 +170,9 @@ void _openFullscreen(
         userId: userId,
         isShare: shareId != null,
         updates: cubit.stream,
-        track: () => shareId == null
-            ? cubit.remoteVideoTrackFor(userId)
-            : cubit.remoteScreenTrackForShare(shareId),
+        feed: () => shareId == null
+            ? cubit.remoteVideoFeedFor(userId)
+            : cubit.remoteScreenFeedForShare(shareId),
         // See the matching note in `GuildVoiceScreen`: the roster answers this,
         // not the track, so a picture that ends any of the several ways it can
         // closes this route without each of them being named here.
@@ -212,7 +212,7 @@ void _openLocalFullscreen(BuildContext context, CallCubit cubit) {
       builder: (_) => VoiceFullscreenView(
         title: 'Your camera',
         updates: cubit.stream,
-        track: () => cubit.localVideoTrack,
+        feed: () => cubit.localVideoFeed,
         isMirrored: () => cubit.isFrontCamera,
         // Closes itself if the camera goes off - from the action row below this
         // route, or because the call ended underneath it.
@@ -297,9 +297,9 @@ class _ActiveCallView extends StatelessWidget {
               child: ScreenShareView(
                 userId: sharer.userId,
                 isSelf: sharer.userId == myUserId,
-                track: sharer.userId == myUserId
-                    ? cubit.localScreenTrack
-                    : cubit.remoteScreenTrackFor(sharer.userId),
+                feed: sharer.userId == myUserId
+                    ? cubit.localScreenFeed
+                    : cubit.remoteScreenFeedFor(sharer.userId),
                 // Only somebody else's share is worth a size: the server picks
                 // a layer for what this client *pulls*, and nobody pulls their
                 // own picture.
@@ -333,7 +333,8 @@ class _ActiveCallView extends StatelessWidget {
                 children: [
                   if (cubit.isCameraOn)
                     LocalCameraTile(
-                      track: cubit.localVideoTrack,
+                      key: const ValueKey('camera:self'),
+                      feed: cubit.localVideoFeed,
                       isFrontCamera: cubit.isFrontCamera,
                       onSwitchCamera: cubit.switchCamera,
                       onTap: () => _openLocalFullscreen(context, cubit),
@@ -349,6 +350,13 @@ class _ActiveCallView extends StatelessWidget {
                     for (final participant in others)
                       if (participant.hasCamera)
                         GestureDetector(
+                          // Keyed because this list changes shape - the local
+                          // tile appears, a participant moves between a video
+                          // tile and an audio one - and positional
+                          // reconciliation would otherwise hand one
+                          // participant's element to another, disposing a live
+                          // renderer and forgetting a tile that is still drawn.
+                          key: ValueKey('camera:${participant.userId}'),
                           onTap: () => _openFullscreen(
                             context,
                             cubit,
@@ -356,7 +364,8 @@ class _ActiveCallView extends StatelessWidget {
                             tileId: 'camera:${participant.userId}',
                           ),
                           child: VideoParticipantTile(
-                            track: cubit.remoteVideoTrackFor(
+                            label: 'camera:${participant.userId}',
+                            feed: cubit.remoteVideoFeedFor(
                               participant.userId,
                             ),
                             onHeightChanged: (devicePixels) =>

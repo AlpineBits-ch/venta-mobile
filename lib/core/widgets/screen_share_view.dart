@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../voice/voice_video_feed.dart';
 import 'profile_resolver.dart';
 import 'video_participant_tile.dart';
 
@@ -12,7 +12,7 @@ class ScreenShareView extends StatelessWidget {
   const ScreenShareView({
     super.key,
     required this.userId,
-    required this.track,
+    required this.feed,
     required this.isSelf,
     this.onHeightChanged,
     this.onHidden,
@@ -20,7 +20,7 @@ class ScreenShareView extends StatelessWidget {
   });
 
   final String userId;
-  final MediaStreamTrack? track;
+  final VoiceVideoFeed? feed;
   final bool isSelf;
 
   /// Opens the share full-screen. Null for a share this device is publishing:
@@ -47,7 +47,11 @@ class ScreenShareView extends StatelessWidget {
             GestureDetector(
               onTap: onTap,
               child: VideoParticipantTile(
-                track: track,
+                feed: feed,
+                label: 'share:$userId',
+                // A share this device is publishing is drawn from its own
+                // capture; there is no delivery to diagnose on this side.
+                expectsVideo: !isSelf,
                 width: width,
                 height: width * 9 / 16,
                 onHeightChanged: onHeightChanged,

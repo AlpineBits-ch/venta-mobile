@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' show RTCVideoViewObjectFit;
 
 import '../diagnostics/video_diagnostics_prefs.dart';
 import '../orientation/viewer_orientation.dart';
 import '../theme/app_colors.dart';
+import '../voice/voice_video_feed.dart';
 import 'adaptive_progress_indicator.dart';
 import 'camera_switch_button.dart';
 import 'profile_resolver.dart';
@@ -45,7 +46,7 @@ import 'video_participant_tile.dart';
 ///    can ask for a track the set does not include.
 ///
 /// [updates] is the cubit that owns the media. `MediaStreamTrack`s cannot live
-/// in cubit state, so [track] re-reads the current one imperatively on every
+/// in cubit state, so [feed] re-reads the current one imperatively on every
 /// emission - the same arrangement the grid tiles use, for the same reason.
 ///
 /// This is also the one screen in the app that is allowed to be sideways. It
@@ -64,7 +65,7 @@ class VoiceFullscreenView extends StatefulWidget {
   const VoiceFullscreenView({
     super.key,
     required this.updates,
-    required this.track,
+    required this.feed,
     required this.isLive,
     this.userId,
     this.title,
@@ -93,15 +94,15 @@ class VoiceFullscreenView extends StatefulWidget {
   /// thing the title says differently.
   final bool isShare;
 
-  /// Emits whenever the owning cubit does. Only used to re-read [track].
+  /// Emits whenever the owning cubit does. Only used to re-read [feed].
   final Stream<Object?> updates;
 
-  /// The track to render right now, or null while none has arrived.
-  final MediaStreamTrack? Function() track;
+  /// The picture to render right now, or null while none has arrived.
+  final VoiceVideoFeed? Function() feed;
 
   /// Whether the picture this route was opened on still exists in the roster.
   ///
-  /// Read on every emission the same way [track] is, and for the same reason:
+  /// Read on every emission the same way [feed] is, and for the same reason:
   /// the roster is authoritative, and it can drop a share through half a dozen
   /// routes - the publisher stopping it, leaving, being evicted by the server's
   /// liveness sweep, or a snapshot arriving that simply no longer lists it.
@@ -109,14 +110,14 @@ class VoiceFullscreenView extends StatefulWidget {
   /// server grows another one; asking the roster covers all of them by
   /// construction, including the ones that do not exist yet.
   ///
-  /// **A null [track] is deliberately not the test.** A track reads null for a
+  /// **A null [feed] is deliberately not the test.** A feed reads null for a
   /// beat during renegotiation too, and closing the view on that would snatch
   /// the picture away from a viewer whose stream was about to come back. Absent
   /// from the roster is a fact; absent from the wire for a moment is not.
   final bool Function() isLive;
 
   /// Whether to mirror the picture, re-read on every emission the same way
-  /// [track] is - a camera flip changes the answer while this route is open,
+  /// [feed] is - a camera flip changes the answer while this route is open,
   /// and this route is where the flip is most likely to be pressed.
   ///
   /// Null - never mirrored - for anything arriving from somebody else: a remote
@@ -305,7 +306,14 @@ class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
                       stream: widget.updates,
                       builder: (context, _) => Center(
                         child: VideoParticipantTile(
-                          track: widget.track(),
+                          feed: widget.feed(),
+                          label: widget.userId == null
+                              ? 'full:self'
+                              : 'full:${widget.userId}',
+                          // A local picture is this device's own capture and
+                          // has no delivery to explain; the two callbacks that
+                          // are null for it say the same thing.
+                          expectsVideo: widget.onSwitchCamera == null,
                           mirror: widget.isMirrored?.call() ?? false,
                           width: constraints.maxWidth,
                           height: constraints.maxHeight,

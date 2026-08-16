@@ -154,7 +154,7 @@ void main() {
           home: Scaffold(
             body: Center(
               child: LocalCameraTile(
-                track: null,
+                feed: null,
                 isFrontCamera: isFrontCamera,
                 onSwitchCamera: onSwitchCamera ?? () async {},
                 onTap: onTap ?? () {},
@@ -231,7 +231,7 @@ void main() {
           home: VoiceFullscreenView(
             title: 'Your camera',
             updates: const Stream<Object?>.empty(),
-            track: () => null,
+            feed: () => null,
             isLive: () => true,
             isMirrored: () => true,
             onSwitchCamera: onSwitchCamera,

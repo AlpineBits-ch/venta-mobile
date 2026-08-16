@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart';
 
 import '../../features/billing/data/models/entitlement_degradation_dto.dart';
+import '../diagnostics/voice_diagnostics.dart';
 import '../media/camera_permission.dart';
 import '../media/screen_share_service.dart';
 import 'tile_heights.dart';
@@ -15,6 +16,7 @@ import 'voice_identity.dart';
 import 'voice_media_api.dart';
 import 'voice_media_dto.dart';
 import 'voice_subscription_set.dart';
+import 'voice_video_feed.dart';
 
 /// The media half of one voice room - connection, publication and subscription,
 /// for a guild voice channel and a direct call alike.
@@ -42,7 +44,12 @@ import 'voice_subscription_set.dart';
 /// tracks do not render anywhere on their own; the UI attaches a renderer to
 /// whatever the track getters here currently return.
 class VoiceWebRtcService {
-  VoiceWebRtcService();
+  VoiceWebRtcService({VoiceDiagnostics? diagnostics})
+    : _diagnostics = diagnostics ?? VoiceDiagnostics.shared;
+
+  /// Where every failure this class swallows is written down. Injectable so a
+  /// test can assert on the trail rather than on a debug print.
+  final VoiceDiagnostics _diagnostics;
 
   final ScreenShareService _screenShareService = ScreenShareService();
 
@@ -121,9 +128,14 @@ class VoiceWebRtcService {
   /// Remote tracks by the key they are addressed under. Screen tracks are keyed
   /// by `shareId` rather than by user: one participant can run more than one
   /// share, and the snapshot models them as a list for exactly that reason.
+  ///
+  /// Audio is held as a bare track because nothing renders it - it plays on
+  /// arrival, and the only thing done to it locally is [setDeafened]. Video is
+  /// held as a [_RemoteVideo], which keeps the stream the renderer needs and the
+  /// health readings that explain a tile that stays black.
   final Map<String, rtc.MediaStreamTrack> _remoteAudioTracks = {};
-  final Map<String, rtc.MediaStreamTrack> _remoteVideoTracks = {};
-  final Map<String, rtc.MediaStreamTrack> _remoteScreenTracks = {};
+  final Map<String, _RemoteVideo> _remoteVideo = {};
+  final Map<String, _RemoteVideo> _remoteScreens = {};
   final Map<String, rtc.MediaStreamTrack> _remoteScreenAudioTracks = {};
   final Map<String, String> _shareOwners = {};
 
@@ -183,6 +195,12 @@ class VoiceWebRtcService {
   /// publishing and what it should re-subscribe to afterwards.
   void Function()? onMediaDisconnected;
 
+  /// Called with a video publication the SFU is advertising that nothing has
+  /// asked for - see `_reportUnknownPublications` for the case it exists to
+  /// close. The owner decides whether to draw it and subscribes through the
+  /// ordinary route; nothing is pulled on the strength of this alone.
+  void Function(VoicePublicationDiscovery discovery)? onPublicationDiscovered;
+
   /// Whether the server is currently managing this client's subscriptions.
   bool get hasManagedSubscriptions => _plan.isManaged;
 
@@ -212,6 +230,24 @@ class VoiceWebRtcService {
   /// event is not reported as a connection that was lost.
   bool _disconnecting = false;
 
+  /// Which connection attempt is current. Raised by [connectTo] and by
+  /// [disconnect], and read at every checkpoint inside [_connectAttempt]: an
+  /// attempt whose generation has moved on is one whose room nobody wants.
+  int _generation = 0;
+
+  /// The attempt in flight, so [disconnect] can wait for it to abandon itself
+  /// rather than racing it to the same room.
+  Future<void>? _connecting;
+
+  /// How long the SDK is given to close a room before the local teardown
+  /// proceeds without it.
+  ///
+  /// Shorter than the SDK's own ten seconds on purpose: the ten is its bound for
+  /// a pathological socket, and nothing after this point needs the socket to
+  /// have closed. Leaving has to feel local, and the server has its own liveness
+  /// sweep for a session that goes quiet.
+  static const Duration _roomCloseTimeout = Duration(seconds: 3);
+
   /// The last raw speaking state seen, so [onLocalSpeakingChanged] fires on
   /// transitions rather than on every active-speaker recomputation - which
   /// happens whenever *anybody* in the room starts or stops.
@@ -238,9 +274,34 @@ class VoiceWebRtcService {
   /// `autoSubscribe: false` is not a detail. It is what puts §6 in charge of
   /// what this client pulls instead of the room, and without it a large room
   /// quietly subscribes to everybody and pays for it with nobody the wiser.
+  ///
+  /// **Cancellable, and it has to be.** Every step below is a round trip - the
+  /// connection mint, the SFU handshake, the microphone - and a person who taps
+  /// a channel and changes their mind is inside one of them. [disconnect] raises
+  /// the generation, and every checkpoint here abandons and tears down whatever
+  /// it has built so far. Without that the room this call opens is one nothing
+  /// holds a reference to: it stays connected, keeps the microphone live, and -
+  /// because the SFU keys participants by identity and drops an earlier session
+  /// that reappears under the same one - is what kicks the *next* connection off
+  /// the air. That is the "could not connect" a fast rejoin produces.
   Future<void> connectTo(VoiceMediaApi media) async {
+    final generation = ++_generation;
     _media = media;
     _disconnecting = false;
+    final attempt = _connectAttempt(media, generation);
+    _connecting = attempt;
+    try {
+      await attempt;
+    } finally {
+      if (identical(_connecting, attempt)) _connecting = null;
+    }
+  }
+
+  Future<void> _connectAttempt(VoiceMediaApi media, int generation) async {
+    // True once the room this attempt is building is no longer the room anybody
+    // wants. Read after every await rather than once: the whole of this method
+    // is time somebody can spend leaving.
+    bool superseded() => generation != _generation || _disconnecting;
 
     final connection = await media.createConnection(primary: true);
     // The handshake declares its backend so a client picks a media layer from a
@@ -248,8 +309,14 @@ class VoiceWebRtcService {
     // this build cannot drive the room - guessing would drive a transport with
     // different semantics and fail as if the network were at fault.
     if (!supportedVoiceBackends.contains(connection.backend)) {
+      _diagnostics.record(
+        VoiceFaultCodes.backend,
+        subject: media.roomKey.toString(),
+        detail: 'server offered "${connection.backend}"',
+      );
       throw UnsupportedVoiceBackendException(connection.backend);
     }
+    if (superseded()) throw const VoiceConnectSuperseded();
     _connection = connection;
 
     final room = Room(
@@ -271,17 +338,41 @@ class VoiceWebRtcService {
     _room = room;
     _roomEvents = room.events.listen(_handleRoomEvent);
 
-    await room.connect(
-      connection.url,
-      connection.token,
-      connectOptions: const ConnectOptions(autoSubscribe: false),
-    );
+    try {
+      await room.connect(
+        connection.url,
+        connection.token,
+        connectOptions: const ConnectOptions(autoSubscribe: false),
+      );
+    } catch (_) {
+      await _abandon(room);
+      rethrow;
+    }
+    if (superseded()) {
+      await _abandon(room);
+      throw const VoiceConnectSuperseded();
+    }
 
     final track = await LocalAudioTrack.create();
-    await room.localParticipant?.publishAudioTrack(
-      track,
-      publishOptions: const AudioPublishOptions(name: TrackNaming.audio),
-    );
+    if (superseded()) {
+      await _releaseAudio(track);
+      await _abandon(room);
+      throw const VoiceConnectSuperseded();
+    }
+    try {
+      await room.localParticipant?.publishAudioTrack(
+        track,
+        publishOptions: const AudioPublishOptions(name: TrackNaming.audio),
+      );
+    } catch (_) {
+      // The one path where capture succeeded and publication did not. A
+      // microphone left open against a publish the SFU refused is a lit
+      // indicator over nothing - the same rule [publishLocalVideo] follows for
+      // the camera.
+      await _releaseAudio(track);
+      await _abandon(room);
+      rethrow;
+    }
     _localAudioTrack = track;
     // Set from the line above rather than from the declaration below, because
     // it is what the *heartbeat* asserts and the heartbeat has to be honest.
@@ -297,26 +388,128 @@ class VoiceWebRtcService {
     // server reconciles from it.
     try {
       await _declarePublish([TrackNaming.audio]);
-    } catch (e) {
-      debugPrint('[Voice] publish declaration failed, heartbeat will repair: $e');
+    } catch (e, s) {
+      _diagnostics.record(
+        VoiceFaultCodes.publish,
+        subject: media.roomKey.toString(),
+        detail: 'microphone published but not declared; heartbeat will repair',
+        error: e,
+        stackTrace: s,
+      );
     }
 
     await rtc.Helper.setSpeakerphoneOnButPreferBluetooth();
     _resolveWanted();
   }
 
+  /// Tears down a room this attempt built and nobody wants, without disturbing
+  /// whatever has replaced it.
+  ///
+  /// Guarded on identity throughout: by the time an abandoned attempt gets here
+  /// a *newer* connection may already own [_room], and clearing it would take
+  /// the live room down with the dead one.
+  Future<void> _abandon(Room room) async {
+    if (identical(_room, room)) {
+      await _roomEvents?.call();
+      _roomEvents = null;
+      _room = null;
+      _connection = null;
+    }
+    await _closeRoom(room);
+  }
+
+  Future<void> _releaseAudio(LocalAudioTrack track) async {
+    try {
+      await track.stop();
+      await track.dispose();
+    } catch (e) {
+      _diagnostics.record(
+        VoiceFaultCodes.connect,
+        detail: 'microphone was not released after an abandoned connect',
+        error: e,
+      );
+    }
+  }
+
+  /// Closes one room, bounded and never throwing.
+  ///
+  /// **The SDK's own `disconnect()` can hang for ten seconds and then throw**,
+  /// and on the exact path this app hits most: it awaits an
+  /// `EngineDisconnectedEvent` that `Engine.disconnect()` has *already emitted*
+  /// synchronously whenever the engine was not `connected` - which is every
+  /// room torn down before its handshake finished, i.e. every fast leave. The
+  /// listener subscribes after the fact, the broadcast controller does not
+  /// replay, and `waitFor` times out.
+  ///
+  /// Unguarded, that `TimeoutException` propagated out of [disconnect] and took
+  /// the rest of the teardown with it - the room, the microphone and the media
+  /// API were all left set, and the caller's own `POST .../voice/leave` never
+  /// ran, so the server still had this device in the channel. The next join then
+  /// collided with a membership that should not have existed. Bounding it here
+  /// is what makes leaving a local operation again.
+  Future<void> _closeRoom(Room room) async {
+    try {
+      await room.disconnect().timeout(_roomCloseTimeout);
+    } catch (e) {
+      _diagnostics.record(
+        VoiceFaultCodes.superseded,
+        detail: 'room disconnect did not complete cleanly',
+        error: e,
+        // Not an error: the local teardown below is unconditional, and the SFU
+        // drops an abandoned session on its own liveness window either way.
+        isError: false,
+      );
+    }
+    try {
+      await room.dispose();
+    } catch (_) {
+      // Disposing twice, or disposing a room whose engine is already gone, is
+      // not a condition anybody can act on.
+    }
+  }
+
+  /// Releases the media half of this room. **Never throws, and always completes
+  /// the local reset**, because its caller has a `POST .../voice/leave` to send
+  /// afterwards and a leave that does not reach the server is a membership
+  /// nobody can clear.
   Future<void> disconnect() async {
     // Set before anything closes, so the SDK's own disconnect event is not
-    // mistaken for the connection being lost.
+    // mistaken for the connection being lost - and so an in-flight [connectTo]
+    // abandons at its next checkpoint.
     _disconnecting = true;
-    if (_localScreenTrack != null && Platform.isAndroid) {
-      await _screenShareService.stop();
+    _generation++;
+
+    // Awaited so the room an in-flight attempt is opening is torn down by the
+    // attempt itself. Its failure is the abandonment, which is the expected
+    // outcome here rather than something to report.
+    final pending = _connecting;
+    if (pending != null) {
+      try {
+        await pending;
+      } catch (_) {}
     }
-    await _roomEvents?.call();
+
+    if (_localScreenTrack != null && Platform.isAndroid) {
+      try {
+        await _screenShareService.stop();
+      } catch (e) {
+        _diagnostics.record(
+          VoiceFaultCodes.connect,
+          detail: 'screen capture service did not stop',
+          error: e,
+        );
+      }
+    }
+    try {
+      await _roomEvents?.call();
+    } catch (_) {
+      // A listener that is already cancelled.
+    }
     _roomEvents = null;
-    await _room?.disconnect();
-    await _room?.dispose();
+    final room = _room;
     _room = null;
+    if (room != null) await _closeRoom(room);
+
     _media = null;
     _connection = null;
     _publishedLocalAudio = false;
@@ -336,8 +529,11 @@ class VoiceWebRtcService {
     // report that turns video back on.
     _paused = false;
     _remoteAudioTracks.clear();
-    _remoteVideoTracks.clear();
-    _remoteScreenTracks.clear();
+    for (final video in [..._remoteVideo.values, ..._remoteScreens.values]) {
+      video.dispose();
+    }
+    _remoteVideo.clear();
+    _remoteScreens.clear();
     _remoteScreenAudioTracks.clear();
     _shareOwners.clear();
     _wanted.clear();
@@ -483,7 +679,11 @@ class VoiceWebRtcService {
       await track.setCameraPosition(next);
       _cameraPosition = next;
     } catch (e) {
-      debugPrint('[Voice] camera switch failed: $e');
+      _diagnostics.record(
+        VoiceFaultCodes.connect,
+        detail: 'camera flip failed; the previous camera is still running',
+        error: e,
+      );
     } finally {
       _switchingCamera = false;
     }
@@ -793,8 +993,8 @@ class VoiceWebRtcService {
     if (wanted == null) return false;
     return switch (wanted.kind) {
       TrackKind.audio => _remoteAudioTracks.containsKey(wanted.userId),
-      TrackKind.video => _remoteVideoTracks.containsKey(wanted.userId),
-      TrackKind.screen => _remoteScreenTracks.containsKey(wanted.shareId),
+      TrackKind.video => _remoteVideo.containsKey(wanted.userId),
+      TrackKind.screen => _remoteScreens.containsKey(wanted.shareId),
       TrackKind.screenAudio => _remoteScreenAudioTracks.containsKey(
         wanted.shareId,
       ),
@@ -818,9 +1018,9 @@ class VoiceWebRtcService {
       case TrackKind.audio:
         _remoteAudioTracks.remove(userId);
       case TrackKind.video:
-        _remoteVideoTracks.remove(userId);
+        _remoteVideo.remove(userId)?.dispose();
       case TrackKind.screen:
-        if (shareId != null) _remoteScreenTracks.remove(shareId);
+        if (shareId != null) _remoteScreens.remove(shareId)?.dispose();
       case TrackKind.screenAudio:
         if (shareId != null) _remoteScreenAudioTracks.remove(shareId);
     }
@@ -996,26 +1196,42 @@ class VoiceWebRtcService {
 
   // ── Track getters for the UI ──────────────────────────────────────────────
 
-  rtc.MediaStreamTrack? get localVideoTrack => _localVideoTrack?.mediaStreamTrack;
-  rtc.MediaStreamTrack? get localScreenTrack =>
-      _localScreenTrack?.mediaStreamTrack;
+  /// This device's own camera, as a feed.
+  ///
+  /// Carries the stream the SDK opened rather than one built here. The
+  /// distinction is the difference between a preview that survives a camera flip
+  /// and one that does not: `restartTrack` stops the old track and disposes its
+  /// stream before opening the replacement, so anything the UI built around the
+  /// old track is already invalid by the time it is used.
+  ///
+  /// No health, because nobody subscribes to their own picture and there are no
+  /// receiver statistics to read.
+  VoiceVideoFeed? get localVideoFeed => _feedOf(_localVideoTrack);
+  VoiceVideoFeed? get localScreenFeed => _feedOf(_localScreenTrack);
 
-  rtc.MediaStreamTrack? remoteVideoTrackFor(String userId) =>
-      _remoteVideoTracks[userId];
+  VoiceVideoFeed? remoteVideoFeedFor(String userId) =>
+      _remoteVideo[userId]?.feed;
 
-  rtc.MediaStreamTrack? remoteScreenTrackForShare(String shareId) =>
-      _remoteScreenTracks[shareId];
+  VoiceVideoFeed? remoteScreenFeedForShare(String shareId) =>
+      _remoteScreens[shareId]?.feed;
 
   /// The first share this participant is running. Kept for the single-share
   /// rendering the call and channel screens do today; a multi-share UI should
-  /// address shares by id via [remoteScreenTrackForShare].
-  rtc.MediaStreamTrack? remoteScreenTrackFor(String userId) {
+  /// address shares by id via [remoteScreenFeedForShare].
+  VoiceVideoFeed? remoteScreenFeedFor(String userId) {
     for (final shareId in _sharesOf(userId)) {
-      final track = _remoteScreenTracks[shareId];
-      if (track != null) return track;
+      final feed = _remoteScreens[shareId]?.feed;
+      if (feed != null) return feed;
     }
     return null;
   }
+
+  static VoiceVideoFeed? _feedOf(LocalVideoTrack? track) => track == null
+      ? null
+      : VoiceVideoFeed(
+          stream: track.mediaStream,
+          track: track.mediaStreamTrack,
+        );
 
   // ── Room events ───────────────────────────────────────────────────────────
 
@@ -1024,20 +1240,43 @@ class VoiceWebRtcService {
       case TrackSubscribedEvent(:final participant, :final publication):
         _routeTrack(
           identity: participant.identity,
-          trackName: publication.name,
+          publication: publication,
           track: publication.track,
         );
+        // The layer the server chose is applied on a *subscribed* publication,
+        // and it was not one when the subscribe was issued - `subscribed` means
+        // the media has landed, which is this moment and not the earlier one. Up
+        // to here nothing had asked for a layer since the subscribe, so every
+        // tile was served the top rung until an unrelated resolve happened by.
+        _resolveWanted();
       case TrackUnsubscribedEvent(:final participant, :final publication):
         _dropTrack(
           identity: participant.identity,
           trackName: publication.name,
         );
+      case TrackMutedEvent(:final participant, :final publication):
+        _setSenderMuted(participant.identity, publication.name, true);
+      case TrackUnmutedEvent(:final participant, :final publication):
+        _setSenderMuted(participant.identity, publication.name, false);
+      case TrackSubscriptionExceptionEvent(:final participant, :final reason):
+        // The one subscribe failure the SDK reports as an event rather than as
+        // a rejected future. Without this it is a tile that never fills and no
+        // record anywhere of having been refused.
+        _diagnostics.record(
+          VoiceFaultCodes.notSubscribed,
+          subject: participant == null
+              ? null
+              : VoiceIdentity.userIdOf(participant.identity),
+          detail: 'the SFU refused a subscribe: ${reason.name}',
+        );
       case TrackPublishedEvent():
       case ParticipantConnectedEvent():
+      case RoomConnectedEvent():
         // A publication this client may already be waiting for. The roster
         // event that names it arrives over the hub separately; this is the
         // moment the SDK can actually act on a want recorded earlier.
         _resolveWanted();
+        _reportUnknownPublications();
       case ParticipantDisconnectedEvent(:final participant):
         _dropParticipant(VoiceIdentity.userIdOf(participant.identity));
       case ActiveSpeakersChangedEvent(:final speakers):
@@ -1057,6 +1296,7 @@ class VoiceWebRtcService {
         // than assumed - it is a diff, so a session that kept them does no
         // work.
         _resolveWanted();
+        _reportUnknownPublications();
       case RoomDisconnectedEvent():
         // Only ever after the SDK's own ladder is exhausted. A teardown this
         // client asked for is excluded by the flag, because reporting that as
@@ -1071,24 +1311,31 @@ class VoiceWebRtcService {
 
   void _routeTrack({
     required String identity,
-    required String trackName,
+    required RemoteTrackPublication publication,
     required Track? track,
   }) {
+    final trackName = publication.name;
     final mediaTrack = track?.mediaStreamTrack;
-    if (mediaTrack == null || trackName.isEmpty) return;
+    if (track == null || mediaTrack == null || trackName.isEmpty) return;
     final userId = VoiceIdentity.userIdOf(identity);
-    final descriptor = TrackNaming.describe(trackName);
+    final descriptor = _describeChecked(trackName, publication, userId);
 
     switch (descriptor.kind) {
       case TrackKind.audio:
         mediaTrack.enabled = !_deafened;
         _remoteAudioTracks[userId] = mediaTrack;
       case TrackKind.video:
-        _remoteVideoTracks[userId] = mediaTrack;
+        _remoteVideo[userId]?.dispose();
+        _remoteVideo[userId] = _watch(track, publication, subject: userId);
       case TrackKind.screen:
         final shareId = descriptor.shareId;
         if (shareId == null) return;
-        _remoteScreenTracks[shareId] = mediaTrack;
+        _remoteScreens[shareId]?.dispose();
+        _remoteScreens[shareId] = _watch(
+          track,
+          publication,
+          subject: 'share:$shareId',
+        );
         _shareOwners[shareId] = userId;
       case TrackKind.screenAudio:
         final shareId = descriptor.shareId;
@@ -1102,6 +1349,108 @@ class VoiceWebRtcService {
     onTracksChanged?.call();
   }
 
+  /// The descriptor for [trackName], checked against what the SDK says the
+  /// track actually is.
+  ///
+  /// [TrackNaming.describe] classifies from the name alone and falls back to
+  /// *camera* for anything it does not recognise, which is the right default
+  /// while every publisher agrees on the convention and a silent disaster the
+  /// moment one does not: a publisher whose microphone is published under the
+  /// SDK's own default name would have its audio routed into the camera map and
+  /// rendered as a black tile, with nothing refused anywhere.
+  ///
+  /// The SFU's own `kind` cannot disagree about audio versus video, so it is
+  /// the tie-breaker - and the disagreement itself is worth recording, because
+  /// it means two clients have drifted on the naming convention.
+  TrackDescriptor _describeChecked(
+    String trackName,
+    RemoteTrackPublication publication,
+    String userId,
+  ) {
+    final descriptor = TrackNaming.describe(trackName);
+    final isAudioByName =
+        descriptor.kind == TrackKind.audio ||
+        descriptor.kind == TrackKind.screenAudio;
+    final isAudioByKind = publication.kind == TrackType.AUDIO;
+    if (isAudioByName == isAudioByKind) return descriptor;
+
+    _diagnostics.record(
+      VoiceFaultCodes.noDecode,
+      subject: userId,
+      detail:
+          'track "$trackName" reads as ${descriptor.kind.name} by name and '
+          '${publication.kind.name} by kind; trusting the SFU',
+    );
+    return TrackDescriptor(
+      trackName: trackName,
+      kind: isAudioByKind ? TrackKind.audio : TrackKind.video,
+    );
+  }
+
+  /// Starts holding one incoming video track, with its health.
+  _RemoteVideo _watch(
+    Track track,
+    RemoteTrackPublication publication, {
+    required String subject,
+  }) {
+    final video = _RemoteVideo(
+      stream: track.mediaStream,
+      track: track.mediaStreamTrack,
+      publication: publication,
+    );
+    video.listenTo(track);
+    return video;
+  }
+
+  void _setSenderMuted(String identity, String trackName, bool muted) {
+    if (trackName.isEmpty) return;
+    final userId = VoiceIdentity.userIdOf(identity);
+    final descriptor = TrackNaming.describe(trackName);
+    final video = switch (descriptor.kind) {
+      TrackKind.video => _remoteVideo[userId],
+      TrackKind.screen => _remoteScreens[descriptor.shareId],
+      _ => null,
+    };
+    video?.setSenderMuted(muted);
+  }
+
+  /// Reports publications the SFU is advertising that nothing has asked for.
+  ///
+  /// **The camera that was already on when you arrived.** A snapshot names an
+  /// audio track and any shares; it does not name a camera, so the only thing
+  /// that ever subscribed one was the `TrackPublished` relay - an event that is
+  /// never replayed. Join a room where somebody is already on camera, or rebuild
+  /// media after the SDK gave up, and their picture is one nothing in this
+  /// client will ever ask for: no tile, or a tile that stays black for as long
+  /// as they do not toggle the camera off and on again.
+  ///
+  /// Reported rather than subscribed here, because whether a picture should be
+  /// drawn is the roster's question and the roster lives above this class. What
+  /// comes back down is an ordinary [subscribeToTrack].
+  void _reportUnknownPublications() {
+    final report = onPublicationDiscovered;
+    final room = _room;
+    if (report == null || room == null) return;
+    for (final participant in room.remoteParticipants.values) {
+      final userId = VoiceIdentity.userIdOf(participant.identity);
+      for (final publication in participant.trackPublications.values) {
+        final name = publication.name;
+        if (name.isEmpty || publication.kind == TrackType.AUDIO) continue;
+        final descriptor = TrackNaming.describe(name);
+        final key = _subscriptionKey(userId, name, descriptor.shareId);
+        if (_wanted.containsKey(key)) continue;
+        report(
+          VoicePublicationDiscovery(
+            userId: userId,
+            trackName: name,
+            kind: descriptor.kind,
+            shareId: descriptor.shareId,
+          ),
+        );
+      }
+    }
+  }
+
   void _dropTrack({required String identity, required String trackName}) {
     if (trackName.isEmpty) return;
     final userId = VoiceIdentity.userIdOf(identity);
@@ -1110,9 +1459,9 @@ class VoiceWebRtcService {
       case TrackKind.audio:
         _remoteAudioTracks.remove(userId);
       case TrackKind.video:
-        _remoteVideoTracks.remove(userId);
+        _remoteVideo.remove(userId)?.dispose();
       case TrackKind.screen:
-        _remoteScreenTracks.remove(descriptor.shareId);
+        _remoteScreens.remove(descriptor.shareId)?.dispose();
       case TrackKind.screenAudio:
         _remoteScreenAudioTracks.remove(descriptor.shareId);
     }
@@ -1121,14 +1470,122 @@ class VoiceWebRtcService {
 
   void _dropParticipant(String userId) {
     _remoteAudioTracks.remove(userId);
-    _remoteVideoTracks.remove(userId);
+    _remoteVideo.remove(userId)?.dispose();
     for (final shareId in _sharesOf(userId)) {
-      _remoteScreenTracks.remove(shareId);
+      _remoteScreens.remove(shareId)?.dispose();
       _remoteScreenAudioTracks.remove(shareId);
       _shareOwners.remove(shareId);
     }
     onTracksChanged?.call();
   }
+}
+
+/// One incoming video track this client is holding, with the readings that
+/// explain a tile that is not showing it.
+///
+/// The health is a [ValueNotifier] rather than part of cubit state because it
+/// moves on the SDK's own statistics timer - once a second, per track - and
+/// putting that through a cubit would rebuild an entire voice screen at that
+/// rate to update one badge.
+class _RemoteVideo {
+  _RemoteVideo({
+    required this.stream,
+    required this.track,
+    required RemoteTrackPublication publication,
+  }) : health = ValueNotifier(
+         VoiceTrackHealth(
+           subscribed: true,
+           senderMuted: publication.muted,
+           trackName: publication.name,
+           subscribedAt: DateTime.now(),
+         ),
+       );
+
+  final rtc.MediaStream stream;
+  final rtc.MediaStreamTrack track;
+  final ValueNotifier<VoiceTrackHealth> health;
+
+  CancelListenFunc? _events;
+
+  VoiceVideoFeed get feed =>
+      VoiceVideoFeed(stream: stream, track: track, health: health);
+
+  /// The SDK monitors a started track on its own timer, so this only has to
+  /// listen - there is no polling to arrange and no second `getStats` call to
+  /// pay for.
+  void listenTo(Track source) {
+    _events = source.events.listen((event) {
+      if (event is! VideoReceiverStatsEvent) return;
+      final stats = event.stats;
+      final decoded = stats.framesDecoded?.toInt() ?? 0;
+      final previous = health.value;
+      health.value = previous.copyWith(
+        bytesReceived: stats.bytesReceived?.toInt() ?? previous.bytesReceived,
+        packetsReceived:
+            stats.packetsReceived?.toInt() ?? previous.packetsReceived,
+        framesDecoded: decoded,
+        framesReceived: stats.framesReceived?.toInt() ?? previous.framesReceived,
+        frameWidth: stats.frameWidth?.toInt() ?? previous.frameWidth,
+        frameHeight: stats.frameHeight?.toInt() ?? previous.frameHeight,
+        mimeType: stats.mimeType ?? previous.mimeType,
+        decoder: stats.decoderImplementation ?? previous.decoder,
+        updatedAt: DateTime.now(),
+        // Only moved when the count did, so "when did a frame last arrive" is
+        // answerable rather than being overwritten by every tick that brought
+        // none.
+        lastFrameAt: decoded > previous.framesDecoded
+            ? DateTime.now()
+            : previous.lastFrameAt,
+      );
+    });
+  }
+
+  void setSenderMuted(bool muted) {
+    if (health.value.senderMuted == muted) return;
+    health.value = health.value.copyWith(senderMuted: muted);
+  }
+
+  void dispose() {
+    unawaited(_events?.call() ?? Future<void>.value());
+    _events = null;
+    // The stream and the track belong to the SDK, which stops them with the
+    // subscription. Disposing either from here is what takes a *second*
+    // renderer on the same track down with it - on darwin `streamDispose`
+    // clears whichever renderer it finds holding that track id first, which is
+    // not necessarily the one being closed.
+    health.dispose();
+  }
+}
+
+/// A publication the SFU is advertising that nothing in this client has asked
+/// for. See `VoiceWebRtcService._reportUnknownPublications`.
+@immutable
+class VoicePublicationDiscovery {
+  const VoicePublicationDiscovery({
+    required this.userId,
+    required this.trackName,
+    required this.kind,
+    this.shareId,
+  });
+
+  final String userId;
+  final String trackName;
+  final TrackKind kind;
+  final String? shareId;
+}
+
+/// A connection attempt abandoned because the room was left underneath it.
+///
+/// Its own type because it is the *correct* outcome of a race and must not be
+/// shown to anybody: a person who tapped away from a channel has not
+/// experienced a failure to connect to it, and telling them so is how a
+/// deliberate cancellation reads as a broken feature.
+class VoiceConnectSuperseded implements Exception {
+  const VoiceConnectSuperseded();
+
+  @override
+  String toString() =>
+      'VoiceConnectSuperseded: the room was left while it was being connected.';
 }
 
 /// One track this client has asked to pull.

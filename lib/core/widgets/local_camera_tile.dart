@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../voice/voice_video_feed.dart';
 import 'adaptive_progress_indicator.dart';
 import 'camera_switch_button.dart';
 import 'video_participant_tile.dart';
@@ -24,7 +24,7 @@ import 'video_participant_tile.dart';
 class LocalCameraTile extends StatefulWidget {
   const LocalCameraTile({
     super.key,
-    required this.track,
+    required this.feed,
     required this.isFrontCamera,
     required this.onSwitchCamera,
     required this.onTap,
@@ -32,10 +32,10 @@ class LocalCameraTile extends StatefulWidget {
     this.height = 120,
   });
 
-  /// See `VideoParticipantTile.track` - re-read by the caller on every cubit
-  /// emission, since a `MediaStreamTrack` cannot live in cubit state. A camera
-  /// flip replaces it, so this changing is normal rather than exceptional.
-  final MediaStreamTrack? track;
+  /// See `VideoParticipantTile.feed` - re-read by the caller on every cubit
+  /// emission, since media objects cannot live in cubit state. A camera flip
+  /// replaces it, so this changing is normal rather than exceptional.
+  final VoiceVideoFeed? feed;
 
   /// Drives the mirroring. A front camera is mirrored because that is what
   /// every camera app and every mirror does; a back camera must not be, or the
@@ -76,7 +76,12 @@ class _LocalCameraTileState extends State<LocalCameraTile> {
           // it and the rest of the tile still opens full-screen.
           Positioned.fill(
             child: VideoParticipantTile(
-              track: widget.track,
+              feed: widget.feed,
+              label: 'self:camera',
+              // Nobody subscribes to their own camera, so a preview that never
+              // fills is a capture this device can already see the state of -
+              // there is no delivery to diagnose and nothing to write over it.
+              expectsVideo: false,
               width: widget.width,
               height: widget.height,
               mirror: widget.isFrontCamera,

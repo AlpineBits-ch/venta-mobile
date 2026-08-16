@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
+import 'package:flutter_webrtc/flutter_webrtc.dart'
+    show MediaStream, MediaStreamTrack;
 import 'package:mocktail/mocktail.dart';
 import 'package:venta_mobile/core/realtime/realtime_transport.dart';
 import 'package:venta_mobile/core/sound/sound_service.dart';
 import 'package:venta_mobile/core/voice/track_naming.dart';
 import 'package:venta_mobile/core/voice/voice_heartbeat.dart';
 import 'package:venta_mobile/core/voice/voice_snapshot_dto.dart';
+import 'package:venta_mobile/core/voice/voice_video_feed.dart';
 import 'package:venta_mobile/core/voice/voice_webrtc_service.dart';
 import 'package:venta_mobile/features/auth/data/auth_repository.dart';
 import 'package:venta_mobile/features/guild_voice/bloc/guild_voice_cubit.dart';
@@ -40,6 +42,13 @@ class _MockSound extends Mock implements SoundService {}
 
 class _FakeTrack extends Mock implements MediaStreamTrack {}
 
+class _FakeStream extends Mock implements MediaStream {}
+
+/// A feed carrying a throwaway stream and track, which is all the cubit ever
+/// does with one - hand it to a tile.
+VoiceVideoFeed _fakeFeed() =>
+    VoiceVideoFeed(stream: _FakeStream(), track: _FakeTrack());
+
 /// A transport that behaves like the real one where it matters: tracks turn up
 /// some time after the subscribe that asked for them, and the only way anyone
 /// finds out is [VoiceWebRtcService.onTracksChanged].
@@ -52,24 +61,24 @@ class _FakeTransport extends Mock implements GuildVoiceWebRtcService {
   @override
   void Function()? onTracksChanged;
 
-  final Map<String, MediaStreamTrack> _screenTracks = {};
+  final Map<String, VoiceVideoFeed> _screenTracks = {};
   final Map<String, String> _shareOwners = {};
-  final Map<String, MediaStreamTrack> _cameraTracks = {};
+  final Map<String, VoiceVideoFeed> _cameraTracks = {};
 
   /// The SFU delivering a track that was subscribed to earlier.
-  void deliverScreenTrack(String userId, String shareId, MediaStreamTrack t) {
+  void deliverScreenTrack(String userId, String shareId, VoiceVideoFeed t) {
     _shareOwners[shareId] = userId;
     _screenTracks[shareId] = t;
     onTracksChanged?.call();
   }
 
-  void deliverCameraTrack(String userId, MediaStreamTrack t) {
+  void deliverCameraTrack(String userId, VoiceVideoFeed t) {
     _cameraTracks[userId] = t;
     onTracksChanged?.call();
   }
 
   @override
-  MediaStreamTrack? remoteScreenTrackFor(String userId) {
+  VoiceVideoFeed? remoteScreenFeedFor(String userId) {
     for (final e in _shareOwners.entries) {
       if (e.value == userId) return _screenTracks[e.key];
     }
@@ -77,11 +86,11 @@ class _FakeTransport extends Mock implements GuildVoiceWebRtcService {
   }
 
   @override
-  MediaStreamTrack? remoteScreenTrackForShare(String shareId) =>
+  VoiceVideoFeed? remoteScreenFeedForShare(String shareId) =>
       _screenTracks[shareId];
 
   @override
-  MediaStreamTrack? remoteVideoTrackFor(String userId) => _cameraTracks[userId];
+  VoiceVideoFeed? remoteVideoFeedFor(String userId) => _cameraTracks[userId];
 }
 
 const _guildId = 'guild-1';
@@ -260,7 +269,7 @@ void main() {
         trackNames: ['screen-$_shareId'],
       ),
     ).called(greaterThanOrEqualTo(1));
-    expect(cubit.remoteScreenTrackFor(_peer), isNull);
+    expect(cubit.remoteScreenFeedFor(_peer), isNull);
   });
 
   /// A share is not necessarily published on the session that carries the
@@ -300,7 +309,7 @@ void main() {
     final sub = cubit.stream.listen(emitted.add);
     final before = cubit.state.videoRevision;
 
-    transport.deliverScreenTrack(_peer, _shareId, _FakeTrack());
+    transport.deliverScreenTrack(_peer, _shareId, _fakeFeed());
     await pumpEventQueue();
     await sub.cancel();
 
@@ -313,19 +322,19 @@ void main() {
           'before the track existed',
     );
     expect(cubit.state.videoRevision, greaterThan(before));
-    expect(cubit.remoteScreenTrackFor(_peer), isNotNull);
+    expect(cubit.remoteScreenFeedFor(_peer), isNotNull);
   });
 
   test('a camera track arriving does too', () async {
     final emitted = <GuildVoiceState>[];
     final sub = cubit.stream.listen(emitted.add);
 
-    transport.deliverCameraTrack(_peer, _FakeTrack());
+    transport.deliverCameraTrack(_peer, _fakeFeed());
     await pumpEventQueue();
     await sub.cancel();
 
     expect(emitted, isNotEmpty);
-    expect(cubit.remoteVideoTrackFor(_peer), isNotNull);
+    expect(cubit.remoteVideoFeedFor(_peer), isNotNull);
   });
 
   /// Why the arrival has to be what emits. Re-opening the voice screen goes

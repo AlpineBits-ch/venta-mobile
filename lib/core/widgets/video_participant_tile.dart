@@ -3,23 +3,46 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../voice/voice_video_feed.dart';
 import 'adaptive_progress_indicator.dart';
 import 'received_resolution_badge.dart';
+import 'voice_tile_fault_overlay.dart';
 
 /// Renders one live camera/screen-share video track - the video-capable
 /// sibling of `CallParticipantTile`. Owns its own `RTCVideoRenderer` and
-/// wraps whatever [track] currently is in a throwaway local `MediaStream`
-/// (flutter_webrtc's renderer only accepts a stream, not a bare track).
+/// attaches the [VoiceVideoFeed]'s stream to it.
 ///
-/// [track] is expected to change *reference* (not mutate) whenever the
-/// underlying `MediaStreamTrack` is replaced/cleared - `MediaStreamTrack`s
-/// can't live in `Equatable` cubit state, so callers re-read the current
-/// track from the webrtc service on every rebuild driven by the cubit's
-/// `videoRevision` counter and pass whatever comes back.
+/// **It attaches the SDK's stream and builds nothing of its own.** This used to
+/// wrap each track in a throwaway `createLocalMediaStream` + `addTrack`, because
+/// the renderer takes a stream and the cubits handed out bare tracks. That wrap
+/// is what produced the permanently black tile, three ways at once:
+///
+///  * `addTrack` is a platform call that **throws** when the native track has
+///    been released since the Dart reference was read - reported from a handset
+///    as `PlatformException(mediaStreamAddTrack: Track is nil)` while a camera
+///    was being flipped, which is exactly when `LocalVideoTrack.restartTrack`
+///    stops the old track and disposes its stream. The throw landed before
+///    `srcObject` was ever assigned, in a future nobody awaited.
+///  * the synthetic stream gave the renderer an `ownerTag` of its own, which is
+///    what `flutter_webrtc`'s re-bind path matches on. A track object replaced
+///    under an unchanged track id - an ICE restart, a resubscribe - therefore
+///    never reached the renderer, and the sink stayed on the dead track.
+///  * disposing it on the way out clears, on darwin, whichever renderer is found
+///    holding that track id first. With a grid tile and a full-screen view open
+///    on the same track, closing one blacked the other.
+///
+/// The stream on a feed is the one the media SDK already owns. Attaching it
+/// costs no platform call, keeps the plugin's own lifecycle handling, and is
+/// never disposed from here.
+///
+/// [feed] is expected to change *value* (not mutate) whenever the underlying
+/// media is replaced or cleared - feeds can't live in `Equatable` cubit state,
+/// so callers re-read the current one from the webrtc service on every rebuild
+/// driven by the cubit's `videoRevision` counter and pass whatever comes back.
 class VideoParticipantTile extends StatefulWidget {
   const VideoParticipantTile({
     super.key,
-    required this.track,
+    required this.feed,
     this.width = 160,
     this.height = 120,
     this.mirror = false,
@@ -27,11 +50,27 @@ class VideoParticipantTile extends StatefulWidget {
     this.onHidden,
     this.objectFit = RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
     this.borderRadius = 12,
+    this.expectsVideo = true,
+    this.label,
   });
 
-  final MediaStreamTrack? track;
+  final VoiceVideoFeed? feed;
+
+  /// What this tile is showing, for the fault log - a publisher's user id, or a
+  /// share's id. Without it every black tile in a room records itself under the
+  /// same subject, so the log collapses them into one entry and the one thing
+  /// worth knowing - *whose* picture is missing - is the thing that is absent.
+  final String? label;
   final double width;
   final double height;
+
+  /// Whether a picture is owed here at all.
+  ///
+  /// True for every tile that is drawn *because* the roster says a camera is on,
+  /// which is all of them today - and it is what lets a tile that never receives
+  /// anything say so instead of spinning indefinitely. A tile drawn
+  /// speculatively would pass false and simply wait.
+  final bool expectsVideo;
 
   /// Cover for a grid tile, which is a fixed shape the picture has to fill.
   /// Contain for a full-screen one, where cropping to the device's aspect
@@ -64,14 +103,26 @@ class VideoParticipantTile extends StatefulWidget {
 
 class _VideoParticipantTileState extends State<VideoParticipantTile> {
   final _renderer = RTCVideoRenderer();
-  MediaStream? _wrapperStream;
   bool _rendererReady = false;
   int? _reportedHeight;
+
+  /// The feed the renderer currently holds, so a rebuild with the same feed
+  /// does not re-attach and a rebuild with a different one does.
+  VoiceVideoFeed? _attached;
+
+  /// Why the last attach failed, or null. Held rather than logged and dropped:
+  /// this is the state the tile is stuck in, so it is the state the tile has to
+  /// be able to say out loud.
+  Object? _attachError;
+
+  /// When this tile started expecting a picture. The clock the "nothing ever
+  /// arrived" reading is measured from.
+  final DateTime _mountedAt = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    _init();
+    unawaited(_init());
   }
 
   Future<void> _init() async {
@@ -80,8 +131,8 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
       await _renderer.dispose();
       return;
     }
-    _rendererReady = true;
-    await _attachTrack(widget.track);
+    setState(() => _rendererReady = true);
+    _attach(widget.feed);
   }
 
   @override
@@ -96,9 +147,7 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
   @override
   void didUpdateWidget(covariant VideoParticipantTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.track?.id != widget.track?.id) {
-      unawaited(_attachTrack(widget.track));
-    }
+    _attach(widget.feed);
     if (oldWidget.height != widget.height) _reportHeight();
   }
 
@@ -114,35 +163,40 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
     report(devicePixels);
   }
 
-  Future<void> _attachTrack(MediaStreamTrack? track) async {
+  /// Points the renderer at [feed].
+  ///
+  /// **Synchronous, which is the point.** `srcObject` is a plain setter; there
+  /// is no await between deciding what to show and showing it, so two rebuilds
+  /// in the same frame cannot land out of order and leave the renderer on the
+  /// older of two feeds - which the previous asynchronous version could, and
+  /// did, permanently.
+  void _attach(VoiceVideoFeed? feed) {
     if (!_rendererReady) return;
-    // One renderer outlives several tracks here, and the platform emits a size
-    // event only when the size *changes*. A new track that never decodes would
-    // otherwise leave the previous track's resolution on screen - which is
-    // exactly the stale reading `ReceivedResolutionBadge` exists to rule out.
-    _renderer.value = RTCVideoValue.empty;
-    final previousStream = _wrapperStream;
-    _wrapperStream = null;
-    if (track == null) {
-      _renderer.srcObject = null;
-    } else {
-      final stream = await createLocalMediaStream('video-tile-${track.id}');
-      await stream.addTrack(track);
-      if (!mounted) {
-        await stream.dispose();
-        return;
-      }
-      _wrapperStream = stream;
-      setState(() => _renderer.srcObject = stream);
+    if (feed == _attached && _attachError == null) return;
+    _attached = feed;
+    try {
+      // One renderer outlives several feeds here, and the platform emits a size
+      // event only when the size *changes*. A new feed that never decodes would
+      // otherwise leave the previous one's resolution on screen - which is
+      // exactly the stale reading `ReceivedResolutionBadge` exists to rule out.
+      _renderer.value = RTCVideoValue.empty;
+      _renderer.srcObject = feed?.stream;
+      if (_attachError != null) setState(() => _attachError = null);
+    } catch (e) {
+      // Nothing here is expected to throw any more - that is what removing the
+      // platform round trip bought - so if one does, it is worth saying so on
+      // the tile rather than discovering it from a black rectangle.
+      setState(() => _attachError = e);
     }
-    await previousStream?.dispose();
   }
 
   @override
   void dispose() {
     widget.onHidden?.call();
-    _renderer.dispose();
-    _wrapperStream?.dispose();
+    // The renderer only. The stream belongs to the media SDK and is shared with
+    // every other tile on the same track; disposing it from here is what took
+    // the other tile's picture down with this one.
+    unawaited(_renderer.dispose());
     super.dispose();
   }
 
@@ -155,39 +209,62 @@ class _VideoParticipantTileState extends State<VideoParticipantTile> {
         height: widget.height,
         child: ColoredBox(
           color: Colors.black,
-          child: widget.track == null || !_rendererReady
-              ? const Center(
-                  child: AdaptiveProgressIndicator(
-                    size: 20,
-                    strokeWidth: 2,
-                    color: Colors.white54,
-                  ),
-                )
-              : Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    RTCVideoView(
-                      _renderer,
-                      objectFit: widget.objectFit,
-                      mirror: widget.mirror,
-                    ),
-                    // Top right, because bottom left is already the sharer's
-                    // name label in `ScreenShareView`. Draws nothing at all
-                    // unless the diagnostics pref is on.
-                    Align(
-                      alignment: Alignment.topRight,
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: ReceivedResolutionBadge(
-                          renderer: _renderer,
-                          reportedDevicePixels: _reportedHeight,
-                        ),
-                      ),
-                    ),
-                  ],
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (widget.feed != null && _rendererReady)
+                RTCVideoView(
+                  _renderer,
+                  objectFit: widget.objectFit,
+                  mirror: widget.mirror,
                 ),
+              // Over the picture rather than instead of it. A tile can be
+              // decoding and drawing while the *sender* is muted, and a fault
+              // that replaced the view would throw away the last good frame.
+              VoiceTileFaultOverlay(
+                renderer: _renderer,
+                health: widget.feed?.health,
+                awaitingSince: widget.expectsVideo ? _mountedAt : null,
+                attachError: _attachError,
+                compact: widget.height < 200,
+                label: widget.label,
+              ),
+              // Top right, because bottom left is already the sharer's name
+              // label in `ScreenShareView`. Draws nothing at all unless the
+              // diagnostics pref is on.
+              Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: ReceivedResolutionBadge(
+                    renderer: _renderer,
+                    reportedDevicePixels: _reportedHeight,
+                    health: widget.feed?.health,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// The spinner a tile shows while it is still reasonable to be waiting.
+///
+/// Extracted because the fault overlay decides when waiting stops being
+/// reasonable, and both states have to be drawn by the same thing or they can
+/// be on screen at once.
+class VoiceTileSpinner extends StatelessWidget {
+  const VoiceTileSpinner({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: AdaptiveProgressIndicator(
+      size: 20,
+      strokeWidth: 2,
+      color: Colors.white54,
+    ),
+  );
 }

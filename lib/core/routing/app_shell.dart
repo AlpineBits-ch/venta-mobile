@@ -24,6 +24,7 @@ import '../theme/widget_styles.dart';
 import '../widgets/connection_status_banner.dart';
 import '../widgets/server_rail_icon.dart';
 import '../widgets/user_banner.dart';
+import '../widgets/voice_diagnostics_sheet.dart';
 import '../widgets/venta_logo_mark.dart';
 import 'route_paths.dart';
 
@@ -271,20 +272,51 @@ class _AppShellState extends State<AppShell> {
           (previous.phase == CallPhase.idle) !=
           (current.phase == CallPhase.idle),
       listener: _syncCallScreen,
-      child: BlocListener<GuildVoiceCubit, GuildVoiceState>(
-        bloc: getIt<GuildVoiceCubit>(),
+      // Calls failed silently until this existed: `CallState.errorMessage` was
+      // set on every path that could not start, accept or connect a call, and
+      // nothing anywhere rendered it. Raised from the shell for the same reason
+      // `disconnectNotice` is - the call screen's own route is often the thing
+      // being popped in the same beat.
+      child: BlocListener<CallCubit, CallState>(
+        bloc: getIt<CallCubit>(),
         listenWhen: (previous, current) =>
             current.errorMessage != null &&
             current.errorMessage != previous.errorMessage,
-        listener: (context, state) => ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(state.errorMessage!))),
-        child: BlocListener<VoiceRingCubit, VoiceRingState>(
-          bloc: getIt<VoiceRingCubit>(),
+        listener: (context, state) =>
+            _showVoiceError(context, state.errorMessage!),
+        child: BlocListener<GuildVoiceCubit, GuildVoiceState>(
+          bloc: getIt<GuildVoiceCubit>(),
           listenWhen: (previous, current) =>
-              current.notice != null || current.acceptedChannel != null,
-          listener: _handleVoiceRing,
-          child: _buildShellScaffold(theme, onHome, currentGuildId),
+              current.errorMessage != null &&
+              current.errorMessage != previous.errorMessage,
+          listener: (context, state) =>
+              _showVoiceError(context, state.errorMessage!),
+          child: BlocListener<VoiceRingCubit, VoiceRingState>(
+            bloc: getIt<VoiceRingCubit>(),
+            listenWhen: (previous, current) =>
+                current.notice != null || current.acceptedChannel != null,
+            listener: _handleVoiceRing,
+            child: _buildShellScaffold(theme, onHome, currentGuildId),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A voice failure, with the way into what was actually recorded.
+  ///
+  /// The message already carries its trace reference, which is what somebody
+  /// reads out. **Details** is for the case where reading out four characters is
+  /// not enough - it opens the session's fault log, where the status code, the
+  /// operation and the order things failed in are legible without a cable.
+  void _showVoiceError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'Details',
+          onPressed: () => unawaited(showVoiceDiagnosticsSheet(context)),
         ),
       ),
     );

@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
 
 import '../../../core/bloc/safe_emit.dart';
+import '../../../core/diagnostics/voice_diagnostics.dart';
 import '../../../core/realtime/realtime_transport.dart';
 import '../../../core/sound/sound_service.dart';
 import '../../../core/voice/track_naming.dart';
@@ -16,6 +16,8 @@ import '../../../core/voice/voice_media_api.dart';
 import '../../../core/voice/voice_participant_state.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
 import '../../../core/voice/voice_speaking_detector.dart';
+import '../../../core/voice/voice_video_feed.dart';
+import '../../../core/voice/voice_webrtc_service.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../billing/data/entitlement_reader.dart';
 import '../../billing/data/models/entitlement_degradation_dto.dart';
@@ -187,7 +189,9 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     required this.soundService,
     required CallWebRtcService Function() webRtcServiceFactory,
     this.entitlements,
+    VoiceDiagnostics? diagnostics,
   }) : _webRtcServiceFactory = webRtcServiceFactory,
+       _diagnostics = diagnostics ?? VoiceDiagnostics.shared,
        super(const CallState()) {
     _sub = repository.events.listen(_handleEvent);
     _connectionSub = repository.connectionStatus.listen(
@@ -211,6 +215,10 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   final EntitlementReader? entitlements;
 
   final CallWebRtcService Function() _webRtcServiceFactory;
+
+  /// Where a failure this cubit swallows is written down, and the source of the
+  /// reference appended to every message it shows.
+  final VoiceDiagnostics _diagnostics;
   late final StreamSubscription<VoiceRepositoryEvent> _sub;
   late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
   late final VoiceHeartbeat _heartbeat;
@@ -272,9 +280,20 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
       _isRingingOutgoing = true;
       unawaited(soundService.startRingOutgoing());
       await _connect(call);
-    } catch (_) {
+    } catch (e, s) {
       _stopOutgoingRingback();
-      emitIfOpen(_cleared(errorMessage: 'Could not start the call.'));
+      final reference = _diagnostics.record(
+        VoiceFaultCodes.join,
+        subject: conversationId,
+        detail: _describeFailure(e),
+        error: e,
+        stackTrace: s,
+      );
+      emitIfOpen(
+        _cleared(
+          errorMessage: withVoiceTrace('Could not start the call.', reference),
+        ),
+      );
     }
   }
 
@@ -285,10 +304,23 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     try {
       final accepted = await repository.acceptCall(call.id);
       await _connect(accepted);
-    } catch (_) {
-      emitIfOpen(_cleared(errorMessage: 'Could not join the call.'));
+    } catch (e, s) {
+      emitIfOpen(_cleared(errorMessage: _joinFailure(call.id, e, s)));
     }
   }
+
+  /// The sentence and the trace reference for a call that could not be joined.
+  String _joinFailure(String callId, Object error, StackTrace stackTrace) =>
+      withVoiceTrace(
+        'Could not join the call.',
+        _diagnostics.record(
+          VoiceFaultCodes.join,
+          subject: callId,
+          detail: _describeFailure(error),
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
 
   Future<void> declineIncomingCall() async {
     final call = state.call;
@@ -312,8 +344,8 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     try {
       final accepted = await repository.acceptCall(callId);
       await _connect(accepted);
-    } catch (_) {
-      emitIfOpen(_cleared(errorMessage: 'Could not join the call.'));
+    } catch (e, s) {
+      emitIfOpen(_cleared(errorMessage: _joinFailure(callId, e, s)));
     }
   }
 
@@ -346,14 +378,27 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   Future<void> endCall() async {
     final call = state.call;
     if (call == null) return;
+    _epoch++;
     _stopOutgoingRingback();
     final webRtc = await _teardown();
     emitIfOpen(_cleared());
+    // Started before the media teardown rather than after it. `disconnect()` is
+    // a round trip to the SFU, and sequencing the hang-up behind it meant a slow
+    // teardown - or one that threw, which the SDK's own disconnect does on every
+    // room closed before its handshake finished - delayed or skipped the one
+    // request that actually removes this device from the call.
+    final leaving = repository.leaveCall(call.id);
     await webRtc?.disconnect();
     try {
-      await repository.leaveCall(call.id);
-    } catch (_) {
-      // Best-effort - we've already torn down locally.
+      await leaving;
+    } catch (e, s) {
+      _diagnostics.record(
+        VoiceFaultCodes.join,
+        subject: call.id,
+        detail: 'leave was not acknowledged by the server',
+        error: e,
+        stackTrace: s,
+      );
     }
   }
 
@@ -401,7 +446,33 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     // The SDK gave up reconnecting. A fresh connection is the only recovery -
     // and it is cheap, because minting one touches nothing but the token.
     webRtc.onMediaDisconnected = () => unawaited(_reconnectMedia());
+    // A publication the SFU is advertising that nothing asked for - the camera
+    // that was already on when this device joined, or one whose `TrackPublished`
+    // was missed. See `VoiceWebRtcService._reportUnknownPublications`.
+    webRtc.onPublicationDiscovered = _handleDiscoveredPublication;
     return webRtc;
+  }
+
+  void _handleDiscoveredPublication(VoicePublicationDiscovery discovery) {
+    final callId = state.call?.id;
+    if (callId == null || state.phase != CallPhase.active) return;
+    _diagnostics.record(
+      VoiceFaultCodes.notSubscribed,
+      subject: discovery.userId,
+      detail:
+          'adopted an unannounced publication "${discovery.trackName}" '
+          'the SFU was already carrying',
+      isError: false,
+    );
+    _handleTrackPublished(
+      userId: discovery.userId,
+      // The SFU knows nothing about the backend's session ids and nothing on
+      // the subscribe path reads one any more.
+      mediaSessionId: '',
+      trackName: discovery.trackName,
+      kind: discovery.kind,
+      shareId: discovery.shareId,
+    );
   }
 
   /// Guards [_reconnectMedia] against a second attempt while one is running.
@@ -510,7 +581,13 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     emitIfOpen(state.copyWith(videoNotice: video.notice));
   }
 
+  /// Which call cycle is current, so media work that outlives the call it was
+  /// started for can tell that it has been superseded rather than writing into
+  /// the next one. See `GuildVoiceCubit._epoch` - the same race, the same fix.
+  int _epoch = 0;
+
   Future<void> _connect(CallDto call) async {
+    final epoch = ++_epoch;
     final webRtc = _buildTransport();
     _webRtc = webRtc;
     repository.enterCall(call.id);
@@ -534,30 +611,75 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
       await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
       _startSpeakingReports();
       _startVisibilityReports();
-    } on VoiceMediaException catch (e) {
+    } on VoiceConnectSuperseded {
+      // The call was hung up while this was connecting. Not a failure, and
+      // reporting it would tell somebody who deliberately ended a call that it
+      // could not be joined.
+      return;
+    } on VoiceMediaException catch (e, s) {
+      if (epoch != _epoch) return;
+      final reference = _diagnostics.record(
+        VoiceFaultCodes.connect,
+        subject: call.id,
+        detail: _describeFailure(e),
+        error: e,
+        stackTrace: s,
+      );
       // A self-hosted instance with no SFU configured is a supported state, not
       // a fault - and there is no capability read to ask up front, so this is
       // where it is discovered. Saying "could not connect" for it would send
       // somebody looking for a network problem that does not exist.
       emitIfOpen(
         state.copyWith(
-          errorMessage: e.isVoiceNotConfigured
-              ? 'Voice is not available on this server.'
-              : 'Could not connect audio.',
+          errorMessage: withVoiceTrace(
+            e.isVoiceNotConfigured
+                ? 'Voice is not available on this server.'
+                : 'Could not connect audio.',
+            reference,
+          ),
         ),
       );
-    } catch (_) {
-      emitIfOpen(state.copyWith(errorMessage: 'Could not connect audio.'));
+    } catch (e, s) {
+      if (epoch != _epoch) return;
+      final reference = _diagnostics.record(
+        VoiceFaultCodes.connect,
+        subject: call.id,
+        detail: _describeFailure(e),
+        error: e,
+        stackTrace: s,
+      );
+      emitIfOpen(
+        state.copyWith(
+          errorMessage: withVoiceTrace('Could not connect audio.', reference),
+        ),
+      );
     }
+
+    // Everything below belongs to a call this device is still in. Left
+    // unguarded, a hang-up during the connect above was followed by a refetch
+    // for the call just left and by two timers restarted after the teardown had
+    // stopped them.
+    if (epoch != _epoch) return;
 
     // The snapshot is the roster, and it is read after connecting so it can be
     // acted on immediately. The accept/create response cannot serve here: it is
     // serialized before the other side publishes, so it names nobody to
     // subscribe to.
     await repository.refetchSnapshot();
+    if (epoch != _epoch) return;
     _heartbeat.start();
     _liveness.start();
   }
+
+  /// A short, safe description of a failure for the fault log. See
+  /// `GuildVoiceCubit._describeFailure`.
+  String _describeFailure(Object error) => switch (error) {
+    VoiceMediaException(:final statusCode, :final operation, :final error) =>
+      '$operation failed: $statusCode ${error ?? ''}'.trimRight(),
+    UnsupportedVoiceBackendException(:final backend) =>
+      'unsupported media backend "$backend"',
+    _ => error.runtimeType.toString(),
+  };
 
   // ── Snapshot ──────────────────────────────────────────────────────────────
 
@@ -969,14 +1091,14 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   /// Track getters for the UI - read imperatively, see
   /// [CallState.videoRevision] for why `MediaStreamTrack`s can't live in
   /// cubit state itself.
-  MediaStreamTrack? get localVideoTrack => _webRtc?.localVideoTrack;
-  MediaStreamTrack? get localScreenTrack => _webRtc?.localScreenTrack;
-  MediaStreamTrack? remoteVideoTrackFor(String userId) =>
-      _webRtc?.remoteVideoTrackFor(userId);
-  MediaStreamTrack? remoteScreenTrackFor(String userId) =>
-      _webRtc?.remoteScreenTrackFor(userId);
-  MediaStreamTrack? remoteScreenTrackForShare(String shareId) =>
-      _webRtc?.remoteScreenTrackForShare(shareId);
+  VoiceVideoFeed? get localVideoFeed => _webRtc?.localVideoFeed;
+  VoiceVideoFeed? get localScreenFeed => _webRtc?.localScreenFeed;
+  VoiceVideoFeed? remoteVideoFeedFor(String userId) =>
+      _webRtc?.remoteVideoFeedFor(userId);
+  VoiceVideoFeed? remoteScreenFeedFor(String userId) =>
+      _webRtc?.remoteScreenFeedFor(userId);
+  VoiceVideoFeed? remoteScreenFeedForShare(String shareId) =>
+      _webRtc?.remoteScreenFeedForShare(shareId);
 
   /// How large this client is drawing [userId], which is what the server picks
   /// their simulcast layer from. Reported by the tiles themselves; safe to call

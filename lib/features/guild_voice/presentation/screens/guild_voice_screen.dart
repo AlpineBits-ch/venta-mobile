@@ -70,9 +70,9 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
           userId: userId,
           isShare: shareId != null,
           updates: cubit.stream,
-          track: () => shareId == null
-              ? cubit.remoteVideoTrackFor(userId)
-              : cubit.remoteScreenTrackForShare(shareId),
+          feed: () => shareId == null
+              ? cubit.remoteVideoFeedFor(userId)
+              : cubit.remoteScreenFeedForShare(shareId),
           // Asked of the roster rather than of the track, so every way a
           // picture can end - stopped, left, evicted, or absent from a fresh
           // snapshot - closes this route without being listed here.
@@ -116,7 +116,7 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
         builder: (_) => VoiceFullscreenView(
           title: 'Your camera',
           updates: cubit.stream,
-          track: () => cubit.localVideoTrack,
+          feed: () => cubit.localVideoFeed,
           isMirrored: () => cubit.isFrontCamera,
           // Closes itself if the camera goes off - from the action row below
           // this route, or because the channel was left underneath it.
@@ -191,9 +191,9 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                       child: ScreenShareView(
                         userId: sharer.userId,
                         isSelf: sharer.userId == myUserId,
-                        track: sharer.userId == myUserId
-                            ? getIt<GuildVoiceCubit>().localScreenTrack
-                            : getIt<GuildVoiceCubit>().remoteScreenTrackFor(
+                        feed: sharer.userId == myUserId
+                            ? getIt<GuildVoiceCubit>().localScreenFeed
+                            : getIt<GuildVoiceCubit>().remoteScreenFeedFor(
                                 sharer.userId,
                               ),
                         // Only somebody else's share is worth a size: the
@@ -241,8 +241,17 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                                   if (participant.userId == myUserId &&
                                       participant.hasCamera)
                                     LocalCameraTile(
-                                      track: getIt<GuildVoiceCubit>()
-                                          .localVideoTrack,
+                                      // Keyed, like every tile in this grid.
+                                      // The list changes shape as people join,
+                                      // turn a camera on, or start sharing, and
+                                      // positional reconciliation then reuses
+                                      // one participant's element for another -
+                                      // which disposes a renderer and fires
+                                      // `forgetTile` for a tile that is still on
+                                      // screen.
+                                      key: const ValueKey('camera:self'),
+                                      feed: getIt<GuildVoiceCubit>()
+                                          .localVideoFeed,
                                       isFrontCamera: getIt<GuildVoiceCubit>()
                                           .isFrontCamera,
                                       onSwitchCamera: getIt<GuildVoiceCubit>()
@@ -251,14 +260,19 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                                     )
                                   else if (participant.hasCamera)
                                     GestureDetector(
+                                      key: ValueKey(
+                                        'camera:${participant.userId}',
+                                      ),
                                       onTap: () => _openFullscreen(
                                         userId: participant.userId,
                                         tileId:
                                             'camera:${participant.userId}',
                                       ),
                                       child: VideoParticipantTile(
-                                        track: getIt<GuildVoiceCubit>()
-                                            .remoteVideoTrackFor(
+                                        label:
+                                            'camera:${participant.userId}',
+                                        feed: getIt<GuildVoiceCubit>()
+                                            .remoteVideoFeedFor(
                                               participant.userId,
                                             ),
                                         onHeightChanged: (devicePixels) =>

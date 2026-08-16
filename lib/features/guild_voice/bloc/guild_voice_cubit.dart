@@ -2,9 +2,8 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
-
 import '../../../core/bloc/safe_emit.dart';
+import '../../../core/diagnostics/voice_diagnostics.dart';
 import '../../../core/realtime/realtime_transport.dart';
 import '../../../core/sound/sound_service.dart';
 import '../../../core/voice/track_naming.dart';
@@ -16,6 +15,8 @@ import '../../../core/voice/voice_media_api.dart';
 import '../../../core/voice/voice_participant_state.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
 import '../../../core/voice/voice_speaking_detector.dart';
+import '../../../core/voice/voice_video_feed.dart';
+import '../../../core/voice/voice_webrtc_service.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../billing/data/entitlement_reader.dart';
 import '../../billing/data/models/entitlement_degradation_dto.dart';
@@ -167,7 +168,9 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     required this.soundService,
     required GuildVoiceWebRtcService Function() webRtcServiceFactory,
     this.entitlements,
+    VoiceDiagnostics? diagnostics,
   }) : _webRtcServiceFactory = webRtcServiceFactory,
+       _diagnostics = diagnostics ?? VoiceDiagnostics.shared,
        super(const GuildVoiceState()) {
     _sub = repository.events.listen(_handleEvent);
     _connectionSub = repository.connectionStatus.listen(
@@ -191,6 +194,11 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   final EntitlementReader? entitlements;
 
   final GuildVoiceWebRtcService Function() _webRtcServiceFactory;
+
+  /// Where a failure this cubit swallows is written down, and the source of the
+  /// reference appended to every message it shows.
+  final VoiceDiagnostics _diagnostics;
+
   late final StreamSubscription<GuildVoiceEvent> _sub;
   late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
   late final VoiceHeartbeat _heartbeat;
@@ -237,16 +245,62 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+  /// Serialises [join] against [leave].
+  ///
+  /// **The phase is not a lock and was being used as one.** `leave()` publishes
+  /// an idle state two awaits before it has actually finished, so a rejoin
+  /// tapped straight after a leave saw `idle`, skipped the `await leave()`
+  /// below, and fired `POST /join` alongside the previous session's still
+  /// pending `POST /leave`. That leave carries only the channel and the device
+  /// id - nothing scopes it to the session that issued it - so when it landed it
+  /// removed the participant the new join had just created, and everything after
+  /// it answered 404. That is the "could not connect" a fast rejoin produces.
+  Future<void>? _transition;
+
+  /// Which join/leave cycle is current, so work that outlives its own cycle -
+  /// the media connect, the snapshot refetch behind it - can tell that it has
+  /// been superseded rather than writing into the next one.
+  int _epoch = 0;
+
+  Future<void> _serialise(Future<void> Function() operation) {
+    final previous = _transition;
+    final next = () async {
+      if (previous != null) {
+        try {
+          await previous;
+        } catch (_) {
+          // The previous operation reported its own failure; this one runs
+          // regardless, because a leave that failed is exactly when the next
+          // join most needs to start from a clean slate.
+        }
+      }
+      await operation();
+    }();
+    _transition = next;
+    return next;
+  }
+
   Future<void> join({
     required String guildId,
     required String channelId,
     required String channelName,
     required String guildName,
-  }) async {
+  }) => _serialise(() => _join(guildId, channelId, channelName, guildName));
+
+  Future<void> _join(
+    String guildId,
+    String channelId,
+    String channelName,
+    String guildName,
+  ) async {
     if (state.phase != GuildVoicePhase.idle) {
-      if (state.channelId == channelId) return;
-      await leave();
+      // A channel already joined and healthy needs nothing. One that is joined
+      // and carrying an error does - so the identity check is not enough on its
+      // own, or the only way out of a failed connect is the leave button.
+      if (state.channelId == channelId && state.errorMessage == null) return;
+      await _leave();
     }
+    final epoch = ++_epoch;
     emitIfOpen(
       state.copyWith(
         phase: GuildVoicePhase.connecting,
@@ -260,22 +314,37 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       // Join first: it puts this user in the roster before any media work, and
       // hands back the authoritative snapshot.
       final snapshot = await repository.join(guildId, channelId);
-      await _connect(guildId, channelId, snapshot);
-    } catch (_) {
+      if (epoch != _epoch) return;
+      await _connect(guildId, channelId, snapshot, epoch);
+    } catch (e, s) {
+      if (epoch != _epoch) return;
       repository.exitChannel();
+      final reference = _diagnostics.record(
+        VoiceFaultCodes.join,
+        subject: channelId,
+        detail: _describeFailure(e),
+        error: e,
+        stackTrace: s,
+      );
       emitIfOpen(
         GuildVoiceState(
           rosters: state.rosters,
-          errorMessage: 'Could not join voice channel.',
+          errorMessage: withVoiceTrace(
+            'Could not join voice channel.',
+            reference,
+          ),
         ),
       );
     }
   }
 
-  Future<void> leave() async {
+  Future<void> leave() => _serialise(_leave);
+
+  Future<void> _leave() async {
     final guildId = state.guildId;
     final channelId = state.channelId;
     if (guildId == null || channelId == null) return;
+    _epoch++;
     unawaited(soundService.playLeaveCall());
     final webRtc = await _teardown();
 
@@ -287,13 +356,46 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
         .toList();
     emitIfOpen(GuildVoiceState(rosters: rosters));
 
+    // Started before the media teardown rather than after it, and this ordering
+    // is the fix rather than a tidy-up. `disconnect()` is a round trip to the
+    // SFU; sequencing the server-side leave behind it meant a slow - or, on the
+    // SDK path a fast leave always takes, a *ten second* - teardown delayed the
+    // one request that actually removes this device from the channel. Anything
+    // that threw in between skipped it entirely, and the membership then
+    // outlived the session that owned it.
+    final leaving = repository.leave(guildId, channelId);
     await webRtc?.disconnect();
     try {
-      await repository.leave(guildId, channelId);
-    } catch (_) {
-      // Best-effort - we've already torn down locally.
+      await leaving;
+    } catch (e, s) {
+      // Recorded rather than shown. Locally this device has left, and the
+      // server's own liveness sweep clears the record within 90 seconds - but a
+      // leave that did not land is the thing the next join collides with, so it
+      // must not be invisible.
+      _diagnostics.record(
+        VoiceFaultCodes.join,
+        subject: channelId,
+        detail: 'leave was not acknowledged by the server',
+        error: e,
+        stackTrace: s,
+      );
     }
   }
+
+  /// A short, safe description of a failure for the fault log.
+  ///
+  /// [VoiceMediaException] already classifies itself against the contract's
+  /// status codes, and that classification is the useful half - "503
+  /// sfuUnavailable" says retry, "404" says the room is not there. Anything else
+  /// is recorded by type, because a message from an arbitrary exception can
+  /// carry a token or a URL and this ends up in a bug report.
+  String _describeFailure(Object error) => switch (error) {
+    VoiceMediaException(:final statusCode, :final operation, :final error) =>
+      '$operation failed: $statusCode ${error ?? ''}'.trimRight(),
+    UnsupportedVoiceBackendException(:final backend) =>
+      'unsupported media backend "$backend"',
+    _ => error.runtimeType.toString(),
+  };
 
   /// Releases everything local about the joined channel, returning the WebRTC
   /// service so the caller can dispose it after emitting. Viewer claims go
@@ -339,7 +441,41 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     // The SDK gave up reconnecting. A fresh connection is the only recovery -
     // and it is cheap, because minting one touches nothing but the token.
     webRtc.onMediaDisconnected = () => unawaited(_reconnectMedia());
+    // A publication the SFU is advertising that nothing asked for - the camera
+    // that was already on when this device arrived, or one whose
+    // `TrackPublished` was missed. Handled exactly like the relay would have
+    // handled it, because it is the same fact arriving by a different road.
+    webRtc.onPublicationDiscovered = _handleDiscoveredPublication;
     return webRtc;
+  }
+
+  /// Adopts a publication the transport found on the SFU that the roster had
+  /// not been told about.
+  ///
+  /// The one thing it cannot supply is a media session id, which is a backend
+  /// concept the SFU knows nothing about. Nothing on the subscribe path reads
+  /// it any more - it is a parameter the pre-LiveKit contract needed - so an
+  /// empty string is passed rather than dropping a publication that the SFU is
+  /// demonstrably already carrying.
+  void _handleDiscoveredPublication(VoicePublicationDiscovery discovery) {
+    final channelId = state.channelId;
+    if (channelId == null || state.phase != GuildVoicePhase.active) return;
+    _diagnostics.record(
+      VoiceFaultCodes.notSubscribed,
+      subject: discovery.userId,
+      detail:
+          'adopted an unannounced publication "${discovery.trackName}" '
+          'the SFU was already carrying',
+      isError: false,
+    );
+    _handleTrackPublished(
+      userId: discovery.userId,
+      channelId: channelId,
+      mediaSessionId: '',
+      trackName: discovery.trackName,
+      kind: discovery.kind,
+      shareId: discovery.shareId,
+    );
   }
 
   /// Guards [_reconnectMedia] against a second attempt while one is running.
@@ -489,6 +625,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     String guildId,
     String channelId,
     VoiceRoomSnapshotDto snapshot,
+    int epoch,
   ) async {
     final webRtc = _buildTransport();
     _webRtc = webRtc;
@@ -511,25 +648,60 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
       _startSpeakingReports();
       _startVisibilityReports();
-    } on VoiceMediaException catch (e) {
+    } on VoiceConnectSuperseded {
+      // The channel was left while this was connecting. Not a failure, and
+      // saying so would tell somebody who deliberately tapped away that the
+      // thing they left could not be joined.
+      return;
+    } on VoiceMediaException catch (e, s) {
+      if (epoch != _epoch) return;
+      final reference = _diagnostics.record(
+        VoiceFaultCodes.connect,
+        subject: channelId,
+        detail: _describeFailure(e),
+        error: e,
+        stackTrace: s,
+      );
       // A self-hosted instance with no SFU configured is a supported state, not
       // a fault - and there is no capability read to ask up front, so this is
       // where it is discovered. Saying "could not connect" for it would send
       // somebody looking for a network problem that does not exist.
       emitIfOpen(
         state.copyWith(
-          errorMessage: e.isVoiceNotConfigured
-              ? 'Voice is not available on this server.'
-              : 'Could not connect audio.',
+          errorMessage: withVoiceTrace(
+            e.isVoiceNotConfigured
+                ? 'Voice is not available on this server.'
+                : 'Could not connect audio.',
+            reference,
+          ),
         ),
       );
-    } catch (_) {
-      emitIfOpen(state.copyWith(errorMessage: 'Could not connect audio.'));
+    } catch (e, s) {
+      if (epoch != _epoch) return;
+      final reference = _diagnostics.record(
+        VoiceFaultCodes.connect,
+        subject: channelId,
+        detail: _describeFailure(e),
+        error: e,
+        stackTrace: s,
+      );
+      emitIfOpen(
+        state.copyWith(
+          errorMessage: withVoiceTrace('Could not connect audio.', reference),
+        ),
+      );
     }
+
+    // Everything below belongs to a channel this device is still in. Left
+    // unguarded, a leave that landed during the connect above was followed by a
+    // refetch for the channel just exited and by two timers restarted after the
+    // teardown had stopped them.
+    if (epoch != _epoch) return;
 
     // Re-read after connecting: anyone who started publishing while we were
     // behind the microphone prompt is only in this second snapshot.
     await repository.refetchSnapshot();
+    if (epoch != _epoch) return;
     _heartbeat.start();
     _liveness.start();
   }
@@ -977,17 +1149,17 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   void _bumpVideoRevision() =>
       emitIfOpen(state.copyWith(videoRevision: state.videoRevision + 1));
 
-  /// Track getters for the UI - read imperatively (see
-  /// [GuildVoiceState.videoRevision] for why `MediaStreamTrack`s can't live in
-  /// cubit state itself).
-  MediaStreamTrack? get localVideoTrack => _webRtc?.localVideoTrack;
-  MediaStreamTrack? get localScreenTrack => _webRtc?.localScreenTrack;
-  MediaStreamTrack? remoteVideoTrackFor(String userId) =>
-      _webRtc?.remoteVideoTrackFor(userId);
-  MediaStreamTrack? remoteScreenTrackFor(String userId) =>
-      _webRtc?.remoteScreenTrackFor(userId);
-  MediaStreamTrack? remoteScreenTrackForShare(String shareId) =>
-      _webRtc?.remoteScreenTrackForShare(shareId);
+  /// Video getters for the UI - read imperatively (see
+  /// [GuildVoiceState.videoRevision] for why media objects can't live in cubit
+  /// state itself).
+  VoiceVideoFeed? get localVideoFeed => _webRtc?.localVideoFeed;
+  VoiceVideoFeed? get localScreenFeed => _webRtc?.localScreenFeed;
+  VoiceVideoFeed? remoteVideoFeedFor(String userId) =>
+      _webRtc?.remoteVideoFeedFor(userId);
+  VoiceVideoFeed? remoteScreenFeedFor(String userId) =>
+      _webRtc?.remoteScreenFeedFor(userId);
+  VoiceVideoFeed? remoteScreenFeedForShare(String shareId) =>
+      _webRtc?.remoteScreenFeedForShare(shareId);
 
   /// How large this client is drawing [userId], which is what the server picks
   /// their simulcast layer from. Reported by the tiles themselves; safe to call
@@ -1215,6 +1387,9 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
 
   Future<void> _tearDownLocally(String message) async {
     final channelId = state.channelId;
+    // Raised with the rest of the teardown: this is a departure like any other,
+    // and a connect still climbing must not write into the state it leaves.
+    _epoch++;
     final webRtc = await _teardown();
     final rosters = Map<String, List<VoiceParticipantState>>.from(
       state.rosters,
