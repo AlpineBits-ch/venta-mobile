@@ -410,6 +410,10 @@ class VoiceWebRtcService {
         track,
         publishOptions: VideoPublishOptions(
           name: TrackNaming.camera,
+          // Named rather than defaulted, and the reasoning - which is about
+          // what a handset's H.264 encoder can honestly declare, not about the
+          // SFU - is on [publishVideoCodec].
+          videoCodec: publishVideoCodec,
           videoSimulcastLayers: VideoLayers.cameraFor(declared.height),
         ),
       );
@@ -486,6 +490,10 @@ class VoiceWebRtcService {
         videoTrack,
         publishOptions: VideoPublishOptions(
           name: TrackNaming.screenTrack(shareId),
+          // Same codec as the camera, and for the same reason: a share is the
+          // publish most worth spending H.264 High on, and the platform this
+          // runs on is the one that cannot declare it. See [publishVideoCodec].
+          videoCodec: publishVideoCodec,
           screenShareSimulcastLayers: VideoLayers.screenFor(
             declared?.height ?? VideoPublishIntent.conservative.height,
           ),

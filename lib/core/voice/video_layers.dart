@@ -6,6 +6,58 @@ import 'package:livekit_client/livekit_client.dart';
 import '../../features/billing/data/models/entitlement_ladder.dart';
 import 'voice_subscription_set.dart';
 
+/// The codec every video publish from this client names, stated rather than
+/// inherited from the SDK's default.
+///
+/// **The SFU stopped dictating this and the handsets did not.** Cloudflare
+/// Realtime answered exactly one H.264 variant - `42e01f`, Constrained Baseline
+/// 3.1 - and dropped every other entry from every answer, which is why both
+/// clients were pinned to Baseline. The room is self-hosted LiveKit now:
+/// measured against `livekit-server` 1.13.5 on 2026-08-16, an offer carrying
+/// `42001f`, `42e01f`, `640032` and `640034` is answered with all four kept,
+/// because it forwards opaquely instead of imposing a codec table. The desktop
+/// client publishes H.264 High at Level 5.2 on the strength of that.
+///
+/// **It does not follow that a phone should.** An SFU does not transcode, so
+/// what a mobile publisher may send is decided by the platform encoder
+/// libwebrtc finds, and on Android that is both narrower and more brittle than
+/// the SDP suggests (`io.github.webrtc-sdk:android:144.7559.09`, the AAR
+/// `flutter_webrtc` pulls in):
+///
+///  * H.264 High and Constrained High are advertised only for codecs named
+///    `OMX.qcom.` or `OMX.Exynos.`. A device on Codec2 naming - the norm since
+///    Android 10 - advertises Constrained Baseline and nothing else, as an
+///    encoder *and* as a decoder.
+///  * The level in that advertisement is fixed at 3.1 and cannot be raised from
+///    here. `HardwareVideoEncoder` picks the profile by comparing the negotiated
+///    `profile-level-id` against the literal strings `42e01f` and `640c1f`;
+///    anything else is an unknown profile level id and the encoder does not
+///    start. Declaring `42e034` would cost the publish rather than buy a level.
+///
+/// So publishing H.264 from Android means sending 1080p60 under a Level 3.1
+/// declaration - a stream above what was negotiated, which survives on decoder
+/// leniency alone and fails as a black tile rather than a soft one. iOS is the
+/// opposite case, offering Constrained High at Level 5.1 (`flutter_webrtc`
+/// raises the platform's 3.1 in `motifyH264ProfileLevelId`), but publishing
+/// High-family video from iOS alone would hand exactly those Codec2 Android
+/// viewers a track their decoder never matches: **profile has to match for a
+/// codec to be selected at all, level never does** (`level-asymmetry-allowed=1`
+/// is on every offer, and only the level is asymmetric).
+///
+/// VP8 has no profile to get wrong and every client decodes it, which is what
+/// makes it the honest choice for the one publisher that cannot describe its own
+/// encoder. Stated explicitly because it is also the SDK's current default: a
+/// default that moved under a `livekit_client` bump would be an Android interop
+/// break with nothing in this repo pointing at the cause. The server can still
+/// override it - a codec absent from `enabled_publish_codecs` is replaced by the
+/// first that is present - but that arrives on the join as a stated decision.
+///
+/// Revisit when libwebrtc's Android factories learn Codec2 names, which is what
+/// would make Constrained High general rather than a Qualcomm and Exynos
+/// privilege. Nothing here narrows the **receive** side: this client accepts
+/// whatever the platform advertises, and no Dart in this repo filters it.
+const String publishVideoCodec = 'vp8';
+
 /// The simulcast ladders this client publishes video in, and the translation
 /// between the server's layer ranking and the SDK's quality enum.
 ///
