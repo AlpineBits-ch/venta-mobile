@@ -14,6 +14,7 @@ import 'core/mls/mls_store.dart';
 import 'core/push/nse_diagnostics_reporter.dart';
 import 'core/push/push_decrypt_diagnostics.dart';
 import 'core/push/push_notification_service.dart';
+import 'core/realtime/realtime_service.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/back_navigation.dart';
 import 'core/routing/deep_link_handler.dart';
@@ -93,6 +94,12 @@ class _AppState extends State<App> {
         // An incident can start and end while the app is away, so a resume
         // needs an answer immediately rather than on the next 60s tick.
         _statusRepository?.resume();
+        // And the same problem one layer down: a backgrounded process runs no
+        // timers, so the hub only notices its socket died once the 30s server
+        // timeout finally fires - until then the app sits in the foreground
+        // showing the world as it was when the screen went off. This is what
+        // makes people appear in the voice channels they are actually in.
+        unawaited(getIt<RealtimeService>().resume());
       },
     );
 

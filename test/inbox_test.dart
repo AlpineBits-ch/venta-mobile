@@ -9,6 +9,7 @@ import 'package:venta_mobile/core/mls/mls_service.dart';
 import 'package:venta_mobile/core/network/api_client.dart';
 import 'package:venta_mobile/core/realtime/realtime_event.dart';
 import 'package:venta_mobile/core/realtime/realtime_service.dart';
+import 'package:venta_mobile/core/realtime/realtime_transport.dart';
 import 'package:venta_mobile/features/auth/data/auth_repository.dart';
 import 'package:venta_mobile/features/guilds/data/models/channel_dto.dart';
 import 'package:venta_mobile/features/inbox/data/inbox_api.dart';
@@ -105,6 +106,7 @@ void main() {
   late _ScriptedAdapter adapter;
   late InboxApi api;
   late StreamController<RealtimeEvent> events;
+  late StreamController<RealtimeConnectionStatus> connection;
   late InboxRepository repository;
 
   /// Not every test here needs a repository - the pure mapping ones don't -
@@ -123,8 +125,10 @@ void main() {
 
     api = InboxApi(client: client);
     events = StreamController<RealtimeEvent>.broadcast();
+    connection = StreamController<RealtimeConnectionStatus>.broadcast();
     final realtime = _MockRealtimeService();
     when(() => realtime.events).thenAnswer((_) => events.stream);
+    when(() => realtime.connectionStatus).thenAnswer((_) => connection.stream);
     repository = InboxRepository(
       api: api,
       realtimeService: realtime,
@@ -137,6 +141,7 @@ void main() {
     built = false;
     repository.dispose();
     unawaited(events.close());
+    unawaited(connection.close());
   });
 
   group('paging', () {
@@ -559,6 +564,47 @@ void main() {
       await Future<void>.delayed(const Duration(seconds: 4));
 
       expect(repository.summary.value.taskCount, 3);
+    });
+  });
+
+  group('reconnect', () {
+    // Both inbox events are broadcasts the server never replays, so the badge
+    // is counting a world that moved on while the app was backgrounded - and
+    // wrong upwards, because the missed `ReadStateChanged`s are the ones that
+    // would have taken it down.
+    test('a reconnect re-reads the summary', () async {
+      build(
+        (options, index) => index == 0
+            ? {'unreadChannelCount': 4, 'mentionCount': 2, 'taskCount': 0}
+            : {'unreadChannelCount': 0, 'mentionCount': 0, 'taskCount': 0},
+      );
+      await repository.refreshSummary();
+      expect(repository.summary.value.mentionCount, 2);
+
+      connection.add(RealtimeConnectionStatus.connected);
+      await pumpEventQueue();
+
+      // Immediately, not on the 3s burst debounce: a reconnect is one event,
+      // and the badge is on screen the moment the app comes back.
+      expect(repository.summary.value.unreadChannelCount, 0);
+      expect(repository.summary.value.mentionCount, 0);
+    });
+
+    test('a drop leaves the badge alone', () async {
+      build(
+        (options, index) => index == 0
+            ? {'unreadChannelCount': 4, 'mentionCount': 2, 'taskCount': 0}
+            : {'unreadChannelCount': 0, 'mentionCount': 0, 'taskCount': 0},
+      );
+      await repository.refreshSummary();
+
+      connection.add(RealtimeConnectionStatus.disconnected);
+      connection.add(RealtimeConnectionStatus.connecting);
+      await pumpEventQueue();
+
+      // Nothing is known to have changed yet, and the counts it is showing are
+      // the last ones that were true.
+      expect(repository.summary.value.mentionCount, 2);
     });
   });
 }

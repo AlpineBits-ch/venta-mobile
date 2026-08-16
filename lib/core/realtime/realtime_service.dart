@@ -15,12 +15,22 @@ class RealtimeService {
     required this.transport,
     required this.authRepository,
     required this.deviceIdService,
-  });
+  }) {
+    // Never cancelled: this is an app-lifetime singleton and both ends outlive
+    // every session. `stop()` tears down the connection, not this class.
+    transport.connectionStatus.listen(_statusController.add);
+  }
 
   final RealtimeTransport transport;
   final AuthRepository authRepository;
   final DeviceIdService deviceIdService;
   bool _configured = false;
+
+  /// The transport's status, plus the synthetic `connected` [resume] emits.
+  /// Owned here rather than passed through so this class can announce one -
+  /// see [resume] for why that is not a lie.
+  final _statusController =
+      StreamController<RealtimeConnectionStatus>.broadcast();
 
   /// Every hub method registered on the transport. Public so a test can hold
   /// it against the household event list - a name missing here is dropped
@@ -286,7 +296,7 @@ class RealtimeService {
   Stream<RealtimeEvent> get events => _eventsController.stream;
 
   Stream<RealtimeConnectionStatus> get connectionStatus =>
-      transport.connectionStatus;
+      _statusController.stream;
 
   /// Idempotent: call once per authenticated session (login, or app cold
   /// start with a restored session). Safe to call again after [stop].
@@ -306,6 +316,45 @@ class RealtimeService {
       _configured = true;
     }
     await transport.start();
+  }
+
+  /// Brings the hub - and everything downstream of it - back in step after the
+  /// app has been in the background.
+  ///
+  /// A backgrounded process has no timers, so the client's own 30-second server
+  /// timeout is what eventually notices the socket died while it was away: the
+  /// app can sit in the foreground showing an hour-old picture of the world
+  /// until that fires and the reconnect ladder finishes behind it. That is the
+  /// "it doesn't backfill on wake" this exists to remove - the state does
+  /// repair itself, just far too late to look like anything but a bug.
+  ///
+  /// Nothing here is new machinery. `connected` is already the app's "you
+  /// missed things, re-read them" signal - SignalR queues nothing across a gap,
+  /// so every cubit that cares already refetches on it. So:
+  ///
+  /// * down and idle → [start] it, which announces `connected` on its own;
+  /// * mid-handshake or mid-reconnect → leave it alone, its own ladder is
+  ///   already the faster path and a second `start` throws;
+  /// * still connected → announce `connected` anyway. Not a lie about the
+  ///   socket, which is genuinely up: it is the same "re-read what you hold"
+  ///   instruction, and it has to be sent because a socket that *looks* alive
+  ///   after a long suspension is exactly the case that shows stale state.
+  Future<void> resume() async {
+    // Never started this session - a signed-out app has nothing to resync.
+    if (!_configured) return;
+
+    if (transport.isConnected) {
+      _statusController.add(RealtimeConnectionStatus.connected);
+      return;
+    }
+    if (!transport.isDisconnected) return;
+
+    try {
+      await transport.start();
+    } catch (_) {
+      // The reconnect ladder owns retrying; a failed nudge is not an error the
+      // user can act on, and the socket was already down before it.
+    }
   }
 
   Future<void> stop() async {

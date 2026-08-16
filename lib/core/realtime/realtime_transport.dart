@@ -8,6 +8,19 @@ enum RealtimeConnectionStatus { connected, connecting, disconnected }
 abstract class RealtimeTransport {
   Stream<RealtimeConnectionStatus> get connectionStatus;
 
+  /// The connection is fully established right now.
+  ///
+  /// Read on resume, where the *current* state is the question and the status
+  /// stream - which only reports transitions - cannot answer it: an app that
+  /// was away for an hour has no live subscriber holding the last value.
+  bool get isConnected;
+
+  /// The connection is down and is not trying to come back on its own, so
+  /// [start] is both safe and necessary. False while it is mid-handshake or
+  /// mid-reconnect, where starting again would throw and the client's own
+  /// retry ladder is already the faster path.
+  bool get isDisconnected;
+
   /// Builds the underlying connection object against [hubUrl]. Must be
   /// called once, before [on] or [start].
   void configure({

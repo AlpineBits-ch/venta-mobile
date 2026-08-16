@@ -550,6 +550,9 @@ void resetSessionScopedCaches() {
   // different set of servers, and a rail badge left over from the previous one
   // would sit on a server the new user cannot even see into.
   getIt<GuildVoiceActivityCubit>().clear();
+  // Same reason, one level finer: the per-channel sidebar rosters, and the
+  // channel→guild index a reconnect re-reads them from.
+  getIt<GuildVoiceCubit>().clearRosters();
   // Device registration is per account, not per install: the id this handset
   // registered for the previous user means nothing to the next one, and every
   // call/voice action would be rejected until it registers again.

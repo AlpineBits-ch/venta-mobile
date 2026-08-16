@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/mls/mls_service.dart';
 import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
+import '../../../core/realtime/realtime_transport.dart';
 import '../../messaging/data/message_decryptor.dart';
 import '../../messaging/data/models/message_dto.dart';
 import 'inbox_api.dart';
@@ -76,11 +77,23 @@ class InboxRepository {
           }.contains(e.name),
         )
         .listen(_handleRealtimeEvent);
+    _connectionSub = realtimeService.connectionStatus.listen((status) {
+      // Both inbox events are broadcasts the server never replays, so a socket
+      // gap - a night on the nightstand, most often - leaves the badge counting
+      // a world that has moved on. It goes wrong in the direction people
+      // notice, too: reading a channel on the desktop client arrives as
+      // `ReadStateChanged`, so the missed events are mostly the ones that would
+      // have taken the count *down*.
+      if (status == RealtimeConnectionStatus.connected) {
+        _refreshSummaryQuietly();
+      }
+    });
   }
 
   final InboxApi api;
   final MessageDecryptor _decryptor;
   late final StreamSubscription<RealtimeEvent> _realtimeSub;
+  late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
 
   /// How many pages the cursor is followed through before giving up on a round.
   ///
@@ -233,6 +246,12 @@ class InboxRepository {
   Future<InboxTaskPageDto> loadTasks({int limit = 25}) =>
       api.getTasks(limit: limit);
 
+  /// [refreshSummary] where a failure is not the caller's problem - the badge
+  /// keeps its last known value and the next event or reconnect tries again.
+  void _refreshSummaryQuietly() {
+    unawaited(refreshSummary().then((_) {}, onError: (_) {}));
+  }
+
   Future<InboxSummaryDto> refreshSummary() async {
     final summary = await api.getSummary();
     _summary.value = summary;
@@ -283,6 +302,7 @@ class InboxRepository {
   void dispose() {
     _summaryRefreshTimer?.cancel();
     unawaited(_realtimeSub.cancel());
+    unawaited(_connectionSub.cancel());
     unawaited(_mentionAddedController.close());
     unawaited(_readStateController.close());
     unawaited(_tasksChangedController.close());

@@ -231,7 +231,17 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   /// Safe for a channel this user is not in: the snapshot withholds session
   /// ids and track names for anyone not actually publishing, so a roster read
   /// hands out nothing subscribable.
+  /// Which guild each roster belongs to.
+  ///
+  /// The roster map is keyed by channel alone - which is all the UI needs -
+  /// but the snapshot read needs both ids, so a reconnect could not re-read
+  /// what it was already showing without this.
+  final Map<String, String> _rosterGuilds = {};
+
   Future<void> hydrateChannelRoster(String guildId, String channelId) async {
+    // Recorded before the read, not after: a channel whose hydrate failed is
+    // precisely one worth retrying on the next reconnect.
+    _rosterGuilds[channelId] = guildId;
     try {
       final snapshot = await repository.getSnapshot(guildId, channelId);
       _setRoster(channelId, [
@@ -241,6 +251,25 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     } catch (_) {
       // Best-effort - realtime events keep it eventually consistent.
     }
+  }
+
+  /// Drops the sidebar rosters. Called on sign-in and sign-out alike - this
+  /// singleton outlives a session, and the next account is in a different set
+  /// of guilds, so a reconnect would otherwise re-read channels it cannot see.
+  ///
+  /// The joined room, if there is one, is left alone: tearing down voice is
+  /// `leave`'s job and it is the one roster this cubit is authoritative about.
+  void clearRosters() {
+    final joined = state.channelId;
+    _rosterGuilds.removeWhere((channelId, _) => channelId != joined);
+    emitIfOpen(
+      state.copyWith(
+        rosters: {
+          if (joined != null && state.rosters[joined] != null)
+            joined: state.rosters[joined]!,
+        },
+      ),
+    );
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -573,9 +602,8 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   void _startVisibilityReports() {
     _visibility?.dispose();
     _visibility = VoiceAppVisibility(
-      onChanged: (isPaused) => unawaited(
-        _webRtc?.setPaused(isPaused) ?? Future.value(),
-      ),
+      onChanged: (isPaused) =>
+          unawaited(_webRtc?.setPaused(isPaused) ?? Future.value()),
     );
   }
 
@@ -917,9 +945,34 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   /// snapshot on its own. The refetch covers the rest - SignalR does not queue what it missed.
   void _handleConnectionStatus(RealtimeConnectionStatus status) {
     if (status != RealtimeConnectionStatus.connected) return;
-    if (state.phase != GuildVoicePhase.active) return;
-    unawaited(_sendHeartbeat());
-    unawaited(repository.refetchSnapshot());
+    if (state.phase == GuildVoicePhase.active) {
+      unawaited(_sendHeartbeat());
+      unawaited(repository.refetchSnapshot());
+    }
+    _rehydrateRosters();
+  }
+
+  /// Re-reads the sidebar rosters for the voice channels this cubit is showing
+  /// but is not in.
+  ///
+  /// They are kept current by the guild-wide `UserJoinedVoice`/`UserLeftVoice`
+  /// fan-out, and those are dropped outright across a socket gap - there is no
+  /// version gate on them, because a client that is not in the room has no
+  /// version to be behind on. So without this the channel list keeps showing
+  /// who was in voice when the app was last awake, for as long as the screen
+  /// stays open: the people who joined while it was away never appear, and the
+  /// ones who left never go. Everything above only repairs the room this device
+  /// is actually joined to.
+  void _rehydrateRosters() {
+    final joined = state.channelId;
+    // Over a copy: `hydrateChannelRoster` writes back into this map before its
+    // first await, so iterating it live is a concurrent modification.
+    for (final entry in Map.of(_rosterGuilds).entries) {
+      // The joined room is authoritative via its snapshot refetch, which
+      // carries track and session state a roster read deliberately withholds.
+      if (entry.key == joined) continue;
+      unawaited(hydrateChannelRoster(entry.value, entry.key));
+    }
   }
 
   // ── Local controls ────────────────────────────────────────────────────────
@@ -1205,7 +1258,15 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
           unawaited(_handleRoomGone());
         }
 
-      case UserJoinedVoiceChannel(:final userId, :final channelId):
+      case UserJoinedVoiceChannel(
+        :final userId,
+        :final channelId,
+        :final guildId,
+      ):
+        // A guild-wide join can be the first this cubit hears of a channel, so
+        // it is also where the guild behind a roster gets learned when the user
+        // has not opened that server's channel list this session.
+        _rosterGuilds[channelId] = guildId;
         if (userId == _myUserId) return;
         if (channelId == state.channelId) {
           unawaited(soundService.playJoinCall());

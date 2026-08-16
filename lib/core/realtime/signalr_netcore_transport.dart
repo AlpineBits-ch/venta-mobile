@@ -15,6 +15,14 @@ class SignalrNetcoreTransport implements RealtimeTransport {
       _statusController.stream;
 
   @override
+  bool get isConnected => _connection?.state == HubConnectionState.Connected;
+
+  @override
+  bool get isDisconnected =>
+      _connection == null ||
+      _connection?.state == HubConnectionState.Disconnected;
+
+  @override
   void configure({
     required String hubUrl,
     required Future<String> Function() accessTokenFactory,
