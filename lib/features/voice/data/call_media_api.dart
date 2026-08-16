@@ -19,54 +19,42 @@ class CallMediaApi implements VoiceMediaApi {
   Future<VoiceRoomSnapshotDto> fetchSnapshot() => api.getSnapshot(callId);
 
   @override
-  Future<VoiceSessionDto> createSession({bool primary = true}) =>
-      api.createSession(callId, primary: primary);
+  Future<VoiceConnectionDto> createConnection({
+    bool primary = true,
+    String? tag,
+  }) => api.createConnection(callId, primary: primary, tag: tag);
 
   @override
-  Future<VoiceNegotiateResponseDto> negotiate({
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    required List<Map<String, dynamic>> tracks,
-    Map<String, dynamic>? video,
-  }) => api.negotiate(
-    callId: callId,
-    mediaSessionId: mediaSessionId,
-    sessionDescription: sessionDescription,
-    tracks: tracks,
-    video: video,
-  );
-
-  @override
-  Future<VoiceRenegotiateResponseDto> renegotiate({
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    Map<String, dynamic>? video,
-  }) => api.renegotiate(
-    callId: callId,
-    mediaSessionId: mediaSessionId,
-    sessionDescription: sessionDescription,
-    video: video,
-  );
-
-  @override
-  Future<void> closeTracks({
-    required String mediaSessionId,
+  Future<VoicePublishResultDto> declarePublish({
     required List<String> trackNames,
-  }) => api.closeTracks(
+    Map<String, dynamic>? video,
+  }) => api.declarePublish(
     callId: callId,
-    mediaSessionId: mediaSessionId,
     trackNames: trackNames,
+    video: video,
   );
 
   @override
-  Future<void> updateSubscriber({
+  Future<void> unpublish({required List<String> trackNames}) =>
+      api.unpublish(callId: callId, trackNames: trackNames);
+
+  @override
+  Future<void> declareVideo(Map<String, dynamic> video) =>
+      api.declareVideo(callId: callId, video: video);
+
+  @override
+  Future<VoiceSubscriptionSetDto?> updateSubscriber({
+    bool? paused,
     Map<String, int>? tileHeights,
     List<String>? pinned,
+    List<String>? pausedPublishers,
     List<String>? screenAudioShares,
   }) => api.updateSubscriber(
     callId: callId,
+    paused: paused,
     tileHeights: tileHeights,
     pinned: pinned,
+    pausedPublishers: pausedPublishers,
     screenAudioShares: screenAudioShares,
   );
 

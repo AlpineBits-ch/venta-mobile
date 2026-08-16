@@ -88,9 +88,12 @@ void main() {
         kind: TrackKind.video,
       );
 
+      // Keyed by track *name* rather than by kind: the name is what the SFU
+      // and the roster agree on, and it is what a publication carries. Keying
+      // on kind collapses two video tracks from one publisher into one entry.
       expect(
         service.pendingSubscribeKeys,
-        containsAll(<String>['u2|audio', 'u2|video']),
+        containsAll(<String>['u2|audio', 'u2|camera']),
       );
 
       // Dropping the camera must not take the microphone with it.

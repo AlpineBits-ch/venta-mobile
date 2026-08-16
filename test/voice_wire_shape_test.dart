@@ -14,16 +14,19 @@ import 'package:venta_mobile/features/voice/data/voice_api.dart';
 
 /// The voice surface is deliberately *not* the SFU's.
 ///
-/// It used to be: routes were `cf/tracks/new`, the session was a
-/// `cfSessionId`, and a track said `location: "local"|"remote"` - Cloudflare's
-/// own vocabulary, describing where media sits rather than what the caller is
-/// doing. The server replaced all of it with neutral contracts so the SFU is
-/// swappable, and the old shape was deleted rather than kept working.
+/// It used to be: routes were `cf/tracks/new`, the session was a `cfSessionId`,
+/// and a track said `location: "local"|"remote"` - the SFU's own vocabulary,
+/// describing where media sits rather than what the caller is doing. The server
+/// replaced all of it with neutral contracts so the SFU is swappable, and the
+/// move from Cloudflare Calls to LiveKit is what that bought: the snapshot, the
+/// version rules, the heartbeat, the viewer counts and the entitlement bodies
+/// did not move at all, because none of them were ever about which SFU was
+/// behind them.
 ///
 /// These pin the request side of that contract. A silent regression here does
 /// not fail loudly - it 404s a route or drops a field the server then reads as
 /// null, both of which surface as "voice does not connect" rather than as
-/// anything pointing at the rename.
+/// anything pointing at the shape.
 class _MockAuthRepository extends Mock implements AuthRepository {}
 
 class _MockDeviceIdService extends Mock implements DeviceIdService {}
@@ -40,10 +43,16 @@ class _CapturingAdapter implements HttpClientAdapter {
     requests.add(options);
     return ResponseBody.fromString(
       jsonEncode({
-        'mediaSessionId': 'media-1',
-        'backend': 'cloudflare',
-        'sessionDescription': <String, dynamic>{'type': 'answer', 'sdp': ''},
-        'tracks': <dynamic>[],
+        // A superset serving every endpoint: these tests assert on the request
+        // side, so one canned body answers them all.
+        'backend': 'livekit',
+        'url': 'wss://sfu-fsn1.venta.gg',
+        'token': 'jwt',
+        'room': 'channel-chan-1',
+        'identity': 'user-1',
+        'mediaSessionId': 'user-1',
+        'rung': '1080p60',
+        'maxLayer': null,
         'roomId': 'chan-1',
         'kind': 'channel',
         'instanceId': 'inst-1',
@@ -93,45 +102,66 @@ void main() {
     guildApi = GuildVoiceApi(client: client, deviceIdService: deviceIdService);
   });
 
-  group('negotiation body', () {
-    test('names the session with mediaSessionId, not cfSessionId', () async {
-      await callApi.negotiate(
+  group('publish declaration', () {
+    test('declares tracks by name, and nothing about a transport', () async {
+      // The whole body now. There is no SDP to relay, no session to name and no
+      // mid to resolve - the media is already flowing by the time this is sent,
+      // and its only job is to make the publish visible to everything in the
+      // product that is not the media.
+      await callApi.declarePublish(
         callId: 'call-1',
-        mediaSessionId: 'media-1',
-        sessionDescription: const {'type': 'offer', 'sdp': ''},
-        tracks: const [],
-      );
-
-      final body = bodyOf('/tracks');
-      expect(body['mediaSessionId'], 'media-1');
-      expect(body.containsKey('cfSessionId'), isFalse);
-    });
-
-    test('direction is spelled the way the server spells it', () {
-      // `direction: publish|subscribe` replaced `location: local|remote`, and
-      // both values are wire constants. A typo here is silent: the server
-      // reads anything that is not "subscribe" as a publish, so a mistyped
-      // subscribe is sent to the SFU as an offer to send media nobody has.
-      expect(VoiceTrackDirection.publish, 'publish');
-      expect(VoiceTrackDirection.subscribe, 'subscribe');
-    });
-
-    // The optional declaration is the same field on both bodies, and the call
-    // routes carry it as well as the guild ones.
-    test('a call renegotiation can restate the picture', () async {
-      await callApi.renegotiate(
-        callId: 'call-1',
-        mediaSessionId: 'media-1',
-        sessionDescription: const {},
+        trackNames: const ['screen-abc123', 'screen-audio-abc123'],
         video: const {'height': 1080, 'framerate': 60},
       );
 
-      expect(bodyOf('/negotiate')['video'], {'height': 1080, 'framerate': 60});
+      final body = bodyOf('/publish');
+      expect(body['trackNames'], ['screen-abc123', 'screen-audio-abc123']);
+      expect(body['video'], {'height': 1080, 'framerate': 60});
+      expect(body.containsKey('sessionDescription'), isFalse);
+      expect(body.containsKey('mediaSessionId'), isFalse);
+    });
+
+    test('both halves of a share are declared in one call', () async {
+      // What lets a receiving client group them into a single tile from the two
+      // `TrackPublished` events that follow.
+      await callApi.declarePublish(
+        callId: 'call-1',
+        trackNames: const ['screen-abc123', 'screen-audio-abc123'],
+      );
+
+      expect(adapter.requests.where((r) => r.path.contains('/publish')), hasLength(1));
+    });
+
+    test('an audio-only publish declares no picture', () async {
+      // A video ceiling has never had anything to say about a microphone, and
+      // declaring a height on one invites the server to answer a question
+      // nobody asked.
+      await callApi.declarePublish(
+        callId: 'call-1',
+        trackNames: const ['audio'],
+      );
+
+      expect(bodyOf('/publish').containsKey('video'), isFalse);
+    });
+
+    test('a resolution change is its own declaration', () async {
+      // For a client that changes what it sends *without* republishing - a
+      // share that switched source, a camera that changed size. A ceiling
+      // computed once at publish time is one a later change walks straight
+      // past.
+      await callApi.declareVideo(
+        callId: 'call-1',
+        video: const {'height': 1080, 'framerate': 60},
+      );
+
+      final request = requestFor('/video');
+      expect(request.method, 'PUT');
+      expect(request.data, {'height': 1080, 'framerate': 60});
     });
 
     test('the microphone track name is still the wire constant', () {
-      // Participant announcements key off this exact name, so it survived the
-      // rename untouched and must keep doing so.
+      // Participant announcements key off this exact name, so it survived two
+      // SFU migrations untouched and must keep doing so.
       expect(TrackNaming.audio, 'audio');
     });
   });
@@ -185,70 +215,156 @@ void main() {
       expect(body['pinned'], isEmpty);
       expect(body['screenAudioShares'], isEmpty);
     });
+
+    test('backgrounding reports paused on its own', () async {
+      // Drops video, never audio - a backgrounded client is still in the
+      // conversation. Riding anything else on this body would clear a set
+      // nobody asked to clear.
+      await callApi.updateSubscriber(callId: 'call-1', paused: true);
+
+      final body = bodyOf('/subscriptions');
+      expect(body['paused'], isTrue);
+      expect(body.containsKey('tileHeights'), isFalse);
+      expect(body.containsKey('pinned'), isFalse);
+    });
+
+    test('a collapsed tile names its publisher', () async {
+      await callApi.updateSubscriber(
+        callId: 'call-1',
+        pausedPublishers: const ['user-7'],
+      );
+
+      expect(bodyOf('/subscriptions')['pausedPublishers'], ['user-7']);
+    });
+
+    test('the reply is this client\'s own subscription set', () async {
+      // So a caller can act on what it just reported without waiting for the
+      // push - which matters most on the report that *caused* the change, where
+      // waiting means a tile stays at the wrong layer for a round trip.
+      //
+      // The reply is always a full 200 object, never a 204 or a bare null, and
+      // it flattens the set onto itself the way `SubscriptionsChanged` does
+      // rather than nesting it the way the snapshot does.
+      final set = await callApi.updateSubscriber(
+        callId: 'call-1',
+        tileHeights: const {'user-4': 180},
+      );
+
+      expect(set, isNotNull);
+      // The canned reply carries no `tracks`, which is the unplanned room: a
+      // revocation, **not** an empty set. Reading it as the latter unsubscribes
+      // this client from everybody in the ordinary small call, silently, on
+      // every tile resize.
+      expect(set!.isInForce, isFalse);
+      expect(set.tracks, isNull);
+    });
   });
 
   group('routes', () {
     test('the call media routes are the neutral ones', () async {
-      await callApi.createSession('call-1');
-      await callApi.negotiate(
+      await callApi.createConnection('call-1');
+      await callApi.declarePublish(
         callId: 'call-1',
-        mediaSessionId: 'media-1',
-        sessionDescription: const {},
-        tracks: const [],
-      );
-      await callApi.renegotiate(
-        callId: 'call-1',
-        mediaSessionId: 'media-1',
-        sessionDescription: const {},
-      );
-      await callApi.closeTracks(
-        callId: 'call-1',
-        mediaSessionId: 'media-1',
         trackNames: const ['audio'],
       );
+      await callApi.declareVideo(
+        callId: 'call-1',
+        video: const {'height': 720, 'framerate': 30},
+      );
+      await callApi.unpublish(callId: 'call-1', trackNames: const ['audio']);
 
-      expect(requestFor('/tracks').method, 'POST');
-      expect(requestFor('/negotiate').method, 'PUT');
-      // Was a PUT on `cf/tracks/close`; closing is a POST now.
-      expect(requestFor('/tracks/close').method, 'POST');
+      expect(requestFor('/connection').method, 'POST');
+      expect(requestFor('/publish').method, 'POST');
+      expect(requestFor('/video').method, 'PUT');
+      expect(requestFor('/unpublish').method, 'POST');
       for (final request in adapter.requests) {
         expect(request.path, isNot(contains('/cf/')));
+      }
+    });
+
+    test('the removed negotiation routes are gone from this client', () async {
+      // They 404 now, and a client still calling them fails in a way that looks
+      // like a network problem rather than like a deleted route.
+      await callApi.createConnection('call-1');
+      await callApi.declarePublish(
+        callId: 'call-1',
+        trackNames: const ['audio'],
+      );
+      await callApi.unpublish(callId: 'call-1', trackNames: const ['audio']);
+
+      for (final request in adapter.requests) {
+        expect(request.path, isNot(contains('/session')));
+        expect(request.path, isNot(endsWith('/tracks')));
+        expect(request.path, isNot(contains('/tracks/close')));
+        expect(request.path, isNot(contains('/negotiate')));
+        expect(request.path, isNot(contains('/ice-servers')));
       }
     });
 
     test(
       'the guild media routes match the call ones under a guild path',
       () async {
-        await guildApi.createSession('g1', 'c1');
-        await guildApi.negotiate(
+        await guildApi.createConnection('g1', 'c1');
+        await guildApi.declarePublish(
           guildId: 'g1',
           channelId: 'c1',
-          mediaSessionId: 'media-1',
-          sessionDescription: const {},
-          tracks: const [],
+          trackNames: const ['audio'],
         );
 
         expect(
-          requestFor('/tracks').path,
-          contains('/guilds/g1/channels/c1/voice/tracks'),
+          requestFor('/publish').path,
+          contains('/guilds/g1/channels/c1/voice/publish'),
         );
-        expect(bodyOf('/tracks')['mediaSessionId'], 'media-1');
+        expect(bodyOf('/publish')['trackNames'], ['audio']);
       },
     );
   });
 
-  group('session handshake', () {
-    test('reads the declared backend alongside the session id', () async {
-      final session = await callApi.createSession('call-1');
+  group('connection handshake', () {
+    test('reads the node, the token and what the token grants', () async {
+      // `url` is the routing answer - a room lives on exactly one node - and
+      // the two publish flags are what the token actually permits, which is not
+      // the same question as what the UI would like to offer.
+      final connection = await callApi.createConnection('call-1');
 
-      expect(session.mediaSessionId, 'media-1');
-      expect(session.backend, 'cloudflare');
+      expect(connection.backend, 'livekit');
+      expect(connection.url, 'wss://sfu-fsn1.venta.gg');
+      expect(connection.token, 'jwt');
+      expect(connection.canPublishAudio, isTrue);
+      expect(connection.canPublishVideo, isTrue);
     });
 
-    test('declares whether it is the primary session', () async {
-      await callApi.createSession('call-1');
+    test('identity is the handle, under either name', () {
+      // Both fields carry it so a client can adopt the newer name without
+      // changing its snapshot handling on the same day.
+      const connection = VoiceConnectionDto(
+        url: 'wss://node',
+        token: 't',
+        identity: 'AbC123',
+        mediaSessionId: 'AbC123',
+      );
 
-      expect(requestFor('/session').queryParameters['primary'], isTrue);
+      expect(connection.sessionHandle, 'AbC123');
+    });
+
+    test('declares whether it is the primary connection', () async {
+      await callApi.createConnection('call-1');
+
+      expect(requestFor('/connection').queryParameters['primary'], isTrue);
+    });
+
+    test('a capped publish says so without failing', () async {
+      // `maxLayer` non-null means no viewer is served above that layer however
+      // large their tile - but the track is up and the picture is flowing, so
+      // nothing may treat it as a refusal.
+      final result = await callApi.declarePublish(
+        callId: 'call-1',
+        trackNames: const ['camera'],
+      );
+
+      expect(result.rung, '1080p60');
+      expect(result.maxLayer, isNull);
+      expect(result.isLayerCapped, isFalse);
     });
 
     test('join answers with the snapshot itself', () async {

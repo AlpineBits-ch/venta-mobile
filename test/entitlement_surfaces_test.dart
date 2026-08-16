@@ -317,26 +317,49 @@ void main() {
   });
 
   group('a clamped publish is a 200', () {
-    test('the reduction rides the normal negotiate body', () {
-      final response = VoiceNegotiateResponseDto.fromJson({
-        'sessionDescription': {'type': 'answer', 'sdp': 'v=0'},
-        'tracks': <dynamic>[],
+    test('the reduction rides the normal publish body', () {
+      final response = VoicePublishResultDto.fromJson({
+        'identity': 'AbC123',
+        'rung': '720p30',
+        'height': 720,
+        'framerate': 30,
+        'maxLayer': null,
         'degradations': [_degradationJson()],
       });
 
-      // The body the caller already parses, unchanged. Nothing rolls back.
-      expect(response.sessionDescription['sdp'], 'v=0');
+      // The body the caller already parses, unchanged. Nothing rolls back: the
+      // track is up and the picture is flowing, and only the rung differs from
+      // what was asked for.
+      expect(response.rung, '720p30');
       expect(response.degradations, hasLength(1));
       expect(response.degradations.single.key, 'voice.video_ceiling');
     });
 
     test('an absent degradations array is the normal case', () {
-      final response = VoiceNegotiateResponseDto.fromJson({
-        'sessionDescription': {'type': 'answer', 'sdp': 'v=0'},
-        'tracks': <dynamic>[],
+      final response = VoicePublishResultDto.fromJson({
+        'identity': 'AbC123',
+        'rung': '1080p60',
       });
 
       expect(response.degradations, isEmpty);
+    });
+
+    test('a null maxLayer is the ordinary case, not a missing one', () {
+      // Non-null means no viewer is served above that layer however large their
+      // tile - still publishing, still flowing. Reading the absence as a cap
+      // would hold every publisher inside its rung down to a layer nobody
+      // asked for.
+      expect(
+        VoicePublishResultDto.fromJson({'rung': '1080p60'}).isLayerCapped,
+        isFalse,
+      );
+      expect(
+        VoicePublishResultDto.fromJson({
+          'rung': '720p30',
+          'maxLayer': 'b',
+        }).isLayerCapped,
+        isTrue,
+      );
     });
 
     // The sentence the room renders. Present tense and about what is being
@@ -371,16 +394,13 @@ void main() {
     });
   });
 
-  group('what a negotiation declares', () {
+  group('what a publish declares', () {
     late _ScriptedAdapter adapter;
     late GuildVoiceApi api;
 
     setUp(() {
       adapter = _ScriptedAdapter(
-        (_) => {
-          'sessionDescription': <String, dynamic>{'type': 'answer', 'sdp': ''},
-          'tracks': <dynamic>[],
-        },
+        (_) => {'identity': 'AbC123', 'rung': '1080p60', 'maxLayer': null},
       );
       final deviceIdService = _MockDeviceIdService();
       when(() => deviceIdService.deviceId).thenReturn('device-1');
@@ -394,12 +414,10 @@ void main() {
         adapter.requests.last.data as Map<String, dynamic>;
 
     test('a camera publish states the picture it intends to send', () async {
-      await api.negotiate(
+      await api.declarePublish(
         guildId: 'g1',
         channelId: 'c1',
-        mediaSessionId: 'media-1',
-        sessionDescription: const {},
-        tracks: const [],
+        trackNames: const ['camera'],
         video: VideoPublishIntent.conservative.toJson(),
       );
 
@@ -407,15 +425,13 @@ void main() {
     });
 
     // An audio-only publish is never affected by a video ceiling, and declaring
-    // a height on the microphone's own negotiation invites an answer to a
-    // question nobody asked.
+    // a height alongside the microphone invites an answer to a question nobody
+    // asked.
     test('an audio-only publish declares nothing', () async {
-      await api.negotiate(
+      await api.declarePublish(
         guildId: 'g1',
         channelId: 'c1',
-        mediaSessionId: 'media-1',
-        sessionDescription: const {},
-        tracks: const [],
+        trackNames: const ['audio'],
       );
 
       expect(lastBody().containsKey('video'), isFalse);
@@ -446,30 +462,19 @@ void main() {
     });
 
     // The cap is computed from the declaration, so one made at publish time
-    // stops describing this client the moment the encoding changes.
-    test('a renegotiation that changes the picture states it', () async {
-      await api.renegotiate(
+    // stops describing this client the moment the encoding changes. This is
+    // what the `video` field on the old renegotiate body became: the
+    // declaration outlived the negotiation it used to ride, because the reason
+    // for it was never about negotiating anything.
+    test('a resolution change without a republish states itself', () async {
+      await api.declareVideo(
         guildId: 'g1',
         channelId: 'c1',
-        mediaSessionId: 'media-1',
-        sessionDescription: const {},
         video: VideoPublishIntent.conservative.toJson(),
       );
 
-      expect(lastBody()['video'], {'height': 720, 'framerate': 30});
-    });
-
-    // Absent leaves the last declaration in force in both directions: an ICE
-    // restart or a reconnect must not lift a cap, and must not apply one.
-    test('a renegotiation that is not about video declares nothing', () async {
-      await api.renegotiate(
-        guildId: 'g1',
-        channelId: 'c1',
-        mediaSessionId: 'media-1',
-        sessionDescription: const {},
-      );
-
-      expect(lastBody().containsKey('video'), isFalse);
+      expect(lastBody(), {'height': 720, 'framerate': 30});
+      expect(adapter.requests.last.method, 'PUT');
     });
   });
 

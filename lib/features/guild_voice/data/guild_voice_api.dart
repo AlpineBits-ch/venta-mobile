@@ -2,9 +2,11 @@ import 'package:dio/dio.dart';
 
 import '../../../core/device/device_id_service.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/voice/voice_liveness.dart';
 import '../../../core/voice/voice_media_api.dart';
 import '../../../core/voice/voice_media_dto.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
+import '../../../core/voice/voice_subscription_set.dart';
 import 'models/guild_voice_activity_dto.dart';
 
 /// REST surface for guild voice channels.
@@ -55,6 +57,31 @@ class GuildVoiceApi {
     );
   }
 
+  /// "I am still here", over HTTP rather than over the hub - see
+  /// [VoiceLiveness] for why the room needs telling twice by two different
+  /// routes.
+  ///
+  /// Answers an outcome instead of throwing, because `404` and `409` are two of
+  /// the three expected replies rather than faults: the loop that calls this
+  /// every 30 seconds has to branch on all three, and exception control flow
+  /// for the ordinary case would be the wrong shape for it. `X-Device-Id` is
+  /// load-bearing here in particular - the server compares it against the
+  /// roster and answers `409` for a device the roster has superseded.
+  Future<VoiceLivenessOutcome> assertAlive(
+    String guildId,
+    String channelId,
+  ) async {
+    try {
+      await client.dio.post<void>(
+        '${_base(guildId, channelId)}/alive',
+        options: _deviceOptions,
+      );
+      return VoiceLivenessOutcome.alive;
+    } on DioException catch (e) {
+      return voiceLivenessOutcomeFor(e.response?.statusCode);
+    }
+  }
+
   /// The authoritative state of the channel: who is publishing, what to pull
   /// to hear them, and which screen shares exist. Also the roster read for
   /// channels the user has not joined, which is why it is safe to call for any
@@ -90,99 +117,91 @@ class GuildVoiceApi {
 
   // ── Media ─────────────────────────────────────────────────────────────────
 
-  /// See `VoiceApi.createSession` for what [primary] selects. This client only
-  /// opens primary sessions - screen share rides the same peer connection as
-  /// the microphone.
-  Future<VoiceSessionDto> createSession(
+  /// See `VoiceApi.createConnection` for what [primary] selects. This client
+  /// only opens primary connections - screen share rides the same one as the
+  /// microphone.
+  Future<VoiceConnectionDto> createConnection(
     String guildId,
     String channelId, {
     bool primary = true,
-  }) => mapMediaErrors('session', () async {
+    String? tag,
+  }) => mapMediaErrors('connection', () async {
     final response = await client.dio.post<Map<String, dynamic>>(
-      '${_base(guildId, channelId)}/session',
+      '${_base(guildId, channelId)}/connection',
       data: const {},
-      queryParameters: {'primary': primary},
+      queryParameters: {'primary': primary, 'tag': ?tag},
       options: _deviceOptions,
     );
-    return VoiceSessionDto.fromJson(response.data!);
+    return VoiceConnectionDto.fromJson(response.data!);
   });
 
-  /// Publishes and/or subscribes tracks in one negotiation.
-  Future<VoiceNegotiateResponseDto> negotiate({
+  /// Declares tracks already published through the SDK. See
+  /// `VoiceMediaApi.declarePublish`.
+  Future<VoicePublishResultDto> declarePublish({
     required String guildId,
     required String channelId,
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    required List<Map<String, dynamic>> tracks,
-    Map<String, dynamic>? video,
-  }) => mapMediaErrors('tracks', () async {
-    final response = await client.dio.post<Map<String, dynamic>>(
-      '${_base(guildId, channelId)}/tracks',
-      data: {
-        'mediaSessionId': mediaSessionId,
-        'sessionDescription': sessionDescription,
-        'tracks': tracks,
-        'video': ?video,
-      },
-      options: _deviceOptions,
-    );
-    return VoiceNegotiateResponseDto.fromJson(response.data!);
-  });
-
-  /// [video] is sent only when this renegotiation changes the picture - see
-  /// `VoiceMediaApi.renegotiate`. Omitted, the server leaves whatever the last
-  /// declaration recorded in force.
-  Future<VoiceRenegotiateResponseDto> renegotiate({
-    required String guildId,
-    required String channelId,
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    Map<String, dynamic>? video,
-  }) => mapMediaErrors('negotiate', () async {
-    final response = await client.dio.put<Map<String, dynamic>>(
-      '${_base(guildId, channelId)}/negotiate',
-      data: {
-        'mediaSessionId': mediaSessionId,
-        'sessionDescription': sessionDescription,
-        'video': ?video,
-      },
-      options: _deviceOptions,
-    );
-    return VoiceRenegotiateResponseDto.fromJson(response.data!);
-  });
-
-  Future<void> closeTracks({
-    required String guildId,
-    required String channelId,
-    required String mediaSessionId,
     required List<String> trackNames,
-  }) => mapMediaErrors('tracks/close', () async {
+    Map<String, dynamic>? video,
+  }) => mapMediaErrors('publish', () async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      '${_base(guildId, channelId)}/publish',
+      data: {'trackNames': trackNames, 'video': ?video},
+      options: _deviceOptions,
+    );
+    return VoicePublishResultDto.fromJson(response.data ?? const {});
+  });
+
+  Future<void> unpublish({
+    required String guildId,
+    required String channelId,
+    required List<String> trackNames,
+  }) => mapMediaErrors('unpublish', () async {
     await client.dio.post<void>(
-      '${_base(guildId, channelId)}/tracks/close',
-      data: {'mediaSessionId': mediaSessionId, 'trackNames': trackNames},
+      '${_base(guildId, channelId)}/unpublish',
+      data: {'trackNames': trackNames},
       options: _deviceOptions,
     );
   });
 
-  /// Reports this client's own rendering - tile sizes, pins and share audio.
-  /// Omitted fields are left alone server-side, so a tile resize is a body with
-  /// `tileHeights` in it and nothing else.
-  Future<void> updateSubscriber({
+  /// Declares a resolution change made without republishing. Never refuses.
+  Future<void> declareVideo({
     required String guildId,
     required String channelId,
+    required Map<String, dynamic> video,
+  }) => mapMediaErrors('video', () async {
+    await client.dio.put<void>(
+      '${_base(guildId, channelId)}/video',
+      data: video,
+      options: _deviceOptions,
+    );
+  });
+
+  /// Reports this client's own rendering - tile sizes, pins, collapsed tiles,
+  /// backgrounding and share audio. Omitted fields are left alone server-side,
+  /// so a tile resize is a body with `tileHeights` in it and nothing else.
+  ///
+  /// The reply is this client's own subscription set.
+  Future<VoiceSubscriptionSetDto?> updateSubscriber({
+    required String guildId,
+    required String channelId,
+    bool? paused,
     Map<String, int>? tileHeights,
     List<String>? pinned,
+    List<String>? pausedPublishers,
     List<String>? screenAudioShares,
   }) => mapMediaErrors('subscriptions', () async {
-    await client.dio.post<void>(
+    final response = await client.dio.post<dynamic>(
       '${_base(guildId, channelId)}/subscriptions',
       data: {
+        'paused': ?paused,
         'tileHeights': ?tileHeights,
         'pinned': ?pinned,
+        'pausedPublishers': ?pausedPublishers,
         'screenAudioShares': ?screenAudioShares,
       },
       options: _deviceOptions,
     );
+    return voiceSubscriptionSetFromJson(response.data);
   });
 
   // ── Screen share viewership ───────────────────────────────────────────────

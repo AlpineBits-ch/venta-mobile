@@ -6,46 +6,56 @@ part of 'voice_media_dto.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-_VoiceSessionDto _$VoiceSessionDtoFromJson(Map<String, dynamic> json) =>
-    _VoiceSessionDto(
-      mediaSessionId: json['mediaSessionId'] as String,
+_VoiceConnectionDto _$VoiceConnectionDtoFromJson(Map<String, dynamic> json) =>
+    _VoiceConnectionDto(
       backend: json['backend'] as String? ?? '',
+      url: json['url'] as String,
+      token: json['token'] as String,
+      room: json['room'] as String? ?? '',
+      identity: json['identity'] as String,
+      mediaSessionId: json['mediaSessionId'] as String?,
+      expiresAt: _$JsonConverterFromJson<String, DateTime>(
+        json['expiresAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
+      canPublishAudio: json['canPublishAudio'] as bool? ?? true,
+      canPublishVideo: json['canPublishVideo'] as bool? ?? true,
     );
 
-Map<String, dynamic> _$VoiceSessionDtoToJson(_VoiceSessionDto instance) =>
+Map<String, dynamic> _$VoiceConnectionDtoToJson(_VoiceConnectionDto instance) =>
     <String, dynamic>{
-      'mediaSessionId': instance.mediaSessionId,
       'backend': instance.backend,
+      'url': instance.url,
+      'token': instance.token,
+      'room': instance.room,
+      'identity': instance.identity,
+      'mediaSessionId': instance.mediaSessionId,
+      'expiresAt': _$JsonConverterToJson<String, DateTime>(
+        instance.expiresAt,
+        const ApiDateTimeConverter().toJson,
+      ),
+      'canPublishAudio': instance.canPublishAudio,
+      'canPublishVideo': instance.canPublishVideo,
     };
 
-_VoiceTrackResultDto _$VoiceTrackResultDtoFromJson(Map<String, dynamic> json) =>
-    _VoiceTrackResultDto(
-      mid: json['mid'] as String?,
-      trackName: json['trackName'] as String,
-      mediaSessionId: json['mediaSessionId'] as String?,
-      direction: json['direction'] as String?,
-    );
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
 
-Map<String, dynamic> _$VoiceTrackResultDtoToJson(
-  _VoiceTrackResultDto instance,
-) => <String, dynamic>{
-  'mid': instance.mid,
-  'trackName': instance.trackName,
-  'mediaSessionId': instance.mediaSessionId,
-  'direction': instance.direction,
-};
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);
 
-_VoiceNegotiateResponseDto _$VoiceNegotiateResponseDtoFromJson(
+_VoicePublishResultDto _$VoicePublishResultDtoFromJson(
   Map<String, dynamic> json,
-) => _VoiceNegotiateResponseDto(
-  sessionDescription: json['sessionDescription'] as Map<String, dynamic>,
-  tracks:
-      (json['tracks'] as List<dynamic>?)
-          ?.map((e) => VoiceTrackResultDto.fromJson(e as Map<String, dynamic>))
-          .toList() ??
-      const <VoiceTrackResultDto>[],
-  requiresImmediateRenegotiation:
-      json['requiresImmediateRenegotiation'] as bool? ?? false,
+) => _VoicePublishResultDto(
+  identity: json['identity'] as String? ?? '',
+  rung: json['rung'] as String?,
+  height: (json['height'] as num?)?.toInt(),
+  framerate: (json['framerate'] as num?)?.toInt(),
+  maxLayer: json['maxLayer'] as String?,
   degradations:
       (json['degradations'] as List<dynamic>?)
           ?.map(
@@ -56,21 +66,13 @@ _VoiceNegotiateResponseDto _$VoiceNegotiateResponseDtoFromJson(
       const <EntitlementDegradationDto>[],
 );
 
-Map<String, dynamic> _$VoiceNegotiateResponseDtoToJson(
-  _VoiceNegotiateResponseDto instance,
+Map<String, dynamic> _$VoicePublishResultDtoToJson(
+  _VoicePublishResultDto instance,
 ) => <String, dynamic>{
-  'sessionDescription': instance.sessionDescription,
-  'tracks': instance.tracks,
-  'requiresImmediateRenegotiation': instance.requiresImmediateRenegotiation,
+  'identity': instance.identity,
+  'rung': instance.rung,
+  'height': instance.height,
+  'framerate': instance.framerate,
+  'maxLayer': instance.maxLayer,
   'degradations': instance.degradations,
 };
-
-_VoiceRenegotiateResponseDto _$VoiceRenegotiateResponseDtoFromJson(
-  Map<String, dynamic> json,
-) => _VoiceRenegotiateResponseDto(
-  sessionDescription: json['sessionDescription'] as Map<String, dynamic>,
-);
-
-Map<String, dynamic> _$VoiceRenegotiateResponseDtoToJson(
-  _VoiceRenegotiateResponseDto instance,
-) => <String, dynamic>{'sessionDescription': instance.sessionDescription};

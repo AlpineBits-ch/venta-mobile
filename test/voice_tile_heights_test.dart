@@ -15,31 +15,23 @@ class _FakeTrack extends Mock implements MediaStreamTrack {
   Map<String, dynamic> getSettings() => _settings;
 }
 
-/// The client half of simulcast layer selection: the rid names it publishes
-/// under, and the tile sizes it reports for the server to choose from.
+/// The client half of simulcast layer selection: the ladder it publishes, and
+/// the tile sizes it reports for the server to choose from.
 ///
-/// Neither half fails loudly when it is wrong. A bad rid order costs quality
-/// only under congestion; a report that never arrives costs money only on the
-/// bill. So both are asserted rather than left to be noticed.
+/// Neither half fails loudly when it is wrong. A mis-shaped ladder costs
+/// quality only under congestion; a report that never arrives costs money only
+/// on the bill. So both are asserted rather than left to be noticed.
 void main() {
   group('video layers', () {
-    test('rid names sort alphabetically in descending quality', () {
-      // The SFU's only ordering vocabulary is `asciibetical` - a-z, "a most
-      // desirable, z least" - and it is never told what these names mean, so
-      // the alphabet *is* the ranking. The WebRTC convention q/h/f sorts
-      // backwards and would ask the SFU to degrade a congested viewer up to
-      // full resolution. Must match the server's `VoiceVideoLayers`.
-      expect(VideoLayers.high.compareTo(VideoLayers.medium), isNegative);
-      expect(VideoLayers.medium.compareTo(VideoLayers.low), isNegative);
-    });
-
     test('the camera ladder is three layers, largest first', () {
+      // Rid *names* no longer matter and used to: the layer string was once a
+      // `preferredRid` that went on the wire, and the previous SFU ranked rids
+      // alphabetically. The server never sees a rid now, so the SDK names the
+      // encodings and only the shape of the ladder is this client's business.
       final ladder = VideoLayers.cameraFor(720);
-      final rids = ladder.map((e) => e.rid).toList();
-      final scales = ladder.map((e) => e.scaleResolutionDownBy).toList();
 
-      expect(rids, [VideoLayers.high, VideoLayers.medium, VideoLayers.low]);
-      expect(scales, [1, 2, 4]);
+      expect(ladder, hasLength(3));
+      expect(ladder.map((e) => e.dimensions.height), [720, 360, 180]);
     });
 
     // The server's layer ceiling arithmetic assumes exactly this relationship,
@@ -48,9 +40,13 @@ void main() {
     // have the server serving viewers a layer it had mis-measured.
     test('the 1:2:4 relationship survives a taller capture', () {
       for (final height in [480, 720, 1080]) {
+        final heights = VideoLayers.cameraFor(
+          height,
+        ).map((e) => e.dimensions.height).toList();
+
         expect(
-          VideoLayers.cameraFor(height).map((e) => e.scaleResolutionDownBy),
-          [1, 2, 4],
+          heights,
+          [height, height ~/ 2, height ~/ 4],
           reason: 'ladder for ${height}p',
         );
       }
@@ -61,9 +57,9 @@ void main() {
       // not push 1080 lines through a budget tuned for 720. `maxBitrate` is a
       // ceiling rather than a target, so congestion control still settles below
       // it on a link that cannot carry it.
-      final at720 = VideoLayers.cameraFor(720).first.maxBitrate!;
-      final at1080 = VideoLayers.cameraFor(1080).first.maxBitrate!;
-      final at480 = VideoLayers.cameraFor(480).first.maxBitrate!;
+      final at720 = VideoLayers.cameraFor(720).first.encoding!.maxBitrate;
+      final at1080 = VideoLayers.cameraFor(1080).first.encoding!.maxBitrate;
+      final at480 = VideoLayers.cameraFor(480).first.encoding!.maxBitrate;
 
       expect(at1080, greaterThan(at720));
       expect(at480, lessThan(at720));
@@ -72,12 +68,24 @@ void main() {
 
     test('the screen ladder omits the quarter layer', () {
       // Text at quarter resolution is not a cheaper picture but an unreadable
-      // one. A viewer the server sends to `low` has no such layer to pull,
-      // which the subscribe already handles by falling back to one that exists.
-      expect(VideoLayers.screen.map((e) => e.rid), [
-        VideoLayers.high,
-        VideoLayers.medium,
-      ]);
+      // one. A viewer the server sends to the bottom layer has no such layer to
+      // pull, which the SDK already handles by falling back to one the
+      // publisher actually sends.
+      expect(VideoLayers.screenFor(1080), hasLength(2));
+      expect(
+        VideoLayers.screenFor(1080).map((e) => e.dimensions.height),
+        [1080, 540],
+      );
+    });
+
+    test('a screen layer carries more bits than a camera one', () {
+      // Same scale, different content: a shared screen is mostly text, and
+      // text is where a camera-tuned budget produces an unreadable picture
+      // rather than a cheaper one.
+      final screen = VideoLayers.screenFor(720).first.encoding!.maxBitrate;
+      final camera = VideoLayers.cameraFor(720).first.encoding!.maxBitrate;
+
+      expect(screen, greaterThan(camera));
     });
   });
 

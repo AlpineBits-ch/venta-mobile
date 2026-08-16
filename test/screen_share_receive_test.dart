@@ -52,9 +52,6 @@ class _FakeTransport extends Mock implements GuildVoiceWebRtcService {
   @override
   void Function()? onTracksChanged;
 
-  @override
-  void Function()? onStaleSubscription;
-
   final Map<String, MediaStreamTrack> _screenTracks = {};
   final Map<String, String> _shareOwners = {};
   final Map<String, MediaStreamTrack> _cameraTracks = {};
@@ -200,7 +197,7 @@ void main() {
     when(() => auth.currentUserId).thenReturn(_me);
 
     when(() => transport.connect(any(), any())).thenAnswer((_) async {});
-    when(() => transport.setMuted(any())).thenReturn(null);
+    when(() => transport.setMuted(any())).thenAnswer((_) async {});
     when(() => transport.setDeafened(any())).thenReturn(null);
     when(() => transport.setSpeakerphoneOn(any())).thenAnswer((_) async {});
     when(transport.disconnect).thenAnswer((_) async {});

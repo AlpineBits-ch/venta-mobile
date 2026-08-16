@@ -13,42 +13,42 @@ part of 'voice_media_dto.dart';
 T _$identity<T>(T value) => value;
 
 /// @nodoc
-mixin _$VoiceSessionDto {
+mixin _$VoiceConnectionDto {
 
- String get mediaSessionId; String get backend;
-/// Create a copy of VoiceSessionDto
+ String get backend; String get url; String get token; String get room; String get identity; String? get mediaSessionId; DateTime? get expiresAt; bool get canPublishAudio; bool get canPublishVideo;
+/// Create a copy of VoiceConnectionDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
-$VoiceSessionDtoCopyWith<VoiceSessionDto> get copyWith => _$VoiceSessionDtoCopyWithImpl<VoiceSessionDto>(this as VoiceSessionDto, _$identity);
+$VoiceConnectionDtoCopyWith<VoiceConnectionDto> get copyWith => _$VoiceConnectionDtoCopyWithImpl<VoiceConnectionDto>(this as VoiceConnectionDto, _$identity);
 
-  /// Serializes this VoiceSessionDto to a JSON map.
+  /// Serializes this VoiceConnectionDto to a JSON map.
   Map<String, dynamic> toJson();
 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceSessionDto&&(identical(other.mediaSessionId, mediaSessionId) || other.mediaSessionId == mediaSessionId)&&(identical(other.backend, backend) || other.backend == backend));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceConnectionDto&&(identical(other.backend, backend) || other.backend == backend)&&(identical(other.url, url) || other.url == url)&&(identical(other.token, token) || other.token == token)&&(identical(other.room, room) || other.room == room)&&(identical(other.identity, identity) || other.identity == identity)&&(identical(other.mediaSessionId, mediaSessionId) || other.mediaSessionId == mediaSessionId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.canPublishAudio, canPublishAudio) || other.canPublishAudio == canPublishAudio)&&(identical(other.canPublishVideo, canPublishVideo) || other.canPublishVideo == canPublishVideo));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,mediaSessionId,backend);
+int get hashCode => Object.hash(runtimeType,backend,url,token,room,identity,mediaSessionId,expiresAt,canPublishAudio,canPublishVideo);
 
 @override
 String toString() {
-  return 'VoiceSessionDto(mediaSessionId: $mediaSessionId, backend: $backend)';
+  return 'VoiceConnectionDto(backend: $backend, url: $url, token: $token, room: $room, identity: $identity, mediaSessionId: $mediaSessionId, expiresAt: $expiresAt, canPublishAudio: $canPublishAudio, canPublishVideo: $canPublishVideo)';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class $VoiceSessionDtoCopyWith<$Res>  {
-  factory $VoiceSessionDtoCopyWith(VoiceSessionDto value, $Res Function(VoiceSessionDto) _then) = _$VoiceSessionDtoCopyWithImpl;
+abstract mixin class $VoiceConnectionDtoCopyWith<$Res>  {
+  factory $VoiceConnectionDtoCopyWith(VoiceConnectionDto value, $Res Function(VoiceConnectionDto) _then) = _$VoiceConnectionDtoCopyWithImpl;
 @useResult
 $Res call({
- String mediaSessionId, String backend
+ String backend, String url, String token, String room, String identity, String? mediaSessionId, DateTime? expiresAt, bool canPublishAudio, bool canPublishVideo
 });
 
 
@@ -56,28 +56,35 @@ $Res call({
 
 }
 /// @nodoc
-class _$VoiceSessionDtoCopyWithImpl<$Res>
-    implements $VoiceSessionDtoCopyWith<$Res> {
-  _$VoiceSessionDtoCopyWithImpl(this._self, this._then);
+class _$VoiceConnectionDtoCopyWithImpl<$Res>
+    implements $VoiceConnectionDtoCopyWith<$Res> {
+  _$VoiceConnectionDtoCopyWithImpl(this._self, this._then);
 
-  final VoiceSessionDto _self;
-  final $Res Function(VoiceSessionDto) _then;
+  final VoiceConnectionDto _self;
+  final $Res Function(VoiceConnectionDto) _then;
 
-/// Create a copy of VoiceSessionDto
+/// Create a copy of VoiceConnectionDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? mediaSessionId = null,Object? backend = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? backend = null,Object? url = null,Object? token = null,Object? room = null,Object? identity = null,Object? mediaSessionId = freezed,Object? expiresAt = freezed,Object? canPublishAudio = null,Object? canPublishVideo = null,}) {
   return _then(_self.copyWith(
-mediaSessionId: null == mediaSessionId ? _self.mediaSessionId : mediaSessionId // ignore: cast_nullable_to_non_nullable
-as String,backend: null == backend ? _self.backend : backend // ignore: cast_nullable_to_non_nullable
-as String,
+backend: null == backend ? _self.backend : backend // ignore: cast_nullable_to_non_nullable
+as String,url: null == url ? _self.url : url // ignore: cast_nullable_to_non_nullable
+as String,token: null == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
+as String,room: null == room ? _self.room : room // ignore: cast_nullable_to_non_nullable
+as String,identity: null == identity ? _self.identity : identity // ignore: cast_nullable_to_non_nullable
+as String,mediaSessionId: freezed == mediaSessionId ? _self.mediaSessionId : mediaSessionId // ignore: cast_nullable_to_non_nullable
+as String?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,canPublishAudio: null == canPublishAudio ? _self.canPublishAudio : canPublishAudio // ignore: cast_nullable_to_non_nullable
+as bool,canPublishVideo: null == canPublishVideo ? _self.canPublishVideo : canPublishVideo // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
 }
 
 
-/// Adds pattern-matching-related methods to [VoiceSessionDto].
-extension VoiceSessionDtoPatterns on VoiceSessionDto {
+/// Adds pattern-matching-related methods to [VoiceConnectionDto].
+extension VoiceConnectionDtoPatterns on VoiceConnectionDto {
 /// A variant of `map` that fallback to returning `orElse`.
 ///
 /// It is equivalent to doing:
@@ -90,10 +97,10 @@ extension VoiceSessionDtoPatterns on VoiceSessionDto {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _VoiceSessionDto value)?  $default,{required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _VoiceConnectionDto value)?  $default,{required TResult orElse(),}){
 final _that = this;
 switch (_that) {
-case _VoiceSessionDto() when $default != null:
+case _VoiceConnectionDto() when $default != null:
 return $default(_that);case _:
   return orElse();
 
@@ -112,10 +119,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _VoiceSessionDto value)  $default,){
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _VoiceConnectionDto value)  $default,){
 final _that = this;
 switch (_that) {
-case _VoiceSessionDto():
+case _VoiceConnectionDto():
 return $default(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
@@ -130,10 +137,10 @@ return $default(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _VoiceSessionDto value)?  $default,){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _VoiceConnectionDto value)?  $default,){
 final _that = this;
 switch (_that) {
-case _VoiceSessionDto() when $default != null:
+case _VoiceConnectionDto() when $default != null:
 return $default(_that);case _:
   return null;
 
@@ -151,10 +158,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String mediaSessionId,  String backend)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String backend,  String url,  String token,  String room,  String identity,  String? mediaSessionId,  DateTime? expiresAt,  bool canPublishAudio,  bool canPublishVideo)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
-case _VoiceSessionDto() when $default != null:
-return $default(_that.mediaSessionId,_that.backend);case _:
+case _VoiceConnectionDto() when $default != null:
+return $default(_that.backend,_that.url,_that.token,_that.room,_that.identity,_that.mediaSessionId,_that.expiresAt,_that.canPublishAudio,_that.canPublishVideo);case _:
   return orElse();
 
 }
@@ -172,10 +179,10 @@ return $default(_that.mediaSessionId,_that.backend);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String mediaSessionId,  String backend)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String backend,  String url,  String token,  String room,  String identity,  String? mediaSessionId,  DateTime? expiresAt,  bool canPublishAudio,  bool canPublishVideo)  $default,) {final _that = this;
 switch (_that) {
-case _VoiceSessionDto():
-return $default(_that.mediaSessionId,_that.backend);}
+case _VoiceConnectionDto():
+return $default(_that.backend,_that.url,_that.token,_that.room,_that.identity,_that.mediaSessionId,_that.expiresAt,_that.canPublishAudio,_that.canPublishVideo);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -189,10 +196,10 @@ return $default(_that.mediaSessionId,_that.backend);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String mediaSessionId,  String backend)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String backend,  String url,  String token,  String room,  String identity,  String? mediaSessionId,  DateTime? expiresAt,  bool canPublishAudio,  bool canPublishVideo)?  $default,) {final _that = this;
 switch (_that) {
-case _VoiceSessionDto() when $default != null:
-return $default(_that.mediaSessionId,_that.backend);case _:
+case _VoiceConnectionDto() when $default != null:
+return $default(_that.backend,_that.url,_that.token,_that.room,_that.identity,_that.mediaSessionId,_that.expiresAt,_that.canPublishAudio,_that.canPublishVideo);case _:
   return null;
 
 }
@@ -202,312 +209,55 @@ return $default(_that.mediaSessionId,_that.backend);case _:
 
 /// @nodoc
 @JsonSerializable()
+@ApiDateTimeConverter()
+class _VoiceConnectionDto extends VoiceConnectionDto {
+  const _VoiceConnectionDto({this.backend = '', required this.url, required this.token, this.room = '', required this.identity, this.mediaSessionId, this.expiresAt, this.canPublishAudio = true, this.canPublishVideo = true}): super._();
+  factory _VoiceConnectionDto.fromJson(Map<String, dynamic> json) => _$VoiceConnectionDtoFromJson(json);
 
-class _VoiceSessionDto implements VoiceSessionDto {
-  const _VoiceSessionDto({required this.mediaSessionId, this.backend = ''});
-  factory _VoiceSessionDto.fromJson(Map<String, dynamic> json) => _$VoiceSessionDtoFromJson(json);
-
-@override final  String mediaSessionId;
 @override@JsonKey() final  String backend;
-
-/// Create a copy of VoiceSessionDto
-/// with the given fields replaced by the non-null parameter values.
-@override @JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-_$VoiceSessionDtoCopyWith<_VoiceSessionDto> get copyWith => __$VoiceSessionDtoCopyWithImpl<_VoiceSessionDto>(this, _$identity);
-
-@override
-Map<String, dynamic> toJson() {
-  return _$VoiceSessionDtoToJson(this, );
-}
-
-@override
-bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceSessionDto&&(identical(other.mediaSessionId, mediaSessionId) || other.mediaSessionId == mediaSessionId)&&(identical(other.backend, backend) || other.backend == backend));
-}
-
-@JsonKey(includeFromJson: false, includeToJson: false)
-@override
-int get hashCode => Object.hash(runtimeType,mediaSessionId,backend);
-
-@override
-String toString() {
-  return 'VoiceSessionDto(mediaSessionId: $mediaSessionId, backend: $backend)';
-}
-
-
-}
-
-/// @nodoc
-abstract mixin class _$VoiceSessionDtoCopyWith<$Res> implements $VoiceSessionDtoCopyWith<$Res> {
-  factory _$VoiceSessionDtoCopyWith(_VoiceSessionDto value, $Res Function(_VoiceSessionDto) _then) = __$VoiceSessionDtoCopyWithImpl;
-@override @useResult
-$Res call({
- String mediaSessionId, String backend
-});
-
-
-
-
-}
-/// @nodoc
-class __$VoiceSessionDtoCopyWithImpl<$Res>
-    implements _$VoiceSessionDtoCopyWith<$Res> {
-  __$VoiceSessionDtoCopyWithImpl(this._self, this._then);
-
-  final _VoiceSessionDto _self;
-  final $Res Function(_VoiceSessionDto) _then;
-
-/// Create a copy of VoiceSessionDto
-/// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? mediaSessionId = null,Object? backend = null,}) {
-  return _then(_VoiceSessionDto(
-mediaSessionId: null == mediaSessionId ? _self.mediaSessionId : mediaSessionId // ignore: cast_nullable_to_non_nullable
-as String,backend: null == backend ? _self.backend : backend // ignore: cast_nullable_to_non_nullable
-as String,
-  ));
-}
-
-
-}
-
-
-/// @nodoc
-mixin _$VoiceTrackResultDto {
-
- String? get mid; String get trackName; String? get mediaSessionId; String? get direction;
-/// Create a copy of VoiceTrackResultDto
-/// with the given fields replaced by the non-null parameter values.
-@JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-$VoiceTrackResultDtoCopyWith<VoiceTrackResultDto> get copyWith => _$VoiceTrackResultDtoCopyWithImpl<VoiceTrackResultDto>(this as VoiceTrackResultDto, _$identity);
-
-  /// Serializes this VoiceTrackResultDto to a JSON map.
-  Map<String, dynamic> toJson();
-
-
-@override
-bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceTrackResultDto&&(identical(other.mid, mid) || other.mid == mid)&&(identical(other.trackName, trackName) || other.trackName == trackName)&&(identical(other.mediaSessionId, mediaSessionId) || other.mediaSessionId == mediaSessionId)&&(identical(other.direction, direction) || other.direction == direction));
-}
-
-@JsonKey(includeFromJson: false, includeToJson: false)
-@override
-int get hashCode => Object.hash(runtimeType,mid,trackName,mediaSessionId,direction);
-
-@override
-String toString() {
-  return 'VoiceTrackResultDto(mid: $mid, trackName: $trackName, mediaSessionId: $mediaSessionId, direction: $direction)';
-}
-
-
-}
-
-/// @nodoc
-abstract mixin class $VoiceTrackResultDtoCopyWith<$Res>  {
-  factory $VoiceTrackResultDtoCopyWith(VoiceTrackResultDto value, $Res Function(VoiceTrackResultDto) _then) = _$VoiceTrackResultDtoCopyWithImpl;
-@useResult
-$Res call({
- String? mid, String trackName, String? mediaSessionId, String? direction
-});
-
-
-
-
-}
-/// @nodoc
-class _$VoiceTrackResultDtoCopyWithImpl<$Res>
-    implements $VoiceTrackResultDtoCopyWith<$Res> {
-  _$VoiceTrackResultDtoCopyWithImpl(this._self, this._then);
-
-  final VoiceTrackResultDto _self;
-  final $Res Function(VoiceTrackResultDto) _then;
-
-/// Create a copy of VoiceTrackResultDto
-/// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? mid = freezed,Object? trackName = null,Object? mediaSessionId = freezed,Object? direction = freezed,}) {
-  return _then(_self.copyWith(
-mid: freezed == mid ? _self.mid : mid // ignore: cast_nullable_to_non_nullable
-as String?,trackName: null == trackName ? _self.trackName : trackName // ignore: cast_nullable_to_non_nullable
-as String,mediaSessionId: freezed == mediaSessionId ? _self.mediaSessionId : mediaSessionId // ignore: cast_nullable_to_non_nullable
-as String?,direction: freezed == direction ? _self.direction : direction // ignore: cast_nullable_to_non_nullable
-as String?,
-  ));
-}
-
-}
-
-
-/// Adds pattern-matching-related methods to [VoiceTrackResultDto].
-extension VoiceTrackResultDtoPatterns on VoiceTrackResultDto {
-/// A variant of `map` that fallback to returning `orElse`.
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case final Subclass value:
-///     return ...;
-///   case _:
-///     return orElse();
-/// }
-/// ```
-
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _VoiceTrackResultDto value)?  $default,{required TResult orElse(),}){
-final _that = this;
-switch (_that) {
-case _VoiceTrackResultDto() when $default != null:
-return $default(_that);case _:
-  return orElse();
-
-}
-}
-/// A `switch`-like method, using callbacks.
-///
-/// Callbacks receives the raw object, upcasted.
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case final Subclass value:
-///     return ...;
-///   case final Subclass2 value:
-///     return ...;
-/// }
-/// ```
-
-@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _VoiceTrackResultDto value)  $default,){
-final _that = this;
-switch (_that) {
-case _VoiceTrackResultDto():
-return $default(_that);}
-}
-/// A variant of `map` that fallback to returning `null`.
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case final Subclass value:
-///     return ...;
-///   case _:
-///     return null;
-/// }
-/// ```
-
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _VoiceTrackResultDto value)?  $default,){
-final _that = this;
-switch (_that) {
-case _VoiceTrackResultDto() when $default != null:
-return $default(_that);case _:
-  return null;
-
-}
-}
-/// A variant of `when` that fallback to an `orElse` callback.
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case Subclass(:final field):
-///     return ...;
-///   case _:
-///     return orElse();
-/// }
-/// ```
-
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? mid,  String trackName,  String? mediaSessionId,  String? direction)?  $default,{required TResult orElse(),}) {final _that = this;
-switch (_that) {
-case _VoiceTrackResultDto() when $default != null:
-return $default(_that.mid,_that.trackName,_that.mediaSessionId,_that.direction);case _:
-  return orElse();
-
-}
-}
-/// A `switch`-like method, using callbacks.
-///
-/// As opposed to `map`, this offers destructuring.
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case Subclass(:final field):
-///     return ...;
-///   case Subclass2(:final field2):
-///     return ...;
-/// }
-/// ```
-
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? mid,  String trackName,  String? mediaSessionId,  String? direction)  $default,) {final _that = this;
-switch (_that) {
-case _VoiceTrackResultDto():
-return $default(_that.mid,_that.trackName,_that.mediaSessionId,_that.direction);}
-}
-/// A variant of `when` that fallback to returning `null`
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case Subclass(:final field):
-///     return ...;
-///   case _:
-///     return null;
-/// }
-/// ```
-
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? mid,  String trackName,  String? mediaSessionId,  String? direction)?  $default,) {final _that = this;
-switch (_that) {
-case _VoiceTrackResultDto() when $default != null:
-return $default(_that.mid,_that.trackName,_that.mediaSessionId,_that.direction);case _:
-  return null;
-
-}
-}
-
-}
-
-/// @nodoc
-@JsonSerializable()
-
-class _VoiceTrackResultDto implements VoiceTrackResultDto {
-  const _VoiceTrackResultDto({this.mid, required this.trackName, this.mediaSessionId, this.direction});
-  factory _VoiceTrackResultDto.fromJson(Map<String, dynamic> json) => _$VoiceTrackResultDtoFromJson(json);
-
-@override final  String? mid;
-@override final  String trackName;
+@override final  String url;
+@override final  String token;
+@override@JsonKey() final  String room;
+@override final  String identity;
 @override final  String? mediaSessionId;
-@override final  String? direction;
+@override final  DateTime? expiresAt;
+@override@JsonKey() final  bool canPublishAudio;
+@override@JsonKey() final  bool canPublishVideo;
 
-/// Create a copy of VoiceTrackResultDto
+/// Create a copy of VoiceConnectionDto
 /// with the given fields replaced by the non-null parameter values.
 @override @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
-_$VoiceTrackResultDtoCopyWith<_VoiceTrackResultDto> get copyWith => __$VoiceTrackResultDtoCopyWithImpl<_VoiceTrackResultDto>(this, _$identity);
+_$VoiceConnectionDtoCopyWith<_VoiceConnectionDto> get copyWith => __$VoiceConnectionDtoCopyWithImpl<_VoiceConnectionDto>(this, _$identity);
 
 @override
 Map<String, dynamic> toJson() {
-  return _$VoiceTrackResultDtoToJson(this, );
+  return _$VoiceConnectionDtoToJson(this, );
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceTrackResultDto&&(identical(other.mid, mid) || other.mid == mid)&&(identical(other.trackName, trackName) || other.trackName == trackName)&&(identical(other.mediaSessionId, mediaSessionId) || other.mediaSessionId == mediaSessionId)&&(identical(other.direction, direction) || other.direction == direction));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceConnectionDto&&(identical(other.backend, backend) || other.backend == backend)&&(identical(other.url, url) || other.url == url)&&(identical(other.token, token) || other.token == token)&&(identical(other.room, room) || other.room == room)&&(identical(other.identity, identity) || other.identity == identity)&&(identical(other.mediaSessionId, mediaSessionId) || other.mediaSessionId == mediaSessionId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.canPublishAudio, canPublishAudio) || other.canPublishAudio == canPublishAudio)&&(identical(other.canPublishVideo, canPublishVideo) || other.canPublishVideo == canPublishVideo));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,mid,trackName,mediaSessionId,direction);
+int get hashCode => Object.hash(runtimeType,backend,url,token,room,identity,mediaSessionId,expiresAt,canPublishAudio,canPublishVideo);
 
 @override
 String toString() {
-  return 'VoiceTrackResultDto(mid: $mid, trackName: $trackName, mediaSessionId: $mediaSessionId, direction: $direction)';
+  return 'VoiceConnectionDto(backend: $backend, url: $url, token: $token, room: $room, identity: $identity, mediaSessionId: $mediaSessionId, expiresAt: $expiresAt, canPublishAudio: $canPublishAudio, canPublishVideo: $canPublishVideo)';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class _$VoiceTrackResultDtoCopyWith<$Res> implements $VoiceTrackResultDtoCopyWith<$Res> {
-  factory _$VoiceTrackResultDtoCopyWith(_VoiceTrackResultDto value, $Res Function(_VoiceTrackResultDto) _then) = __$VoiceTrackResultDtoCopyWithImpl;
+abstract mixin class _$VoiceConnectionDtoCopyWith<$Res> implements $VoiceConnectionDtoCopyWith<$Res> {
+  factory _$VoiceConnectionDtoCopyWith(_VoiceConnectionDto value, $Res Function(_VoiceConnectionDto) _then) = __$VoiceConnectionDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String? mid, String trackName, String? mediaSessionId, String? direction
+ String backend, String url, String token, String room, String identity, String? mediaSessionId, DateTime? expiresAt, bool canPublishAudio, bool canPublishVideo
 });
 
 
@@ -515,22 +265,27 @@ $Res call({
 
 }
 /// @nodoc
-class __$VoiceTrackResultDtoCopyWithImpl<$Res>
-    implements _$VoiceTrackResultDtoCopyWith<$Res> {
-  __$VoiceTrackResultDtoCopyWithImpl(this._self, this._then);
+class __$VoiceConnectionDtoCopyWithImpl<$Res>
+    implements _$VoiceConnectionDtoCopyWith<$Res> {
+  __$VoiceConnectionDtoCopyWithImpl(this._self, this._then);
 
-  final _VoiceTrackResultDto _self;
-  final $Res Function(_VoiceTrackResultDto) _then;
+  final _VoiceConnectionDto _self;
+  final $Res Function(_VoiceConnectionDto) _then;
 
-/// Create a copy of VoiceTrackResultDto
+/// Create a copy of VoiceConnectionDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? mid = freezed,Object? trackName = null,Object? mediaSessionId = freezed,Object? direction = freezed,}) {
-  return _then(_VoiceTrackResultDto(
-mid: freezed == mid ? _self.mid : mid // ignore: cast_nullable_to_non_nullable
-as String?,trackName: null == trackName ? _self.trackName : trackName // ignore: cast_nullable_to_non_nullable
+@override @pragma('vm:prefer-inline') $Res call({Object? backend = null,Object? url = null,Object? token = null,Object? room = null,Object? identity = null,Object? mediaSessionId = freezed,Object? expiresAt = freezed,Object? canPublishAudio = null,Object? canPublishVideo = null,}) {
+  return _then(_VoiceConnectionDto(
+backend: null == backend ? _self.backend : backend // ignore: cast_nullable_to_non_nullable
+as String,url: null == url ? _self.url : url // ignore: cast_nullable_to_non_nullable
+as String,token: null == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
+as String,room: null == room ? _self.room : room // ignore: cast_nullable_to_non_nullable
+as String,identity: null == identity ? _self.identity : identity // ignore: cast_nullable_to_non_nullable
 as String,mediaSessionId: freezed == mediaSessionId ? _self.mediaSessionId : mediaSessionId // ignore: cast_nullable_to_non_nullable
-as String?,direction: freezed == direction ? _self.direction : direction // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,canPublishAudio: null == canPublishAudio ? _self.canPublishAudio : canPublishAudio // ignore: cast_nullable_to_non_nullable
+as bool,canPublishVideo: null == canPublishVideo ? _self.canPublishVideo : canPublishVideo // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -539,42 +294,42 @@ as String?,
 
 
 /// @nodoc
-mixin _$VoiceNegotiateResponseDto {
+mixin _$VoicePublishResultDto {
 
- Map<String, dynamic> get sessionDescription; List<VoiceTrackResultDto> get tracks; bool get requiresImmediateRenegotiation; List<EntitlementDegradationDto> get degradations;
-/// Create a copy of VoiceNegotiateResponseDto
+ String get identity; String? get rung; int? get height; int? get framerate; String? get maxLayer; List<EntitlementDegradationDto> get degradations;
+/// Create a copy of VoicePublishResultDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
-$VoiceNegotiateResponseDtoCopyWith<VoiceNegotiateResponseDto> get copyWith => _$VoiceNegotiateResponseDtoCopyWithImpl<VoiceNegotiateResponseDto>(this as VoiceNegotiateResponseDto, _$identity);
+$VoicePublishResultDtoCopyWith<VoicePublishResultDto> get copyWith => _$VoicePublishResultDtoCopyWithImpl<VoicePublishResultDto>(this as VoicePublishResultDto, _$identity);
 
-  /// Serializes this VoiceNegotiateResponseDto to a JSON map.
+  /// Serializes this VoicePublishResultDto to a JSON map.
   Map<String, dynamic> toJson();
 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceNegotiateResponseDto&&const DeepCollectionEquality().equals(other.sessionDescription, sessionDescription)&&const DeepCollectionEquality().equals(other.tracks, tracks)&&(identical(other.requiresImmediateRenegotiation, requiresImmediateRenegotiation) || other.requiresImmediateRenegotiation == requiresImmediateRenegotiation)&&const DeepCollectionEquality().equals(other.degradations, degradations));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoicePublishResultDto&&(identical(other.identity, identity) || other.identity == identity)&&(identical(other.rung, rung) || other.rung == rung)&&(identical(other.height, height) || other.height == height)&&(identical(other.framerate, framerate) || other.framerate == framerate)&&(identical(other.maxLayer, maxLayer) || other.maxLayer == maxLayer)&&const DeepCollectionEquality().equals(other.degradations, degradations));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(sessionDescription),const DeepCollectionEquality().hash(tracks),requiresImmediateRenegotiation,const DeepCollectionEquality().hash(degradations));
+int get hashCode => Object.hash(runtimeType,identity,rung,height,framerate,maxLayer,const DeepCollectionEquality().hash(degradations));
 
 @override
 String toString() {
-  return 'VoiceNegotiateResponseDto(sessionDescription: $sessionDescription, tracks: $tracks, requiresImmediateRenegotiation: $requiresImmediateRenegotiation, degradations: $degradations)';
+  return 'VoicePublishResultDto(identity: $identity, rung: $rung, height: $height, framerate: $framerate, maxLayer: $maxLayer, degradations: $degradations)';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class $VoiceNegotiateResponseDtoCopyWith<$Res>  {
-  factory $VoiceNegotiateResponseDtoCopyWith(VoiceNegotiateResponseDto value, $Res Function(VoiceNegotiateResponseDto) _then) = _$VoiceNegotiateResponseDtoCopyWithImpl;
+abstract mixin class $VoicePublishResultDtoCopyWith<$Res>  {
+  factory $VoicePublishResultDtoCopyWith(VoicePublishResultDto value, $Res Function(VoicePublishResultDto) _then) = _$VoicePublishResultDtoCopyWithImpl;
 @useResult
 $Res call({
- Map<String, dynamic> sessionDescription, List<VoiceTrackResultDto> tracks, bool requiresImmediateRenegotiation, List<EntitlementDegradationDto> degradations
+ String identity, String? rung, int? height, int? framerate, String? maxLayer, List<EntitlementDegradationDto> degradations
 });
 
 
@@ -582,21 +337,23 @@ $Res call({
 
 }
 /// @nodoc
-class _$VoiceNegotiateResponseDtoCopyWithImpl<$Res>
-    implements $VoiceNegotiateResponseDtoCopyWith<$Res> {
-  _$VoiceNegotiateResponseDtoCopyWithImpl(this._self, this._then);
+class _$VoicePublishResultDtoCopyWithImpl<$Res>
+    implements $VoicePublishResultDtoCopyWith<$Res> {
+  _$VoicePublishResultDtoCopyWithImpl(this._self, this._then);
 
-  final VoiceNegotiateResponseDto _self;
-  final $Res Function(VoiceNegotiateResponseDto) _then;
+  final VoicePublishResultDto _self;
+  final $Res Function(VoicePublishResultDto) _then;
 
-/// Create a copy of VoiceNegotiateResponseDto
+/// Create a copy of VoicePublishResultDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? sessionDescription = null,Object? tracks = null,Object? requiresImmediateRenegotiation = null,Object? degradations = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? identity = null,Object? rung = freezed,Object? height = freezed,Object? framerate = freezed,Object? maxLayer = freezed,Object? degradations = null,}) {
   return _then(_self.copyWith(
-sessionDescription: null == sessionDescription ? _self.sessionDescription : sessionDescription // ignore: cast_nullable_to_non_nullable
-as Map<String, dynamic>,tracks: null == tracks ? _self.tracks : tracks // ignore: cast_nullable_to_non_nullable
-as List<VoiceTrackResultDto>,requiresImmediateRenegotiation: null == requiresImmediateRenegotiation ? _self.requiresImmediateRenegotiation : requiresImmediateRenegotiation // ignore: cast_nullable_to_non_nullable
-as bool,degradations: null == degradations ? _self.degradations : degradations // ignore: cast_nullable_to_non_nullable
+identity: null == identity ? _self.identity : identity // ignore: cast_nullable_to_non_nullable
+as String,rung: freezed == rung ? _self.rung : rung // ignore: cast_nullable_to_non_nullable
+as String?,height: freezed == height ? _self.height : height // ignore: cast_nullable_to_non_nullable
+as int?,framerate: freezed == framerate ? _self.framerate : framerate // ignore: cast_nullable_to_non_nullable
+as int?,maxLayer: freezed == maxLayer ? _self.maxLayer : maxLayer // ignore: cast_nullable_to_non_nullable
+as String?,degradations: null == degradations ? _self.degradations : degradations // ignore: cast_nullable_to_non_nullable
 as List<EntitlementDegradationDto>,
   ));
 }
@@ -604,8 +361,8 @@ as List<EntitlementDegradationDto>,
 }
 
 
-/// Adds pattern-matching-related methods to [VoiceNegotiateResponseDto].
-extension VoiceNegotiateResponseDtoPatterns on VoiceNegotiateResponseDto {
+/// Adds pattern-matching-related methods to [VoicePublishResultDto].
+extension VoicePublishResultDtoPatterns on VoicePublishResultDto {
 /// A variant of `map` that fallback to returning `orElse`.
 ///
 /// It is equivalent to doing:
@@ -618,10 +375,10 @@ extension VoiceNegotiateResponseDtoPatterns on VoiceNegotiateResponseDto {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _VoiceNegotiateResponseDto value)?  $default,{required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _VoicePublishResultDto value)?  $default,{required TResult orElse(),}){
 final _that = this;
 switch (_that) {
-case _VoiceNegotiateResponseDto() when $default != null:
+case _VoicePublishResultDto() when $default != null:
 return $default(_that);case _:
   return orElse();
 
@@ -640,10 +397,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _VoiceNegotiateResponseDto value)  $default,){
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _VoicePublishResultDto value)  $default,){
 final _that = this;
 switch (_that) {
-case _VoiceNegotiateResponseDto():
+case _VoicePublishResultDto():
 return $default(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
@@ -658,10 +415,10 @@ return $default(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _VoiceNegotiateResponseDto value)?  $default,){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _VoicePublishResultDto value)?  $default,){
 final _that = this;
 switch (_that) {
-case _VoiceNegotiateResponseDto() when $default != null:
+case _VoicePublishResultDto() when $default != null:
 return $default(_that);case _:
   return null;
 
@@ -679,10 +436,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( Map<String, dynamic> sessionDescription,  List<VoiceTrackResultDto> tracks,  bool requiresImmediateRenegotiation,  List<EntitlementDegradationDto> degradations)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String identity,  String? rung,  int? height,  int? framerate,  String? maxLayer,  List<EntitlementDegradationDto> degradations)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
-case _VoiceNegotiateResponseDto() when $default != null:
-return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRenegotiation,_that.degradations);case _:
+case _VoicePublishResultDto() when $default != null:
+return $default(_that.identity,_that.rung,_that.height,_that.framerate,_that.maxLayer,_that.degradations);case _:
   return orElse();
 
 }
@@ -700,10 +457,10 @@ return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRen
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( Map<String, dynamic> sessionDescription,  List<VoiceTrackResultDto> tracks,  bool requiresImmediateRenegotiation,  List<EntitlementDegradationDto> degradations)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String identity,  String? rung,  int? height,  int? framerate,  String? maxLayer,  List<EntitlementDegradationDto> degradations)  $default,) {final _that = this;
 switch (_that) {
-case _VoiceNegotiateResponseDto():
-return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRenegotiation,_that.degradations);}
+case _VoicePublishResultDto():
+return $default(_that.identity,_that.rung,_that.height,_that.framerate,_that.maxLayer,_that.degradations);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -717,10 +474,10 @@ return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRen
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( Map<String, dynamic> sessionDescription,  List<VoiceTrackResultDto> tracks,  bool requiresImmediateRenegotiation,  List<EntitlementDegradationDto> degradations)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String identity,  String? rung,  int? height,  int? framerate,  String? maxLayer,  List<EntitlementDegradationDto> degradations)?  $default,) {final _that = this;
 switch (_that) {
-case _VoiceNegotiateResponseDto() when $default != null:
-return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRenegotiation,_that.degradations);case _:
+case _VoicePublishResultDto() when $default != null:
+return $default(_that.identity,_that.rung,_that.height,_that.framerate,_that.maxLayer,_that.degradations);case _:
   return null;
 
 }
@@ -731,25 +488,15 @@ return $default(_that.sessionDescription,_that.tracks,_that.requiresImmediateRen
 /// @nodoc
 @JsonSerializable()
 
-class _VoiceNegotiateResponseDto implements VoiceNegotiateResponseDto {
-  const _VoiceNegotiateResponseDto({required final  Map<String, dynamic> sessionDescription, final  List<VoiceTrackResultDto> tracks = const <VoiceTrackResultDto>[], this.requiresImmediateRenegotiation = false, final  List<EntitlementDegradationDto> degradations = const <EntitlementDegradationDto>[]}): _sessionDescription = sessionDescription,_tracks = tracks,_degradations = degradations;
-  factory _VoiceNegotiateResponseDto.fromJson(Map<String, dynamic> json) => _$VoiceNegotiateResponseDtoFromJson(json);
+class _VoicePublishResultDto extends VoicePublishResultDto {
+  const _VoicePublishResultDto({this.identity = '', this.rung, this.height, this.framerate, this.maxLayer, final  List<EntitlementDegradationDto> degradations = const <EntitlementDegradationDto>[]}): _degradations = degradations,super._();
+  factory _VoicePublishResultDto.fromJson(Map<String, dynamic> json) => _$VoicePublishResultDtoFromJson(json);
 
- final  Map<String, dynamic> _sessionDescription;
-@override Map<String, dynamic> get sessionDescription {
-  if (_sessionDescription is EqualUnmodifiableMapView) return _sessionDescription;
-  // ignore: implicit_dynamic_type
-  return EqualUnmodifiableMapView(_sessionDescription);
-}
-
- final  List<VoiceTrackResultDto> _tracks;
-@override@JsonKey() List<VoiceTrackResultDto> get tracks {
-  if (_tracks is EqualUnmodifiableListView) return _tracks;
-  // ignore: implicit_dynamic_type
-  return EqualUnmodifiableListView(_tracks);
-}
-
-@override@JsonKey() final  bool requiresImmediateRenegotiation;
+@override@JsonKey() final  String identity;
+@override final  String? rung;
+@override final  int? height;
+@override final  int? framerate;
+@override final  String? maxLayer;
  final  List<EntitlementDegradationDto> _degradations;
 @override@JsonKey() List<EntitlementDegradationDto> get degradations {
   if (_degradations is EqualUnmodifiableListView) return _degradations;
@@ -758,40 +505,40 @@ class _VoiceNegotiateResponseDto implements VoiceNegotiateResponseDto {
 }
 
 
-/// Create a copy of VoiceNegotiateResponseDto
+/// Create a copy of VoicePublishResultDto
 /// with the given fields replaced by the non-null parameter values.
 @override @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
-_$VoiceNegotiateResponseDtoCopyWith<_VoiceNegotiateResponseDto> get copyWith => __$VoiceNegotiateResponseDtoCopyWithImpl<_VoiceNegotiateResponseDto>(this, _$identity);
+_$VoicePublishResultDtoCopyWith<_VoicePublishResultDto> get copyWith => __$VoicePublishResultDtoCopyWithImpl<_VoicePublishResultDto>(this, _$identity);
 
 @override
 Map<String, dynamic> toJson() {
-  return _$VoiceNegotiateResponseDtoToJson(this, );
+  return _$VoicePublishResultDtoToJson(this, );
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceNegotiateResponseDto&&const DeepCollectionEquality().equals(other._sessionDescription, _sessionDescription)&&const DeepCollectionEquality().equals(other._tracks, _tracks)&&(identical(other.requiresImmediateRenegotiation, requiresImmediateRenegotiation) || other.requiresImmediateRenegotiation == requiresImmediateRenegotiation)&&const DeepCollectionEquality().equals(other._degradations, _degradations));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoicePublishResultDto&&(identical(other.identity, identity) || other.identity == identity)&&(identical(other.rung, rung) || other.rung == rung)&&(identical(other.height, height) || other.height == height)&&(identical(other.framerate, framerate) || other.framerate == framerate)&&(identical(other.maxLayer, maxLayer) || other.maxLayer == maxLayer)&&const DeepCollectionEquality().equals(other._degradations, _degradations));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_sessionDescription),const DeepCollectionEquality().hash(_tracks),requiresImmediateRenegotiation,const DeepCollectionEquality().hash(_degradations));
+int get hashCode => Object.hash(runtimeType,identity,rung,height,framerate,maxLayer,const DeepCollectionEquality().hash(_degradations));
 
 @override
 String toString() {
-  return 'VoiceNegotiateResponseDto(sessionDescription: $sessionDescription, tracks: $tracks, requiresImmediateRenegotiation: $requiresImmediateRenegotiation, degradations: $degradations)';
+  return 'VoicePublishResultDto(identity: $identity, rung: $rung, height: $height, framerate: $framerate, maxLayer: $maxLayer, degradations: $degradations)';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class _$VoiceNegotiateResponseDtoCopyWith<$Res> implements $VoiceNegotiateResponseDtoCopyWith<$Res> {
-  factory _$VoiceNegotiateResponseDtoCopyWith(_VoiceNegotiateResponseDto value, $Res Function(_VoiceNegotiateResponseDto) _then) = __$VoiceNegotiateResponseDtoCopyWithImpl;
+abstract mixin class _$VoicePublishResultDtoCopyWith<$Res> implements $VoicePublishResultDtoCopyWith<$Res> {
+  factory _$VoicePublishResultDtoCopyWith(_VoicePublishResultDto value, $Res Function(_VoicePublishResultDto) _then) = __$VoicePublishResultDtoCopyWithImpl;
 @override @useResult
 $Res call({
- Map<String, dynamic> sessionDescription, List<VoiceTrackResultDto> tracks, bool requiresImmediateRenegotiation, List<EntitlementDegradationDto> degradations
+ String identity, String? rung, int? height, int? framerate, String? maxLayer, List<EntitlementDegradationDto> degradations
 });
 
 
@@ -799,285 +546,24 @@ $Res call({
 
 }
 /// @nodoc
-class __$VoiceNegotiateResponseDtoCopyWithImpl<$Res>
-    implements _$VoiceNegotiateResponseDtoCopyWith<$Res> {
-  __$VoiceNegotiateResponseDtoCopyWithImpl(this._self, this._then);
+class __$VoicePublishResultDtoCopyWithImpl<$Res>
+    implements _$VoicePublishResultDtoCopyWith<$Res> {
+  __$VoicePublishResultDtoCopyWithImpl(this._self, this._then);
 
-  final _VoiceNegotiateResponseDto _self;
-  final $Res Function(_VoiceNegotiateResponseDto) _then;
+  final _VoicePublishResultDto _self;
+  final $Res Function(_VoicePublishResultDto) _then;
 
-/// Create a copy of VoiceNegotiateResponseDto
+/// Create a copy of VoicePublishResultDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? sessionDescription = null,Object? tracks = null,Object? requiresImmediateRenegotiation = null,Object? degradations = null,}) {
-  return _then(_VoiceNegotiateResponseDto(
-sessionDescription: null == sessionDescription ? _self._sessionDescription : sessionDescription // ignore: cast_nullable_to_non_nullable
-as Map<String, dynamic>,tracks: null == tracks ? _self._tracks : tracks // ignore: cast_nullable_to_non_nullable
-as List<VoiceTrackResultDto>,requiresImmediateRenegotiation: null == requiresImmediateRenegotiation ? _self.requiresImmediateRenegotiation : requiresImmediateRenegotiation // ignore: cast_nullable_to_non_nullable
-as bool,degradations: null == degradations ? _self._degradations : degradations // ignore: cast_nullable_to_non_nullable
+@override @pragma('vm:prefer-inline') $Res call({Object? identity = null,Object? rung = freezed,Object? height = freezed,Object? framerate = freezed,Object? maxLayer = freezed,Object? degradations = null,}) {
+  return _then(_VoicePublishResultDto(
+identity: null == identity ? _self.identity : identity // ignore: cast_nullable_to_non_nullable
+as String,rung: freezed == rung ? _self.rung : rung // ignore: cast_nullable_to_non_nullable
+as String?,height: freezed == height ? _self.height : height // ignore: cast_nullable_to_non_nullable
+as int?,framerate: freezed == framerate ? _self.framerate : framerate // ignore: cast_nullable_to_non_nullable
+as int?,maxLayer: freezed == maxLayer ? _self.maxLayer : maxLayer // ignore: cast_nullable_to_non_nullable
+as String?,degradations: null == degradations ? _self._degradations : degradations // ignore: cast_nullable_to_non_nullable
 as List<EntitlementDegradationDto>,
-  ));
-}
-
-
-}
-
-
-/// @nodoc
-mixin _$VoiceRenegotiateResponseDto {
-
- Map<String, dynamic> get sessionDescription;
-/// Create a copy of VoiceRenegotiateResponseDto
-/// with the given fields replaced by the non-null parameter values.
-@JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-$VoiceRenegotiateResponseDtoCopyWith<VoiceRenegotiateResponseDto> get copyWith => _$VoiceRenegotiateResponseDtoCopyWithImpl<VoiceRenegotiateResponseDto>(this as VoiceRenegotiateResponseDto, _$identity);
-
-  /// Serializes this VoiceRenegotiateResponseDto to a JSON map.
-  Map<String, dynamic> toJson();
-
-
-@override
-bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceRenegotiateResponseDto&&const DeepCollectionEquality().equals(other.sessionDescription, sessionDescription));
-}
-
-@JsonKey(includeFromJson: false, includeToJson: false)
-@override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(sessionDescription));
-
-@override
-String toString() {
-  return 'VoiceRenegotiateResponseDto(sessionDescription: $sessionDescription)';
-}
-
-
-}
-
-/// @nodoc
-abstract mixin class $VoiceRenegotiateResponseDtoCopyWith<$Res>  {
-  factory $VoiceRenegotiateResponseDtoCopyWith(VoiceRenegotiateResponseDto value, $Res Function(VoiceRenegotiateResponseDto) _then) = _$VoiceRenegotiateResponseDtoCopyWithImpl;
-@useResult
-$Res call({
- Map<String, dynamic> sessionDescription
-});
-
-
-
-
-}
-/// @nodoc
-class _$VoiceRenegotiateResponseDtoCopyWithImpl<$Res>
-    implements $VoiceRenegotiateResponseDtoCopyWith<$Res> {
-  _$VoiceRenegotiateResponseDtoCopyWithImpl(this._self, this._then);
-
-  final VoiceRenegotiateResponseDto _self;
-  final $Res Function(VoiceRenegotiateResponseDto) _then;
-
-/// Create a copy of VoiceRenegotiateResponseDto
-/// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? sessionDescription = null,}) {
-  return _then(_self.copyWith(
-sessionDescription: null == sessionDescription ? _self.sessionDescription : sessionDescription // ignore: cast_nullable_to_non_nullable
-as Map<String, dynamic>,
-  ));
-}
-
-}
-
-
-/// Adds pattern-matching-related methods to [VoiceRenegotiateResponseDto].
-extension VoiceRenegotiateResponseDtoPatterns on VoiceRenegotiateResponseDto {
-/// A variant of `map` that fallback to returning `orElse`.
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case final Subclass value:
-///     return ...;
-///   case _:
-///     return orElse();
-/// }
-/// ```
-
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _VoiceRenegotiateResponseDto value)?  $default,{required TResult orElse(),}){
-final _that = this;
-switch (_that) {
-case _VoiceRenegotiateResponseDto() when $default != null:
-return $default(_that);case _:
-  return orElse();
-
-}
-}
-/// A `switch`-like method, using callbacks.
-///
-/// Callbacks receives the raw object, upcasted.
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case final Subclass value:
-///     return ...;
-///   case final Subclass2 value:
-///     return ...;
-/// }
-/// ```
-
-@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _VoiceRenegotiateResponseDto value)  $default,){
-final _that = this;
-switch (_that) {
-case _VoiceRenegotiateResponseDto():
-return $default(_that);}
-}
-/// A variant of `map` that fallback to returning `null`.
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case final Subclass value:
-///     return ...;
-///   case _:
-///     return null;
-/// }
-/// ```
-
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _VoiceRenegotiateResponseDto value)?  $default,){
-final _that = this;
-switch (_that) {
-case _VoiceRenegotiateResponseDto() when $default != null:
-return $default(_that);case _:
-  return null;
-
-}
-}
-/// A variant of `when` that fallback to an `orElse` callback.
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case Subclass(:final field):
-///     return ...;
-///   case _:
-///     return orElse();
-/// }
-/// ```
-
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( Map<String, dynamic> sessionDescription)?  $default,{required TResult orElse(),}) {final _that = this;
-switch (_that) {
-case _VoiceRenegotiateResponseDto() when $default != null:
-return $default(_that.sessionDescription);case _:
-  return orElse();
-
-}
-}
-/// A `switch`-like method, using callbacks.
-///
-/// As opposed to `map`, this offers destructuring.
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case Subclass(:final field):
-///     return ...;
-///   case Subclass2(:final field2):
-///     return ...;
-/// }
-/// ```
-
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( Map<String, dynamic> sessionDescription)  $default,) {final _that = this;
-switch (_that) {
-case _VoiceRenegotiateResponseDto():
-return $default(_that.sessionDescription);}
-}
-/// A variant of `when` that fallback to returning `null`
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case Subclass(:final field):
-///     return ...;
-///   case _:
-///     return null;
-/// }
-/// ```
-
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( Map<String, dynamic> sessionDescription)?  $default,) {final _that = this;
-switch (_that) {
-case _VoiceRenegotiateResponseDto() when $default != null:
-return $default(_that.sessionDescription);case _:
-  return null;
-
-}
-}
-
-}
-
-/// @nodoc
-@JsonSerializable()
-
-class _VoiceRenegotiateResponseDto implements VoiceRenegotiateResponseDto {
-  const _VoiceRenegotiateResponseDto({required final  Map<String, dynamic> sessionDescription}): _sessionDescription = sessionDescription;
-  factory _VoiceRenegotiateResponseDto.fromJson(Map<String, dynamic> json) => _$VoiceRenegotiateResponseDtoFromJson(json);
-
- final  Map<String, dynamic> _sessionDescription;
-@override Map<String, dynamic> get sessionDescription {
-  if (_sessionDescription is EqualUnmodifiableMapView) return _sessionDescription;
-  // ignore: implicit_dynamic_type
-  return EqualUnmodifiableMapView(_sessionDescription);
-}
-
-
-/// Create a copy of VoiceRenegotiateResponseDto
-/// with the given fields replaced by the non-null parameter values.
-@override @JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-_$VoiceRenegotiateResponseDtoCopyWith<_VoiceRenegotiateResponseDto> get copyWith => __$VoiceRenegotiateResponseDtoCopyWithImpl<_VoiceRenegotiateResponseDto>(this, _$identity);
-
-@override
-Map<String, dynamic> toJson() {
-  return _$VoiceRenegotiateResponseDtoToJson(this, );
-}
-
-@override
-bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceRenegotiateResponseDto&&const DeepCollectionEquality().equals(other._sessionDescription, _sessionDescription));
-}
-
-@JsonKey(includeFromJson: false, includeToJson: false)
-@override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_sessionDescription));
-
-@override
-String toString() {
-  return 'VoiceRenegotiateResponseDto(sessionDescription: $sessionDescription)';
-}
-
-
-}
-
-/// @nodoc
-abstract mixin class _$VoiceRenegotiateResponseDtoCopyWith<$Res> implements $VoiceRenegotiateResponseDtoCopyWith<$Res> {
-  factory _$VoiceRenegotiateResponseDtoCopyWith(_VoiceRenegotiateResponseDto value, $Res Function(_VoiceRenegotiateResponseDto) _then) = __$VoiceRenegotiateResponseDtoCopyWithImpl;
-@override @useResult
-$Res call({
- Map<String, dynamic> sessionDescription
-});
-
-
-
-
-}
-/// @nodoc
-class __$VoiceRenegotiateResponseDtoCopyWithImpl<$Res>
-    implements _$VoiceRenegotiateResponseDtoCopyWith<$Res> {
-  __$VoiceRenegotiateResponseDtoCopyWithImpl(this._self, this._then);
-
-  final _VoiceRenegotiateResponseDto _self;
-  final $Res Function(_VoiceRenegotiateResponseDto) _then;
-
-/// Create a copy of VoiceRenegotiateResponseDto
-/// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? sessionDescription = null,}) {
-  return _then(_VoiceRenegotiateResponseDto(
-sessionDescription: null == sessionDescription ? _self._sessionDescription : sessionDescription // ignore: cast_nullable_to_non_nullable
-as Map<String, dynamic>,
   ));
 }
 

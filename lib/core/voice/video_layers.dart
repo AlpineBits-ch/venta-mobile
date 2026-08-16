@@ -1,38 +1,32 @@
 import 'dart:ui' show PlatformDispatcher;
 
-import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
+import 'package:livekit_client/livekit_client.dart';
 
 import '../../features/billing/data/models/entitlement_ladder.dart';
+import 'voice_subscription_set.dart';
 
-/// The simulcast layers this client publishes video in, and the names the
-/// server chooses between when it decides what each viewer is served.
+/// The simulcast ladders this client publishes video in, and the translation
+/// between the server's layer ranking and the SDK's quality enum.
 ///
-/// **The names are a ranking, not an abbreviation, and their alphabetical order
-/// is load-bearing.** The SFU's only ordering vocabulary is `asciibetical` -
-/// a-z, "a most desirable, z least" - and it governs both what a congested
-/// viewer is dropped to and what an unavailable layer falls back to. Neither
-/// rule is told what the names mean, so the alphabet *is* the quality order.
-/// The WebRTC convention `q`/`h`/`f` sorts backwards against quality and would
-/// quietly ask the SFU to degrade a struggling viewer *up* to full resolution;
-/// these match the server's `VoiceVideoLayers`, which is the contract these
-/// rids have to answer.
+/// **Rid names do not matter, and used to.** The layer string on a subscription
+/// set was once a `preferredRid` that went on the wire, and the previous SFU
+/// ranked rids alphabetically - so the ladder had to be named `a`/`b`/`c` or a
+/// congested viewer was quietly degraded *up*. None of that is true any more:
+/// the server never sees a rid, never sends one and never matches one. The
+/// encodings are named by the SDK (`f`/`h`/`q`) and that is fine.
 ///
-/// Publishing them is the half that makes server-side layer selection real. The
-/// server already picks a layer per viewer from the tile size they report, but
-/// a publisher that sends a single encoding has no layers to pick between, so
-/// every viewer is served full quality whatever size they draw it - which is
-/// the entire bill the choice exists to reduce.
+/// What replaced it is [videoQualityForLayer]. `a`/`b`/`c` is now a ranking
+/// vocabulary of the server's - top, middle, bottom - that this client maps
+/// onto [VideoQuality] when it applies what it has been told. It is deliberately
+/// opaque so it cannot be mistaken for a resolution.
+///
+/// Publishing a ladder at all is still the half that makes server-side layer
+/// selection real: a publisher sending one encoding has no layers to choose
+/// between, so every viewer is served full quality whatever size they draw it -
+/// which is the entire bill the choice exists to reduce.
 class VideoLayers {
   const VideoLayers._();
-
-  /// Full resolution.
-  static const String high = 'a';
-
-  /// Half resolution.
-  static const String medium = 'b';
-
-  /// Quarter resolution.
-  static const String low = 'c';
 
   /// The height the bitrates below are quoted at. Everything scales from here
   /// by pixel area, so raising the capture size raises the ladder with it
@@ -43,34 +37,43 @@ class VideoLayers {
   /// served roughly a tenth of the bitrate the publisher's own preview costs.
   ///
   /// **The 1:2:4 relationship is a contract, not a preference.** The server's
-  /// layer ceiling arithmetic assumes exactly it - `b` is half the top encode
-  /// and `c` a quarter of it - so the ladder is generated from whatever the top
-  /// encode actually is rather than written down against one size. A ladder
-  /// whose rungs did not line up would have the server serving viewers a layer
-  /// it had mis-measured.
+  /// layer ceiling arithmetic assumes exactly it - the middle layer is half the
+  /// top encode and the bottom a quarter of it - so the ladder is generated
+  /// from whatever the top encode actually is rather than written down against
+  /// one size. A ladder whose rungs did not line up would have the server
+  /// serving viewers a layer it had mis-measured.
   ///
   /// The uplink cost of the extra two encodings is the publisher's, and it is
   /// the trade this whole mechanism is: the top layer's bitrate out of one
   /// phone against full quality times every viewer in the room. `maxBitrate` is
   /// a ceiling rather than a target, so congestion control still settles below
   /// it on a link that cannot carry it.
-  static List<RTCRtpEncoding> cameraFor(int topHeight) => [
-    RTCRtpEncoding(
-      rid: high,
-      scaleResolutionDownBy: 1,
-      maxBitrate: _scaledBitrate(1200 * 1000, topHeight),
-    ),
-    RTCRtpEncoding(
-      rid: medium,
-      scaleResolutionDownBy: 2,
-      maxBitrate: _scaledBitrate(350 * 1000, topHeight),
-    ),
-    RTCRtpEncoding(
-      rid: low,
-      scaleResolutionDownBy: 4,
-      maxBitrate: _scaledBitrate(120 * 1000, topHeight),
-    ),
-  ];
+  static List<VideoParameters> cameraFor(int topHeight) {
+    final width = widthFor(topHeight);
+    return [
+      VideoParameters(
+        dimensions: VideoDimensions(width, topHeight),
+        encoding: VideoEncoding(
+          maxFramerate: 30,
+          maxBitrate: _scaledBitrate(1200 * 1000, topHeight),
+        ),
+      ),
+      VideoParameters(
+        dimensions: VideoDimensions(width ~/ 2, topHeight ~/ 2),
+        encoding: VideoEncoding(
+          maxFramerate: 30,
+          maxBitrate: _scaledBitrate(350 * 1000, topHeight),
+        ),
+      ),
+      VideoParameters(
+        dimensions: VideoDimensions(width ~/ 4, topHeight ~/ 4),
+        encoding: VideoEncoding(
+          maxFramerate: 15,
+          maxBitrate: _scaledBitrate(120 * 1000, topHeight),
+        ),
+      ),
+    ];
+  }
 
   /// The screen ladder, deliberately two layers rather than three.
   ///
@@ -79,26 +82,33 @@ class VideoLayers {
   /// broken feature rather than an economical one. Both layers therefore carry
   /// more bitrate than the camera equivalents at the same scale.
   ///
-  /// A viewer the server decides should get [low] simply has no such layer to
-  /// pull, which is a case the transport already handles: the subscribe asks
-  /// the SFU to fall back to a layer the publisher actually sends rather than
-  /// to send nothing. That costs the saving on that one tile and nothing else.
+  /// A viewer the server decides should get the bottom layer simply has no such
+  /// layer to pull, which the SDK already handles: asking for a quality a
+  /// publisher does not send falls back to what it does send rather than to
+  /// nothing. That costs the saving on that one tile and nothing else.
   ///
   /// Fixed rather than scaled from the capture size, unlike the camera: nothing
   /// here chooses how large a display is, and a legible number of bits for text
   /// is a property of the text rather than of the panel it was rendered on.
-  static List<RTCRtpEncoding> get screen => [
-    RTCRtpEncoding(
-      rid: high,
-      scaleResolutionDownBy: 1,
-      maxBitrate: 2500 * 1000,
-    ),
-    RTCRtpEncoding(
-      rid: medium,
-      scaleResolutionDownBy: 2,
-      maxBitrate: 900 * 1000,
-    ),
-  ];
+  static List<VideoParameters> screenFor(int topHeight) {
+    final width = widthFor(topHeight);
+    return [
+      VideoParameters(
+        dimensions: VideoDimensions(width, topHeight),
+        encoding: const VideoEncoding(
+          maxFramerate: 30,
+          maxBitrate: 2500 * 1000,
+        ),
+      ),
+      VideoParameters(
+        dimensions: VideoDimensions(width ~/ 2, topHeight ~/ 2),
+        encoding: const VideoEncoding(
+          maxFramerate: 15,
+          maxBitrate: 900 * 1000,
+        ),
+      ),
+    ];
+  }
 
   /// What the camera is asked to capture for [target].
   ///
@@ -127,6 +137,21 @@ class VideoLayers {
     return (atAnchor * ratio * ratio).round();
   }
 }
+
+/// The SDK quality to request for a track the server has ranked [layer].
+///
+/// The server's vocabulary is a ranking - top, middle, bottom - and this is the
+/// whole of the mapping onto the local SDK's enum. Anything unrecognised, and
+/// the absence of a layer entirely, resolves to [VideoQuality.HIGH]: the server
+/// says nothing about a track it is not managing, and the safe reading of
+/// silence is "as good as it comes" rather than "as cheap as it comes". An
+/// unreadable tile is a worse failure than an expensive one.
+VideoQuality videoQualityForLayer(String? layer) => switch (layer) {
+  VoiceVideoLayer.full => VideoQuality.HIGH,
+  VoiceVideoLayer.medium => VideoQuality.MEDIUM,
+  VoiceVideoLayer.low => VideoQuality.LOW,
+  _ => VideoQuality.HIGH,
+};
 
 /// What this client tells the server it is about to send, so the server can
 /// clamp against a stated number instead of guessing from an SDP.

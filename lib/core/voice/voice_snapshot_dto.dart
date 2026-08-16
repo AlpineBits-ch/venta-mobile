@@ -3,8 +3,11 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import '../format/api_date_time.dart';
 import 'track_naming.dart';
 import 'voice_limits.dart';
+import 'voice_subscription_set.dart';
 
 export 'voice_limits.dart' show VoiceRoomLimitsDto;
+export 'voice_subscription_set.dart'
+    show VoiceSubscriptionSetDto, VoiceSubscriptionTrackDto;
 
 part 'voice_snapshot_dto.freezed.dart';
 part 'voice_snapshot_dto.g.dart';
@@ -136,6 +139,17 @@ sealed class VoiceRoomSnapshotDto with _$VoiceRoomSnapshotDto {
     /// "no ceilings" where the truth is "nobody said".
     @JsonKey(fromJson: voiceRoomLimitsFromJson, toJson: voiceRoomLimitsToJson)
     VoiceRoomLimitsDto? limits,
+
+    /// What this client should be pulling, when the server is managing that at
+    /// all. **Absent or null in the ordinary small room**, where it means "pull
+    /// everyone who is `Publishing`" - which is why it is nullable rather than
+    /// defaulted to an empty set. An empty set is "pull nobody", and the two
+    /// must never collapse into each other.
+    @JsonKey(
+      fromJson: voiceSubscriptionSetFromJson,
+      toJson: voiceSubscriptionSetToJson,
+    )
+    VoiceSubscriptionSetDto? subscriptions,
   }) = _VoiceRoomSnapshotDto;
 
   const VoiceRoomSnapshotDto._();

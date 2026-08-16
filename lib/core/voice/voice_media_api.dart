@@ -9,16 +9,20 @@ import 'voice_snapshot_dto.dart';
 /// A failure returned by the voice media surface, classified the way the
 /// contract classifies it.
 ///
-/// The distinctions are load-bearing rather than cosmetic:
+/// The distinctions are load-bearing rather than cosmetic, and the three `503`s
+/// are three different situations sharing one status:
 ///
-///  * **409** is a stale *client* - it asked to pull media nobody is
-///    publishing. Refetch the snapshot and reconcile; re-sending the same body
-///    is guaranteed to fail again, because the track is gone rather than late.
-///  * **502** is the SFU rejecting the operation. A real failure, and treating
-///    it as success is what leaves a client believing it is subscribed to a
-///    peer no media will ever arrive from.
-///  * **503** is the room being contended - the change simply was not applied,
-///    and retrying shortly after works.
+///  * **`voiceNotConfigured`** is a self-hosted install with no SFU. Not a
+///    fault, not transient, and not something to retry - the feature does not
+///    exist on this instance and should be hidden.
+///  * **`sfuUnavailable`** is the control plane being unreachable. Retry with
+///    backoff, and **do not tear anything down**: media does not travel the
+///    path that failed, so every call already in progress is unaffected.
+///  * **anything else `503`** is the room being contended - the change simply
+///    was not applied, and retrying shortly after works.
+///
+/// **502** is the SFU rejecting a control-plane operation. A real failure, and
+/// not fixed by asking again.
 ///
 /// Everything else ([isFatal]) must not be retried blind.
 class VoiceMediaException implements Exception {
@@ -26,13 +30,12 @@ class VoiceMediaException implements Exception {
     required this.statusCode,
     required this.operation,
     this.error,
-    this.staleTracks = const [],
     this.action,
   });
 
-  /// Builds one from a Dio failure. The 502 body is `{ operation, error }`;
-  /// the 409 body is `{ error, tracks, action }`, where `error` is a code
-  /// rather than a message.
+  /// Builds one from a Dio failure. The 502 body is `{ operation, error }` and
+  /// the 503 bodies are `{ error, action }`, where `error` is a code rather
+  /// than a message.
   factory VoiceMediaException.from(DioException e, String fallbackOperation) {
     final data = e.response?.data;
     final body = data is Map<String, dynamic> ? data : const {};
@@ -40,7 +43,6 @@ class VoiceMediaException implements Exception {
       statusCode: e.response?.statusCode ?? 0,
       operation: body['operation'] as String? ?? fallbackOperation,
       error: body['error'] as String? ?? e.message,
-      staleTracks: (body['tracks'] as List? ?? const []).cast<String>(),
       action: body['action'] as String?,
     );
   }
@@ -49,47 +51,32 @@ class VoiceMediaException implements Exception {
   final String operation;
   final String? error;
 
-  /// The tracks the server knew were gone up front. Empty when the publisher
-  /// vanished mid-request - the meaning is the same either way, so nothing
-  /// should branch on it beyond logging.
-  final List<String> staleTracks;
-
-  /// What the server says to do about it, e.g. `refetchSnapshot`.
+  /// What the server says to do about it, e.g. `contactOperator` or `retry`.
   final String? action;
 
-  /// This client asked to pull media nobody is publishing - its view of the
-  /// room is out of date.
+  /// This instance has no SFU configured at all.
   ///
-  /// Never retry: the subscribe was refused because the track no longer
-  /// exists, so the identical body fails identically. Refetch the snapshot and
-  /// subscribe from that instead. Before the server started answering this, a
-  /// stale share cost six seconds of SFU retries and then a 502, and a client
-  /// looping on it took voice to the status page.
-  bool get isStale =>
-      statusCode == 409 && (error == 'staleSubscription' || error == null);
+  /// A supported state rather than a fault - a self-hosted install that has not
+  /// set voice up - so the answer is to hide the feature and say so, not to
+  /// retry or to show a failure. There is no capability read to ask up front,
+  /// so this is discovered by trying once and is worth caching for the session.
+  bool get isVoiceNotConfigured =>
+      statusCode == 503 && error == 'voiceNotConfigured';
 
-  /// This client's *own* media session has no live peer connection - it was closed, or never
-  /// reached `connected`.
+  /// The control plane could not be reached. Retry with backoff.
   ///
-  /// The opposite direction to [isStale] and answered differently, which is why they are separate
-  /// despite sharing a status. A stale subscription is a track that stopped: refetch the roster and
-  /// pull whatever replaced it. This is the session doing the pulling being spent, which no roster
-  /// can repair - it has to be recreated before anything can be pulled onto it at all.
-  ///
-  /// Never retried. Every call on that session id fails identically from here on.
-  ///
-  /// The 502 arm matches the transport's own wording, which is what leaks through when the
-  /// operation reaches the SFU before the server classifies it.
-  bool get isSessionGone =>
-      (statusCode == 409 && error == 'sessionGone') ||
-      (statusCode == 502 && (error?.contains('session_error') ?? false));
+  /// **Nothing is torn down on this.** The failure is on the path that mints
+  /// connections, not the one media rides, so a call already in progress has
+  /// not noticed and must not be ended on this client's initiative.
+  bool get isSfuUnavailable => statusCode == 503 && error == 'sfuUnavailable';
 
   /// The room was contended and the change was not applied. Transient; retry
   /// after a short delay.
-  bool get isContended => statusCode == 503;
+  bool get isContended =>
+      statusCode == 503 && !isVoiceNotConfigured && !isSfuUnavailable;
 
   /// The SFU rejected the operation. A real failure - roll back any local
-  /// "subscribed" bookkeeping for the peer involved.
+  /// bookkeeping for whatever it was about.
   bool get isTransportFailure => statusCode == 502;
 
   /// Not permitted, or the room does not exist. Retrying cannot help.
@@ -102,17 +89,15 @@ class VoiceMediaException implements Exception {
   @override
   String toString() =>
       'VoiceMediaException($statusCode, $operation'
-      '${error == null ? '' : ': $error'}'
-      '${staleTracks.isEmpty ? '' : ' tracks=$staleTracks'})';
+      '${error == null ? '' : ': $error'})';
 }
 
 /// The room named a media backend this build has no implementation for.
 ///
-/// The session handshake declares its backend so a client can pick its media
+/// The connection handshake declares its backend so a client can pick its media
 /// layer from a stated value instead of inferring one. An unrecognised value
-/// means "I cannot handle this room" - guessing would negotiate an SDP against
-/// a transport with different semantics and fail in a way that looks like a
-/// network problem.
+/// means "I cannot handle this room" - guessing would drive a transport with
+/// different semantics and fail in a way that looks like a network problem.
 class UnsupportedVoiceBackendException implements Exception {
   UnsupportedVoiceBackendException(this.backend);
 
@@ -132,9 +117,10 @@ class UnsupportedVoiceBackendException implements Exception {
 /// `voice/calls/{callId}/...` family are the same operations behind different
 /// paths, so the transport above them is written once.
 ///
-/// The vocabulary here is the server's neutral one, not any SFU's: sessions
-/// are `mediaSessionId`, and a track says whether it is being published or
-/// subscribed rather than whether it is "local" or "remote".
+/// The vocabulary is the server's neutral one, not the SFU's. What this backend
+/// still decides is *whether* a client may connect, *what* it may send, and the
+/// roster the rest of the product reads - it no longer carries any media or any
+/// negotiation, so nothing here names an SDP, a transceiver or a mid.
 abstract class VoiceMediaApi {
   VoiceRoomKey get roomKey;
 
@@ -142,61 +128,78 @@ abstract class VoiceMediaApi {
   /// missed, whenever it is asked for.
   Future<VoiceRoomSnapshotDto> fetchSnapshot();
 
-  /// Opens a media session. [primary] carries the microphone and runs the
-  /// device-takeover path server-side; a secondary session (screen share from
-  /// a separate process) deliberately skips it.
-  Future<VoiceSessionDto> createSession({bool primary});
-
-  /// Publishes and/or subscribes tracks in one negotiation.
+  /// Mints a connection to the SFU node this room lives on.
   ///
-  /// [video] declares what this client intends to send, as
-  /// `{ height, framerate }` - see [VideoPublishIntent]. Additive and optional:
-  /// a server that predates it ignores it, and a publish that carries no video
-  /// track sends nothing, because an audio-only publish is never affected by a
-  /// video ceiling.
-  Future<VoiceNegotiateResponseDto> negotiate({
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    required List<Map<String, dynamic>> tracks,
-    Map<String, dynamic>? video,
-  });
-
-  /// Relays a fresh offer on an existing session.
+  /// [primary] carries the microphone and runs the device-takeover path
+  /// server-side. A *secondary* connection - a screen share published from a
+  /// separate process - must pass `primary: false` **and** a [tag]: the SFU
+  /// keys participants by identity and disconnects an earlier session that
+  /// reappears under the same one, so a secondary minted as primary kicks this
+  /// client's own call off the air.
   ///
-  /// [video] carries the same `{ height, framerate }` as [negotiate] and is
-  /// only sent when this renegotiation changes what the picture actually is.
-  /// Absent leaves the last declaration exactly where it stands, in **both**
-  /// directions: omitting never lifts a cap and never applies one, so an ICE
-  /// restart, a reconnect or a track close sends the body it always sent.
-  ///
-  /// Nothing about this path can refuse. There is no `403` and no
-  /// `degradations[]` on a renegotiation, whatever is declared here.
-  Future<VoiceRenegotiateResponseDto> renegotiate({
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    Map<String, dynamic>? video,
-  });
+  /// Cheap and repeatable. It does not touch the roster, does not re-announce
+  /// anybody, and does not disturb a connection already held - only the token is
+  /// new. That is what makes it the answer to an expired token, and it is also
+  /// why it must not be called on every attempt of a reconnect ladder: doing so
+  /// mints tokens at the SFU's retry rate to solve a problem that has not
+  /// occurred.
+  Future<VoiceConnectionDto> createConnection({bool primary, String? tag});
 
-  Future<void> closeTracks({
-    required String mediaSessionId,
+  /// Declares tracks that are **already published** through the SDK.
+  ///
+  /// The media does not depend on this - the picture is flowing by the time it
+  /// is called - but the roster, the viewer counts, the entitlement check and
+  /// every other client's UI do. Nothing in the product can see a publisher who
+  /// skipped it.
+  ///
+  /// Both halves of a screen share go in one call, which is what lets a
+  /// receiving client group them into a single tile from the two
+  /// `TrackPublished` events that follow.
+  ///
+  /// [video] describes what this client intends to send and is optional. It is
+  /// only read when the body carries video, because a video ceiling has never
+  /// had anything to say about a microphone.
+  ///
+  /// Answers to handle: a `200` carrying `degradations` is a success that was
+  /// clamped, and a `403` carrying an entitlement denial is a publish that will
+  /// reach nobody - stop the local track, because the connection token does not
+  /// permit it either.
+  Future<VoicePublishResultDto> declarePublish({
     required List<String> trackNames,
+    Map<String, dynamic>? video,
   });
+
+  /// Marks tracks closed and tells peers to drop them. Unpublishing `audio`
+  /// marks this participant no longer publishing.
+  Future<void> unpublish({required List<String> trackNames});
+
+  /// Declares a resolution change made **without republishing** - a share that
+  /// switched source, a camera that changed size.
+  ///
+  /// It exists because a ceiling computed once at publish time is one a later
+  /// resolution change walks straight past. It never refuses anything, and
+  /// declaring nothing leaves the ceiling exactly where the last publish put
+  /// it - so an unchanged resolution needs no call at all.
+  Future<void> declareVideo(Map<String, dynamic> video);
 
   /// Reports what this client can actually see, so the server can decide what
-  /// to serve it.
+  /// to serve it. Everything here only ever *reduces* what is sent, which is
+  /// why it needs no permission beyond speaking for oneself.
   ///
-  /// [tileHeights] maps a publisher's user id to the height in **device
-  /// pixels** of the largest tile this client draws them in, and it drives the
-  /// simulcast layer each of their video tracks is served at. The map is
-  /// authoritative rather than a delta: a publisher missing from it is one this
-  /// client is not drawing.
+  /// [paused] is this client backgrounded or hidden. It **drops video, never
+  /// audio** - a backgrounded client is still in the conversation.
   ///
-  /// [pinned] names publishers to keep subscribed whatever the ranking decides.
-  /// In a room large enough for the server to be selective a subscription set is
-  /// active speakers plus pins, so fullscreening somebody who is not talking
-  /// without pinning them asks for a track the set does not include - and that
-  /// subscribe is refused. **Capped server-side** (3 by default), and a pin over
-  /// the cap is dropped rather than answered with an error.
+  /// [pinned] names publishers to keep subscribed whatever the ranking says.
+  /// Capped server-side (3 by default), and a pin over the cap is dropped
+  /// silently rather than refused.
+  ///
+  /// [pausedPublishers] are publishers whose tile this client has collapsed.
+  /// Video only, the same as [paused].
+  ///
+  /// [tileHeights] maps a publisher's user id to the height in **device pixels**
+  /// of the largest tile this client draws them in, and it is the only
+  /// measurement behind layer selection. The map is authoritative rather than a
+  /// delta: a publisher missing from it is one this client is not drawing.
   ///
   /// [screenAudioShares] names shares whose audio half to deliver. Share audio
   /// is off by default because most shares carry none, and distributing it
@@ -206,13 +209,13 @@ abstract class VoiceMediaApi {
   /// resize is a body with `tileHeights` in it and nothing else. An empty list
   /// is not an omission: it clears that set.
   ///
-  /// The reply is this client's own subscription set, which nothing here reads
-  /// yet - the subscription-set contract is not implemented, and a small room
-  /// is not sent one at all. Reporting is still worth doing on its own: it is
-  /// the only measurement behind layer selection.
-  Future<void> updateSubscriber({
+  /// The reply is this client's own subscription set, so a caller can act on
+  /// what it just reported without waiting for the push.
+  Future<VoiceSubscriptionSetDto?> updateSubscriber({
+    bool? paused,
     Map<String, int>? tileHeights,
     List<String>? pinned,
+    List<String>? pausedPublishers,
     List<String>? screenAudioShares,
   });
 
@@ -232,13 +235,10 @@ abstract class VoiceMediaApi {
 /// With one exception, checked first: a `403` carrying the entitlement refusal
 /// body is an [EntitlementDenialException] instead. That is a publish the
 /// server would not carry out at any size - a `none` rung, or no publisher slot
-/// free - and it is the one refusal on these routes that has a plain
-/// explanation attached to it. Folded into [VoiceMediaException] it would
-/// arrive as `isFatal`, indistinguishable from "no such room", and the camera
-/// button would fail silently.
-///
-/// Nothing else about the 403 handling moves: a refusal without that body is
-/// still an ordinary fatal media error.
+/// free - and it is the one refusal on these routes with a plain explanation
+/// attached. Folded into [VoiceMediaException] it would arrive as `isFatal`,
+/// indistinguishable from "no such room", and the camera button would fail
+/// silently.
 Future<T> mapMediaErrors<T>(String name, Future<T> Function() operation) async {
   try {
     return await operation();
@@ -249,27 +249,27 @@ Future<T> mapMediaErrors<T>(String name, Future<T> Function() operation) async {
   }
 }
 
-/// How long to wait before retrying a failed negotiation, or null for "do not
+/// How long to wait before retrying a failed media call, or null for "do not
 /// retry". [attempt] is 1-based.
 ///
 /// The policy, and why each arm is what it is:
 ///
-///  * **409 stale** and **403/404** are never retried. The first means the
-///    track is gone rather than late, so the identical body fails identically;
-///    the other two cannot be fixed by asking again.
-///  * **503** is contended - nothing about the request was wrong, so it is
-///    retried quickly.
-///  * **502** backs off exponentially from a second. Incident VNT-GE21R3P7 had
-///    the same subscribe reattempted every 5-6 seconds against a snapshot that
-///    could not have changed in between; retrying faster than the room state
-///    actually moves spends requests to learn nothing, and turns one bad moment
-///    into the burst that trips a degraded threshold.
+///  * **`voiceNotConfigured`** is never retried. There is no SFU on this
+///    instance and there will not be one before the operator configures it, so
+///    a retry loop is a request per interval for the life of the session.
+///  * **403/404** cannot be fixed by asking again.
+///  * **contended 503** is the request being fine and the room being busy, so
+///    it is retried quickly.
+///  * **`sfuUnavailable` 503** and **502** back off exponentially from a
+///    second. Incident VNT-GE21R3P7 had the same operation reattempted every
+///    5-6 seconds against a state that could not have changed in between;
+///    retrying faster than the thing being retried against actually moves
+///    spends requests to learn nothing, and turns one bad moment into the burst
+///    that trips a degraded threshold.
 Duration? voiceRetryDelay(VoiceMediaException e, int attempt) {
-  // `isSessionGone` is checked before the 502 arm below, because it can *be* a 502 and retrying it
-  // is the one thing guaranteed not to work.
-  if (e.isFatal || e.isStale || e.isSessionGone) return null;
+  if (e.isFatal || e.isVoiceNotConfigured) return null;
   if (e.isContended) return Duration(milliseconds: 250 * attempt);
-  if (e.isTransportFailure) {
+  if (e.isSfuUnavailable || e.isTransportFailure) {
     return Duration(milliseconds: 1000 * (1 << (attempt - 1)));
   }
   return null;
@@ -277,7 +277,12 @@ Duration? voiceRetryDelay(VoiceMediaException e, int attempt) {
 
 /// Backends this client's media layer can actually drive.
 ///
-/// Everything about the negotiation is neutral, so this list is short only
-/// because there is one SFU today - not because the code below it is
-/// Cloudflare-shaped.
-const Set<String> supportedVoiceBackends = {'cloudflare'};
+/// Short because there is one SFU today, not because the code below it is
+/// LiveKit-shaped: everything above [VoiceMediaApi] is written in the server's
+/// neutral vocabulary, which is what made the move off the previous SFU a
+/// change to one file rather than to the feature.
+const Set<String> supportedVoiceBackends = {'livekit'};
+
+/// Re-exported so callers that build a publish body do not have to import the
+/// layer module separately.
+typedef VoiceVideoIntent = VideoPublishIntent;

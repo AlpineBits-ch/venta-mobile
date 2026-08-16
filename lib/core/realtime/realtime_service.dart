@@ -157,6 +157,13 @@ class RealtimeService {
     'status.SummaryChanged',
     'status.IncidentUpdated',
     'call.IncomingCall',
+    // The recovery channel, and it has to be registered to exist: the transport
+    // only delivers methods named here, so a handler for an unregistered event
+    // is unreachable code. `Snapshot` and `Resync` are what the version gate
+    // repairs itself with - without them a dropped event is permanent, which is
+    // the exact failure the gate was written to prevent.
+    'call.Snapshot',
+    'call.Resync',
     'call.ParticipantJoined',
     // No `call.ParticipantLeft` here: the server has no such event (see
     // Echo.Voice's VoiceEvents). Departures arrive as `call.CallParticipantLeft`
@@ -176,20 +183,31 @@ class RealtimeService {
     // symmetrically for calls too, the client just never watched them.
     'call.SpeakingChanged',
     'call.CameraChanged',
+    'call.DeafenChanged',
     'call.TrackPublished',
     'call.TrackClosed',
     'call.ScreenShareStarted',
     'call.ScreenShareStopped',
+    'call.ShareViewersChanged',
+    // What this client should now be pulling. Sent without any user action -
+    // the conversation moved - and per-recipient, so it is nobody else's set.
+    // Relay only: it carries the room version without being a change to it.
+    'call.SubscriptionsChanged',
     'guild.voice.UserJoinedVoice',
     'guild.voice.UserLeftVoice',
+    'guild.voice.Snapshot',
+    'guild.voice.Resync',
     'guild.voice.ParticipantJoined',
     'guild.voice.TrackPublished',
     'guild.voice.TrackClosed',
     'guild.voice.MuteChanged',
     'guild.voice.DeafenChanged',
     'guild.voice.CameraChanged',
+    'guild.voice.SpeakingChanged',
     'guild.voice.ScreenShareStarted',
     'guild.voice.ScreenShareStopped',
+    'guild.voice.ShareViewersChanged',
+    'guild.voice.SubscriptionsChanged',
     'guild.voice.MovedToChannel',
     'guild.voice.KickedByOtherDevice',
     // Household modules (see `HouseholdEvents`, which mirrors this list and is

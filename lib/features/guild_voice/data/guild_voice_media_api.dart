@@ -25,58 +25,47 @@ class GuildVoiceMediaApi implements VoiceMediaApi {
       api.getSnapshot(guildId, channelId);
 
   @override
-  Future<VoiceSessionDto> createSession({bool primary = true}) =>
-      api.createSession(guildId, channelId, primary: primary);
+  Future<VoiceConnectionDto> createConnection({
+    bool primary = true,
+    String? tag,
+  }) => api.createConnection(guildId, channelId, primary: primary, tag: tag);
 
   @override
-  Future<VoiceNegotiateResponseDto> negotiate({
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    required List<Map<String, dynamic>> tracks,
-    Map<String, dynamic>? video,
-  }) => api.negotiate(
-    guildId: guildId,
-    channelId: channelId,
-    mediaSessionId: mediaSessionId,
-    sessionDescription: sessionDescription,
-    tracks: tracks,
-    video: video,
-  );
-
-  @override
-  Future<VoiceRenegotiateResponseDto> renegotiate({
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    Map<String, dynamic>? video,
-  }) => api.renegotiate(
-    guildId: guildId,
-    channelId: channelId,
-    mediaSessionId: mediaSessionId,
-    sessionDescription: sessionDescription,
-    video: video,
-  );
-
-  @override
-  Future<void> closeTracks({
-    required String mediaSessionId,
+  Future<VoicePublishResultDto> declarePublish({
     required List<String> trackNames,
-  }) => api.closeTracks(
+    Map<String, dynamic>? video,
+  }) => api.declarePublish(
     guildId: guildId,
     channelId: channelId,
-    mediaSessionId: mediaSessionId,
+    trackNames: trackNames,
+    video: video,
+  );
+
+  @override
+  Future<void> unpublish({required List<String> trackNames}) => api.unpublish(
+    guildId: guildId,
+    channelId: channelId,
     trackNames: trackNames,
   );
 
   @override
-  Future<void> updateSubscriber({
+  Future<void> declareVideo(Map<String, dynamic> video) =>
+      api.declareVideo(guildId: guildId, channelId: channelId, video: video);
+
+  @override
+  Future<VoiceSubscriptionSetDto?> updateSubscriber({
+    bool? paused,
     Map<String, int>? tileHeights,
     List<String>? pinned,
+    List<String>? pausedPublishers,
     List<String>? screenAudioShares,
   }) => api.updateSubscriber(
     guildId: guildId,
     channelId: channelId,
+    paused: paused,
     tileHeights: tileHeights,
     pinned: pinned,
+    pausedPublishers: pausedPublishers,
     screenAudioShares: screenAudioShares,
   );
 

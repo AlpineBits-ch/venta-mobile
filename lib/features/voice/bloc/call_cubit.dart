@@ -9,9 +9,13 @@ import '../../../core/realtime/realtime_transport.dart';
 import '../../../core/sound/sound_service.dart';
 import '../../../core/voice/track_naming.dart';
 import '../../../core/voice/video_layers.dart';
+import '../../../core/voice/voice_app_visibility.dart';
 import '../../../core/voice/voice_heartbeat.dart';
+import '../../../core/voice/voice_liveness.dart';
+import '../../../core/voice/voice_media_api.dart';
 import '../../../core/voice/voice_participant_state.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
+import '../../../core/voice/voice_speaking_detector.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../billing/data/entitlement_reader.dart';
 import '../../billing/data/models/entitlement_degradation_dto.dart';
@@ -190,6 +194,10 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
       _handleConnectionStatus,
     );
     _heartbeat = VoiceHeartbeat(send: _sendHeartbeat);
+    _liveness = VoiceLiveness(
+      assertAlive: _assertAlive,
+      onRoomGone: () => unawaited(_handleRoomGone()),
+    );
   }
 
   final VoiceRepository repository;
@@ -206,6 +214,11 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   late final StreamSubscription<VoiceRepositoryEvent> _sub;
   late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
   late final VoiceHeartbeat _heartbeat;
+
+  /// The second, independent liveness channel. Kept as its own timer rather
+  /// than folded into [_heartbeat] on purpose: the heartbeat goes over the hub,
+  /// and the case this covers is the hub being down.
+  late final VoiceLiveness _liveness;
   CallWebRtcService? _webRtc;
 
   /// Whether the call's screen shares are actually on screen. Viewer claims
@@ -350,6 +363,11 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   /// phantom viewer keeps a publisher's egress alive for nothing.
   Future<CallWebRtcService?> _teardown() async {
     _heartbeat.stop();
+    // Before anything that can block. A ping for a call the user has left keeps
+    // a ghost participant in everybody else's roster until it stops.
+    _liveness.stop();
+    _stopSpeakingReports();
+    _stopVisibilityReports();
     await _releaseAllShareClaims();
     repository.exitCall();
     final webRtc = _webRtc;
@@ -357,16 +375,17 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     return webRtc;
   }
 
-  /// A transport with its three callbacks wired. Built here rather than at each call site so a
-  /// rebuild cannot come back with fewer of them than the original had.
+  /// A transport with its callbacks wired. Built here rather than at each call
+  /// site so a rebuild cannot come back with fewer of them than the original
+  /// had.
+  ///
+  /// Two callbacks that used to be here are gone with the SDP relay:
+  /// `onStaleSubscription` and `onSessionGone`. Neither condition exists any
+  /// more - there is no subscribe for this backend to refuse, and no minted
+  /// session id to be spent - so the media-rebuild path they drove has gone with
+  /// them.
   CallWebRtcService _buildTransport() {
     final webRtc = _webRtcServiceFactory();
-    // A refused subscribe means this client is looking at a share that has
-    // already stopped. The snapshot is the only thing that can say what to pull
-    // instead, and the gate collapses a burst of these into one request.
-    webRtc.onStaleSubscription = () => unawaited(repository.refetchSnapshot());
-    // Our own session, rather than somebody's track. No snapshot can repair that.
-    webRtc.onSessionGone = () => unawaited(_rebuildMedia());
     // A track arriving is its own event, later than the subscribe that asked
     // for it and with nothing else attached to it. Without this the screen
     // renders whatever it read before the media existed - see
@@ -375,7 +394,107 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     // A reduction is a success. Nothing is torn down here - the sentence is
     // put where the person publishing can read it, and that is all.
     webRtc.onPublishReduced = _noteReduction;
+    // Raw, and deliberately not reported from here - it goes through the
+    // detector, which is where the hysteresis lives.
+    webRtc.onLocalSpeakingChanged = (isSpeaking) =>
+        _speaking?.update(isSpeaking: isSpeaking);
+    // The SDK gave up reconnecting. A fresh connection is the only recovery -
+    // and it is cheap, because minting one touches nothing but the token.
+    webRtc.onMediaDisconnected = () => unawaited(_reconnectMedia());
     return webRtc;
+  }
+
+  /// Guards [_reconnectMedia] against a second attempt while one is running.
+  bool _reconnectingMedia = false;
+
+  /// Rebuilds the media half after the SDK's own reconnect ladder is exhausted.
+  ///
+  /// A token is good for minutes rather than hours, so the case this covers is
+  /// a device asleep or in a tunnel for longer than that: the resume is refused
+  /// and the SDK stops. Asking for another connection is the documented answer,
+  /// it does not touch the roster, and it does not re-announce this client to
+  /// anybody.
+  ///
+  /// **The call itself is untouched.** Membership, the roster and the version
+  /// tracker all survive; this is not a rejoin, and the user is not hung up on.
+  /// The camera and any screen share do not survive - they were publications on
+  /// a connection that is gone - so the room is told they stopped rather than
+  /// left advertising a picture nobody is receiving.
+  Future<void> _reconnectMedia() async {
+    final call = state.call;
+    if (_reconnectingMedia || call == null) return;
+    if (state.phase != CallPhase.active) return;
+    _reconnectingMedia = true;
+    try {
+      final dead = _webRtc;
+      _webRtc = null;
+      await dead?.disconnect();
+
+      final webRtc = _buildTransport();
+      _webRtc = webRtc;
+      await webRtc.connect(call.id);
+      await webRtc.setMuted(state.isMuted);
+      webRtc.setDeafened(state.isDeafened);
+      await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
+
+      // The roster is unchanged, but every subscription went with the old
+      // connection, so this is what pulls the call back in.
+      await repository.refetchSnapshot();
+    } catch (_) {
+      emitIfOpen(
+        state.copyWith(errorMessage: 'Lost the connection to the call.'),
+      );
+    } finally {
+      _reconnectingMedia = false;
+    }
+  }
+
+  /// Debounces this device's voice activity into `call.SpeakingChanged`.
+  ///
+  /// Built per call rather than per cubit so its "what the server currently
+  /// believes" state cannot survive into a call the belief is not about.
+  VoiceSpeakingDetector? _speaking;
+
+  /// Tells the server when this client is backgrounded, so it stops sending
+  /// video nobody is looking at. Audio is unaffected - see
+  /// [VoiceAppVisibility].
+  VoiceAppVisibility? _visibility;
+
+  void _startVisibilityReports() {
+    _visibility?.dispose();
+    _visibility = VoiceAppVisibility(
+      onChanged: (isPaused) => unawaited(
+        _webRtc?.setPaused(isPaused) ?? Future.value(),
+      ),
+    );
+  }
+
+  void _stopVisibilityReports() {
+    _visibility?.dispose();
+    _visibility = null;
+  }
+
+  void _startSpeakingReports() {
+    _speaking?.dispose();
+    _speaking = VoiceSpeakingDetector(
+      report: (isSpeaking) async {
+        final callId = state.call?.id;
+        if (callId == null || state.phase != CallPhase.active) return;
+        await repository.invokeSpeakingChanged(
+          callId: callId,
+          isSpeaking: isSpeaking,
+        );
+      },
+    );
+  }
+
+  void _stopSpeakingReports() {
+    // Silenced rather than merely disposed: a detector torn down mid-word
+    // leaves the server believing this device is still talking, which keeps it
+    // ranked - and every other client in the room subscribed to it.
+    _speaking?.silenceNow();
+    _speaking?.dispose();
+    _speaking = null;
   }
 
   /// Files a clamped publish where the call screen can render it.
@@ -389,43 +508,6 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
       orElse: () => degradations.first,
     );
     emitIfOpen(state.copyWith(videoNotice: video.notice));
-  }
-
-  /// Guards [_rebuildMedia]: every pending subscribe fails at once when a session dies.
-  bool _rebuildingMedia = false;
-
-  /// Open a fresh media session after the server declares the current one spent.
-  ///
-  /// A session id is meaningless without the peer connection that produced it, and once the server
-  /// has said `sessionGone` every call on it fails identically. The media half is rebuilt - new
-  /// session, republished microphone, re-subscribed call - while the call itself, its roster and the
-  /// version tracker are left alone. This is not rejoining the call.
-  Future<void> _rebuildMedia() async {
-    final call = state.call;
-    if (_rebuildingMedia || call == null) return;
-    if (state.phase != CallPhase.active) return;
-    _rebuildingMedia = true;
-    try {
-      final dead = _webRtc;
-      _webRtc = null;
-      await dead?.disconnect();
-
-      final webRtc = _buildTransport();
-      _webRtc = webRtc;
-      await webRtc.connect(call.id);
-      webRtc.setMuted(state.isMuted);
-      webRtc.setDeafened(state.isDeafened);
-      await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
-
-      // The roster is unchanged, but every subscription on it went with the session.
-      await repository.refetchSnapshot();
-    } catch (_) {
-      emitIfOpen(
-        state.copyWith(errorMessage: 'Lost the connection to the call.'),
-      );
-    } finally {
-      _rebuildingMedia = false;
-    }
   }
 
   Future<void> _connect(CallDto call) async {
@@ -446,24 +528,35 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     );
 
     try {
-      // Publish before pulling anything: Cloudflare rejects a pull on a
-      // session that has not completed its own negotiation. The subscribes
-      // below are safe because of it, and any that raced ahead were held by
-      // the transport rather than dropped.
       await webRtc.connect(call.id);
-      webRtc.setMuted(state.isMuted);
+      await webRtc.setMuted(state.isMuted);
       webRtc.setDeafened(state.isDeafened);
       await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
+      _startSpeakingReports();
+      _startVisibilityReports();
+    } on VoiceMediaException catch (e) {
+      // A self-hosted instance with no SFU configured is a supported state, not
+      // a fault - and there is no capability read to ask up front, so this is
+      // where it is discovered. Saying "could not connect" for it would send
+      // somebody looking for a network problem that does not exist.
+      emitIfOpen(
+        state.copyWith(
+          errorMessage: e.isVoiceNotConfigured
+              ? 'Voice is not available on this server.'
+              : 'Could not connect audio.',
+        ),
+      );
     } catch (_) {
       emitIfOpen(state.copyWith(errorMessage: 'Could not connect audio.'));
     }
 
-    // The snapshot is the roster, and it is read after the publish so it can
-    // be acted on immediately. The accept/create response cannot serve here:
-    // it is serialized before the other side publishes, so it names no
-    // sessions to subscribe to.
+    // The snapshot is the roster, and it is read after connecting so it can be
+    // acted on immediately. The accept/create response cannot serve here: it is
+    // serialized before the other side publishes, so it names nobody to
+    // subscribe to.
     await repository.refetchSnapshot();
     _heartbeat.start();
+    _liveness.start();
   }
 
   // ── Snapshot ──────────────────────────────────────────────────────────────
@@ -510,6 +603,14 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     );
 
     if (webRtc == null) return;
+
+    // Taken wholesale, exactly like the roster. Applied *before* the subscribes
+    // below so they are filtered by it on the way through rather than issued
+    // and then withdrawn - and a snapshot with no `subscriptions` clears any
+    // set that was in force, which is the ordinary small room saying "pull
+    // everyone who is publishing".
+    webRtc.applySubscriptionSet(snapshot.subscriptions);
+
     for (final p in snapshot.publishersExcept(_myUserId)) {
       unawaited(
         webRtc.subscribeToParticipant(
@@ -634,6 +735,18 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     }
   }
 
+  /// One tick of the HTTP liveness loop - see [VoiceLiveness].
+  ///
+  /// Null when there is no active call to assert. The timer is started after
+  /// the phase goes active and stopped in [_teardown], so that only happens to
+  /// a tick that raced a hang-up - and a hang-up is not the server evicting us,
+  /// which is the one thing a non-null answer here would be read as.
+  Future<VoiceLivenessOutcome?> _assertAlive() async {
+    final callId = state.call?.id;
+    if (callId == null || state.phase != CallPhase.active) return null;
+    return repository.assertAlive(callId);
+  }
+
   // ── Local controls ────────────────────────────────────────────────────────
 
   Future<void> toggleMute() async {
@@ -645,7 +758,12 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
         participants: _updateSelf((p) => p.copyWith(isMuted: isMuted)),
       ),
     );
-    _webRtc?.setMuted(isMuted);
+    await _webRtc?.setMuted(isMuted);
+    // Muting is not a pause in speech and must not be debounced like one: held
+    // through the release delay, this device stays ranked as talking with its
+    // microphone off, and every other client in the room stays subscribed to
+    // the silence.
+    if (isMuted) _speaking?.silenceNow();
     final callId = state.call?.id;
     if (callId != null) {
       await repository.invokeMuteChanged(callId: callId, isMuted: isMuted);
@@ -678,10 +796,19 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
 
   /// Whether asking to publish video here would only be refused.
   ///
-  /// False when no limits have been reported: a control disabled on the
-  /// strength of a field nobody sent is worse than one that is pressed and
-  /// answered.
-  bool get isVideoBlocked => !(state.limits?.canPublishVideo ?? true);
+  /// Two independent sources, and both have to permit it. The room's limits
+  /// describe what this room allows; the **connection token** describes what
+  /// this client was actually granted, which is the more authoritative of the
+  /// two - a member whose plan carries no video connects and hears everyone,
+  /// and cannot turn a camera on however the client is patched. Rendering the
+  /// control from a locally computed permission instead is how a button that
+  /// cannot work stays enabled.
+  ///
+  /// False when neither has been reported: a control disabled on the strength
+  /// of a field nobody sent is worse than one that is pressed and answered.
+  bool get isVideoBlocked =>
+      !(state.limits?.canPublishVideo ?? true) ||
+      !(_webRtc?.canPublishVideo ?? true);
 
   Future<void> toggleCamera() async {
     if (state.phase != CallPhase.active) return;
@@ -888,9 +1015,10 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   /// A reconnect is when to assert this client's state, not when to rebuild it.
   ///
   /// A dropped socket is not leaving the call: the server shortens this client's liveness window
-  /// rather than evicting it, and reconnecting restores it - so nothing here touches the peer
-  /// connection or the media session. They ride their own transport, and rebuilding them on a
-  /// websocket blip spends the session id and earns `sessionGone` on every call after it.
+  /// rather than evicting it, and reconnecting restores it - so nothing here touches the SFU
+  /// connection. The hub and the media are entirely independent transports, the SDK has its own
+  /// reconnect for its own socket, and rebuilding media on a hub blip drops audio for a fault that
+  /// was never on the media path.
   ///
   /// What the gap does cost is events, which SignalR does not queue. The heartbeat goes first and
   /// immediately rather than at the next 30-second tick: it restores the liveness window and brings
@@ -939,17 +1067,20 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
       case CallSnapshotReceived(:final snapshot):
         _applySnapshot(snapshot);
 
+      case CallSubscriptionsChanged(:final subscriptions):
+        // Nobody did anything - the conversation moved. The transport diffs
+        // this against what it is currently pulling and adjusts; nothing here
+        // tears anything down, and everyone stays rendered.
+        if (state.phase != CallPhase.active) return;
+        _webRtc?.applySubscriptionSet(subscriptions);
+
       case CallResyncRequested():
         // Everything but roomGone was already answered by a refetch in the
         // repository. roomGone means the room is gone: rejoining has to go
         // through the authorised path, so this device hangs up locally rather
         // than re-asserting itself.
         if (event.isRoomGone && state.phase == CallPhase.active) {
-          unawaited(() async {
-            final webRtc = await _teardown();
-            emitIfOpen(_cleared());
-            await webRtc?.disconnect();
-          }());
+          unawaited(_handleRoomGone());
         }
 
       case IncomingCallReceived(:final call):
@@ -1141,6 +1272,18 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
           }());
         }
     }
+  }
+
+  /// The room is gone, or this device is not in it. Reached two ways, and the
+  /// second is the one that matters during an outage: `Resync(roomGone)` over
+  /// the hub, and a `404`/`409` from the HTTP liveness ping. A client the sweep
+  /// evicted is announced to the roster it has just been removed from, so it is
+  /// the one participant the hub event does not reach - the ping is the only
+  /// channel that can tell it.
+  Future<void> _handleRoomGone() async {
+    final webRtc = await _teardown();
+    emitIfOpen(_cleared());
+    await webRtc?.disconnect();
   }
 
   void _handleTrackPublished({
@@ -1350,6 +1493,7 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
   @override
   Future<void> close() {
     _heartbeat.stop();
+    _liveness.stop();
     unawaited(_sub.cancel());
     unawaited(_connectionSub.cancel());
     return super.close();

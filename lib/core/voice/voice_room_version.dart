@@ -26,12 +26,20 @@ enum VoiceEventVerdict {
 ///    loss). Versions restart from zero, so they collide with numbers already
 ///    seen behind a completely different roster. Compared *first*, because it
 ///    is the only signal a rebuild gives.
-///  * **relay events** - `SpeakingChanged` and `CameraChanged` are not stored
-///    server-side and do not bump the version, so they arrive carrying the
-///    version already held. They are applied without advancing anything:
-///    advancing on a relay would let it stand in for a state change actually
-///    missed, and the next real event would then look contiguous when it is
-///    not.
+///  * **relay events** - `SpeakingChanged`, `CameraChanged` and
+///    `SubscriptionsChanged` are not stored server-side and do not bump the
+///    version, so they arrive carrying the version already held. They are
+///    applied without advancing anything: advancing on a relay would let it
+///    stand in for a state change actually missed, and the next real event would
+///    then look contiguous when it is not.
+///
+///    `SubscriptionsChanged` is in that list for a second reason on top of the
+///    first. The subscription set moves at *conversational* frequency - every
+///    time the ranked speaker changes - so versioning it would make every
+///    sentence anybody says look like a missed roster change to every client in
+///    the room, and answer each one with a snapshot refetch. It carries its own
+///    `revision` instead, which is unrelated to the version and is guarded
+///    separately in `VoiceSubscriptionPlan`.
 ///  * **`version < held`** - *strictly* older. Events from two server
 ///    instances can interleave, and one arriving late must not overwrite newer
 ///    state.
@@ -78,8 +86,9 @@ class VoiceRoomVersionTracker {
   /// the event actually represents one, so a caller that forgets to act on the
   /// verdict cannot silently desync.
   ///
-  /// [isRelay] marks `SpeakingChanged` and `CameraChanged`, which carry the
-  /// current version without being a change to it.
+  /// [isRelay] marks `SpeakingChanged`, `CameraChanged` and
+  /// `SubscriptionsChanged`, which carry the current version without being a
+  /// change to it.
   VoiceEventVerdict evaluate({
     required String? instanceId,
     required int? version,

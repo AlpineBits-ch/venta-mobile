@@ -93,6 +93,7 @@ _VoiceRoomSnapshotDto _$VoiceRoomSnapshotDtoFromJson(
           .toList() ??
       const <VoiceParticipantSnapshotDto>[],
   limits: voiceRoomLimitsFromJson(json['limits'] as Map<String, dynamic>?),
+  subscriptions: voiceSubscriptionSetFromJson(json['subscriptions']),
 );
 
 Map<String, dynamic> _$VoiceRoomSnapshotDtoToJson(
@@ -105,4 +106,5 @@ Map<String, dynamic> _$VoiceRoomSnapshotDtoToJson(
   'version': instance.version,
   'participants': instance.participants,
   'limits': voiceRoomLimitsToJson(instance.limits),
+  'subscriptions': voiceSubscriptionSetToJson(instance.subscriptions),
 };

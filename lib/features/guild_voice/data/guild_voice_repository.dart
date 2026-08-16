@@ -4,6 +4,7 @@ import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/realtime/realtime_transport.dart';
 import '../../../core/voice/voice_heartbeat.dart';
+import '../../../core/voice/voice_liveness.dart';
 import '../../../core/voice/voice_room_gate.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
 import 'guild_voice_api.dart';
@@ -187,6 +188,24 @@ class VoiceScreenShareStopped extends GuildVoiceEvent {
   final String shareId;
 }
 
+/// What this client should now be pulling.
+///
+/// Sent without any user action - the conversation moved - and per-recipient,
+/// so this set is nobody else's. It only ever removes, so applying one can
+/// never break a subscription that was valid.
+///
+/// Relay only: the envelope carries the room version without being a change to
+/// it. Ordering is guarded by the set's own `revision` instead - see
+/// [VoiceSubscriptionPlan].
+class VoiceSubscriptionsChanged extends GuildVoiceEvent {
+  const VoiceSubscriptionsChanged({
+    required this.channelId,
+    required this.subscriptions,
+  });
+  final String channelId;
+  final VoiceSubscriptionSetDto subscriptions;
+}
+
 /// Who is currently watching one screen share.
 class VoiceShareViewersChanged extends GuildVoiceEvent {
   const VoiceShareViewersChanged({
@@ -311,7 +330,16 @@ class GuildVoiceRepository {
     // server neither stores them nor bumps the version for them. Letting one
     // advance the baseline would have it stand in for a state change that was
     // actually missed, and the next real event would look contiguous.
-    const relays = {'guild.voice.SpeakingChanged', 'guild.voice.CameraChanged'};
+    //
+    // `SubscriptionsChanged` belongs here for a second reason as well: the set
+    // moves every time the ranked speaker does, so version-gating it would turn
+    // every sentence anybody speaks into an apparent gap - and a snapshot
+    // refetch - for every client in the room.
+    const relays = {
+      'guild.voice.SpeakingChanged',
+      'guild.voice.CameraChanged',
+      'guild.voice.SubscriptionsChanged',
+    };
 
     if (!ungated.contains(event.name) &&
         !_gate.admit(
@@ -432,6 +460,16 @@ class GuildVoiceRepository {
             shareId: payload['shareId'] as String,
           ),
         );
+      case 'guild.voice.SubscriptionsChanged':
+        // The payload *is* the set, alongside the usual envelope - the same
+        // shape the snapshot carries under `subscriptions`, so one parser
+        // handles both.
+        _eventsController.add(
+          VoiceSubscriptionsChanged(
+            channelId: channelId ?? '',
+            subscriptions: VoiceSubscriptionSetDto.fromJson(payload),
+          ),
+        );
       case 'guild.voice.ShareViewersChanged':
         _eventsController.add(
           VoiceShareViewersChanged(
@@ -467,6 +505,13 @@ class GuildVoiceRepository {
 
   Future<void> leave(String guildId, String channelId) =>
       api.leave(guildId, channelId);
+
+  /// The HTTP half of this client's liveness, deliberately not routed through
+  /// [_realtimeService] like the heartbeat below it - see [VoiceLiveness].
+  Future<VoiceLivenessOutcome> assertAlive({
+    required String guildId,
+    required String channelId,
+  }) => api.assertAlive(guildId, channelId);
 
   /// Roster read for a channel the user has not joined - the same snapshot,
   /// which is safe because it withholds media handles for anyone not actually
@@ -530,6 +575,27 @@ class GuildVoiceRepository {
     'guild.voice.CameraChanged',
     args: [
       {'channelId': channelId, 'isCameraOn': isCameraOn},
+    ],
+  );
+
+  /// The **sole** input to active-speaker ranking.
+  ///
+  /// A guild channel whose clients do not send this stays `mode: "all"` at any
+  /// size, which is what every guild room did until the command existed:
+  /// nothing looks broken, and nothing is saved. That is the state this client
+  /// was in, because it never called it.
+  ///
+  /// Always driven through `VoiceSpeakingDetector` rather than from a raw
+  /// signal. The server admits a speaker the instant it is told, so an
+  /// un-hysteresised report costs every other client in the room a
+  /// resubscription.
+  Future<void> invokeSpeakingChanged({
+    required String channelId,
+    required bool isSpeaking,
+  }) => _realtimeService.invoke(
+    'guild.voice.SpeakingChanged',
+    args: [
+      {'channelId': channelId, 'isSpeaking': isSpeaking},
     ],
   );
 

@@ -1,10 +1,15 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:livekit_client/livekit_client.dart' show VideoQuality;
 import 'package:venta_mobile/core/voice/track_naming.dart';
+import 'package:venta_mobile/core/voice/video_layers.dart';
+import 'package:venta_mobile/core/voice/voice_identity.dart';
 import 'package:venta_mobile/core/voice/voice_media_api.dart';
 import 'package:venta_mobile/core/voice/voice_room_gate.dart';
 import 'package:venta_mobile/core/voice/voice_room_version.dart';
 import 'package:venta_mobile/core/voice/voice_snapshot_dto.dart';
+import 'package:venta_mobile/core/voice/voice_speaking_detector.dart';
+import 'package:venta_mobile/core/voice/voice_subscription_set.dart';
 
 /// The two rules a voice client cannot skip, and the one string-parsing trap
 /// that silently subscribes it to a track that does not exist.
@@ -201,127 +206,83 @@ void main() {
     VoiceMediaException failureOf(int status, Map<String, dynamic>? body) =>
         VoiceMediaException.from(
           DioException(
-            requestOptions: RequestOptions(path: '/tracks'),
+            requestOptions: RequestOptions(path: '/publish'),
             response: Response<Map<String, dynamic>>(
-              requestOptions: RequestOptions(path: '/tracks'),
+              requestOptions: RequestOptions(path: '/publish'),
               statusCode: status,
               data: body,
             ),
           ),
-          'tracks',
+          'publish',
         );
 
-    test('a 409 staleSubscription is a stale client, not a failure', () {
-      // Incident VNT-GE21R3P7: a publisher stopped a share without closing its
-      // tracks, so the snapshot kept advertising it and watchers kept pulling
-      // media nobody was sending. The server answered 502 after six seconds of
-      // SFU retries, clients retried the identical body, and four rounds of
-      // that put voice on the status page.
-      final stale = failureOf(409, {
-        'error': 'staleSubscription',
-        'tracks': ['screen-7c41c31c'],
-        'action': 'refetchSnapshot',
+    /// The three 503s are three different situations sharing one status, and
+    /// telling them apart is the whole of this group. Collapsed together they
+    /// produce the two worst outcomes available: a retry loop against a server
+    /// that will never have voice, and a call torn down over a control-plane
+    /// blip that the media never noticed.
+    test('voiceNotConfigured is a supported state, not a fault', () {
+      final notConfigured = failureOf(503, {
+        'error': 'voiceNotConfigured',
+        'action': 'contactOperator',
       });
 
-      expect(stale.isStale, isTrue);
-      expect(stale.staleTracks, ['screen-7c41c31c']);
-      expect(stale.action, 'refetchSnapshot');
-      expect(stale.isTransportFailure, isFalse);
+      expect(notConfigured.isVoiceNotConfigured, isTrue);
+      expect(notConfigured.isContended, isFalse);
+      expect(notConfigured.isSfuUnavailable, isFalse);
+      expect(notConfigured.action, 'contactOperator');
     });
 
-    test('a 409 with no body still reads as stale', () {
-      // `tracks` is absent when the publisher vanished mid-request. The meaning
-      // is identical, so nothing may branch on its presence.
-      expect(failureOf(409, null).isStale, isTrue);
-      expect(failureOf(409, null).staleTracks, isEmpty);
+    test('a server without voice is never retried', () {
+      // There is no SFU on this instance and there will not be one before the
+      // operator configures it. A retry loop is one request per interval for
+      // the life of the session, answering a question already answered.
+      expect(
+        voiceRetryDelay(failureOf(503, {'error': 'voiceNotConfigured'}), 1),
+        isNull,
+      );
+    });
+
+    test('sfuUnavailable is transient and backs off', () {
+      // The control plane could not be reached. Media does not travel that
+      // path, so every call in progress is unaffected - this must never be read
+      // as a reason to tear anything down.
+      final unavailable = failureOf(503, {
+        'error': 'sfuUnavailable',
+        'action': 'retry',
+      });
+
+      expect(unavailable.isSfuUnavailable, isTrue);
+      expect(unavailable.isVoiceNotConfigured, isFalse);
+      expect(unavailable.isContended, isFalse);
+      expect(voiceRetryDelay(unavailable, 1), const Duration(seconds: 1));
+      expect(voiceRetryDelay(unavailable, 3), const Duration(seconds: 4));
+    });
+
+    test('an unlabelled 503 is the contended room', () {
+      // Nothing about the request was wrong and the change simply was not
+      // applied, so this is the one 503 that is retried quickly.
+      final contended = failureOf(503, null);
+
+      expect(contended.isContended, isTrue);
+      expect(contended.isVoiceNotConfigured, isFalse);
+      expect(contended.isSfuUnavailable, isFalse);
+      expect(
+        voiceRetryDelay(contended, 1),
+        lessThan(const Duration(seconds: 1)),
+      );
     });
 
     test('the other statuses keep their own meanings', () {
-      expect(
-        failureOf(502, {'operation': 'tracks', 'error': 'boom'}).isStale,
-        isFalse,
-      );
-      expect(
-        failureOf(502, {
-          'operation': 'tracks',
-          'error': 'boom',
-        }).isTransportFailure,
-        isTrue,
-      );
-      expect(failureOf(503, null).isContended, isTrue);
-      expect(failureOf(403, null).isFatal, isTrue);
-      expect(failureOf(404, null).isFatal, isTrue);
-    });
-
-    /// "Our own session is gone", as opposed to "the track we asked for is gone".
-    ///
-    /// Both are 409s and they are told apart by the code alone, so this pair is the whole
-    /// distinction. Confusing them either rebuilds a healthy session over a stopped share, or
-    /// answers a spent session with a roster refetch that cannot possibly help.
-    test(
-      'a 409 sessionGone is our own session, not somebody else\'s track',
-      () {
-        final gone = failureOf(409, {
-          'error': 'sessionGone',
-          'action': 'recreateSession',
-        });
-
-        expect(gone.isSessionGone, isTrue);
-        expect(gone.isStale, isFalse);
-        expect(gone.action, 'recreateSession');
-      },
-    );
-
-    test('a stale subscription is not a dead session', () {
-      final stale = failureOf(409, {'error': 'staleSubscription'});
-
-      expect(stale.isSessionGone, isFalse);
-    });
-
-    test('the transport wording for the same condition is recognised too', () {
-      // What leaks through when the operation reaches the SFU before the server classifies it -
-      // and what this client was actually being sent in the field.
-      final gone = failureOf(502, {
-        'operation': 'tracks/new',
-        'error':
-            '{"errorCode":"session_error","errorDescription":"Session appears '
-            'to be disconnected. Please check if the PeerConnection is connected."}',
+      final transport = failureOf(502, {
+        'operation': 'publish',
+        'error': 'boom',
       });
 
-      expect(gone.isSessionGone, isTrue);
-    });
-
-    test('an ordinary transport failure is not a dead session', () {
-      // It must keep its backoff. Treating every 502 as a dead session would tear down a healthy
-      // one over a blip and lose every subscription on it.
-      final failure = failureOf(502, {'operation': 'tracks', 'error': 'boom'});
-
-      expect(failure.isSessionGone, isFalse);
-      expect(voiceRetryDelay(failure, 1), isNotNull);
-    });
-
-    test('a dead session is never retried, on either status', () {
-      // The session is spent: the identical body fails identically for as long as anyone tries.
-      // Recreating it is the only move, and that is the owner's to make.
-      expect(
-        voiceRetryDelay(failureOf(409, {'error': 'sessionGone'}), 1),
-        isNull,
-      );
-      expect(
-        voiceRetryDelay(
-          failureOf(502, {'operation': 'tracks', 'error': 'session_error'}),
-          1,
-        ),
-        isNull,
-      );
-    });
-
-    test('a stale subscribe is never retried', () {
-      // Retrying the identical body is guaranteed to fail again. The only
-      // useful move is refetching the snapshot and subscribing from that.
-      final stale = failureOf(409, {'error': 'staleSubscription'});
-
-      expect(voiceRetryDelay(stale, 1), isNull);
+      expect(transport.isTransportFailure, isTrue);
+      expect(transport.isContended, isFalse);
+      expect(failureOf(403, null).isFatal, isTrue);
+      expect(failureOf(404, null).isFatal, isTrue);
     });
 
     test('a permission or missing-room failure is never retried', () {
@@ -330,20 +291,22 @@ void main() {
     });
 
     test('a transport failure backs off exponentially from a second', () {
-      final failure = failureOf(502, {'operation': 'tracks', 'error': 'boom'});
+      // Incident VNT-GE21R3P7: the same operation reattempted every 5-6 seconds
+      // against a state that could not have changed in between, which turned
+      // one bad moment into the burst that tripped a degraded threshold.
+      final failure = failureOf(502, {'operation': 'publish', 'error': 'boom'});
 
       expect(voiceRetryDelay(failure, 1), const Duration(seconds: 1));
       expect(voiceRetryDelay(failure, 2), const Duration(seconds: 2));
       expect(voiceRetryDelay(failure, 3), const Duration(seconds: 4));
     });
 
-    test('a contended room is retried quickly, since nothing was wrong', () {
-      final contended = failureOf(503, null);
-
-      expect(
-        voiceRetryDelay(contended, 1),
-        lessThan(const Duration(seconds: 1)),
-      );
+    test('this build drives livekit, and refuses to guess at anything else', () {
+      // An unrecognised backend means "I cannot handle this room". Guessing
+      // would drive a transport with different semantics and fail in a way that
+      // looks like a network problem.
+      expect(supportedVoiceBackends, contains('livekit'));
+      expect(supportedVoiceBackends, isNot(contains('cloudflare')));
     });
   });
 
@@ -494,6 +457,339 @@ void main() {
       // the microphone's session, where the track does not exist.
       expect(user.shares.single.mediaSessionId, 'cf-share');
       expect(user.joinedAt, isNotNull);
+    });
+
+    test('an absent subscription set is not an empty one', () {
+      // The difference between "pull everyone publishing" and "pull nobody".
+      // A `@Default` on the field would collapse the first into the second and
+      // silence the ordinary small room.
+      final snapshot = VoiceRoomSnapshotDto.fromJson({
+        'roomId': 'channel-1',
+        'kind': 'channel',
+        'instanceId': 'i1',
+        'version': 1,
+        'participants': <Map<String, dynamic>>[],
+      });
+
+      expect(snapshot.subscriptions, isNull);
+    });
+
+    test('a subscription set on the snapshot parses whole', () {
+      final snapshot = VoiceRoomSnapshotDto.fromJson({
+        'roomId': 'channel-1',
+        'kind': 'channel',
+        'instanceId': 'i1',
+        'version': 42,
+        'participants': <Map<String, dynamic>>[],
+        'subscriptions': {
+          'mode': 'activeSpeaker',
+          'revision': 12,
+          'activeSpeakers': ['user-1', 'user-9'],
+          'tracks': [
+            {
+              'userId': 'user-1',
+              'mediaSessionId': 'user-1',
+              'trackName': 'audio',
+              'kind': 'audio',
+              'shareId': null,
+              'layer': null,
+            },
+            {
+              'userId': 'user-4',
+              'mediaSessionId': 'user-2',
+              'trackName': 'screen-abc123',
+              'kind': 'screen',
+              'shareId': 'abc123',
+              'layer': 'b',
+            },
+          ],
+        },
+      });
+
+      final set = snapshot.subscriptions!;
+      expect(set.isRanked, isTrue);
+      expect(set.revision, 12);
+      expect(set.activeSpeakers, ['user-1', 'user-9']);
+      expect(set.isInForce, isTrue);
+      expect(set.tracks, hasLength(2));
+      expect(set.tracks!.last.trackKind, TrackKind.screen);
+      expect(set.tracks!.last.layer, VoiceVideoLayer.medium);
+    });
+  });
+
+  group('subscription plan', () {
+    late VoiceSubscriptionPlan plan;
+
+    setUp(() => plan = VoiceSubscriptionPlan());
+
+    VoiceSubscriptionSetDto setAt(
+      int revision, {
+      List<String> speakers = const [],
+      List<VoiceSubscriptionTrackDto> tracks = const [],
+    }) => VoiceSubscriptionSetDto(
+      mode: VoiceSubscriptionMode.activeSpeaker,
+      revision: revision,
+      activeSpeakers: speakers,
+      tracks: tracks,
+    );
+
+    test('no set means pull everyone, which is the small room', () {
+      expect(plan.isManaged, isFalse);
+      expect(plan.allows(userId: 'anyone', trackName: 'audio'), isTrue);
+    });
+
+    /// The three-state rule, which is the one thing here that fails silently.
+    ///
+    /// `tracks` absent and `tracks: []` are *opposite* instructions - "pull
+    /// everyone publishing" and "pull nobody" - and they arrive as the same
+    /// well-formed payload shape. Collapsing them is not refused by anything:
+    /// no request errors, no event is dropped, the room simply goes quiet in
+    /// the ordinary small case.
+    test('absent tracks is a revocation, not an empty set', () {
+      plan.adopt(
+        setAt(
+          1,
+          tracks: const [
+            VoiceSubscriptionTrackDto(userId: 'user-1', trackName: 'audio'),
+          ],
+        ),
+      );
+      expect(plan.isManaged, isTrue);
+
+      final changed = plan.adopt(
+        const VoiceSubscriptionSetDto(revision: 2),
+      );
+
+      expect(changed, isTrue);
+      expect(plan.isManaged, isFalse);
+      expect(plan.allows(userId: 'anyone', trackName: 'audio'), isTrue);
+    });
+
+    test('an empty set in force pulls nobody', () {
+      // Every tile collapsed. The opposite of the case above, and it has to
+      // stay reachable - a client that treated this as "no set" would keep
+      // paying for streams it has just been told nobody is looking at.
+      plan.adopt(setAt(1, tracks: const []));
+
+      expect(plan.isManaged, isTrue);
+      expect(plan.allows(userId: 'anyone', trackName: 'audio'), isFalse);
+    });
+
+    test('the DTO keeps absent and empty apart on the wire', () {
+      expect(
+        VoiceSubscriptionSetDto.fromJson({
+          'mode': 'all',
+          'revision': 3,
+        }).isInForce,
+        isFalse,
+      );
+      expect(
+        VoiceSubscriptionSetDto.fromJson({
+          'mode': 'all',
+          'revision': 3,
+          'tracks': <dynamic>[],
+        }).isInForce,
+        isTrue,
+      );
+    });
+
+    test('a revocation still respects revision ordering', () {
+      // Two server instances can interleave across a revocation as easily as
+      // across any other change. Forgetting the revision when the room goes
+      // unplanned would let the stale set that preceded it be adopted as new.
+      plan.adopt(setAt(12, tracks: const []));
+      plan.adopt(const VoiceSubscriptionSetDto(revision: 13));
+      expect(plan.isManaged, isFalse);
+
+      final changed = plan.adopt(
+        setAt(
+          12,
+          tracks: const [
+            VoiceSubscriptionTrackDto(userId: 'user-1', trackName: 'audio'),
+          ],
+        ),
+      );
+
+      expect(changed, isFalse);
+      expect(plan.isManaged, isFalse);
+    });
+
+    test('a set narrows to what it names', () {
+      plan.adopt(
+        setAt(
+          1,
+          tracks: const [
+            VoiceSubscriptionTrackDto(
+              userId: 'user-1',
+              trackName: 'audio',
+              kind: 'audio',
+            ),
+          ],
+        ),
+      );
+
+      expect(plan.isManaged, isTrue);
+      expect(plan.allows(userId: 'user-1', trackName: 'audio'), isTrue);
+      expect(plan.allows(userId: 'user-2', trackName: 'audio'), isFalse);
+    });
+
+    test('an older revision is ignored', () {
+      // Two server instances can interleave. A late arrival describes a set
+      // that has since moved on, so applying it resubscribes to whoever was
+      // talking a moment ago and then waits for the next change to correct
+      // itself. `revision` is unrelated to the room version.
+      plan.adopt(setAt(12, speakers: const ['user-9']));
+      final changed = plan.adopt(setAt(11, speakers: const ['user-1']));
+
+      expect(changed, isFalse);
+      expect(plan.activeSpeakers, ['user-9']);
+    });
+
+    test('an identical set is not a change', () {
+      // Every snapshot carries the current set whether or not it moved, so this
+      // is most adoptions - and each one that reported a change would cost a
+      // needless reconcile pass over every publication in the room.
+      plan.adopt(setAt(12, speakers: const ['user-9']));
+
+      expect(plan.adopt(setAt(12, speakers: const ['user-9'])), isFalse);
+    });
+
+    test('dropping the set goes back to pulling everyone', () {
+      // The room fell below the threshold, or stopped withholding anything.
+      plan.adopt(setAt(3));
+      final changed = plan.adopt(null);
+
+      expect(changed, isTrue);
+      expect(plan.isManaged, isFalse);
+      expect(plan.allows(userId: 'anyone', trackName: 'audio'), isTrue);
+    });
+
+    test('the layer is read per track, and null where nothing was said', () {
+      plan.adopt(
+        setAt(
+          1,
+          tracks: const [
+            VoiceSubscriptionTrackDto(
+              userId: 'user-4',
+              trackName: 'camera',
+              layer: VoiceVideoLayer.low,
+            ),
+          ],
+        ),
+      );
+
+      expect(plan.layerFor(userId: 'user-4', trackName: 'camera'), 'c');
+      expect(plan.layerFor(userId: 'user-9', trackName: 'camera'), isNull);
+    });
+
+    test('a layer maps onto the SDK quality, and silence means full', () {
+      // `a`/`b`/`c` is a ranking of the server's, not a rid and not a
+      // resolution - the SFU never sees a rid. An unknown or absent layer
+      // resolves to the top: an unreadable tile is a worse failure than an
+      // expensive one.
+      expect(videoQualityForLayer(VoiceVideoLayer.full), VideoQuality.HIGH);
+      expect(videoQualityForLayer(VoiceVideoLayer.medium), VideoQuality.MEDIUM);
+      expect(videoQualityForLayer(VoiceVideoLayer.low), VideoQuality.LOW);
+      expect(videoQualityForLayer(null), VideoQuality.HIGH);
+      expect(videoQualityForLayer('q'), VideoQuality.HIGH);
+    });
+  });
+
+  group('identity', () {
+    test('a primary identity is the bare user id', () {
+      // Not `user-{userId}`, whatever the worked examples look like at a
+      // glance. This is what lets a remote SFU participant be mapped to a user
+      // without consulting the snapshot.
+      expect(VoiceIdentity.userIdOf('AbC123'), 'AbC123');
+      expect(VoiceIdentity.tagOf('AbC123'), isNull);
+      expect(VoiceIdentity.isPrimaryOf('AbC123', 'AbC123'), isTrue);
+    });
+
+    test('a secondary identity splits on the first separator', () {
+      // User ids are Sqids and never contain a `#`, and a tag is stripped to
+      // alphanumerics before it is appended - so the first one is always the
+      // boundary.
+      expect(VoiceIdentity.userIdOf('AbC123#screen'), 'AbC123');
+      expect(VoiceIdentity.tagOf('AbC123#screen'), 'screen');
+      expect(VoiceIdentity.isPrimaryOf('AbC123#screen', 'AbC123'), isFalse);
+    });
+
+    test('a tag is sanitised the way the server sanitises it', () {
+      expect(VoiceIdentity.connectionTag('screen'), 'screen');
+      expect(VoiceIdentity.connectionTag('screen-2!'), 'screen2');
+      expect(VoiceIdentity.connectionTag('***'), 'alt');
+      expect(VoiceIdentity.connectionTag('a' * 40).length, 32);
+    });
+  });
+
+  group('speaking detector', () {
+    test('onset is immediate, because latency here is audible', () async {
+      // The server admits a speaker the instant it is told, deliberately:
+      // gating entry on duration makes the first person to talk in a quiet room
+      // inaudible for seconds.
+      final reports = <bool>[];
+      final detector = VoiceSpeakingDetector(
+        report: (speaking) async => reports.add(speaking),
+        releaseDelay: const Duration(milliseconds: 40),
+      );
+      addTearDown(detector.dispose);
+
+      detector.update(isSpeaking: true);
+
+      expect(reports, [true]);
+    });
+
+    test('a gap between words does not report a stop', () async {
+      // The overwhelming majority of raw transitions. Each one reported would
+      // be a subscription-set change for every other client in the room.
+      final reports = <bool>[];
+      final detector = VoiceSpeakingDetector(
+        report: (speaking) async => reports.add(speaking),
+        releaseDelay: const Duration(milliseconds: 40),
+      );
+      addTearDown(detector.dispose);
+
+      detector.update(isSpeaking: true);
+      detector.update(isSpeaking: false);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      detector.update(isSpeaking: true);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(reports, [true]);
+      expect(detector.reportedState, isTrue);
+    });
+
+    test('sustained silence does report a stop', () async {
+      final reports = <bool>[];
+      final detector = VoiceSpeakingDetector(
+        report: (speaking) async => reports.add(speaking),
+        releaseDelay: const Duration(milliseconds: 40),
+      );
+      addTearDown(detector.dispose);
+
+      detector.update(isSpeaking: true);
+      detector.update(isSpeaking: false);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(reports, [true, false]);
+    });
+
+    test('muting silences now rather than waiting out the release', () async {
+      // Muting is not a pause in speech. Held through the delay, this device
+      // stays ranked as talking with its microphone off - and every other
+      // client in the room stays subscribed to the silence.
+      final reports = <bool>[];
+      final detector = VoiceSpeakingDetector(
+        report: (speaking) async => reports.add(speaking),
+        releaseDelay: const Duration(seconds: 30),
+      );
+      addTearDown(detector.dispose);
+
+      detector.update(isSpeaking: true);
+      detector.silenceNow();
+
+      expect(reports, [true, false]);
+      expect(detector.isReleasePending, isFalse);
     });
   });
 }

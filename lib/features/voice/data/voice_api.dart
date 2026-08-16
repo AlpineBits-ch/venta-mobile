@@ -2,9 +2,11 @@ import 'package:dio/dio.dart';
 
 import '../../../core/device/device_id_service.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/voice/voice_liveness.dart';
 import '../../../core/voice/voice_media_api.dart';
 import '../../../core/voice/voice_media_dto.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
+import '../../../core/voice/voice_subscription_set.dart';
 import 'models/call_dto.dart';
 import 'models/ongoing_call_dto.dart';
 
@@ -159,112 +161,117 @@ class VoiceApi {
     return VoiceRoomSnapshotDto.fromJson(response.data!);
   }
 
-  /// ICE servers for the peer connection. CF Calls' SFU is publicly routable,
-  /// so this is not needed for the SFU leg itself.
-  Future<List<Map<String, dynamic>>> getIceServers() async {
-    final response = await client.dio.get<dynamic>(
-      client.url('$_base/ice-servers'),
-      options: _deviceOptions,
-    );
-    final data = response.data;
-    if (data is List) return data.cast<Map<String, dynamic>>();
-    if (data is Map<String, dynamic> && data['iceServers'] is List) {
-      return (data['iceServers'] as List).cast<Map<String, dynamic>>();
+  /// "I am still here", over HTTP rather than over the hub - see
+  /// [VoiceLiveness] for why the room needs telling twice by two different
+  /// routes.
+  ///
+  /// Note the **plural** `calls` segment: this is one of the voice-room routes,
+  /// not one of the call-lifecycle ones, and the two path shapes are both
+  /// correct as written (see the class comment). Answers an outcome instead of
+  /// throwing, because `404` and `409` are two of the three expected replies
+  /// rather than faults - the loop that calls this every 30 seconds has to
+  /// branch on all three.
+  Future<VoiceLivenessOutcome> assertAlive(String callId) async {
+    try {
+      await client.dio.post<void>(
+        client.url('$_base/calls/$callId/alive'),
+        options: _deviceOptions,
+      );
+      return VoiceLivenessOutcome.alive;
+    } on DioException catch (e) {
+      return voiceLivenessOutcomeFor(e.response?.statusCode);
     }
-    return const [];
   }
 
-  /// [primary] mirrors the backend's query flag: a primary session carries
-  /// this participant's microphone and runs the device-connect/takeover path
-  /// server-side; a secondary one (a second session for a screen track alone)
-  /// deliberately skips it. This client only ever opens primary sessions - it
-  /// publishes screen share on the same peer connection as its mic.
+  /// Mints a connection to the SFU node this call lives on.
   ///
-  /// The response names the media backend as well as the session, so the
+  /// [primary] mirrors the backend's query flag: a primary connection carries
+  /// this participant's microphone and runs the device-connect/takeover path
+  /// server-side. This client only ever opens primary connections - it
+  /// publishes screen share over the same one as its microphone, which is what
+  /// a single-process client should do.
+  ///
+  /// The response names the media backend as well as the connection, so the
   /// client picks its media layer from a declared value rather than inferring
   /// one from the shape of what came back.
-  Future<VoiceSessionDto> createSession(String callId, {bool primary = true}) =>
-      mapMediaErrors('session', () async {
-        final response = await client.dio.post<Map<String, dynamic>>(
-          client.url('$_base/calls/$callId/session'),
-          queryParameters: {'primary': primary},
-          options: _deviceOptions,
-        );
-        return VoiceSessionDto.fromJson(response.data!);
-      });
-
-  /// Publishes and/or subscribes tracks in one negotiation.
-  Future<VoiceNegotiateResponseDto> negotiate({
-    required String callId,
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    required List<Map<String, dynamic>> tracks,
-    Map<String, dynamic>? video,
-  }) => mapMediaErrors('tracks', () async {
+  Future<VoiceConnectionDto> createConnection(
+    String callId, {
+    bool primary = true,
+    String? tag,
+  }) => mapMediaErrors('connection', () async {
     final response = await client.dio.post<Map<String, dynamic>>(
-      client.url('$_base/calls/$callId/tracks'),
-      data: {
-        'mediaSessionId': mediaSessionId,
-        'sessionDescription': sessionDescription,
-        'tracks': tracks,
-        'video': ?video,
-      },
+      client.url('$_base/calls/$callId/connection'),
+      queryParameters: {'primary': primary, 'tag': ?tag},
       options: _deviceOptions,
     );
-    return VoiceNegotiateResponseDto.fromJson(response.data!);
+    return VoiceConnectionDto.fromJson(response.data!);
   });
 
-  /// [video] is sent only when this renegotiation changes the picture - see
-  /// `VoiceMediaApi.renegotiate`. Omitted, the server leaves whatever the last
-  /// declaration recorded in force.
-  Future<VoiceRenegotiateResponseDto> renegotiate({
+  /// Declares tracks already published through the SDK. See
+  /// `VoiceMediaApi.declarePublish` for why this is not optional despite the
+  /// media working without it.
+  Future<VoicePublishResultDto> declarePublish({
     required String callId,
-    required String mediaSessionId,
-    required Map<String, dynamic> sessionDescription,
-    Map<String, dynamic>? video,
-  }) => mapMediaErrors('negotiate', () async {
-    final response = await client.dio.put<Map<String, dynamic>>(
-      client.url('$_base/calls/$callId/negotiate'),
-      data: {
-        'mediaSessionId': mediaSessionId,
-        'sessionDescription': sessionDescription,
-        'video': ?video,
-      },
-      options: _deviceOptions,
-    );
-    return VoiceRenegotiateResponseDto.fromJson(response.data!);
-  });
-
-  Future<void> closeTracks({
-    required String callId,
-    required String mediaSessionId,
     required List<String> trackNames,
-  }) => mapMediaErrors('tracks/close', () async {
+    Map<String, dynamic>? video,
+  }) => mapMediaErrors('publish', () async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      client.url('$_base/calls/$callId/publish'),
+      data: {'trackNames': trackNames, 'video': ?video},
+      options: _deviceOptions,
+    );
+    return VoicePublishResultDto.fromJson(response.data ?? const {});
+  });
+
+  Future<void> unpublish({
+    required String callId,
+    required List<String> trackNames,
+  }) => mapMediaErrors('unpublish', () async {
     await client.dio.post<void>(
-      client.url('$_base/calls/$callId/tracks/close'),
-      data: {'mediaSessionId': mediaSessionId, 'trackNames': trackNames},
+      client.url('$_base/calls/$callId/unpublish'),
+      data: {'trackNames': trackNames},
       options: _deviceOptions,
     );
   });
 
-  /// Reports this client's own rendering - tile sizes, pins and share audio.
-  /// Omitted fields are left alone server-side, so a tile resize is a body with
-  /// `tileHeights` in it and nothing else.
-  Future<void> updateSubscriber({
+  /// Declares a resolution change made without republishing. Never refuses.
+  Future<void> declareVideo({
     required String callId,
+    required Map<String, dynamic> video,
+  }) => mapMediaErrors('video', () async {
+    await client.dio.put<void>(
+      client.url('$_base/calls/$callId/video'),
+      data: video,
+      options: _deviceOptions,
+    );
+  });
+
+  /// Reports this client's own rendering - tile sizes, pins, collapsed tiles,
+  /// backgrounding and share audio. Omitted fields are left alone server-side,
+  /// so a tile resize is a body with `tileHeights` in it and nothing else.
+  ///
+  /// The reply is this client's own subscription set, so a caller can act on
+  /// what it just reported without waiting for the push.
+  Future<VoiceSubscriptionSetDto?> updateSubscriber({
+    required String callId,
+    bool? paused,
     Map<String, int>? tileHeights,
     List<String>? pinned,
+    List<String>? pausedPublishers,
     List<String>? screenAudioShares,
   }) => mapMediaErrors('subscriptions', () async {
-    await client.dio.post<void>(
+    final response = await client.dio.post<dynamic>(
       client.url('$_base/calls/$callId/subscriptions'),
       data: {
+        'paused': ?paused,
         'tileHeights': ?tileHeights,
         'pinned': ?pinned,
+        'pausedPublishers': ?pausedPublishers,
         'screenAudioShares': ?screenAudioShares,
       },
       options: _deviceOptions,
     );
+    return voiceSubscriptionSetFromJson(response.data);
   });
 
   // ── Screen share viewership ───────────────────────────────────────────────

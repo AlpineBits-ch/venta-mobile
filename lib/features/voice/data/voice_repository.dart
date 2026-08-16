@@ -5,6 +5,7 @@ import '../../../core/realtime/realtime_event.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/realtime/realtime_transport.dart';
 import '../../../core/voice/voice_heartbeat.dart';
+import '../../../core/voice/voice_liveness.dart';
 import '../../../core/voice/voice_room_gate.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
 import 'models/call_dto.dart';
@@ -201,6 +202,19 @@ class CallShareViewersChanged extends VoiceRepositoryEvent {
   final List<String> viewerIds;
 }
 
+/// What this client should now be pulling.
+///
+/// Sent without any user action - the conversation moved - and per-recipient,
+/// so this set is nobody else's. It only ever removes, so applying one can never
+/// break a subscription that was valid.
+///
+/// Relay only: the envelope carries the room version without being a change to
+/// it. Ordering is guarded by the set's own `revision` instead.
+class CallSubscriptionsChanged extends VoiceRepositoryEvent {
+  const CallSubscriptionsChanged(this.subscriptions);
+  final VoiceSubscriptionSetDto subscriptions;
+}
+
 /// A call in one of this user's conversations started, changed roster, or
 /// ended - sent to *every member of the conversation*, whether or not they are
 /// in the call.
@@ -319,7 +333,16 @@ class VoiceRepository {
     // server neither stores them nor bumps the version for them. Letting one
     // advance the baseline would have it stand in for a state change that was
     // actually missed, and the next real event would look contiguous.
-    const relays = {'call.SpeakingChanged', 'call.CameraChanged'};
+    //
+    // `SubscriptionsChanged` belongs here for a second reason as well: the set
+    // moves every time the ranked speaker does, so version-gating it would turn
+    // every sentence anybody speaks into an apparent gap - and a snapshot
+    // refetch - for every client in the call.
+    const relays = {
+      'call.SpeakingChanged',
+      'call.CameraChanged',
+      'call.SubscriptionsChanged',
+    };
 
     if (!ungated.contains(event.name) &&
         !_gate.admit(
@@ -477,6 +500,13 @@ class VoiceRepository {
                 .cast<String>(),
           ),
         );
+      case 'call.SubscriptionsChanged':
+        // The payload *is* the set, alongside the usual envelope - the same
+        // shape the snapshot carries under `subscriptions`, so one parser
+        // handles both.
+        _eventsController.add(
+          CallSubscriptionsChanged(VoiceSubscriptionSetDto.fromJson(payload)),
+        );
     }
   }
 
@@ -503,6 +533,11 @@ class VoiceRepository {
   Future<CallDto> endCall(String callId) => api.endCall(callId);
 
   Future<CallDto> getCall(String callId) => api.getCall(callId);
+
+  /// The HTTP half of this client's liveness, deliberately not routed through
+  /// [_realtimeService] like the heartbeat below it - see [VoiceLiveness].
+  Future<VoiceLivenessOutcome> assertAlive(String callId) =>
+      api.assertAlive(callId);
 
   /// See [VoiceApi.getPendingCall] - the catch-up read for a ring this client
   /// was never told about.

@@ -102,9 +102,12 @@ void main() {
     // DTOs require, since these tests only ever assert on the request side.
     adapter = _CapturingAdapter({
       ..._callBody,
-      'mediaSessionId': 'media-session-1',
-      'backend': 'cloudflare',
-      'sessionDescription': <String, dynamic>{'type': 'answer', 'sdp': ''},
+      'backend': 'livekit',
+      'url': 'wss://sfu-fsn1.venta.gg',
+      'token': 'jwt',
+      'room': 'call-1',
+      'identity': 'user-1',
+      'mediaSessionId': 'user-1',
     });
     client.dio.httpClientAdapter = adapter;
 
@@ -115,72 +118,68 @@ void main() {
   });
 
   group('X-Device-Id', () {
-    test('the media session request carries it', () async {
+    test('the connection request carries it', () async {
       // The regression itself: this endpoint runs ConnectDevice server-side
-      // and was the one sending nothing.
-      await api.createSession('call-1');
-      expect(deviceHeaderFor('/session'), _kDeviceId);
+      // and was the one sending nothing. The route moved from `/session` to
+      // `/connection` with the SFU; the takeover comparison behind it did not.
+      await api.createConnection('call-1');
+      expect(deviceHeaderFor('/connection'), _kDeviceId);
     });
 
-    test('accept and the session request agree on the id', () async {
+    test('accept and the connection request agree on the id', () async {
       // The comparison the backend actually makes. Equality here is what
       // decides between "same device, carry on" and "takeover, tear down".
       await api.acceptCall('call-1');
-      await api.createSession('call-1');
+      await api.createConnection('call-1');
 
       expect(deviceHeaderFor('/accept'), isNotNull);
-      expect(deviceHeaderFor('/accept'), deviceHeaderFor('/session'));
+      expect(deviceHeaderFor('/accept'), deviceHeaderFor('/connection'));
     });
 
     test(
-      'the session request never falls back to the "default" bucket',
+      'the connection request never falls back to the "default" bucket',
       () async {
         // Guards the specific value the server substitutes for a missing
         // header - a client that sent the literal string would collide with
         // every other device in that bucket.
-        await api.createSession('call-1');
-        expect(deviceHeaderFor('/session'), isNot('default'));
+        await api.createConnection('call-1');
+        expect(deviceHeaderFor('/connection'), isNot('default'));
       },
     );
 
-    test('leave sends the same id the session request registered', () async {
+    test('leave sends the same id the connection registered', () async {
       // Call.Leave no-ops unless the header matches the ActiveDeviceId that
-      // the session request stored, so a mismatch here leaves the user
+      // the connection request stored, so a mismatch here leaves the user
       // connected server-side until the alone-timeout fires.
-      await api.createSession('call-1');
+      await api.createConnection('call-1');
       await api.leaveCall('call-1');
-      expect(deviceHeaderFor('/leave'), deviceHeaderFor('/session'));
+      expect(deviceHeaderFor('/leave'), deviceHeaderFor('/connection'));
     });
 
     test('every call-scoped endpoint sends it', () async {
       // The failure mode was one endpoint out of nine being forgotten, so
       // assert the whole surface rather than the endpoints known to matter
-      // today - ConnectDevice has already spread from accept to session once.
+      // today - ConnectDevice has already spread from accept to the connection
+      // request once.
       await api.createCall(conversationId: 'c1', participantUserIds: ['u2']);
       await api.acceptCall('call-1');
       await api.declineCall('call-1');
       await api.leaveCall('call-1');
       await api.endCall('call-1');
       await api.getCall('call-1');
-      await api.createSession('call-1');
-      await api.negotiate(
+      await api.createConnection('call-1');
+      await api.declarePublish(
         callId: 'call-1',
-        mediaSessionId: 'media-session-1',
-        sessionDescription: const {},
-        tracks: const [],
-      );
-      await api.renegotiate(
-        callId: 'call-1',
-        mediaSessionId: 'media-session-1',
-        sessionDescription: const {},
-      );
-      await api.closeTracks(
-        callId: 'call-1',
-        mediaSessionId: 'media-session-1',
         trackNames: const ['audio'],
       );
+      await api.declareVideo(
+        callId: 'call-1',
+        video: const {'height': 720, 'framerate': 30},
+      );
+      await api.unpublish(callId: 'call-1', trackNames: const ['audio']);
+      await api.updateSubscriber(callId: 'call-1', paused: true);
 
-      expect(adapter.requests, hasLength(10));
+      expect(adapter.requests, hasLength(11));
       for (final request in adapter.requests) {
         expect(
           request.headers['X-Device-Id'],
@@ -190,13 +189,32 @@ void main() {
       }
     });
 
-    test('the session request declares itself primary', () async {
-      // `primary=false` is the branch that deliberately skips ConnectDevice.
-      // This client publishes screen share on its mic peer connection, so it
-      // only ever opens primary sessions - and must not accidentally opt out
-      // of the device bookkeeping the rest of this suite depends on.
-      await api.createSession('call-1');
-      expect(requestFor('/session').queryParameters['primary'], true);
+    test('the connection request declares itself primary', () async {
+      // `primary=false` is the branch that deliberately skips ConnectDevice,
+      // and mints a *distinct* identity. This client publishes screen share
+      // over its one connection, so it only ever opens primary ones - and must
+      // not accidentally opt out of the device bookkeeping the rest of this
+      // suite depends on.
+      await api.createConnection('call-1');
+      final request = requestFor('/connection');
+
+      expect(request.queryParameters['primary'], true);
+      // Omitted rather than sent empty: a tag is only meaningful on a secondary
+      // connection, and one sent here would name an identity the SFU would then
+      // treat as a different participant.
+      expect(request.queryParameters.containsKey('tag'), isFalse);
+    });
+
+    test('a secondary connection carries its tag', () async {
+      // Not a path this client takes today, but the one that kicks the user's
+      // own call off the air if it is ever taken wrongly: the SFU keys
+      // participants by identity and disconnects the earlier session under the
+      // same one.
+      await api.createConnection('call-1', primary: false, tag: 'screen');
+      final request = requestFor('/connection');
+
+      expect(request.queryParameters['primary'], false);
+      expect(request.queryParameters['tag'], 'screen');
     });
   });
 }

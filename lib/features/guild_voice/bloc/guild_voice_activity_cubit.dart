@@ -195,6 +195,10 @@ class GuildVoiceActivityCubit extends Cubit<GuildVoiceActivityState>
       case VoiceDeafenChanged():
       case VoiceCameraChanged():
       case VoiceSpeakingChanged():
+      // Per-recipient and about what *this* client pulls, so it says nothing
+      // about who is in a channel - which is the only question this cubit
+      // answers.
+      case VoiceSubscriptionsChanged():
       case VoiceShareViewersChanged():
       case VoiceMovedToChannel():
       case VoiceKickedByOtherDevice():

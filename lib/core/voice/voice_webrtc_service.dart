@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
+import 'package:livekit_client/livekit_client.dart';
 
 import '../../features/billing/data/models/entitlement_degradation_dto.dart';
 import '../media/camera_permission.dart';
@@ -10,40 +11,36 @@ import '../media/screen_share_service.dart';
 import 'tile_heights.dart';
 import 'track_naming.dart';
 import 'video_layers.dart';
+import 'voice_identity.dart';
 import 'voice_media_api.dart';
 import 'voice_media_dto.dart';
+import 'voice_subscription_set.dart';
 
-/// Owner of one negotiated mid, so a single `ontrack` callback can route an
-/// inbound track to the right participant and the right bucket. [shareId] is
-/// set for the two halves of a screen share and null otherwise.
-typedef _TrackOwner = ({String userId, TrackKind kind, String? shareId});
-
-/// A subscribe request deferred until the local publish has completed.
-typedef _PendingSubscribe = ({
-  String userId,
-  String mediaSessionId,
-  String trackName,
-  TrackKind kind,
-  String? shareId,
-});
-
-/// The WebRTC half of one voice room - mids, tracks and SDP, for a guild voice
-/// channel and a direct call alike.
+/// The media half of one voice room - connection, publication and subscription,
+/// for a guild voice channel and a direct call alike.
 ///
-/// There is one implementation because there is one server implementation.
-/// The two room kinds differ only in the routes their [VoiceMediaApi] talks to;
-/// every rule below - publish before you pull, roll the dedupe guard back on
-/// failure, group a screen share's two tracks by `shareId` - is identical on
-/// both sides, and having written them twice is how they drifted apart before.
+/// There is one implementation because there is one server implementation. The
+/// two room kinds differ only in the routes their [VoiceMediaApi] talks to;
+/// every rule below is identical on both sides, and having written them twice is
+/// how they drifted apart before.
 ///
-/// Audio plays automatically once its track is part of a live
-/// `RTCPeerConnection` (flutter_webrtc routes it to the device's call/media
-/// output natively). Video and screen tracks do not render anywhere on their
-/// own; the UI attaches an `RTCVideoRenderer` to whatever the track getters
-/// here currently return.
+/// # What this class is, now that there is no negotiation
 ///
-/// The SFU is publicly routable, so no STUN/TURN configuration is needed for
-/// the leg between this device and it.
+/// The SFU is LiveKit and the SDK owns the peer connection, renegotiation and
+/// reconnect. There is no SDP relayed through this backend, no transceiver mid
+/// named to anybody, and no server-minted session id that can go stale. What is
+/// left here is the part the SDK does not know about:
+///
+///  * mapping SFU identities back to user ids, so a track can be attributed;
+///  * naming published tracks to the convention the roster agrees on;
+///  * **declaring** each publish to the backend, which is what makes it visible
+///    to everything in the product that is not the media itself;
+///  * honouring the subscription set - deciding what to pull and at what layer,
+///    which nothing enforces any more.
+///
+/// Audio plays automatically once its track is subscribed. Video and screen
+/// tracks do not render anywhere on their own; the UI attaches a renderer to
+/// whatever the track getters here currently return.
 class VoiceWebRtcService {
   VoiceWebRtcService();
 
@@ -53,135 +50,160 @@ class VoiceWebRtcService {
   /// client is served is the server's decision, and the tile size is the only
   /// input it has for making it. Posts through whatever [VoiceMediaApi] is
   /// current, so a report that arrives before [connectTo] - or after
-  /// [disconnect] - is simply dropped rather than throwing at a UI callback.
+  /// [disconnect] - is dropped rather than throwing at a UI callback.
   late final VoiceTileHeights _tileHeights = VoiceTileHeights(
-    send: (heights) async =>
-        _media?.updateSubscriber(tileHeights: heights) ?? Future.value(),
+    send: (heights) async {
+      final set = await _media?.updateSubscriber(tileHeights: heights);
+      _adoptSubscriptionSet(set);
+    },
   );
 
   VoiceMediaApi? _media;
-  RTCPeerConnection? _pc;
-  String? _mediaSessionId;
+  Room? _room;
+  VoiceConnectionDto? _connection;
 
-  String? _backend;
+  /// What the server has said this client should be pulling. Null inside means
+  /// "everyone who is `Publishing`", which is the ordinary small room.
+  final VoiceSubscriptionPlan _plan = VoiceSubscriptionPlan();
 
-  /// The SFU behind this session, as the server declared it. Read rather than
-  /// branched on anywhere below: the negotiation is backend-neutral, and the
-  /// one decision it drives - "can this build drive this room at all" - is
-  /// made once in [connectTo].
-  String? get mediaBackend => _backend;
+  CancelListenFunc? _roomEvents;
 
-  /// Whether the local microphone track has actually been published.
-  ///
-  /// The SFU rejects a pull on a session that has not completed its own
-  /// negotiation, so this - not merely "a session exists" - is what releases
-  /// the deferred subscribes. See [_pendingSubscribes].
+  /// The SFU behind this connection, as the server declared it. Read rather
+  /// than branched on below: the surface is backend-neutral, and the one
+  /// decision it drives - "can this build drive this room at all" - is made
+  /// once in [connectTo].
+  String? get mediaBackend => _connection?.backend;
+
+  /// What the connection token actually grants, which is not the same question
+  /// as what the UI would like to offer. Both default to true before a
+  /// connection exists so a control is not disabled while it is being built.
+  bool get canPublishAudio => _connection?.canPublishAudio ?? true;
+  bool get canPublishVideo => _connection?.canPublishVideo ?? true;
+
+  /// Whether the microphone has been published *and declared*. The roster does
+  /// not know about a publish until the declaration lands, so this - not merely
+  /// "a track exists" - is what the heartbeat asserts.
   bool _publishedLocalAudio = false;
 
-  MediaStreamTrack? _localAudioTrack;
-  MediaStream? _localStream;
-  MediaStreamTrack? _localVideoTrack;
-  MediaStream? _localVideoStream;
-  MediaStreamTrack? _localScreenTrack;
-  MediaStream? _localScreenStream;
+  LocalAudioTrack? _localAudioTrack;
+  LocalVideoTrack? _localVideoTrack;
+  LocalVideoTrack? _localScreenTrack;
   String? _activeShareId;
 
-  final Map<String, _TrackOwner> _midOwners = {};
+  /// The publications behind the tracks above.
+  ///
+  /// Held separately because unpublishing is addressed by publication sid, and
+  /// a *track's* sid is nullable - it is only assigned once the publication
+  /// exists, so reading it back off the track is a null check on every teardown
+  /// path for a value that was never in doubt.
+  LocalTrackPublication? _localVideoPub;
+  LocalTrackPublication? _localScreenPub;
+  LocalTrackPublication? _localScreenAudioPub;
 
-  /// Subscription keys already claimed - see [_subscriptionKey]. Makes
-  /// subscribing safe to call more than once for the same target (a live
-  /// `TrackPublished` racing a snapshot backfill).
-  final Set<String> _subscribedKeys = {};
-
-  final Map<String, MediaStreamTrack> _remoteAudioTracks = {};
-  final Map<String, MediaStreamTrack> _remoteVideoTracks = {};
-
-  /// Screen tracks are keyed by `shareId`, not by user: one participant can
-  /// run more than one share, and the snapshot models them as a list for
-  /// exactly that reason.
-  final Map<String, MediaStreamTrack> _remoteScreenTracks = {};
-  final Map<String, MediaStreamTrack> _remoteScreenAudioTracks = {};
+  /// Remote tracks by the key they are addressed under. Screen tracks are keyed
+  /// by `shareId` rather than by user: one participant can run more than one
+  /// share, and the snapshot models them as a list for exactly that reason.
+  final Map<String, rtc.MediaStreamTrack> _remoteAudioTracks = {};
+  final Map<String, rtc.MediaStreamTrack> _remoteVideoTracks = {};
+  final Map<String, rtc.MediaStreamTrack> _remoteScreenTracks = {};
+  final Map<String, rtc.MediaStreamTrack> _remoteScreenAudioTracks = {};
   final Map<String, String> _shareOwners = {};
 
-  final List<RTCTrackEvent> _pendingTracks = [];
-
-  /// Subscribe requests that arrived before the local publish completed.
+  /// Everything this client has been asked to pull, whether or not the
+  /// publication exists yet.
   ///
-  /// This window is much wider than it looks and is hit constantly. A cubit
-  /// goes active and starts handling `ParticipantJoined` the moment its
-  /// join/accept response lands, while [connectTo] is still awaiting
-  /// `getUserMedia` - which blocks for seconds behind the OS microphone prompt
-  /// on a cold start. The other party publishes in exactly that window (they
-  /// are not waiting on us), so their announcement is routinely the event that
-  /// lands first. Dropped, it never comes back: nothing replays it short of a
-  /// full resync.
-  final Map<String, _PendingSubscribe> _pendingSubscribes = {};
-
-  /// Called when the server refuses a subscribe because this client's view of
-  /// the room is stale - it asked to pull a track nobody is publishing.
-  ///
-  /// The owner answers by refetching the snapshot and reconciling against it.
-  /// There is nothing useful this service can do on its own: it knows the pull
-  /// was refused, but only the room's owner knows what should be pulled
-  /// instead.
-  void Function()? onStaleSubscription;
-
-  /// Called when the server says this client's *own* media session is gone.
-  ///
-  /// Distinct from [onStaleSubscription] in both cause and cure. That one means a track stopped and
-  /// is answered by reading the roster again; this means the session doing the pulling is spent, and
-  /// no roster can repair it - the session and the peer connection that gave it meaning both have to
-  /// be rebuilt, which only the room's owner can sequence (it has to republish and re-subscribe
-  /// afterwards).
-  void Function()? onSessionGone;
+  /// The window this covers is narrower than the old publish-before-subscribe
+  /// one but has not closed: a cubit starts handling `ParticipantJoined` the
+  /// moment its join/accept response lands, while [connectTo] is still awaiting
+  /// the connection round trip and the SDK's own handshake. A request that
+  /// arrives then has no publication to act on, and dropped it never comes back
+  /// - nothing replays it short of a full resync.
+  final Map<String, _WantedTrack> _wanted = {};
 
   /// Called whenever the remote tracks the getters below hand out change - one
   /// arriving, or one being dropped.
   ///
   /// Nothing else announces an arrival, and an arrival is not the same event as
-  /// the subscribe that asked for it: the subscribe returns when the SFU has
-  /// accepted it, and the media turns up over the platform channel some time
-  /// after that. `MediaStreamTrack`s cannot live in `Equatable` cubit state, so
-  /// the screens re-read them from here and rely on the cubit emitting to know
-  /// when to look - which means an arrival nobody is told about is a tile that
-  /// keeps the placeholder it was built with.
-  ///
-  /// That was the bug this exists to fix. Open the voice screen while somebody
-  /// is already sharing and the whole sequence - refetch a snapshot, reconcile,
-  /// subscribe - changes nothing about the roster, so it emitted nothing; the
-  /// share arrived into [_remoteScreenTracks] and stayed there unread for the
-  /// rest of the session. It looked intermittent only because *joining* a room
-  /// produces enough unrelated state for a re-read to land after the track by
-  /// luck.
+  /// the subscribe that asked for it. `MediaStreamTrack`s cannot live in
+  /// `Equatable` cubit state, so the screens re-read them from here and rely on
+  /// the cubit emitting to know when to look - which means an arrival nobody is
+  /// told about is a tile that keeps the placeholder it was built with.
   void Function()? onTracksChanged;
 
   /// Called when a publish succeeded with less than it asked for.
   ///
-  /// **This is a success callback, not an error one.** A clamped publish is a
-  /// `200` with the whole normal body in it: the track is up, the picture is
-  /// flowing, and the only thing that differs is the rung. Nothing here rolls
-  /// back on it and the owner must not either - it exists so the room can say
-  /// "you are sharing at 720p30" while somebody is looking at the room, which
-  /// is a sentence with a short shelf life and no other delivery.
+  /// **A success callback, not an error one.** A clamped publish is a `200`
+  /// with the whole normal body in it: the track is up, the picture is flowing,
+  /// and the only thing that differs is the rung. Nothing here rolls back on it
+  /// and the owner must not either - it exists so the room can say "you are
+  /// sharing at 720p30" while somebody is looking at the room, which is a
+  /// sentence with a short shelf life and no other delivery.
   void Function(List<EntitlementDegradationDto> degradations)? onPublishReduced;
 
-  /// Keys of subscribe requests currently deferred. Exposed because the flush
-  /// itself can only run against a live peer connection (platform channels),
-  /// so the queueing half is what unit tests can reach.
-  @visibleForTesting
-  Iterable<String> get pendingSubscribeKeys => _pendingSubscribes.keys;
+  /// Called when the SFU's audio-level detection changes its mind about whether
+  /// this device is talking.
+  ///
+  /// **Raw, and not fit to send anywhere as it stands.** It is the input to
+  /// `VoiceSpeakingDetector`, which is what applies the hysteresis §6.5 puts on
+  /// the client: the server admits a speaker the instant it is told, so an
+  /// un-debounced report of a cough costs every other client in the room a
+  /// resubscription.
+  void Function(bool isSpeaking)? onLocalSpeakingChanged;
 
-  // RTCPeerConnection only allows one offer/answer exchange at a time -
-  // chaining through this serializes publish/subscribe calls that would
-  // otherwise race on setLocalDescription/setRemoteDescription.
-  Future<void> _negotiationChain = Future.value();
+  /// Called when the SDK has **given up** reconnecting and the media is gone.
+  ///
+  /// Not a blip: the SDK runs its own reconnect ladder, resuming with the token
+  /// and URL it already holds, and that is correct - a room is placed on a node
+  /// once and is never moved while it exists, so the cached URL cannot become
+  /// the wrong one. This fires only when that ladder is exhausted, which in
+  /// practice means the token outlived its TTL while the device was asleep or
+  /// in a tunnel.
+  ///
+  /// The answer is a fresh connection - it is cheap, it does not touch the
+  /// roster and only the token is new - followed by republishing. That sequence
+  /// belongs to the room's owner, because only it knows what this client was
+  /// publishing and what it should re-subscribe to afterwards.
+  void Function()? onMediaDisconnected;
+
+  /// Whether the server is currently managing this client's subscriptions.
+  bool get hasManagedSubscriptions => _plan.isManaged;
+
+  /// Who the server ranks as talking, in its order.
+  ///
+  /// **An ordering hint, not a speaking indicator.** The per-participant
+  /// "is talking" badge is driven by the `SpeakingChanged` relay, which is
+  /// per-user and immediate; this is a ranked subset that moves at the pace the
+  /// server recomputes plans. Writing the badge from this as well makes the two
+  /// fight - the coarse set clearing a flag the fine relay had just set - so
+  /// nothing here does, and a UI that wants speaker ordering reads this
+  /// directly.
+  ///
+  /// Empty when nothing is ranked, which is every room below the threshold.
+  List<String> get activeSpeakers => _plan.activeSpeakers;
+
+  /// Keys of tracks wanted but not yet held. Exposed because the resolution
+  /// itself needs a live room, so the queueing half is what unit tests reach.
+  @visibleForTesting
+  Iterable<String> get pendingSubscribeKeys => _wanted.keys
+      .where((k) => !_isHeld(k))
+      .toList();
 
   bool _deafened = false;
 
-  /// This session's media id, or null while not publishing - the value
-  /// the heartbeat asserts. Reported honestly: claiming a session that carries
+  /// Whether this client asked for the teardown, so the SDK's own disconnect
+  /// event is not reported as a connection that was lost.
+  bool _disconnecting = false;
+
+  /// The last raw speaking state seen, so [onLocalSpeakingChanged] fires on
+  /// transitions rather than on every active-speaker recomputation - which
+  /// happens whenever *anybody* in the room starts or stops.
+  bool _localSpeaking = false;
+
+  /// This connection's identity, or null while not publishing - the value the
+  /// heartbeat asserts. Reported honestly: claiming a session that carries
   /// nothing is what the server's reconcile pass exists to correct.
-  String? get mediaSessionId => _publishedLocalAudio ? _mediaSessionId : null;
+  String? get mediaSessionId =>
+      _publishedLocalAudio ? _connection?.sessionHandle : null;
 
   /// The microphone track name to assert on the heartbeat, or null when not
   /// publishing.
@@ -190,96 +212,152 @@ class VoiceWebRtcService {
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-  /// Steps 2-3 of the connection lifecycle: open a media session, then publish
-  /// the microphone. Joining (step 1) already happened - it is an
-  /// authorisation decision, not a media one, and the caller holds the
-  /// snapshot it produced.
+  /// Steps 2-4 of the connection lifecycle: mint a connection, connect the SDK
+  /// to it, publish the microphone and declare it. Joining (step 1) already
+  /// happened - it is an authorisation decision, not a media one, and the
+  /// caller holds the snapshot it produced.
   ///
-  /// The microphone is acquired *before* the session is opened. `POST
-  /// /session` records this participant's session id, and until the audio
-  /// track exists there is a window where the roster holds a session carrying
-  /// nothing. The server no longer announces participants in that state, but
-  /// `getUserMedia` can block for seconds on the OS permission prompt - by far
-  /// the widest such window in the stack - so opening the session last shrinks
-  /// it to the round trip it has to be.
+  /// `autoSubscribe: false` is not a detail. It is what puts §6 in charge of
+  /// what this client pulls instead of the room, and without it a large room
+  /// quietly subscribes to everybody and pays for it with nobody the wiser.
   Future<void> connectTo(VoiceMediaApi media) async {
     _media = media;
+    _disconnecting = false;
 
-    final stream = await navigator.mediaDevices.getUserMedia({
-      'audio': true,
-      'video': false,
-    });
-    final track = stream.getAudioTracks().first;
-    _localStream = stream;
-    _localAudioTrack = track;
-
-    _pc = await createPeerConnection({
-      'sdpSemantics': 'unified-plan',
-      'bundlePolicy': 'max-bundle',
-    });
-    _pc!.onTrack = _handleRemoteTrack;
-
-    final session = await media.createSession(primary: true);
-    // The handshake declares its backend so a client picks a media layer from
-    // a stated value rather than inferring one. An unrecognised backend means
-    // this build cannot drive the room - guessing would negotiate against
+    final connection = await media.createConnection(primary: true);
+    // The handshake declares its backend so a client picks a media layer from a
+    // stated value rather than inferring one. An unrecognised backend means
+    // this build cannot drive the room - guessing would drive a transport with
     // different semantics and fail as if the network were at fault.
-    if (!supportedVoiceBackends.contains(session.backend)) {
-      throw UnsupportedVoiceBackendException(session.backend);
+    if (!supportedVoiceBackends.contains(connection.backend)) {
+      throw UnsupportedVoiceBackendException(connection.backend);
     }
-    _mediaSessionId = session.mediaSessionId;
-    _backend = session.backend;
+    _connection = connection;
 
-    await _publishTrack(track: track, trackName: TrackNaming.audio);
+    final room = Room(
+      roomOptions: const RoomOptions(
+        // Deliberately off, and a departure from the SDK's usual advice.
+        // Adaptive stream sizes a subscription from LiveKit's own video
+        // widgets, which this app does not use - it renders tracks through
+        // `RTCVideoRenderer` directly. With no registered views it concludes
+        // every track is invisible and disables it, which is every tile going
+        // black. The measurement it would provide is one this client already
+        // reports, to the server, as `tileHeights` - and the server answers it
+        // with the layer applied in [_applyLayer].
+        adaptiveStream: false,
+        // Stops publishing layers nobody is subscribed to, which is the
+        // publisher-side half of the same saving and needs no view geometry.
+        dynacast: true,
+      ),
+    );
+    _room = room;
+    _roomEvents = room.events.listen(_handleRoomEvent);
+
+    await room.connect(
+      connection.url,
+      connection.token,
+      connectOptions: const ConnectOptions(autoSubscribe: false),
+    );
+
+    final track = await LocalAudioTrack.create();
+    await room.localParticipant?.publishAudioTrack(
+      track,
+      publishOptions: const AudioPublishOptions(name: TrackNaming.audio),
+    );
+    _localAudioTrack = track;
+    // Set from the line above rather than from the declaration below, because
+    // it is what the *heartbeat* asserts and the heartbeat has to be honest.
+    // Media is flowing from here whether or not the declaration lands, and a
+    // client that reported `null` because a declaration failed would have the
+    // server correct its record in the wrong direction - telling peers to drop
+    // somebody who is, in fact, talking.
     _publishedLocalAudio = true;
 
-    await Helper.setSpeakerphoneOnButPreferBluetooth();
-    await _flushPendingSubscribes();
+    // The media is live already; this is what makes it visible to the roster,
+    // the viewer counts and everybody else's UI. A failure here is recoverable
+    // rather than fatal: the next heartbeat asserts the same state and the
+    // server reconciles from it.
+    try {
+      await _declarePublish([TrackNaming.audio]);
+    } catch (e) {
+      debugPrint('[Voice] publish declaration failed, heartbeat will repair: $e');
+    }
+
+    await rtc.Helper.setSpeakerphoneOnButPreferBluetooth();
+    _resolveWanted();
   }
 
   Future<void> disconnect() async {
+    // Set before anything closes, so the SDK's own disconnect event is not
+    // mistaken for the connection being lost.
+    _disconnecting = true;
     if (_localScreenTrack != null && Platform.isAndroid) {
       await _screenShareService.stop();
     }
-    _localAudioTrack?.stop();
-    _localVideoTrack?.stop();
-    _localScreenTrack?.stop();
-    await _localStream?.dispose();
-    await _localVideoStream?.dispose();
-    await _localScreenStream?.dispose();
-    await _pc?.close();
-    _pc = null;
+    await _roomEvents?.call();
+    _roomEvents = null;
+    await _room?.disconnect();
+    await _room?.dispose();
+    _room = null;
     _media = null;
-    _mediaSessionId = null;
-    _backend = null;
+    _connection = null;
     _publishedLocalAudio = false;
     _localAudioTrack = null;
-    _localStream = null;
     _localVideoTrack = null;
-    _localVideoStream = null;
     _localScreenTrack = null;
-    _localScreenStream = null;
+    _localVideoPub = null;
+    _localScreenPub = null;
+    _localScreenAudioPub = null;
     _activeShareId = null;
     _pinnedUserId = null;
     _audibleShareId = null;
-    _midOwners.clear();
+    // Reset with the rest: a rebuilt transport reports its own visibility from
+    // the next lifecycle change, and a stale `true` here would suppress the
+    // report that turns video back on.
+    _paused = false;
     _remoteAudioTracks.clear();
     _remoteVideoTracks.clear();
     _remoteScreenTracks.clear();
     _remoteScreenAudioTracks.clear();
     _shareOwners.clear();
-    _pendingTracks.clear();
-    _pendingSubscribes.clear();
-    _subscribedKeys.clear();
-    // Cleared rather than flushed: the session these sizes described is gone,
-    // and the server drops a departed subscriber's entry anyway. A rebuilt
+    _wanted.clear();
+    _plan.reset();
+    // Cleared rather than flushed: the connection these sizes described is
+    // gone, and the server drops a departed subscriber's entry anyway. A rebuilt
     // transport is reported to from the next layout.
     _tileHeights.clear();
     _deafened = false;
-    _negotiationChain = Future.value();
+    _localSpeaking = false;
   }
 
   // ── Publishing ────────────────────────────────────────────────────────────
+
+  /// Declares tracks that are already published, handing any reduction to
+  /// [onPublishReduced].
+  Future<void> _declarePublish(
+    List<String> trackNames, {
+    VideoPublishIntent? video,
+  }) async {
+    final media = _media;
+    if (media == null) return;
+    final result = await media.declarePublish(
+      trackNames: trackNames,
+      video: video?.toJson(),
+    );
+    if (result.degradations.isNotEmpty) {
+      onPublishReduced?.call(result.degradations);
+    }
+    if (result.isLayerCapped) {
+      // Not an error and not something to roll back: the track is up and
+      // flowing, and every viewer is simply held below the top layer. Logged
+      // because it is otherwise invisible from this side - the picture looks
+      // exactly as it should locally.
+      debugPrint(
+        '[Voice] publish capped at layer ${result.maxLayer} '
+        '(rung ${result.rung ?? 'unstated'}) for $trackNames',
+      );
+    }
+  }
 
   /// Starts local camera capture and publishes it under [TrackNaming.camera].
   /// The server classifies it as `kind: "video"` from the name alone, so
@@ -288,7 +366,7 @@ class VoiceWebRtcService {
   /// [target] is what the room's granted rung permits, resolved from the ladder
   /// the server publishes - see `cameraTargetFor`. It drives three things that
   /// have to agree: the capture constraints, the top rung of the simulcast
-  /// ladder, and the size declared on the publish body. Null falls back to
+  /// ladder, and the size declared on the publish. Null falls back to
   /// [VideoPublishIntent.conservative], which is what this client captured at
   /// before any of it was gated.
   ///
@@ -297,106 +375,141 @@ class VoiceWebRtcService {
   /// target encodes less, and declaring the request instead of the picture
   /// earns a cap that was not needed.
   ///
-  /// **Releases the camera if the publish is refused.** A refusal is the one
+  /// **Releases the camera if the declaration is refused.** That is the one
   /// path where capture succeeded and publication did not, and a camera left
-  /// running against a track the server never accepted is a lit indicator light
-  /// over nothing.
+  /// running against a track the server refused is a lit indicator light over
+  /// nothing.
   Future<void> publishLocalVideo({VideoPublishIntent? target}) async {
-    if (_localVideoTrack != null) return;
+    final room = _room;
+    if (_localVideoTrack != null || room == null) return;
     if (!await ensureCameraPermission()) {
       throw StateError('Camera permission denied');
     }
     final asked = target ?? VideoPublishIntent.conservative;
-    final stream = await navigator.mediaDevices.getUserMedia({
-      'audio': false,
-      'video': VideoLayers.captureFor(asked),
-    });
-    final track = stream.getVideoTracks().first;
-    _localVideoStream = stream;
+    final track = await LocalVideoTrack.createCameraTrack(
+      CameraCaptureOptions(
+        params: VideoParameters(
+          dimensions: VideoDimensions(
+            VideoLayers.widthFor(asked.height),
+            asked.height,
+          ),
+          encoding: VideoEncoding(
+            maxFramerate: asked.framerate,
+            maxBitrate: 1200 * 1000,
+          ),
+        ),
+      ),
+    );
     _localVideoTrack = track;
-    final declared = VideoPublishIntent.fromTrack(track, fallback: asked);
+    final declared = VideoPublishIntent.fromTrack(
+      track.mediaStreamTrack,
+      fallback: asked,
+    );
     try {
-      await _publishTrack(
-        track: track,
-        trackName: TrackNaming.camera,
-        encodings: VideoLayers.cameraFor(declared.height),
-        video: declared,
+      _localVideoPub = await room.localParticipant?.publishVideoTrack(
+        track,
+        publishOptions: VideoPublishOptions(
+          name: TrackNaming.camera,
+          videoSimulcastLayers: VideoLayers.cameraFor(declared.height),
+        ),
       );
+      await _declarePublish([TrackNaming.camera], video: declared);
     } catch (_) {
       _localVideoTrack = null;
-      track.stop();
-      await _localVideoStream?.dispose();
-      _localVideoStream = null;
+      _localVideoPub = null;
+      await track.stop();
+      await track.dispose();
       rethrow;
     }
   }
 
   Future<void> stopLocalVideo() async {
-    final track = _localVideoTrack;
-    if (track == null) return;
+    final publication = _localVideoPub;
+    if (_localVideoTrack == null) return;
     _localVideoTrack = null;
-    track.stop();
-    await _localVideoStream?.dispose();
-    _localVideoStream = null;
-    await _closeTracks([TrackNaming.camera]);
+    _localVideoPub = null;
+    // `RoomOptions.stopLocalTrackOnUnpublish` defaults to true, so this stops
+    // the capture as well as removing the publication - the camera indicator
+    // goes out with the track rather than after it.
+    if (publication != null) {
+      await _room?.localParticipant?.removePublishedTrack(publication.sid);
+    }
+    await _unpublish([TrackNaming.camera]);
   }
 
   /// Starts screen capture and publishes it as `screen-{shareId}`, plus
   /// `screen-audio-{shareId}` when the platform actually handed us the shared
   /// application's audio.
   ///
-  /// Both halves go out in the *same* `tracks/new` call, which is what lets a
+  /// Both halves are declared in the *same* call, which is what lets a
   /// receiving client group them into one tile from the two `TrackPublished`
   /// events that follow. A share may legitimately be video-only - on iOS
   /// ReplayKit and on Android below API 29 there is no app audio to capture -
   /// so the audio half is conditional, never assumed.
   Future<void> startScreenShare(String shareId) async {
-    if (_localScreenTrack != null) return;
+    final room = _room;
+    if (_localScreenTrack != null || room == null) return;
     if (Platform.isAndroid) await _screenShareService.start();
-    final MediaStream stream;
+
+    final List<LocalTrack> tracks;
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({
-        'video': true,
-        'audio': true,
-      });
+      tracks = await LocalVideoTrack.createScreenShareTracksWithAudio(
+        const ScreenShareCaptureOptions(captureScreenAudio: true),
+      );
     } catch (e) {
       if (Platform.isAndroid) await _screenShareService.stop();
       rethrow;
     }
-    final videoTrack = stream.getVideoTracks().first;
-    final audioTrack = stream.getAudioTracks().firstOrNull;
-    _localScreenStream = stream;
+
+    final videoTrack = tracks.whereType<LocalVideoTrack>().firstOrNull;
+    final audioTrack = tracks.whereType<LocalAudioTrack>().firstOrNull;
+    if (videoTrack == null) {
+      for (final track in tracks) {
+        await track.stop();
+      }
+      if (Platform.isAndroid) await _screenShareService.stop();
+      throw StateError('Screen capture produced no video track');
+    }
+
     _localScreenTrack = videoTrack;
     _activeShareId = shareId;
 
-    // A share is not chosen before capture, but it is knowable after it: the
-    // track carries the size the platform actually opened. An undeclared share
+    // A share's size is not chosen before capture, but it is knowable after it:
+    // the track carries what the platform actually opened. An undeclared share
     // is an uncapped one, and a share is the expensive half of the room - a 4K
     // display fanned out at its top layer to every viewer is the bill this
     // declaration exists to bound.
-    final declared = _screenIntent(videoTrack);
+    final declared = _screenIntent(videoTrack.mediaStreamTrack);
 
     try {
-      await _publishTracks([
-        (
-          track: videoTrack,
-          trackName: TrackNaming.screenTrack(shareId),
-          encodings: VideoLayers.screen,
-        ),
-        if (audioTrack != null)
-          (
-            track: audioTrack,
-            trackName: TrackNaming.screenAudioTrack(shareId),
-            encodings: null,
+      _localScreenPub = await room.localParticipant?.publishVideoTrack(
+        videoTrack,
+        publishOptions: VideoPublishOptions(
+          name: TrackNaming.screenTrack(shareId),
+          screenShareSimulcastLayers: VideoLayers.screenFor(
+            declared?.height ?? VideoPublishIntent.conservative.height,
           ),
+        ),
+      );
+      if (audioTrack != null) {
+        _localScreenAudioPub = await room.localParticipant?.publishAudioTrack(
+          audioTrack,
+          publishOptions: AudioPublishOptions(
+            name: TrackNaming.screenAudioTrack(shareId),
+          ),
+        );
+      }
+      await _declarePublish([
+        TrackNaming.screenTrack(shareId),
+        if (audioTrack != null) TrackNaming.screenAudioTrack(shareId),
       ], video: declared);
     } catch (_) {
       _localScreenTrack = null;
+      _localScreenPub = null;
+      _localScreenAudioPub = null;
       _activeShareId = null;
-      videoTrack.stop();
-      audioTrack?.stop();
-      await _localScreenStream?.dispose();
-      _localScreenStream = null;
+      await videoTrack.stop();
+      await audioTrack?.stop();
       if (Platform.isAndroid) await _screenShareService.stop();
       rethrow;
     }
@@ -405,13 +518,13 @@ class VoiceWebRtcService {
   /// What a share declares, from what the platform reports it captured.
   ///
   /// Three sources, in falling order of authority: the track's own settings,
-  /// this device's display size, and nothing. The middle one is not a guess -
-  /// a mobile share captures the display it runs on, so it is the same number
+  /// this device's display size, and nothing. The middle one is not a guess - a
+  /// mobile share captures the display it runs on, so it is the same number
   /// from the other side - and it exists because some platforms hand back a
   /// track with no settings on it at all. When even that is unavailable the
   /// field is omitted, because a number invented to fill it would be a false
   /// statement rather than a missing one.
-  VideoPublishIntent? _screenIntent(MediaStreamTrack track) {
+  VideoPublishIntent? _screenIntent(rtc.MediaStreamTrack track) {
     final declared = VideoPublishIntent.fromTrack(
       track,
       fallback: displayCaptureIntent() ?? VideoPublishIntent.unstated,
@@ -419,108 +532,56 @@ class VoiceWebRtcService {
     return declared.isStated ? declared : null;
   }
 
-  /// Stops the local share and closes its tracks on the SFU.
+  /// Stops the local share and unpublishes its tracks.
   ///
   /// This is only half of stopping: the caller also announces
   /// `ScreenShareStopped` over the hub. Both are needed. The hub event tells
-  /// people; this tells the SFU and releases the media. The server now cleans
-  /// its roster up if only the announcement arrives, so skipping this is no
-  /// longer a correctness bug - but it leaves the track live on the SFU until
-  /// the whole session is torn down, which is egress paid for a picture nobody
-  /// is receiving.
+  /// people; this releases the media and the egress behind it.
   Future<void> stopScreenShare() async {
-    final track = _localScreenTrack;
+    final videoTrack = _localScreenTrack;
     final shareId = _activeShareId;
-    if (track == null || shareId == null) return;
+    if (videoTrack == null || shareId == null) return;
     _localScreenTrack = null;
     _activeShareId = null;
-    track.stop();
-    for (final audio in _localScreenStream?.getAudioTracks() ?? const []) {
-      audio.stop();
-    }
-    await _localScreenStream?.dispose();
-    _localScreenStream = null;
-    // Both halves are closed unconditionally: closing a track that was never
-    // published is a no-op server-side, and leaving a live screen-audio track
-    // behind a stopped video one is a share nobody can see but everyone hears.
-    await _closeTracks([
+
+    final local = _room?.localParticipant;
+    final videoPub = _localScreenPub;
+    final audioPub = _localScreenAudioPub;
+    _localScreenPub = null;
+    _localScreenAudioPub = null;
+    if (videoPub != null) await local?.removePublishedTrack(videoPub.sid);
+    if (audioPub != null) await local?.removePublishedTrack(audioPub.sid);
+    // Both halves are declared closed unconditionally: closing a track that was
+    // never published is a no-op server-side, and leaving a live screen-audio
+    // track behind a stopped video one is a share nobody can see but everyone
+    // hears.
+    await _unpublish([
       TrackNaming.screenTrack(shareId),
       TrackNaming.screenAudioTrack(shareId),
     ]);
     if (Platform.isAndroid) await _screenShareService.stop();
   }
 
-  Future<void> _closeTracks(List<String> trackNames) async {
-    final media = _media;
-    final mediaSessionId = _mediaSessionId;
-    if (media == null || mediaSessionId == null) return;
+  Future<void> _unpublish(List<String> trackNames) async {
     try {
-      await media.closeTracks(
-        mediaSessionId: mediaSessionId,
-        trackNames: trackNames,
-      );
+      await _media?.unpublish(trackNames: trackNames);
     } catch (_) {
       // Best-effort - the local track is already stopped either way.
     }
   }
 
-  Future<void> _publishTrack({
-    required MediaStreamTrack track,
-    required String trackName,
-    List<RTCRtpEncoding>? encodings,
-    VideoPublishIntent? video,
-  }) => _publishTracks([
-    (track: track, trackName: trackName, encodings: encodings),
-  ], video: video);
-
-  /// Publishes one or more already-captured local tracks in a single
-  /// negotiation.
+  /// Declares a resolution change made without republishing.
   ///
-  /// [encodings] is the simulcast ladder for a video track - see [VideoLayers].
-  /// Audio carries none: it is not simulcast, and the server never asks for a
-  /// layer of it.
-  ///
-  /// [video] declares the picture this publish carries, and is null for an
-  /// audio-only one. That is not merely an omission to save bytes: an
-  /// audio-only publish is never affected by a video ceiling, and declaring a
-  /// height on the microphone's own negotiation would invite the server to
-  /// answer a question nobody asked.
-  Future<void> _publishTracks(
-    List<
-      ({
-        MediaStreamTrack track,
-        String trackName,
-        List<RTCRtpEncoding>? encodings,
-      })
-    >
-    tracks, {
-    VideoPublishIntent? video,
-  }) async {
-    final pc = _pc;
-    if (pc == null || tracks.isEmpty) return;
-
-    final transceivers = <String, RTCRtpTransceiver>{};
-    for (final t in tracks) {
-      transceivers[t.trackName] = await pc.addTransceiver(
-        track: t.track,
-        init: RTCRtpTransceiverInit(
-          direction: TransceiverDirection.SendOnly,
-          sendEncodings: t.encodings,
-        ),
-      );
+  /// A ceiling computed once at publish time is one a later resolution change
+  /// walks straight past, which on a share that switched from a document to a
+  /// video is the difference the whole declaration exists to catch.
+  Future<void> declareVideoChange(VideoPublishIntent video) async {
+    if (!video.isStated) return;
+    try {
+      await _media?.declareVideo(video.toJson());
+    } catch (e) {
+      debugPrint('[Voice] resolution change was not declared: $e');
     }
-
-    await _offerAnswerCycle((pc) async {
-      final payload = <Map<String, dynamic>>[];
-      for (final entry in transceivers.entries) {
-        payload.add({
-          'direction': VoiceTrackDirection.publish,
-          'mid': await _resolveMid(pc, entry.value),
-          'trackName': entry.key,
-        });
-      }
-      return payload;
-    }, video: video);
   }
 
   // ── Subscribing ───────────────────────────────────────────────────────────
@@ -532,9 +593,8 @@ class VoiceWebRtcService {
     required String userId,
     required String mediaSessionId,
     required String trackName,
-  }) => _subscribeTrack(
+  }) async => _want(
     userId: userId,
-    mediaSessionId: mediaSessionId,
     trackName: trackName,
     kind: TrackKind.audio,
   );
@@ -547,9 +607,8 @@ class VoiceWebRtcService {
     required String trackName,
     required TrackKind kind,
     String? shareId,
-  }) => _subscribeTrack(
+  }) async => _want(
     userId: userId,
-    mediaSessionId: mediaSessionId,
     trackName: trackName,
     kind: kind,
     shareId: shareId,
@@ -564,178 +623,111 @@ class VoiceWebRtcService {
   }) async {
     for (final trackName in trackNames) {
       final descriptor = TrackNaming.describe(trackName);
-      await _subscribeTrack(
+      _want(
         userId: userId,
-        mediaSessionId: mediaSessionId,
         trackName: trackName,
         kind: descriptor.kind,
         shareId: descriptor.shareId ?? shareId,
       );
     }
+    _resolveWanted();
   }
 
   /// One subscription key. Shares carry their id so a participant running two
   /// of them does not collide with themselves; microphone and camera have no
-  /// share and keep the plain `userId|kind` form.
+  /// share and keep the plain `userId|trackName` form.
   static String _subscriptionKey(
     String userId,
-    TrackKind kind,
+    String trackName,
     String? shareId,
   ) => shareId == null
-      ? '$userId|${kind.name}'
-      : '$userId|${kind.name}|$shareId';
+      ? '$userId|$trackName'
+      : '$userId|$trackName|$shareId';
 
-  /// Subscribes to one remote track, rolling the [_subscribedKeys] guard back
-  /// on any failure.
-  ///
-  /// That rollback is the whole point. Every path that could retry this
-  /// subscription is gated behind the same guard, so a guard consumed by a
-  /// failed attempt and never released is how one transient error becomes
-  /// permanent silence for that participant.
-  ///
-  /// Retries are per status, and the differences matter:
-  ///
-  ///  * **409 stale** - never retried. The track is gone rather than late, so
-  ///    the identical body fails identically; [onStaleSubscription] asks for a
-  ///    fresh snapshot and the reconcile that follows decides what to pull.
-  ///  * **502** - backed off exponentially from a second. Retrying faster than
-  ///    the snapshot being retried against can change just turns one bad moment
-  ///    into a burst; that is what took voice to the status page in
-  ///    VNT-GE21R3P7.
-  ///  * **503** - contended, so the change was simply not applied. Retried
-  ///    quickly, because nothing about the request was wrong.
-  ///  * **403/404** - not retried at all.
-  Future<void> _subscribeTrack({
+  /// Records that this client wants a track, and pulls it if it can.
+  void _want({
     required String userId,
-    required String mediaSessionId,
     required String trackName,
     required TrackKind kind,
     String? shareId,
-  }) async {
-    final key = _subscriptionKey(userId, kind, shareId);
-    final pc = _pc;
+  }) {
+    final key = _subscriptionKey(userId, trackName, shareId);
+    _wanted[key] = _WantedTrack(
+      userId: userId,
+      trackName: trackName,
+      kind: kind,
+      shareId: shareId,
+    );
+    if (shareId != null) _shareOwners[shareId] = userId;
+    _resolveWanted();
+  }
 
-    if (pc == null || _mediaSessionId == null || !_publishedLocalAudio) {
-      // Not publishing yet - hold the request rather than dropping it, and
-      // leave [_subscribedKeys] alone so the flush is what claims the key.
-      _pendingSubscribes[key] = (
-        userId: userId,
-        mediaSessionId: mediaSessionId,
-        trackName: trackName,
-        kind: kind,
-        shareId: shareId,
-      );
-      return;
-    }
-    _pendingSubscribes.remove(key);
-    if (!_subscribedKeys.add(key)) return;
+  /// Brings the SDK's subscriptions in line with what is wanted *and* allowed.
+  ///
+  /// Two filters, and they are different questions. [_wanted] is what this
+  /// client's UI has asked for; the subscription plan is what the server says
+  /// it may have. A track has to pass both - and since the plan only ever
+  /// removes, applying it can never break a subscription that was valid.
+  ///
+  /// Idempotent and cheap to call: it diffs against what is already subscribed
+  /// rather than tearing down and rebuilding, because a set change usually
+  /// moves one or two entries and a rebuild turns that into a reconnect.
+  void _resolveWanted() {
+    final room = _room;
+    if (room == null) return;
 
-    const attempts = 3;
-    for (var attempt = 1; attempt <= attempts; attempt++) {
-      try {
-        await pc.addTransceiver(
-          kind: kind == TrackKind.audio || kind == TrackKind.screenAudio
-              ? RTCRtpMediaType.RTCRtpMediaTypeAudio
-              : RTCRtpMediaType.RTCRtpMediaTypeVideo,
-          init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+    for (final participant in room.remoteParticipants.values) {
+      final userId = VoiceIdentity.userIdOf(participant.identity);
+      for (final publication in participant.trackPublications.values) {
+        final name = publication.name;
+        if (name.isEmpty) continue;
+        final descriptor = TrackNaming.describe(name);
+        final key = _subscriptionKey(userId, name, descriptor.shareId);
+        final wanted = _wanted.containsKey(key);
+        final allowed = _plan.allows(
+          userId: userId,
+          trackName: name,
+          shareId: descriptor.shareId,
         );
 
-        final results = await _offerAnswerCycle(
-          (pc) async => [
-            {
-              'direction': VoiceTrackDirection.subscribe,
-              'mediaSessionId': mediaSessionId,
-              'trackName': trackName,
-            },
-          ],
-        );
-
-        // Only the mid the server answered with can route this track. A locally
-        // resolved one would name a transceiver the SFU never attached anything to.
-        final mid =
-            results.firstWhere(
-                  (r) => r['trackName'] == trackName,
-                  orElse: () => const {},
-                )['mid']
-                as String?;
-        if (mid == null || mid.isEmpty) {
-          throw StateError(
-            'No mid returned for ${kind.name} track "$trackName" '
-            'on session $mediaSessionId',
-          );
+        if (wanted && allowed) {
+          if (!publication.subscribed) unawaited(publication.subscribe());
+          _applyLayer(publication, userId: userId, trackName: name);
+        } else if (publication.subscribed) {
+          unawaited(publication.unsubscribe());
         }
-
-        _midOwners[mid] = (userId: userId, kind: kind, shareId: shareId);
-        if (shareId != null) _shareOwners[shareId] = userId;
-        _processPendingTracks();
-        return;
-      } on VoiceMediaException catch (e) {
-        if (e.isStale) {
-          _subscribedKeys.remove(key);
-          debugPrint(
-            '[Voice] stale subscribe for $userId ("$trackName") - '
-            'refetching the snapshot: $e',
-          );
-          onStaleSubscription?.call();
-          return;
-        }
-
-        if (e.isSessionGone) {
-          // Not this track - us. Every subscribe on this session fails identically from now on, so
-          // the guards are released for all of them rather than just this one, and the owner is
-          // asked to rebuild. Retrying here would burn the budget on a session that cannot answer.
-          debugPrint(
-            '[Voice] our media session is gone ("$trackName") - rebuilding: $e',
-          );
-          _subscribedKeys.clear();
-          onSessionGone?.call();
-          return;
-        }
-
-        final backoff = voiceRetryDelay(e, attempt);
-        if (backoff == null || attempt == attempts) {
-          // Released so another announcement or a fresh snapshot can try
-          // again - a guard left set is how one failure becomes permanent
-          // silence for this participant.
-          _subscribedKeys.remove(key);
-          debugPrint('[Voice] subscribe failed for $userId ("$trackName"): $e');
-          return;
-        }
-
-        // The guard stays claimed across the wait: this attempt is still the
-        // live one, and a duplicate announcement arriving now should still
-        // dedupe against it.
-        await Future<void>.delayed(backoff);
-
-        // Unless something cleared it meanwhile. `unsubscribeTrack` and
-        // `disconnect` both drop the key, and either means retrying would
-        // subscribe to a participant who has already gone.
-        if (!_subscribedKeys.contains(key)) return;
-      } catch (e) {
-        _subscribedKeys.remove(key);
-        debugPrint('[Voice] subscribe failed for $userId ("$trackName"): $e');
-        return;
       }
     }
   }
 
-  /// Issues any subscribe requests that arrived while the local publish was
-  /// still in flight. Draining a snapshot (rather than iterating the live map)
-  /// keeps this safe against [_subscribeTrack] re-adding a failed entry
-  /// mid-flush.
-  Future<void> _flushPendingSubscribes() async {
-    if (_pendingSubscribes.isEmpty) return;
-    final pending = _pendingSubscribes.values.toList();
-    _pendingSubscribes.clear();
-    for (final p in pending) {
-      await _subscribeTrack(
-        userId: p.userId,
-        mediaSessionId: p.mediaSessionId,
-        trackName: p.trackName,
-        kind: p.kind,
-        shareId: p.shareId,
-      );
-    }
+  /// Applies the layer the server chose for one video publication.
+  ///
+  /// This used to ride the subscribe the backend made on this client's behalf,
+  /// so it bound whether the client cooperated or not. It does not any more: a
+  /// tile reported as 120 pixels tall is served the top layer until something
+  /// asks for less, and this is the only thing that asks.
+  void _applyLayer(
+    RemoteTrackPublication publication, {
+    required String userId,
+    required String trackName,
+  }) {
+    if (publication.kind != TrackType.VIDEO) return;
+    if (!publication.subscribed) return;
+    final layer = _plan.layerFor(userId: userId, trackName: trackName);
+    unawaited(publication.setVideoQuality(videoQualityForLayer(layer)));
+  }
+
+  bool _isHeld(String key) {
+    final wanted = _wanted[key];
+    if (wanted == null) return false;
+    return switch (wanted.kind) {
+      TrackKind.audio => _remoteAudioTracks.containsKey(wanted.userId),
+      TrackKind.video => _remoteVideoTracks.containsKey(wanted.userId),
+      TrackKind.screen => _remoteScreenTracks.containsKey(wanted.shareId),
+      TrackKind.screenAudio => _remoteScreenAudioTracks.containsKey(
+        wanted.shareId,
+      ),
+    };
   }
 
   void unsubscribeParticipant(String userId) {
@@ -761,24 +753,20 @@ class VoiceWebRtcService {
       case TrackKind.screenAudio:
         if (shareId != null) _remoteScreenAudioTracks.remove(shareId);
     }
-    onTracksChanged?.call();
-    final key = _subscriptionKey(userId, kind, shareId);
-    _subscribedKeys.remove(key);
-    // Also drop a request still waiting on the publish - a participant who
-    // left during that window must not be subscribed to by the flush.
-    _pendingSubscribes.remove(key);
-    _midOwners.removeWhere(
-      (mid, owner) =>
-          owner.userId == userId &&
-          owner.kind == kind &&
-          owner.shareId == shareId,
+    _wanted.removeWhere(
+      (key, wanted) =>
+          wanted.userId == userId &&
+          wanted.kind == kind &&
+          wanted.shareId == shareId,
     );
+    _resolveWanted();
+    onTracksChanged?.call();
   }
 
   /// Drops both halves of one screen share. Called when the share stops, and
   /// when the viewer stops watching - egress is not free, and an unwatched
-  /// stream that stays subscribed is exactly what the viewer protocol exists
-  /// to avoid paying for.
+  /// stream that stays subscribed is exactly what the viewer protocol exists to
+  /// avoid paying for.
   void unsubscribeShare({required String userId, required String shareId}) {
     unsubscribeTrack(userId: userId, kind: TrackKind.screen, shareId: shareId);
     unsubscribeTrack(
@@ -793,6 +781,35 @@ class VoiceWebRtcService {
       .where((e) => e.value == userId)
       .map((e) => e.key)
       .toList();
+
+  // ── Subscription sets ─────────────────────────────────────────────────────
+
+  /// Adopts a subscription set from a snapshot, a `SubscriptionsChanged` or the
+  /// reply to a report, and reconciles what is being pulled against it.
+  ///
+  /// Safe to call with the same set repeatedly - most calls are exactly that,
+  /// since every snapshot carries the current set whether or not it moved.
+  ///
+  /// Nothing is emitted to the owner from here. A set change that adds or drops
+  /// a track produces the SDK's own subscribe/unsubscribe events, and those
+  /// already reach the UI through [onTracksChanged]; the roster itself does not
+  /// move, because everyone stays rendered whatever the set says.
+  void applySubscriptionSet(VoiceSubscriptionSetDto? set) {
+    if (!_plan.adopt(set)) return;
+    _resolveWanted();
+  }
+
+  /// Adopts the set that came back from a report this client just made.
+  ///
+  /// Null here means the *reply carried no set object at all* - an empty body,
+  /// or one that did not parse - which is a server that did not answer rather
+  /// than one revoking anything, so it is left alone. That is a different thing
+  /// from a reply whose `tracks` is null, which **is** a revocation and reaches
+  /// [applySubscriptionSet] intact.
+  void _adoptSubscriptionSet(VoiceSubscriptionSetDto? set) {
+    if (set == null) return;
+    applySubscriptionSet(set);
+  }
 
   // ── What this client is drawing ───────────────────────────────────────────
 
@@ -818,6 +835,22 @@ class VoiceWebRtcService {
 
   String? _pinnedUserId;
   String? _audibleShareId;
+  bool _paused = false;
+
+  /// This client is backgrounded or hidden.
+  ///
+  /// **Drops video, never audio.** A backgrounded client is still in the
+  /// conversation, and a phone in a pocket that stopped hearing the room would
+  /// be a bug rather than a saving.
+  Future<void> setPaused(bool paused) async {
+    if (_paused == paused) return;
+    _paused = paused;
+    try {
+      _adoptSubscriptionSet(await _media?.updateSubscriber(paused: paused));
+    } catch (e) {
+      debugPrint('[Voice] pause state was not recorded: $e');
+    }
+  }
 
   /// One publisher this client is looking at to the exclusion of the rest, and
   /// optionally the share whose audio it wants with them. Both null is "back to
@@ -826,21 +859,13 @@ class VoiceWebRtcService {
   /// Two separate things ride on one call because they turn on and off at the
   /// same moment, and sending them separately would post the same body twice.
   ///
-  ///  * **The pin** is what makes the picture arrive at all. In a room the
-  ///    server is being selective in, a subscription set is active speakers
-  ///    plus pins - so opening somebody who happens not to be talking asks for
-  ///    a track the set does not include, and that subscribe is refused.
+  ///  * **The pin** keeps a publisher subscribed whatever the ranking says, so
+  ///    opening somebody who happens not to be talking still shows a picture.
+  ///    Capped server-side, and a pin over the cap is dropped silently.
   ///  * **The share audio** is off by default for everybody, because most
   ///    shares carry none and distributing it doubles the stream count of the
   ///    most expensive thing in a room. Opening one full-screen is the clearest
   ///    statement a viewer can make that they want it.
-  ///
-  /// Best-effort, and deliberately not reported back. The pin is capped
-  /// server-side and a pin over the cap is dropped silently rather than
-  /// refused, so "it did not take" has no answer here that differs from "it
-  /// did": the picture either arrives or the subscribe behind it is refused
-  /// with the stale-subscription 409 that [onStaleSubscription] already
-  /// answers by refetching and reconciling.
   Future<void> setFocus({String? userId, String? shareId}) async {
     if (_pinnedUserId == userId && _audibleShareId == shareId) return;
     _pinnedUserId = userId;
@@ -848,23 +873,42 @@ class VoiceWebRtcService {
     final media = _media;
     if (media == null) return;
     try {
-      await media.updateSubscriber(
-        pinned: [?userId],
-        screenAudioShares: [?shareId],
+      _adoptSubscriptionSet(
+        await media.updateSubscriber(
+          pinned: [?userId],
+          screenAudioShares: [?shareId],
+        ),
       );
     } catch (e) {
       debugPrint('[Voice] focus on ${userId ?? 'nobody'} was not recorded: $e');
     }
   }
 
+  /// Publishers whose tile this client has collapsed. Video only - a collapsed
+  /// tile stops paying for pixels, not for sound.
+  Future<void> setPausedPublishers(List<String> userIds) async {
+    try {
+      _adoptSubscriptionSet(
+        await _media?.updateSubscriber(pausedPublishers: userIds),
+      );
+    } catch (e) {
+      debugPrint('[Voice] collapsed tiles were not recorded: $e');
+    }
+  }
+
   // ── Local controls ────────────────────────────────────────────────────────
 
-  void setMuted(bool isMuted) {
-    _localAudioTrack?.enabled = !isMuted;
+  /// Mutes at the track, which is what stops the SFU receiving anything -
+  /// rather than merely disabling the local track, which keeps the encoder
+  /// running and the uplink paid for.
+  Future<void> setMuted(bool isMuted) async {
+    final track = _localAudioTrack;
+    if (track == null) return;
+    await (isMuted ? track.mute() : track.unmute());
   }
 
   Future<void> setSpeakerphoneOn(bool enable) =>
-      Helper.setSpeakerphoneOn(enable);
+      rtc.Helper.setSpeakerphoneOn(enable);
 
   /// Deafening silences peers' microphones *and* any screen audio - a shared
   /// tab's sound is remote audio like any other, and leaving it playing is not
@@ -881,19 +925,20 @@ class VoiceWebRtcService {
 
   // ── Track getters for the UI ──────────────────────────────────────────────
 
-  MediaStreamTrack? get localVideoTrack => _localVideoTrack;
-  MediaStreamTrack? get localScreenTrack => _localScreenTrack;
+  rtc.MediaStreamTrack? get localVideoTrack => _localVideoTrack?.mediaStreamTrack;
+  rtc.MediaStreamTrack? get localScreenTrack =>
+      _localScreenTrack?.mediaStreamTrack;
 
-  MediaStreamTrack? remoteVideoTrackFor(String userId) =>
+  rtc.MediaStreamTrack? remoteVideoTrackFor(String userId) =>
       _remoteVideoTracks[userId];
 
-  MediaStreamTrack? remoteScreenTrackForShare(String shareId) =>
+  rtc.MediaStreamTrack? remoteScreenTrackForShare(String shareId) =>
       _remoteScreenTracks[shareId];
 
   /// The first share this participant is running. Kept for the single-share
   /// rendering the call and channel screens do today; a multi-share UI should
   /// address shares by id via [remoteScreenTrackForShare].
-  MediaStreamTrack? remoteScreenTrackFor(String userId) {
+  rtc.MediaStreamTrack? remoteScreenTrackFor(String userId) {
     for (final shareId in _sharesOf(userId)) {
       final track = _remoteScreenTracks[shareId];
       if (track != null) return track;
@@ -901,154 +946,131 @@ class VoiceWebRtcService {
     return null;
   }
 
-  // ── SDP offer/answer cycle ────────────────────────────────────────────────
+  // ── Room events ───────────────────────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> _offerAnswerCycle(
-    Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc)
-    buildTracks, {
-    VideoPublishIntent? video,
+  void _handleRoomEvent(RoomEvent event) {
+    switch (event) {
+      case TrackSubscribedEvent(:final participant, :final publication):
+        _routeTrack(
+          identity: participant.identity,
+          trackName: publication.name,
+          track: publication.track,
+        );
+      case TrackUnsubscribedEvent(:final participant, :final publication):
+        _dropTrack(
+          identity: participant.identity,
+          trackName: publication.name,
+        );
+      case TrackPublishedEvent():
+      case ParticipantConnectedEvent():
+        // A publication this client may already be waiting for. The roster
+        // event that names it arrives over the hub separately; this is the
+        // moment the SDK can actually act on a want recorded earlier.
+        _resolveWanted();
+      case ParticipantDisconnectedEvent(:final participant):
+        _dropParticipant(VoiceIdentity.userIdOf(participant.identity));
+      case ActiveSpeakersChangedEvent(:final speakers):
+        // The SFU's own audio-level observer, which is a far better voice
+        // detector than anything worth writing here - and the only one that
+        // does not need a second audio tap on the local track.
+        final identity = _room?.localParticipant?.identity;
+        final speaking =
+            identity != null && speakers.any((s) => s.identity == identity);
+        if (speaking != _localSpeaking) {
+          _localSpeaking = speaking;
+          onLocalSpeakingChanged?.call(speaking);
+        }
+      case RoomReconnectedEvent():
+        // The SDK resumed on its own. Subscriptions do not always survive a
+        // full reconnect, so what this client wants is asserted again rather
+        // than assumed - it is a diff, so a session that kept them does no
+        // work.
+        _resolveWanted();
+      case RoomDisconnectedEvent():
+        // Only ever after the SDK's own ladder is exhausted. A teardown this
+        // client asked for is excluded by the flag, because reporting that as
+        // a lost connection would have the owner rebuild media for a room it
+        // has just deliberately left.
+        if (_disconnecting) break;
+        onMediaDisconnected?.call();
+      default:
+        break;
+    }
+  }
+
+  void _routeTrack({
+    required String identity,
+    required String trackName,
+    required Track? track,
   }) {
-    final next = _negotiationChain
-        .catchError((_) {})
-        .then((_) => _doOfferAnswer(buildTracks, video: video));
-    _negotiationChain = next.catchError((_) => const <Map<String, dynamic>>[]);
-    return next;
-  }
+    final mediaTrack = track?.mediaStreamTrack;
+    if (mediaTrack == null || trackName.isEmpty) return;
+    final userId = VoiceIdentity.userIdOf(identity);
+    final descriptor = TrackNaming.describe(trackName);
 
-  Future<List<Map<String, dynamic>>> _doOfferAnswer(
-    Future<List<Map<String, dynamic>>> Function(RTCPeerConnection pc)
-    buildTracks, {
-    VideoPublishIntent? video,
-  }) async {
-    final pc = _pc;
-    final media = _media;
-    final mediaSessionId = _mediaSessionId;
-    if (pc == null || media == null || mediaSessionId == null) return const [];
-
-    final offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    final response = await media.negotiate(
-      mediaSessionId: mediaSessionId,
-      sessionDescription: {'type': offer.type, 'sdp': offer.sdp},
-      tracks: await buildTracks(pc),
-      video: video?.toJson(),
-    );
-
-    // Before the SDP is applied, because the announcement is about a publish
-    // that has already succeeded and the remaining work is plumbing. Announcing
-    // it after would tie a sentence about the picture to whether the transport
-    // finished setting it up.
-    if (response.degradations.isNotEmpty) {
-      onPublishReduced?.call(response.degradations);
-    }
-
-    await pc.setRemoteDescription(
-      _toSessionDescription(response.sessionDescription),
-    );
-
-    if (response.requiresImmediateRenegotiation) {
-      final reOffer = await pc.createOffer();
-      await pc.setLocalDescription(reOffer);
-      // The same declaration the publish above carried, because this is the
-      // second half of that one publish rather than a separate event. It is the
-      // offer the picture actually arrives on, and re-stating a size already
-      // recorded costs nothing; a subscribe-only cycle has none and sends none.
-      final reneg = await media.renegotiate(
-        mediaSessionId: mediaSessionId,
-        sessionDescription: {'type': reOffer.type, 'sdp': reOffer.sdp},
-        video: video?.toJson(),
-      );
-      await pc.setRemoteDescription(
-        _toSessionDescription(reneg.sessionDescription),
-      );
-    }
-
-    return response.tracks
-        .map((t) => <String, dynamic>{'mid': t.mid, 'trackName': t.trackName})
-        .toList();
-  }
-
-  RTCSessionDescription _toSessionDescription(Map<String, dynamic> map) =>
-      RTCSessionDescription(map['sdp'] as String, map['type'] as String);
-
-  // flutter_webrtc's RTCRtpTransceiver.mid is a snapshot taken when
-  // addTransceiver() returns - before the SDP that actually assigns mids
-  // exists - and is never refreshed after setLocalDescription() the way a
-  // browser's live `mid` property is. Reading it straight off `transceiver`
-  // here always sends an empty mid, which the SFU rejects outright
-  // ("Missing mid in track"). getTransceivers() makes a fresh native call and
-  // returns the real, current mid.
-  //
-  // transceiverId can't be used to find the same transceiver again - on
-  // Android (PeerConnectionObserver.java) it's *derived from* mid itself
-  // (`transceiver.getMid() ?? randomUUID()`), so it's a fresh random value
-  // every time it's read before mid is assigned, and a *different* value (the
-  // real mid) once mid becomes available. The "same" transceiver therefore
-  // never compares equal to itself across that gap. The sender's local track
-  // id is what's actually stable.
-  Future<String?> _resolveMid(
-    RTCPeerConnection pc,
-    RTCRtpTransceiver original,
-  ) async {
-    final trackId = original.sender.track?.id;
-    final transceivers = await pc.getTransceivers();
-    if (trackId != null) {
-      for (final t in transceivers) {
-        if (t.sender.track?.id == trackId) return t.mid;
-      }
-    }
-    return original.mid;
-  }
-
-  // ── Remote track routing ──────────────────────────────────────────────────
-
-  void _processPendingTracks() {
-    final remaining = <RTCTrackEvent>[];
-    for (final event in _pendingTracks) {
-      final mid = event.transceiver?.mid;
-      if (mid != null && _midOwners.containsKey(mid)) {
-        _routeTrack(mid, event);
-      } else {
-        remaining.add(event);
-      }
-    }
-    _pendingTracks
-      ..clear()
-      ..addAll(remaining);
-  }
-
-  void _handleRemoteTrack(RTCTrackEvent event) {
-    final mid = event.transceiver?.mid;
-    if (mid == null || !_midOwners.containsKey(mid)) {
-      _pendingTracks.add(event);
-      return;
-    }
-    _routeTrack(mid, event);
-  }
-
-  void _routeTrack(String mid, RTCTrackEvent event) {
-    final owner = _midOwners[mid]!;
-    final track = event.track;
-    switch (owner.kind) {
+    switch (descriptor.kind) {
       case TrackKind.audio:
-        track.enabled = !_deafened;
-        _remoteAudioTracks[owner.userId] = track;
+        mediaTrack.enabled = !_deafened;
+        _remoteAudioTracks[userId] = mediaTrack;
       case TrackKind.video:
-        _remoteVideoTracks[owner.userId] = track;
+        _remoteVideoTracks[userId] = mediaTrack;
       case TrackKind.screen:
-        if (owner.shareId != null) {
-          _remoteScreenTracks[owner.shareId!] = track;
-        }
+        final shareId = descriptor.shareId;
+        if (shareId == null) return;
+        _remoteScreenTracks[shareId] = mediaTrack;
+        _shareOwners[shareId] = userId;
       case TrackKind.screenAudio:
-        track.enabled = !_deafened;
-        if (owner.shareId != null) {
-          _remoteScreenAudioTracks[owner.shareId!] = track;
-        }
+        final shareId = descriptor.shareId;
+        if (shareId == null) return;
+        mediaTrack.enabled = !_deafened;
+        _remoteScreenAudioTracks[shareId] = mediaTrack;
+        _shareOwners[shareId] = userId;
     }
     // The media exists now, which is a different moment from the subscribe that
-    // asked for it - and the only moment a viewer can render it. See
-    // [onTracksChanged].
+    // asked for it - and the only moment a viewer can render it.
     onTracksChanged?.call();
   }
+
+  void _dropTrack({required String identity, required String trackName}) {
+    if (trackName.isEmpty) return;
+    final userId = VoiceIdentity.userIdOf(identity);
+    final descriptor = TrackNaming.describe(trackName);
+    switch (descriptor.kind) {
+      case TrackKind.audio:
+        _remoteAudioTracks.remove(userId);
+      case TrackKind.video:
+        _remoteVideoTracks.remove(userId);
+      case TrackKind.screen:
+        _remoteScreenTracks.remove(descriptor.shareId);
+      case TrackKind.screenAudio:
+        _remoteScreenAudioTracks.remove(descriptor.shareId);
+    }
+    onTracksChanged?.call();
+  }
+
+  void _dropParticipant(String userId) {
+    _remoteAudioTracks.remove(userId);
+    _remoteVideoTracks.remove(userId);
+    for (final shareId in _sharesOf(userId)) {
+      _remoteScreenTracks.remove(shareId);
+      _remoteScreenAudioTracks.remove(shareId);
+      _shareOwners.remove(shareId);
+    }
+    onTracksChanged?.call();
+  }
+}
+
+/// One track this client has asked to pull.
+class _WantedTrack {
+  const _WantedTrack({
+    required this.userId,
+    required this.trackName,
+    required this.kind,
+    this.shareId,
+  });
+
+  final String userId;
+  final String trackName;
+  final TrackKind kind;
+  final String? shareId;
 }

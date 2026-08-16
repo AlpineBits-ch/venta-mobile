@@ -9,9 +9,13 @@ import '../../../core/realtime/realtime_transport.dart';
 import '../../../core/sound/sound_service.dart';
 import '../../../core/voice/track_naming.dart';
 import '../../../core/voice/video_layers.dart';
+import '../../../core/voice/voice_app_visibility.dart';
 import '../../../core/voice/voice_heartbeat.dart';
+import '../../../core/voice/voice_liveness.dart';
+import '../../../core/voice/voice_media_api.dart';
 import '../../../core/voice/voice_participant_state.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
+import '../../../core/voice/voice_speaking_detector.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../billing/data/entitlement_reader.dart';
 import '../../billing/data/models/entitlement_degradation_dto.dart';
@@ -170,6 +174,10 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       _handleConnectionStatus,
     );
     _heartbeat = VoiceHeartbeat(send: _sendHeartbeat);
+    _liveness = VoiceLiveness(
+      assertAlive: _assertAlive,
+      onRoomGone: () => unawaited(_handleRoomGone()),
+    );
   }
 
   final GuildVoiceRepository repository;
@@ -186,6 +194,11 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   late final StreamSubscription<GuildVoiceEvent> _sub;
   late final StreamSubscription<RealtimeConnectionStatus> _connectionSub;
   late final VoiceHeartbeat _heartbeat;
+
+  /// The second, independent liveness channel. Kept as its own timer rather
+  /// than folded into [_heartbeat] on purpose: the heartbeat goes over the hub,
+  /// and the case this covers is the hub being down.
+  late final VoiceLiveness _liveness;
   GuildVoiceWebRtcService? _webRtc;
 
   /// Whether the joined channel's screen shares are on screen. Viewer claims
@@ -288,6 +301,11 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   /// viewer keeps a publisher's egress alive for nothing.
   Future<GuildVoiceWebRtcService?> _teardown() async {
     _heartbeat.stop();
+    // Before anything that can block. A ping for a channel the user has left
+    // keeps a ghost participant in everybody else's roster until it stops.
+    _liveness.stop();
+    _stopSpeakingReports();
+    _stopVisibilityReports();
     await _releaseAllShareClaims();
     repository.exitChannel();
     final webRtc = _webRtc;
@@ -295,64 +313,57 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     return webRtc;
   }
 
-  /// A transport with its three callbacks wired. Built here rather than at each call site so a
-  /// rebuild cannot come back with fewer of them than the original had - which would be silent, and
-  /// would show up much later as one of the failures they exist to answer.
+  /// A transport with its callbacks wired. Built here rather than at each call site so a rebuild
+  /// cannot come back with fewer of them than the original had - which would be silent, and would
+  /// show up much later as one of the conditions they exist to answer.
+  ///
+  /// Two that used to be here are gone with the SDP relay: `onStaleSubscription` and
+  /// `onSessionGone`. Neither condition exists any more - there is no subscribe for this backend to
+  /// refuse, and no minted session id to be spent - so the media-rebuild path they drove has gone
+  /// with them, along with the local publications it had to retire.
   GuildVoiceWebRtcService _buildTransport() {
     final webRtc = _webRtcServiceFactory();
-    // A refused subscribe means this client is looking at a share that has
-    // already stopped. The snapshot is the only thing that can say what to pull
-    // instead, and the gate collapses a burst of these into one request.
-    webRtc.onStaleSubscription = () => unawaited(repository.refetchSnapshot());
-    // Our own session, rather than somebody's track. No snapshot can repair that.
-    webRtc.onSessionGone = () => unawaited(_rebuildMedia());
     // A track arriving is its own event, later than the subscribe that asked
     // for it and with nothing else attached to it. Without this the screen
     // renders whatever it read before the media existed - see
     // [GuildVoiceState.videoRevision].
     webRtc.onTracksChanged = _bumpVideoRevision;
-    // A reduction is a success, so this is wired next to the two failure
-    // callbacks and behaves nothing like them: it changes no media state and
-    // tears nothing down. It only puts the sentence where the person who is
-    // publishing can read it.
+    // A reduction is a success: it changes no media state and tears nothing
+    // down. It only puts the sentence where the person who is publishing can
+    // read it.
     webRtc.onPublishReduced = _noteReduction;
+    // Raw, and deliberately not reported from here - it goes through the
+    // detector, which is where the hysteresis lives.
+    webRtc.onLocalSpeakingChanged = (isSpeaking) =>
+        _speaking?.update(isSpeaking: isSpeaking);
+    // The SDK gave up reconnecting. A fresh connection is the only recovery -
+    // and it is cheap, because minting one touches nothing but the token.
+    webRtc.onMediaDisconnected = () => unawaited(_reconnectMedia());
     return webRtc;
   }
 
-  /// Files a clamped publish where the room can render it.
-  ///
-  /// One sentence rather than a list: two reductions on one publish would be a
-  /// paragraph on a call screen, and the video ceiling is the one that
-  /// describes what the user is now sending. The rest are still recorded in the
-  /// session log by the interceptor, which is where a complete account belongs.
-  void _noteReduction(List<EntitlementDegradationDto> degradations) {
-    final video = degradations.firstWhere(
-      (d) => d.key == EntitlementKeys.voiceVideoCeiling,
-      orElse: () => degradations.first,
-    );
-    emitIfOpen(state.copyWith(videoNotice: video.notice));
-  }
+  /// Guards [_reconnectMedia] against a second attempt while one is running.
+  bool _reconnectingMedia = false;
 
-  /// Guards [_rebuildMedia]: every pending subscribe fails at once when a session dies, so the
-  /// callback fires in a burst.
-  bool _rebuildingMedia = false;
-
-  /// Open a fresh media session after the server declares the current one spent.
+  /// Rebuilds the media half after the SDK's own reconnect ladder is exhausted.
   ///
-  /// A session id outlives nothing: it is meaningless without the peer connection that produced it,
-  /// and once the server has said `sessionGone` every call on it fails identically. So the whole
-  /// media half is rebuilt - new session, republished microphone, re-subscribed room - while the
-  /// room membership, the roster and the version tracker are all left alone. This is not a rejoin.
+  /// A token is good for minutes rather than hours, so the case this covers is
+  /// a device asleep or in a tunnel for longer than that: the resume is refused
+  /// and the SDK stops. Asking for another connection is the documented answer,
+  /// it does not touch the roster, and it does not re-announce this client to
+  /// anybody.
   ///
-  /// The camera and any screen share do not survive it. They were publications on the dead session,
-  /// so they are already gone at the SFU; clearing them locally makes the UI agree with the room
-  /// instead of showing a camera nobody is receiving.
-  Future<void> _rebuildMedia() async {
+  /// **Channel membership is untouched.** The roster and the version tracker
+  /// both survive; this is not a rejoin. The camera and any screen share do not
+  /// survive - they were publications on a connection that is gone - so the
+  /// room is told they stopped rather than left advertising a picture nobody is
+  /// receiving.
+  Future<void> _reconnectMedia() async {
     final guildId = state.guildId;
     final channelId = state.channelId;
-    if (_rebuildingMedia || guildId == null || channelId == null) return;
+    if (_reconnectingMedia || guildId == null || channelId == null) return;
     if (state.phase != GuildVoicePhase.active) return;
-    _rebuildingMedia = true;
+    _reconnectingMedia = true;
     try {
       final dead = _webRtc;
       _webRtc = null;
@@ -363,21 +374,22 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       final webRtc = _buildTransport();
       _webRtc = webRtc;
       await webRtc.connect(guildId, channelId);
-      webRtc.setMuted(state.isMuted);
+      await webRtc.setMuted(state.isMuted);
       webRtc.setDeafened(state.isDeafened);
       await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
 
-      // The roster is unchanged, but every subscription on it was lost with the session, so this is
-      // what pulls the room back in.
+      // The roster is unchanged, but every subscription went with the old
+      // connection, so this is what pulls the room back in.
       await repository.refetchSnapshot();
     } catch (_) {
       emitIfOpen(state.copyWith(errorMessage: 'Lost the connection to voice.'));
     } finally {
-      _rebuildingMedia = false;
+      _reconnectingMedia = false;
     }
   }
 
-  /// Drops the camera and screen share that died with the old session, and tells the room.
+  /// Drops the camera and screen share that went with the old connection, and
+  /// tells the room.
   Future<void> _retireLocalPublications(String channelId) async {
     final shareId = _myShareId;
     _myShareId = null;
@@ -402,8 +414,75 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
         );
       }
     } catch (_) {
-      // Best-effort - the server's own reconcile corrects it from the next heartbeat either way.
+      // Best-effort - the server's own reconcile corrects it from the next
+      // heartbeat either way.
     }
+  }
+
+  /// Debounces this device's voice activity into `guild.voice.SpeakingChanged`.
+  ///
+  /// **This is what a guild channel never sent**, which is why every guild room
+  /// stayed `mode: "all"` at any size: ranking has exactly one input, and no
+  /// client was providing it. Nothing looked broken and nothing was saved.
+  ///
+  /// Built per session rather than per cubit so its "what the server currently
+  /// believes" state cannot survive into a channel the belief is not about.
+  VoiceSpeakingDetector? _speaking;
+
+  /// Tells the server when this client is backgrounded, so it stops sending
+  /// video nobody is looking at. Audio is unaffected - see
+  /// [VoiceAppVisibility].
+  VoiceAppVisibility? _visibility;
+
+  void _startVisibilityReports() {
+    _visibility?.dispose();
+    _visibility = VoiceAppVisibility(
+      onChanged: (isPaused) => unawaited(
+        _webRtc?.setPaused(isPaused) ?? Future.value(),
+      ),
+    );
+  }
+
+  void _stopVisibilityReports() {
+    _visibility?.dispose();
+    _visibility = null;
+  }
+
+  void _startSpeakingReports() {
+    _speaking?.dispose();
+    _speaking = VoiceSpeakingDetector(
+      report: (isSpeaking) async {
+        final channelId = state.channelId;
+        if (channelId == null || state.phase != GuildVoicePhase.active) return;
+        await repository.invokeSpeakingChanged(
+          channelId: channelId,
+          isSpeaking: isSpeaking,
+        );
+      },
+    );
+  }
+
+  void _stopSpeakingReports() {
+    // Silenced rather than merely disposed: a detector torn down mid-word
+    // leaves the server believing this device is still talking, which keeps it
+    // ranked - and every other client in the room subscribed to it.
+    _speaking?.silenceNow();
+    _speaking?.dispose();
+    _speaking = null;
+  }
+
+  /// Files a clamped publish where the room can render it.
+  ///
+  /// One sentence rather than a list: two reductions on one publish would be a
+  /// paragraph on a call screen, and the video ceiling is the one that
+  /// describes what the user is now sending. The rest are still recorded in the
+  /// session log by the interceptor, which is where a complete account belongs.
+  void _noteReduction(List<EntitlementDegradationDto> degradations) {
+    final video = degradations.firstWhere(
+      (d) => d.key == EntitlementKeys.voiceVideoCeiling,
+      orElse: () => degradations.first,
+    );
+    emitIfOpen(state.copyWith(videoNotice: video.notice));
   }
 
   Future<void> _connect(
@@ -426,21 +505,33 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     unawaited(soundService.playJoinCall());
 
     try {
-      // Publish before pulling anything: Cloudflare rejects a pull on a
-      // session that has not completed its own negotiation. Subscribes that
-      // raced ahead of this were held by the transport, not dropped.
       await webRtc.connect(guildId, channelId);
-      webRtc.setMuted(state.isMuted);
+      await webRtc.setMuted(state.isMuted);
       webRtc.setDeafened(state.isDeafened);
       await webRtc.setSpeakerphoneOn(state.isSpeakerOn);
+      _startSpeakingReports();
+      _startVisibilityReports();
+    } on VoiceMediaException catch (e) {
+      // A self-hosted instance with no SFU configured is a supported state, not
+      // a fault - and there is no capability read to ask up front, so this is
+      // where it is discovered. Saying "could not connect" for it would send
+      // somebody looking for a network problem that does not exist.
+      emitIfOpen(
+        state.copyWith(
+          errorMessage: e.isVoiceNotConfigured
+              ? 'Voice is not available on this server.'
+              : 'Could not connect audio.',
+        ),
+      );
     } catch (_) {
       emitIfOpen(state.copyWith(errorMessage: 'Could not connect audio.'));
     }
 
-    // Re-read after publishing: anyone who started publishing while we were
+    // Re-read after connecting: anyone who started publishing while we were
     // behind the microphone prompt is only in this second snapshot.
     await repository.refetchSnapshot();
     _heartbeat.start();
+    _liveness.start();
   }
 
   // ── Snapshot ──────────────────────────────────────────────────────────────
@@ -483,6 +574,13 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     for (final gone in previous.keys.where((id) => !present.contains(id))) {
       webRtc.unsubscribeParticipant(gone);
     }
+
+    // Taken wholesale, exactly like the roster. Applied *before* the subscribes
+    // below so they are filtered by it on the way through rather than issued
+    // and then withdrawn - and a snapshot with no `subscriptions` clears any set
+    // that was in force, which is the ordinary small room saying "pull everyone
+    // who is publishing".
+    webRtc.applySubscriptionSet(snapshot.subscriptions);
 
     for (final p in snapshot.publishersExcept(_myUserId)) {
       unawaited(
@@ -617,12 +715,30 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     }
   }
 
+  /// One tick of the HTTP liveness loop - see [VoiceLiveness].
+  ///
+  /// Null when there is no joined channel to assert. The timer is started after
+  /// the phase goes active and stopped in [_teardown], so that only happens to
+  /// a tick that raced a leave - and a leave is not the server evicting us,
+  /// which is the one thing a non-null answer here would be read as.
+  Future<VoiceLivenessOutcome?> _assertAlive() async {
+    final guildId = state.guildId;
+    final channelId = state.channelId;
+    if (guildId == null ||
+        channelId == null ||
+        state.phase != GuildVoicePhase.active) {
+      return null;
+    }
+    return repository.assertAlive(guildId: guildId, channelId: channelId);
+  }
+
   /// A reconnect is when to assert this client's state, not when to rebuild it.
   ///
   /// A dropped socket is not a departure. The server shortens this client's liveness window rather
-  /// than evicting it, and reconnecting restores it - so nothing here touches the peer connection or
-  /// the media session. They ride their own transport, and rebuilding them on a websocket blip
-  /// spends the session id and earns `sessionGone` on every call after it.
+  /// than evicting it, and reconnecting restores it - so nothing here touches the SFU connection.
+  /// The hub and the media are entirely independent transports, the SDK has its own reconnect for
+  /// its own socket, and rebuilding media on a hub blip drops audio for a fault that was never on
+  /// the media path.
   ///
   /// The heartbeat goes first and immediately, rather than waiting up to 30 seconds for the next
   /// tick: it restores the liveness window and, if this client fell behind while away, brings back a
@@ -640,7 +756,12 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     if (state.phase != GuildVoicePhase.active) return;
     final isMuted = !state.isMuted;
     final channelId = state.channelId;
-    _webRtc?.setMuted(isMuted);
+    await _webRtc?.setMuted(isMuted);
+    // Muting is not a pause in speech and must not be debounced like one: held
+    // through the release delay, this device stays ranked as talking with its
+    // microphone off, and every other client in the room stays subscribed to
+    // the silence.
+    if (isMuted) _speaking?.silenceNow();
     emitIfOpen(state.copyWith(isMuted: isMuted));
     if (channelId == null) return;
     _updateParticipant(
@@ -683,11 +804,18 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
 
   /// Whether asking to publish video here would only be refused.
   ///
-  /// Drawn from the room's own limits, so it follows a plan that lapses
-  /// mid-call. False when no limits have been reported: a control disabled on
-  /// the strength of a field nobody sent is worse than one that is pressed and
-  /// answered.
-  bool get isVideoBlocked => !(state.limits?.canPublishVideo ?? true);
+  /// Two independent sources, and both have to permit it. The room's limits
+  /// describe what this channel allows, and follow a plan that lapses mid-call;
+  /// the **connection token** describes what this client was actually granted,
+  /// which is the more authoritative of the two - a member whose plan carries
+  /// no video connects and hears everyone, and cannot turn a camera on however
+  /// the client is patched.
+  ///
+  /// False when neither has been reported: a control disabled on the strength
+  /// of a field nobody sent is worse than one that is pressed and answered.
+  bool get isVideoBlocked =>
+      !(state.limits?.canPublishVideo ?? true) ||
+      !(_webRtc?.canPublishVideo ?? true);
 
   Future<void> toggleCamera() async {
     if (state.phase != GuildVoicePhase.active) return;
@@ -874,6 +1002,13 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
       case VoiceSnapshotReceived(:final snapshot):
         _applySnapshot(snapshot);
 
+      case VoiceSubscriptionsChanged(:final channelId, :final subscriptions):
+        // Nobody did anything - the conversation moved. The transport diffs
+        // this against what it is currently pulling and adjusts; nothing here
+        // tears anything down, and everyone stays rendered.
+        if (channelId != state.channelId) return;
+        _webRtc?.applySubscriptionSet(subscriptions);
+
       case VoiceResyncRequested():
         // Everything but roomGone was already answered by a refetch in the
         // repository. roomGone means the room no longer exists: rejoining has
@@ -1055,6 +1190,11 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
     }
   }
 
+  /// Reached two ways, and the second is the one that matters during an
+  /// outage: `Resync(roomGone)` over the hub, and a `404`/`409` from the HTTP
+  /// liveness ping. A client the sweep evicted is announced to the roster it
+  /// has just been removed from, so it is the one participant the hub event
+  /// does not reach - the ping is the only channel that can tell it.
   Future<void> _handleRoomGone() =>
       _tearDownLocally('Voice channel is no longer available.');
 
@@ -1246,6 +1386,7 @@ class GuildVoiceCubit extends Cubit<GuildVoiceState>
   @override
   Future<void> close() {
     _heartbeat.stop();
+    _liveness.stop();
     unawaited(_sub.cancel());
     unawaited(_connectionSub.cancel());
     return super.close();
