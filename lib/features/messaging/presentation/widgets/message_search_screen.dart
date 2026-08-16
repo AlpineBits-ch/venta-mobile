@@ -1,20 +1,35 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/format/date_time_format.dart';
+import '../../../../core/network/authed_image_headers.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/profile_resolver.dart';
-import '../../../../core/widgets/read_only_notice.dart';
 import '../../data/message_content_codec.dart';
 import '../../data/message_repository.dart';
+import '../../data/models/attachment_dto.dart';
 import '../../data/models/message_dto.dart';
+import 'message_attachment_view.dart';
+
+/// One attachment whose file name matched, plus the message carrying it -
+/// the row needs both (author/timestamp come off the message).
+class _AttachmentHit {
+  const _AttachmentHit(this.message, this.attachment);
+
+  final MessageDto message;
+  final AttachmentDto attachment;
+}
 
 /// Full-text search within the current conversation/channel - mirrors
 /// desktop's `searchMessagesForConversation`/`searchMessagesForChannel`.
-/// Results are read-only (author + decoded snippet + timestamp); jumping
-/// the live thread view to the exact message isn't wired up yet since
-/// `ThreadView` has no scroll-to-index infra (same limitation as the
-/// reply-quote row, which is tap-inert for the same reason).
+/// Results come back in two groups, as on desktop: messages whose text
+/// matched, and attachments whose file name matched.
+/// Tapping a result pops this screen and hands the message id back as the
+/// route's pop value; `ThreadView._openSearch` is what turns that into a
+/// scroll. The screen deliberately knows nothing about the thread it was
+/// pushed from - it is reachable from a DM and a guild channel alike, and the
+/// only thing both have in common is a message id.
 class MessageSearchScreen extends StatefulWidget {
   const MessageSearchScreen({
     super.key,
@@ -82,9 +97,33 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     }
   }
 
+  /// Attachments in the fetched result set whose file name matches the query,
+  /// flattened one row per attachment - desktop derives its attachment group
+  /// the same way, off the same server response rather than a second call.
+  ///
+  /// Note what that means: the server's tsvector is built from message text
+  /// only (`MessageSearchEntry.Content`), so a file name is never *why* a
+  /// message came back. This surfaces the attachments of messages that already
+  /// matched; it is not a file search. Desktop has the same ceiling.
+  List<_AttachmentHit> _attachmentHits() {
+    final terms = _queryTerms(_lastQuery).map((t) => t.toLowerCase()).toList();
+    if (terms.isEmpty) return const [];
+    return [
+      for (final message in _results)
+        for (final attachment in message.attachments)
+          if (terms.any(
+            (term) => attachment.fileName.toLowerCase().contains(term),
+          ))
+            _AttachmentHit(message, attachment),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final attachmentHits = _searched
+        ? _attachmentHits()
+        : const <_AttachmentHit>[];
     return Scaffold(
       appBar: AppBar(
         // See `AppTheme` - the title here is the search field itself, which
@@ -152,7 +191,9 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                 ),
               ),
             )
-          : _results.isEmpty
+          // Both groups are derived from the one response, so "nothing
+          // matched" has to consider both before it can be said.
+          : _results.isEmpty && attachmentHits.isEmpty
           ? Center(
               child: Text(
                 'No results',
@@ -163,48 +204,26 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
             )
           : Column(
               children: [
-                const ReadOnlyNotice(
-                  'Results are read-only - opening one in the thread isn\'t '
-                  'available yet.',
-                ),
-                const Divider(height: 1),
                 Expanded(
-                  child: ListView.builder(
-                    itemCount: _results.length,
-                    itemBuilder: (context, index) {
-                      final message = _results[index];
-                      final text = MessageContentCodec.decode(message.content);
-                      return ListTile(
-                        title: ProfileResolver(
-                          userId: message.authorId,
-                          builder: (context, profile) =>
-                              Text(profile?.userName ?? '…'),
-                        ),
-                        subtitle: Text.rich(
-                          TextSpan(
-                            children: _highlightedSpans(
-                              text.isEmpty ? '(attachment)' : text,
-                              _lastQuery,
-                              theme.textTheme.bodySmall,
-                              theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                                backgroundColor: theme.colorScheme.primary
-                                    .withValues(alpha: 0.12),
-                              ),
-                            ),
+                  child: ListView(
+                    // Eager children rather than a builder: the endpoint caps
+                    // at 25 results (50 hard limit), and the two groups need
+                    // their own headers interleaved.
+                    children: [
+                      if (_results.isNotEmpty) ...[
+                        const _SectionHeader('Messages'),
+                        for (final message in _results)
+                          _MessageResultTile(
+                            message: message,
+                            query: _lastQuery,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: message.createdAt != null
-                            ? Text(
-                                formatRelativeDateTime(message.createdAt!),
-                                style: theme.textTheme.labelSmall,
-                              )
-                            : null,
-                      );
-                    },
+                      ],
+                      if (attachmentHits.isNotEmpty) ...[
+                        const _SectionHeader('Attachments'),
+                        for (final hit in attachmentHits)
+                          _AttachmentResultTile(hit: hit, query: _lastQuery),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -213,26 +232,203 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   }
 }
 
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.m,
+        AppSpacing.m,
+        AppSpacing.m,
+        AppSpacing.xs,
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+        ),
+      ),
+    );
+  }
+}
+
+class _MessageResultTile extends StatelessWidget {
+  const _MessageResultTile({required this.message, required this.query});
+
+  final MessageDto message;
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final text = MessageContentCodec.decode(message.content);
+    return ListTile(
+      onTap: () => Navigator.of(context).pop(message.id),
+      title: ProfileResolver(
+        userId: message.authorId,
+        builder: (context, profile) => Text(profile?.userName ?? '…'),
+      ),
+      subtitle: Text.rich(
+        TextSpan(
+          children: _highlightedSpans(
+            text.isEmpty ? '(attachment)' : text,
+            query,
+            theme.textTheme.bodySmall,
+            theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.bold,
+              backgroundColor: theme.colorScheme.primary.withValues(
+                alpha: 0.12,
+              ),
+            ),
+          ),
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: message.createdAt != null
+          ? Text(
+              formatRelativeDateTime(message.createdAt!),
+              style: theme.textTheme.labelSmall,
+            )
+          : null,
+    );
+  }
+}
+
+/// One matched attachment: thumbnail (images) or type icon, the highlighted
+/// file name, and who posted it - mirroring desktop's attachment rows. Taps
+/// through to the message carrying the attachment rather than opening the file
+/// itself, which is what the row is a search hit *for*: the query matched a
+/// file name, and what the reader wants is the conversation around it.
+class _AttachmentResultTile extends StatelessWidget {
+  const _AttachmentResultTile({required this.hit, required this.query});
+
+  final _AttachmentHit hit;
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final attachment = hit.attachment;
+    // Message-embedded attachments carry no `url`, so the thumbnail has to go
+    // through the shared resolver rather than reading a field.
+    final thumbnailUrl = resolveAttachmentThumbnailUrl(attachment);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.5);
+    return ListTile(
+      onTap: () => Navigator.of(context).pop(hit.message.id),
+      leading: SizedBox(
+        width: 40,
+        height: 40,
+        child: thumbnailUrl != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadii.chip),
+                child: CachedNetworkImage(
+                  imageUrl: thumbnailUrl,
+                  // The attachment route is authorized and answers 404 rather
+                  // than 401 when it refuses, so an anonymous fetch is
+                  // indistinguishable from a deleted file - it just renders as
+                  // a broken thumbnail with nothing to trace.
+                  httpHeaders: authedImageHeaders(),
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    child: const Icon(Icons.broken_image_outlined, size: 20),
+                  ),
+                ),
+              )
+            : Container(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(AppRadii.chip),
+                ),
+                child: Icon(_iconFor(attachment.contentType), size: 20),
+              ),
+      ),
+      title: Text.rich(
+        TextSpan(
+          children: _highlightedSpans(
+            attachment.fileName,
+            query,
+            theme.textTheme.bodyMedium,
+            theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.bold,
+              backgroundColor: theme.colorScheme.primary.withValues(
+                alpha: 0.12,
+              ),
+            ),
+          ),
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: ProfileResolver(
+        userId: hit.message.authorId,
+        builder: (context, profile) => Text(
+          'from ${profile?.userName ?? '…'}',
+          style: theme.textTheme.bodySmall?.copyWith(color: muted),
+        ),
+      ),
+      trailing: hit.message.createdAt != null
+          ? Text(
+              formatRelativeDateTime(hit.message.createdAt!),
+              style: theme.textTheme.labelSmall,
+            )
+          : null,
+    );
+  }
+
+  /// Same mapping the message list's file chips use - that one is private to
+  /// `message_attachment_view.dart`, and only the thumbnail resolver (where
+  /// the fallback chain actually matters) is shared.
+  IconData _iconFor(String contentType) {
+    if (contentType.startsWith('video/')) return Icons.videocam_outlined;
+    if (contentType.startsWith('audio/')) return Icons.audiotrack_outlined;
+    if (contentType == 'application/pdf') return Icons.picture_as_pdf_outlined;
+    if (contentType.contains('zip') || contentType.contains('compressed')) {
+      return Icons.folder_zip_outlined;
+    }
+    if (contentType.startsWith('text/')) return Icons.description_outlined;
+    return Icons.insert_drive_file_outlined;
+  }
+}
+
+/// The bare words of [query], with `websearch_to_tsquery` syntax (quotes,
+/// leading `-`) stripped rather than trying to fully replicate Postgres'
+/// query parsing.
+///
+/// Both the highlighter and the attachment filter run off this, so a file
+/// name only lands in the attachment group if the row will visibly show why:
+/// matching the raw query string instead would miss `"quoted phrases"` and
+/// `-negations` that the highlighter happily marks up.
+List<String> _queryTerms(String query) => query
+    .replaceAll('"', ' ')
+    .split(RegExp(r'\s+'))
+    .where((t) => t.isNotEmpty && t != '-' && t.toLowerCase() != 'or')
+    .map((t) => t.startsWith('-') ? t.substring(1) : t)
+    .where((t) => t.isNotEmpty)
+    .toSet()
+    .toList();
+
 /// Client-side highlight of [query]'s terms within [text] - the search API
 /// doesn't return match offsets or a pre-highlighted snippet, just the full
 /// `content`, so this does a simple case-insensitive literal-term match.
-/// Strips `websearch_to_tsquery` syntax (quotes, leading `-`) down to bare
-/// words rather than trying to fully replicate Postgres' query parsing.
 List<TextSpan> _highlightedSpans(
   String text,
   String query,
   TextStyle? baseStyle,
   TextStyle? highlightStyle,
 ) {
-  final terms = query
-      .replaceAll('"', ' ')
-      .split(RegExp(r'\s+'))
-      .where((t) => t.isNotEmpty && t != '-' && t.toLowerCase() != 'or')
-      .map((t) => t.startsWith('-') ? t.substring(1) : t)
-      .where((t) => t.isNotEmpty)
-      .map(RegExp.escape)
-      .toSet()
-      .toList();
+  final terms = _queryTerms(query).map(RegExp.escape).toList();
   if (terms.isEmpty) return [TextSpan(text: text, style: baseStyle)];
 
   final pattern = RegExp('(${terms.join('|')})', caseSensitive: false);

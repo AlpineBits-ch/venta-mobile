@@ -4,16 +4,23 @@ import '../../../../core/format/date_time_format.dart';
 import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/load_failure_view.dart';
 import '../../../../core/widgets/profile_resolver.dart';
-import '../../../../core/widgets/read_only_notice.dart';
 import '../../data/message_content_codec.dart';
 import '../../data/message_repository.dart';
 import '../../data/models/message_dto.dart';
 
 /// Pinned-messages panel for the current channel/conversation - backed by
 /// `GET .../pins`, most-recently-pinned first. Shows who pinned each entry
-/// and when, mirroring what moderators expect from the audit log. Results
-/// are read-only, same "no scroll-to-index infra" limitation as
-/// [MessageSearchScreen].
+/// and when, mirroring what moderators expect from the audit log.
+///
+/// Tapping a row pops this screen with the message id as the route's pop
+/// value; `ThreadView._openPinnedMessages` turns that into a scroll. Same
+/// handoff as [MessageSearchScreen], and for the same reason - a panel pushed
+/// on the navigator cannot scroll the screen underneath it.
+///
+/// A pin can be arbitrarily old, so this is the jump most likely to name a
+/// message the thread has not loaded. That case is handled on the other side:
+/// the jump pages older history in, bounded, and says so if the message is
+/// past the bound.
 class PinnedMessagesScreen extends StatefulWidget {
   const PinnedMessagesScreen({super.key, required this.repository});
 
@@ -70,11 +77,6 @@ class _PinnedMessagesScreenState extends State<PinnedMessagesScreen> {
             )
           : Column(
               children: [
-                const ReadOnlyNotice(
-                  'Pinned messages are read-only here - opening one in the '
-                  'thread isn\'t available yet.',
-                ),
-                const Divider(height: 1),
                 Expanded(
                   child: ListView.separated(
                     padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
@@ -84,6 +86,7 @@ class _PinnedMessagesScreenState extends State<PinnedMessagesScreen> {
                       final message = pins[index];
                       final text = MessageContentCodec.decode(message.content);
                       return ListTile(
+                        onTap: () => Navigator.of(context).pop(message.id),
                         isThreeLine: message.pinnedById != null,
                         title: ProfileResolver(
                           userId: message.authorId,

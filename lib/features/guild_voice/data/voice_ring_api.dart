@@ -4,22 +4,34 @@ import '../../../core/device/device_id_service.dart';
 import '../../../core/network/api_client.dart';
 import 'models/voice_ring_dto.dart';
 
-/// The ephemeral "come and join me in here" ring.
+/// "Come and join me in here", in its two forms.
+///
+/// **One endpoint, two things.** The request body's `delivery` decides which,
+/// and they are not variations on each other:
+///
+/// * [ring] is the loud one - live, ~60 seconds, it buzzes their devices, and it
+///   can be accepted, declined or cancelled. The caller must be sitting in the
+///   channel, because the invitation's whole claim is "I am in here".
+/// * [invite] is the quiet one - no ring is created, so nothing expires and
+///   there is nothing to accept or decline; the card written into the DM is the
+///   whole of it. The caller only has to be able to see and connect to the
+///   channel themselves.
 ///
 /// **This is not the DM call ring.** That is a phone call: the caller is on the
 /// line waiting, it raises a CallKit screen on iOS and it appears in the system
-/// call log. This is an ordinary invitation to somebody who may never look at
+/// call log. A ring is an ordinary invitation to somebody who may never look at
 /// it, it lives 60 seconds, and it grants nothing.
 ///
 /// **And it is not the persistent invite link with a voice-channel target.**
 /// That is a credential - a URL anybody can paste anywhere, which admits a
-/// stranger to the guild. This is a message to somebody who is already a member,
-/// addressed to them personally. The two share nothing but the word "invite".
+/// stranger to the guild. Both forms here are addressed to somebody who is
+/// already a member, personally. They share nothing but the word "invite".
 ///
 /// Only the send is channel-scoped. Once a ring exists it is addressed by its
 /// own id from a client that may have no idea which channel it belongs to - a
 /// phone woken by a push knows a ring id and nothing else - so the rest of the
-/// lifecycle is flat.
+/// lifecycle is flat. A message invitation has no lifecycle at all: it is one
+/// request and it is finished.
 class VoiceRingApi {
   VoiceRingApi({required this.client, required this.deviceIdService});
 
@@ -36,13 +48,19 @@ class VoiceRingApi {
   Options get _deviceOptions =>
       Options(headers: {'X-Device-Id': deviceIdService.deviceId});
 
-  /// Asks one member into the voice channel the caller is sitting in.
+  /// Asks one member into the voice channel the caller is sitting in, and
+  /// buzzes them now.
   ///
   /// Throws [VoiceRingRefusedException] for every refusal the server explains,
   /// so a caller has one thing to catch rather than a status code and a body
   /// shape. Repeating a ring you already have out is **not** a refusal: it is
   /// idempotent and answers `200` with the ring that is already out, so the
   /// button can be naive.
+  ///
+  /// Sends `delivery` explicitly rather than leaning on the server default. The
+  /// default is `Both` only for the sake of clients that predate the field, and
+  /// a request that says what it wants does not change meaning if that ever
+  /// stops being true.
   Future<VoiceRingDto> ring({
     required String guildId,
     required String channelId,
@@ -51,10 +69,56 @@ class VoiceRingApi {
     try {
       final response = await client.dio.post<Map<String, dynamic>>(
         '$_base/$guildId/channels/$channelId/voice/rings',
-        data: {'targetUserId': targetUserId},
+        data: {
+          'targetUserId': targetUserId,
+          'delivery': VoiceRingDelivery.both.wire,
+        },
         options: _deviceOptions,
       );
       return VoiceRingDto.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw _refusalFor(e) ?? e;
+    }
+  }
+
+  /// Puts an invitation in their DM and interrupts nobody.
+  ///
+  /// The quiet form, and the one the picker offers first. **No ring is
+  /// created**: nothing expires, there is no id to accept, decline or cancel,
+  /// and no phone rings. The card in the conversation is the whole of it, and it
+  /// stands until somebody acts on it - which is why the response is a
+  /// [VoiceInviteSentDto] carrying a conversation rather than a ring.
+  ///
+  /// Unlike [ring], the caller does **not** have to be sitting in the channel.
+  /// They only have to be able to see and connect to it themselves, so this is
+  /// offerable from a channel somebody is merely looking at.
+  ///
+  /// **It can be refused outright, and commonly is.** A `403` carrying
+  /// [VoiceRingRefusal.recipientPolicy] means the recipient does not accept
+  /// direct messages from this sender - the product default is friends-only, and
+  /// two people sharing a server are frequently not friends. That is the one
+  /// failure [ring] never has, because a ring does not need a conversation. It
+  /// arrives as a [VoiceRingRefusedException] like every other refusal, and it
+  /// is about the two people rather than the channel, so it belongs against the
+  /// one row that asked rather than in a banner about the channel.
+  Future<VoiceInviteSentDto> invite({
+    required String guildId,
+    required String channelId,
+    required String targetUserId,
+  }) async {
+    try {
+      final response = await client.dio.post<Map<String, dynamic>>(
+        '$_base/$guildId/channels/$channelId/voice/rings',
+        data: {
+          'targetUserId': targetUserId,
+          'delivery': VoiceRingDelivery.message.wire,
+        },
+        // Carried for symmetry with the ring rather than out of need: no ring
+        // exists, so there is no other device of this account that could answer
+        // one and nothing for the server to tell apart. It costs a header.
+        options: _deviceOptions,
+      );
+      return VoiceInviteSentDto.fromJson(response.data ?? const {});
     } on DioException catch (e) {
       throw _refusalFor(e) ?? e;
     }
@@ -151,13 +215,17 @@ class VoiceRingApi {
     if (status != 403 && status != 409 && status != 429) return null;
 
     final data = e.response?.data;
-    // A bare 403 with no body is "you are not in that voice channel", which is
-    // a bug in this client rather than something to put on screen - the invite
-    // affordance should not have been offered at all.
+    // A bare 403 with no body is a permission failure the server does not care
+    // to explain: for a ring, "you are not in that voice channel"; for a message
+    // invitation, "you cannot see that channel yourself". Either way it is a bug
+    // in this client rather than something to put on screen - the affordance
+    // should not have been offered at all.
     if (data is! Map) return null;
 
     try {
-      final refusal = VoiceRingRefusalDto.fromJson(data.cast<String, dynamic>());
+      final refusal = VoiceRingRefusalDto.fromJson(
+        data.cast<String, dynamic>(),
+      );
       return VoiceRingRefusedException(refusal);
     } catch (_) {
       return null;

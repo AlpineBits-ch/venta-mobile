@@ -82,6 +82,14 @@ class RealtimeService {
     // the bulk one is what actually fires today.
     'guild.MessageDeleted',
     'guild.MessagesBulkDeleted',
+    // A bot reply only this user was sent, which the server never stored. It
+    // lives in the thread's in-memory list and nowhere else - a reload loses
+    // it, which is the whole point - so nothing may offer edit, delete, pin or
+    // reply on it: there is no row for any of those to act on.
+    'guild.EphemeralMessageCreated',
+    // A bot asking this user to fill in a form. Server->client only; the answer
+    // goes back over REST (`modal-submit`), not the hub.
+    'guild.ModalOpen',
     'guild.UserTyping',
     // A channel's encryption was toggled. Messaging owns the MLS group but not
     // channel membership, so this one is fanned out by Guild rather than

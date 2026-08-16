@@ -84,12 +84,14 @@ class VoiceStatusBar extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // Offered only while actually connected, and only from this
-                  // bar, because the invitation's entire claim is "I am in
-                  // here". Inviting from a channel you are merely looking at is
-                  // refused server-side with a bare 403, which is a bug in the
-                  // client rather than something to put on screen - so the
-                  // affordance simply is not there to press.
+                  // This bar only exists while connected, so anything opened
+                  // from it is opened from a channel this account is sitting in
+                  // - which is what `isInChannel` tells the sheet, and what lets
+                  // it offer the ring as well as the quiet invitation. Opened
+                  // from anywhere else the sheet still works; it just offers the
+                  // message form alone, because ringing from a channel you are
+                  // merely looking at is a claim about somebody else's room and
+                  // the server refuses it with a bare 403.
                   if (state.phase == GuildVoicePhase.active &&
                       state.guildId != null &&
                       state.channelId != null)
@@ -100,6 +102,7 @@ class VoiceStatusBar extends StatelessWidget {
                         context,
                         guildId: state.guildId!,
                         channelId: state.channelId!,
+                        isInChannel: true,
                         // Hidden rather than shown and refused: ringing
                         // somebody already in the channel answers `409` and the
                         // roster already says they are there.

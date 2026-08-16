@@ -17,6 +17,7 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../guild_voice/bloc/guild_voice_cubit.dart';
 import '../../../guild_voice/presentation/screens/guild_voice_screen.dart';
+import '../../../guild_voice/presentation/widgets/voice_ring_invite_sheet.dart';
 import '../../../household/presentation/widgets/away_board.dart';
 import '../../../household/presentation/widgets/home_digest_card.dart';
 import '../../../household/presentation/widgets/home_status_board.dart';
@@ -1277,12 +1278,34 @@ class _VoiceChannelTile extends StatelessWidget {
                 color: joined ? theme.colorScheme.primary : null,
               ),
               title: Text(channel.name, style: theme.textTheme.bodyMedium),
-              trailing: participants.isNotEmpty
-                  ? Text(
+              // Offered whether or not this account is in the channel. Only the
+              // *ring* requires sitting in it - the quiet message invitation
+              // just needs to be able to see and connect to the channel, which
+              // is exactly what rendering this row already proves. `isInChannel`
+              // is what the sheet reads to decide which of the two it may send.
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (participants.isNotEmpty)
+                    Text(
                       '${participants.length}',
                       style: theme.textTheme.labelSmall,
-                    )
-                  : null,
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.person_add_alt_outlined, size: 18),
+                    tooltip: 'Invite to voice',
+                    onPressed: () => showVoiceRingInviteSheet(
+                      context,
+                      guildId: guildId,
+                      channelId: channel.id,
+                      isInChannel: joined,
+                      alreadyInChannel: {
+                        for (final p in participants) p.userId,
+                      },
+                    ),
+                  ),
+                ],
+              ),
               onTap: () => _onTap(context, state),
               onLongPress: onLongPress,
             ),

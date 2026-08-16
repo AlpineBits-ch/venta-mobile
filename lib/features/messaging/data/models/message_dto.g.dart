@@ -145,6 +145,7 @@ const _$MessageTypeEnumMap = {
   MessageType.guildMemberLeave: 'GuildMemberLeave',
   MessageType.callEnded: 'CallEnded',
   MessageType.callMissed: 'CallMissed',
+  MessageType.voiceChannelInvite: 'VoiceChannelInvite',
   MessageType.unknown: 'unknown',
 };
 

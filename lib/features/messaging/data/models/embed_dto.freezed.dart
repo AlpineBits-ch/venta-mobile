@@ -858,13 +858,42 @@ mixin _$EmbedVentaDto implements DiagnosticableTreeMixin {
  bool get resolved;@JsonKey(name: 'guild_id') String? get guildId;/// The invite's short shareable code, not its id. Always the canonical
 /// generated code even when the pasted link was a vanity URL, so it
 /// survives a vanity rename.
-@JsonKey(name: 'invite_code') String? get inviteCode;/// The channel a joiner lands on, when the invite names one. Id only -
-/// never a name.
-@JsonKey(name: 'channel_id') String? get channelId;@JsonKey(name: 'page_id') String? get pageId;/// Absent for an invite that never expires. Safe to freeze into the card:
-/// an absolute instant does not go stale the way "expired" does.
+@JsonKey(name: 'invite_code') String? get inviteCode;/// Invite: the channel a joiner lands on, when the invite names one. Voice
+/// invite: the channel being asked into. An id, never a name - except on a
+/// voice invite, which also carries [channelName].
+@JsonKey(name: 'channel_id') String? get channelId;@JsonKey(name: 'page_id') String? get pageId;/// Absent for an invite that never expires, and for a voice invitation that
+/// was sent as a plain message rather than as a ring - see the standing
+/// case in `_VentaVoiceInviteCard`, which is why "no expiry" must never be
+/// read as "expired". On a ring it is always present and is about a minute
+/// after the message was sent, which is what decides whether [ringId] still
+/// means anything.
+///
+/// Safe to freeze into the card: an absolute instant does not go stale the
+/// way a stored "expired" boolean does.
 @JsonKey(name: 'expires_at') DateTime? get expiresAt;/// Absent for unlimited. The running *use* count is deliberately not
 /// carried - re-resolve if you want to show it.
-@JsonKey(name: 'max_uses') int? get maxUses;
+@JsonKey(name: 'max_uses') int? get maxUses;/// Voice invite only: the ring this card was written for.
+///
+/// Live only until [expiresAt]. Past that, treat it as absent rather than
+/// as something to call - the ring no longer exists and accepting it
+/// answers `409`. The honest affordance there is the ordinary join, which
+/// accepts nothing.
+@JsonKey(name: 'ring_id') String? get ringId;/// Voice invite only: who did the asking.
+///
+/// The same person as the message's author today; carried so the card keeps
+/// meaning what it says if it is ever quoted. It is also what tells the
+/// *inviter* they are reading their own invitation, so the card can drop
+/// the Join button for the channel they are already sitting in.
+@JsonKey(name: 'inviter_id') String? get inviterId;/// Voice invite only: the channel's name when the invitation was sent.
+///
+/// The one place a `venta.*` card carries a name rather than only an id.
+/// The invite kind can leave it out because a client re-resolves it from
+/// the code, and the wiki kind *must* leave it out because the audience for
+/// a title is narrower than the audience for the message. Neither applies
+/// here: the recipient was checked for `ViewChannel` before the ring was
+/// allowed at all, and there is no later lookup that would let them fill it
+/// in. Render it; do not go and fetch a fresher one.
+@JsonKey(name: 'channel_name') String? get channelName;
 /// Create a copy of EmbedVentaDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -878,21 +907,21 @@ $EmbedVentaDtoCopyWith<EmbedVentaDto> get copyWith => _$EmbedVentaDtoCopyWithImp
 void debugFillProperties(DiagnosticPropertiesBuilder properties) {
   properties
     ..add(DiagnosticsProperty('type', 'EmbedVentaDto'))
-    ..add(DiagnosticsProperty('kind', kind))..add(DiagnosticsProperty('resolved', resolved))..add(DiagnosticsProperty('guildId', guildId))..add(DiagnosticsProperty('inviteCode', inviteCode))..add(DiagnosticsProperty('channelId', channelId))..add(DiagnosticsProperty('pageId', pageId))..add(DiagnosticsProperty('expiresAt', expiresAt))..add(DiagnosticsProperty('maxUses', maxUses));
+    ..add(DiagnosticsProperty('kind', kind))..add(DiagnosticsProperty('resolved', resolved))..add(DiagnosticsProperty('guildId', guildId))..add(DiagnosticsProperty('inviteCode', inviteCode))..add(DiagnosticsProperty('channelId', channelId))..add(DiagnosticsProperty('pageId', pageId))..add(DiagnosticsProperty('expiresAt', expiresAt))..add(DiagnosticsProperty('maxUses', maxUses))..add(DiagnosticsProperty('ringId', ringId))..add(DiagnosticsProperty('inviterId', inviterId))..add(DiagnosticsProperty('channelName', channelName));
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is EmbedVentaDto&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.resolved, resolved) || other.resolved == resolved)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.inviteCode, inviteCode) || other.inviteCode == inviteCode)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.pageId, pageId) || other.pageId == pageId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is EmbedVentaDto&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.resolved, resolved) || other.resolved == resolved)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.inviteCode, inviteCode) || other.inviteCode == inviteCode)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.pageId, pageId) || other.pageId == pageId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses)&&(identical(other.ringId, ringId) || other.ringId == ringId)&&(identical(other.inviterId, inviterId) || other.inviterId == inviterId)&&(identical(other.channelName, channelName) || other.channelName == channelName));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,kind,resolved,guildId,inviteCode,channelId,pageId,expiresAt,maxUses);
+int get hashCode => Object.hash(runtimeType,kind,resolved,guildId,inviteCode,channelId,pageId,expiresAt,maxUses,ringId,inviterId,channelName);
 
 @override
 String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
-  return 'EmbedVentaDto(kind: $kind, resolved: $resolved, guildId: $guildId, inviteCode: $inviteCode, channelId: $channelId, pageId: $pageId, expiresAt: $expiresAt, maxUses: $maxUses)';
+  return 'EmbedVentaDto(kind: $kind, resolved: $resolved, guildId: $guildId, inviteCode: $inviteCode, channelId: $channelId, pageId: $pageId, expiresAt: $expiresAt, maxUses: $maxUses, ringId: $ringId, inviterId: $inviterId, channelName: $channelName)';
 }
 
 
@@ -903,7 +932,7 @@ abstract mixin class $EmbedVentaDtoCopyWith<$Res>  {
   factory $EmbedVentaDtoCopyWith(EmbedVentaDto value, $Res Function(EmbedVentaDto) _then) = _$EmbedVentaDtoCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) EmbedVentaKind kind, bool resolved,@JsonKey(name: 'guild_id') String? guildId,@JsonKey(name: 'invite_code') String? inviteCode,@JsonKey(name: 'channel_id') String? channelId,@JsonKey(name: 'page_id') String? pageId,@JsonKey(name: 'expires_at') DateTime? expiresAt,@JsonKey(name: 'max_uses') int? maxUses
+@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) EmbedVentaKind kind, bool resolved,@JsonKey(name: 'guild_id') String? guildId,@JsonKey(name: 'invite_code') String? inviteCode,@JsonKey(name: 'channel_id') String? channelId,@JsonKey(name: 'page_id') String? pageId,@JsonKey(name: 'expires_at') DateTime? expiresAt,@JsonKey(name: 'max_uses') int? maxUses,@JsonKey(name: 'ring_id') String? ringId,@JsonKey(name: 'inviter_id') String? inviterId,@JsonKey(name: 'channel_name') String? channelName
 });
 
 
@@ -920,7 +949,7 @@ class _$EmbedVentaDtoCopyWithImpl<$Res>
 
 /// Create a copy of EmbedVentaDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? kind = null,Object? resolved = null,Object? guildId = freezed,Object? inviteCode = freezed,Object? channelId = freezed,Object? pageId = freezed,Object? expiresAt = freezed,Object? maxUses = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? kind = null,Object? resolved = null,Object? guildId = freezed,Object? inviteCode = freezed,Object? channelId = freezed,Object? pageId = freezed,Object? expiresAt = freezed,Object? maxUses = freezed,Object? ringId = freezed,Object? inviterId = freezed,Object? channelName = freezed,}) {
   return _then(_self.copyWith(
 kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
 as EmbedVentaKind,resolved: null == resolved ? _self.resolved : resolved // ignore: cast_nullable_to_non_nullable
@@ -930,7 +959,10 @@ as String?,channelId: freezed == channelId ? _self.channelId : channelId // igno
 as String?,pageId: freezed == pageId ? _self.pageId : pageId // ignore: cast_nullable_to_non_nullable
 as String?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,maxUses: freezed == maxUses ? _self.maxUses : maxUses // ignore: cast_nullable_to_non_nullable
-as int?,
+as int?,ringId: freezed == ringId ? _self.ringId : ringId // ignore: cast_nullable_to_non_nullable
+as String?,inviterId: freezed == inviterId ? _self.inviterId : inviterId // ignore: cast_nullable_to_non_nullable
+as String?,channelName: freezed == channelName ? _self.channelName : channelName // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -1012,10 +1044,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedVentaKind.unknown)  EmbedVentaKind kind,  bool resolved, @JsonKey(name: 'guild_id')  String? guildId, @JsonKey(name: 'invite_code')  String? inviteCode, @JsonKey(name: 'channel_id')  String? channelId, @JsonKey(name: 'page_id')  String? pageId, @JsonKey(name: 'expires_at')  DateTime? expiresAt, @JsonKey(name: 'max_uses')  int? maxUses)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedVentaKind.unknown)  EmbedVentaKind kind,  bool resolved, @JsonKey(name: 'guild_id')  String? guildId, @JsonKey(name: 'invite_code')  String? inviteCode, @JsonKey(name: 'channel_id')  String? channelId, @JsonKey(name: 'page_id')  String? pageId, @JsonKey(name: 'expires_at')  DateTime? expiresAt, @JsonKey(name: 'max_uses')  int? maxUses, @JsonKey(name: 'ring_id')  String? ringId, @JsonKey(name: 'inviter_id')  String? inviterId, @JsonKey(name: 'channel_name')  String? channelName)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _EmbedVentaDto() when $default != null:
-return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.channelId,_that.pageId,_that.expiresAt,_that.maxUses);case _:
+return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.channelId,_that.pageId,_that.expiresAt,_that.maxUses,_that.ringId,_that.inviterId,_that.channelName);case _:
   return orElse();
 
 }
@@ -1033,10 +1065,10 @@ return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.c
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedVentaKind.unknown)  EmbedVentaKind kind,  bool resolved, @JsonKey(name: 'guild_id')  String? guildId, @JsonKey(name: 'invite_code')  String? inviteCode, @JsonKey(name: 'channel_id')  String? channelId, @JsonKey(name: 'page_id')  String? pageId, @JsonKey(name: 'expires_at')  DateTime? expiresAt, @JsonKey(name: 'max_uses')  int? maxUses)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(unknownEnumValue: EmbedVentaKind.unknown)  EmbedVentaKind kind,  bool resolved, @JsonKey(name: 'guild_id')  String? guildId, @JsonKey(name: 'invite_code')  String? inviteCode, @JsonKey(name: 'channel_id')  String? channelId, @JsonKey(name: 'page_id')  String? pageId, @JsonKey(name: 'expires_at')  DateTime? expiresAt, @JsonKey(name: 'max_uses')  int? maxUses, @JsonKey(name: 'ring_id')  String? ringId, @JsonKey(name: 'inviter_id')  String? inviterId, @JsonKey(name: 'channel_name')  String? channelName)  $default,) {final _that = this;
 switch (_that) {
 case _EmbedVentaDto():
-return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.channelId,_that.pageId,_that.expiresAt,_that.maxUses);}
+return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.channelId,_that.pageId,_that.expiresAt,_that.maxUses,_that.ringId,_that.inviterId,_that.channelName);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -1050,10 +1082,10 @@ return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.c
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(unknownEnumValue: EmbedVentaKind.unknown)  EmbedVentaKind kind,  bool resolved, @JsonKey(name: 'guild_id')  String? guildId, @JsonKey(name: 'invite_code')  String? inviteCode, @JsonKey(name: 'channel_id')  String? channelId, @JsonKey(name: 'page_id')  String? pageId, @JsonKey(name: 'expires_at')  DateTime? expiresAt, @JsonKey(name: 'max_uses')  int? maxUses)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(unknownEnumValue: EmbedVentaKind.unknown)  EmbedVentaKind kind,  bool resolved, @JsonKey(name: 'guild_id')  String? guildId, @JsonKey(name: 'invite_code')  String? inviteCode, @JsonKey(name: 'channel_id')  String? channelId, @JsonKey(name: 'page_id')  String? pageId, @JsonKey(name: 'expires_at')  DateTime? expiresAt, @JsonKey(name: 'max_uses')  int? maxUses, @JsonKey(name: 'ring_id')  String? ringId, @JsonKey(name: 'inviter_id')  String? inviterId, @JsonKey(name: 'channel_name')  String? channelName)?  $default,) {final _that = this;
 switch (_that) {
 case _EmbedVentaDto() when $default != null:
-return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.channelId,_that.pageId,_that.expiresAt,_that.maxUses);case _:
+return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.channelId,_that.pageId,_that.expiresAt,_that.maxUses,_that.ringId,_that.inviterId,_that.channelName);case _:
   return null;
 
 }
@@ -1065,7 +1097,7 @@ return $default(_that.kind,_that.resolved,_that.guildId,_that.inviteCode,_that.c
 @JsonSerializable()
 @ApiDateTimeConverter()
 class _EmbedVentaDto with DiagnosticableTreeMixin implements EmbedVentaDto {
-  const _EmbedVentaDto({@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) this.kind = EmbedVentaKind.unknown, this.resolved = false, @JsonKey(name: 'guild_id') this.guildId, @JsonKey(name: 'invite_code') this.inviteCode, @JsonKey(name: 'channel_id') this.channelId, @JsonKey(name: 'page_id') this.pageId, @JsonKey(name: 'expires_at') this.expiresAt, @JsonKey(name: 'max_uses') this.maxUses});
+  const _EmbedVentaDto({@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) this.kind = EmbedVentaKind.unknown, this.resolved = false, @JsonKey(name: 'guild_id') this.guildId, @JsonKey(name: 'invite_code') this.inviteCode, @JsonKey(name: 'channel_id') this.channelId, @JsonKey(name: 'page_id') this.pageId, @JsonKey(name: 'expires_at') this.expiresAt, @JsonKey(name: 'max_uses') this.maxUses, @JsonKey(name: 'ring_id') this.ringId, @JsonKey(name: 'inviter_id') this.inviterId, @JsonKey(name: 'channel_name') this.channelName});
   factory _EmbedVentaDto.fromJson(Map<String, dynamic> json) => _$EmbedVentaDtoFromJson(json);
 
 @override@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) final  EmbedVentaKind kind;
@@ -1078,16 +1110,48 @@ class _EmbedVentaDto with DiagnosticableTreeMixin implements EmbedVentaDto {
 /// generated code even when the pasted link was a vanity URL, so it
 /// survives a vanity rename.
 @override@JsonKey(name: 'invite_code') final  String? inviteCode;
-/// The channel a joiner lands on, when the invite names one. Id only -
-/// never a name.
+/// Invite: the channel a joiner lands on, when the invite names one. Voice
+/// invite: the channel being asked into. An id, never a name - except on a
+/// voice invite, which also carries [channelName].
 @override@JsonKey(name: 'channel_id') final  String? channelId;
 @override@JsonKey(name: 'page_id') final  String? pageId;
-/// Absent for an invite that never expires. Safe to freeze into the card:
-/// an absolute instant does not go stale the way "expired" does.
+/// Absent for an invite that never expires, and for a voice invitation that
+/// was sent as a plain message rather than as a ring - see the standing
+/// case in `_VentaVoiceInviteCard`, which is why "no expiry" must never be
+/// read as "expired". On a ring it is always present and is about a minute
+/// after the message was sent, which is what decides whether [ringId] still
+/// means anything.
+///
+/// Safe to freeze into the card: an absolute instant does not go stale the
+/// way a stored "expired" boolean does.
 @override@JsonKey(name: 'expires_at') final  DateTime? expiresAt;
 /// Absent for unlimited. The running *use* count is deliberately not
 /// carried - re-resolve if you want to show it.
 @override@JsonKey(name: 'max_uses') final  int? maxUses;
+/// Voice invite only: the ring this card was written for.
+///
+/// Live only until [expiresAt]. Past that, treat it as absent rather than
+/// as something to call - the ring no longer exists and accepting it
+/// answers `409`. The honest affordance there is the ordinary join, which
+/// accepts nothing.
+@override@JsonKey(name: 'ring_id') final  String? ringId;
+/// Voice invite only: who did the asking.
+///
+/// The same person as the message's author today; carried so the card keeps
+/// meaning what it says if it is ever quoted. It is also what tells the
+/// *inviter* they are reading their own invitation, so the card can drop
+/// the Join button for the channel they are already sitting in.
+@override@JsonKey(name: 'inviter_id') final  String? inviterId;
+/// Voice invite only: the channel's name when the invitation was sent.
+///
+/// The one place a `venta.*` card carries a name rather than only an id.
+/// The invite kind can leave it out because a client re-resolves it from
+/// the code, and the wiki kind *must* leave it out because the audience for
+/// a title is narrower than the audience for the message. Neither applies
+/// here: the recipient was checked for `ViewChannel` before the ring was
+/// allowed at all, and there is no later lookup that would let them fill it
+/// in. Render it; do not go and fetch a fresher one.
+@override@JsonKey(name: 'channel_name') final  String? channelName;
 
 /// Create a copy of EmbedVentaDto
 /// with the given fields replaced by the non-null parameter values.
@@ -1103,21 +1167,21 @@ Map<String, dynamic> toJson() {
 void debugFillProperties(DiagnosticPropertiesBuilder properties) {
   properties
     ..add(DiagnosticsProperty('type', 'EmbedVentaDto'))
-    ..add(DiagnosticsProperty('kind', kind))..add(DiagnosticsProperty('resolved', resolved))..add(DiagnosticsProperty('guildId', guildId))..add(DiagnosticsProperty('inviteCode', inviteCode))..add(DiagnosticsProperty('channelId', channelId))..add(DiagnosticsProperty('pageId', pageId))..add(DiagnosticsProperty('expiresAt', expiresAt))..add(DiagnosticsProperty('maxUses', maxUses));
+    ..add(DiagnosticsProperty('kind', kind))..add(DiagnosticsProperty('resolved', resolved))..add(DiagnosticsProperty('guildId', guildId))..add(DiagnosticsProperty('inviteCode', inviteCode))..add(DiagnosticsProperty('channelId', channelId))..add(DiagnosticsProperty('pageId', pageId))..add(DiagnosticsProperty('expiresAt', expiresAt))..add(DiagnosticsProperty('maxUses', maxUses))..add(DiagnosticsProperty('ringId', ringId))..add(DiagnosticsProperty('inviterId', inviterId))..add(DiagnosticsProperty('channelName', channelName));
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EmbedVentaDto&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.resolved, resolved) || other.resolved == resolved)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.inviteCode, inviteCode) || other.inviteCode == inviteCode)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.pageId, pageId) || other.pageId == pageId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _EmbedVentaDto&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.resolved, resolved) || other.resolved == resolved)&&(identical(other.guildId, guildId) || other.guildId == guildId)&&(identical(other.inviteCode, inviteCode) || other.inviteCode == inviteCode)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.pageId, pageId) || other.pageId == pageId)&&(identical(other.expiresAt, expiresAt) || other.expiresAt == expiresAt)&&(identical(other.maxUses, maxUses) || other.maxUses == maxUses)&&(identical(other.ringId, ringId) || other.ringId == ringId)&&(identical(other.inviterId, inviterId) || other.inviterId == inviterId)&&(identical(other.channelName, channelName) || other.channelName == channelName));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,kind,resolved,guildId,inviteCode,channelId,pageId,expiresAt,maxUses);
+int get hashCode => Object.hash(runtimeType,kind,resolved,guildId,inviteCode,channelId,pageId,expiresAt,maxUses,ringId,inviterId,channelName);
 
 @override
 String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
-  return 'EmbedVentaDto(kind: $kind, resolved: $resolved, guildId: $guildId, inviteCode: $inviteCode, channelId: $channelId, pageId: $pageId, expiresAt: $expiresAt, maxUses: $maxUses)';
+  return 'EmbedVentaDto(kind: $kind, resolved: $resolved, guildId: $guildId, inviteCode: $inviteCode, channelId: $channelId, pageId: $pageId, expiresAt: $expiresAt, maxUses: $maxUses, ringId: $ringId, inviterId: $inviterId, channelName: $channelName)';
 }
 
 
@@ -1128,7 +1192,7 @@ abstract mixin class _$EmbedVentaDtoCopyWith<$Res> implements $EmbedVentaDtoCopy
   factory _$EmbedVentaDtoCopyWith(_EmbedVentaDto value, $Res Function(_EmbedVentaDto) _then) = __$EmbedVentaDtoCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) EmbedVentaKind kind, bool resolved,@JsonKey(name: 'guild_id') String? guildId,@JsonKey(name: 'invite_code') String? inviteCode,@JsonKey(name: 'channel_id') String? channelId,@JsonKey(name: 'page_id') String? pageId,@JsonKey(name: 'expires_at') DateTime? expiresAt,@JsonKey(name: 'max_uses') int? maxUses
+@JsonKey(unknownEnumValue: EmbedVentaKind.unknown) EmbedVentaKind kind, bool resolved,@JsonKey(name: 'guild_id') String? guildId,@JsonKey(name: 'invite_code') String? inviteCode,@JsonKey(name: 'channel_id') String? channelId,@JsonKey(name: 'page_id') String? pageId,@JsonKey(name: 'expires_at') DateTime? expiresAt,@JsonKey(name: 'max_uses') int? maxUses,@JsonKey(name: 'ring_id') String? ringId,@JsonKey(name: 'inviter_id') String? inviterId,@JsonKey(name: 'channel_name') String? channelName
 });
 
 
@@ -1145,7 +1209,7 @@ class __$EmbedVentaDtoCopyWithImpl<$Res>
 
 /// Create a copy of EmbedVentaDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? kind = null,Object? resolved = null,Object? guildId = freezed,Object? inviteCode = freezed,Object? channelId = freezed,Object? pageId = freezed,Object? expiresAt = freezed,Object? maxUses = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? kind = null,Object? resolved = null,Object? guildId = freezed,Object? inviteCode = freezed,Object? channelId = freezed,Object? pageId = freezed,Object? expiresAt = freezed,Object? maxUses = freezed,Object? ringId = freezed,Object? inviterId = freezed,Object? channelName = freezed,}) {
   return _then(_EmbedVentaDto(
 kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
 as EmbedVentaKind,resolved: null == resolved ? _self.resolved : resolved // ignore: cast_nullable_to_non_nullable
@@ -1155,7 +1219,10 @@ as String?,channelId: freezed == channelId ? _self.channelId : channelId // igno
 as String?,pageId: freezed == pageId ? _self.pageId : pageId // ignore: cast_nullable_to_non_nullable
 as String?,expiresAt: freezed == expiresAt ? _self.expiresAt : expiresAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,maxUses: freezed == maxUses ? _self.maxUses : maxUses // ignore: cast_nullable_to_non_nullable
-as int?,
+as int?,ringId: freezed == ringId ? _self.ringId : ringId // ignore: cast_nullable_to_non_nullable
+as String?,inviterId: freezed == inviterId ? _self.inviterId : inviterId // ignore: cast_nullable_to_non_nullable
+as String?,channelName: freezed == channelName ? _self.channelName : channelName // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

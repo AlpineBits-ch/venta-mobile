@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,6 +10,10 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:re_highlight/languages/all.dart';
+import 'package:re_highlight/re_highlight.dart';
+import 'package:re_highlight/styles/atom-one-dark.dart';
+import 'package:re_highlight/styles/atom-one-light.dart';
 
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/widgets/adaptive_progress_indicator.dart';
@@ -28,11 +33,16 @@ import '../../../billing/presentation/widgets/entitlement_notice.dart';
 import '../../../mls/presentation/widgets/channel_access_banner.dart';
 import '../../../mls/presentation/widgets/mls_join_request_review.dart';
 import '../../../mls/presentation/widgets/encrypted_badge.dart';
+import '../../../conversations/data/conversation_repository.dart';
 import '../../../guilds/data/guild_repository.dart';
 import '../../../guilds/data/models/channel_dto.dart';
+import '../../../guilds/data/models/guild_dto.dart';
+import '../../../guilds/data/models/guild_features.dart';
 import '../../../guilds/data/models/guild_member_dto.dart';
 import '../../../guilds/data/models/role_dto.dart';
 import '../../../profile/data/profile_repository.dart';
+import '../../../wiki/data/wiki_repository.dart';
+import '../../../wiki/data/models/wiki_page_summary_dto.dart';
 import '../../bloc/message_thread_bloc.dart';
 import '../../data/message_repository.dart';
 import '../../data/bot_command_api.dart';
@@ -176,7 +186,52 @@ class _ThreadViewState extends State<ThreadView> {
   List<GuildMemberDto> _guildMembers = const [];
   String? _mentionQuery;
   int _mentionStart = -1;
-  String _mentionTrigger = '@';
+  _SuggestionTrigger _mentionTrigger = _SuggestionTrigger.user;
+
+  /// This guild's wiki pages, for the `[[` overlay - fetched lazily, see
+  /// [_ensureWikiPages].
+  List<WikiPageSummaryDto> _wikiPages = const [];
+
+  /// The guild [_wikiPages] was filled for, so a guild switch cannot serve the
+  /// previous one's pages.
+  String? _wikiPagesGuildId;
+
+  /// One anchor per rendered message, so a jump has something to
+  /// `ensureVisible` on. Keyed by message id and never cleared while the
+  /// screen lives - the entries cost a key each and outlive the row being
+  /// recycled, which is the whole point of keeping them here.
+  final Map<String, GlobalKey> _messageKeys = {};
+
+  /// The message a jump just landed on, tinted for [_highlightDuration] so the
+  /// reader can find it among a screenful of others. Alpine flashes the row
+  /// for the same reason.
+  String? _highlightedMessageId;
+  Timer? _highlightTimer;
+
+  /// Guards against a second jump starting while one is still paging - two
+  /// interleaved `ThreadLoadMoreRequested` walks would fight over the scroll
+  /// position and neither would arrive.
+  bool _jumping = false;
+
+  /// The message the "new messages" line is drawn above, or null for no line.
+  ///
+  /// Snapshotted once per screen (see [_snapshotFirstUnread]) rather than
+  /// recomputed: the bloc marks the thread read the moment it opens, so a live
+  /// value would erase the divider a heartbeat after drawing it.
+  String? _firstUnreadId;
+  bool _firstUnreadSnapshotTaken = false;
+
+  static const _highlightDuration = Duration(seconds: 2);
+
+  /// How many older pages a jump will pull in before giving up.
+  ///
+  /// Bounded on purpose. The alternative to a bound is walking an entire
+  /// channel's history to reach a pin from two years ago, on a handset, over
+  /// mobile data - fifty pages of messages fetched and decrypted to scroll to
+  /// one of them. Ten pages is roughly five hundred messages, which covers
+  /// every reply quote and effectively every search hit; past that the jump
+  /// says so rather than spinning.
+  static const _maxJumpPages = 10;
 
   /// Whether the caller may pin/unpin messages here - always true for DMs
   /// (any conversation member may pin), gated on the `PinMessages` guild
@@ -290,8 +345,162 @@ class _ThreadViewState extends State<ThreadView> {
     setState(() => _isEncrypted = encrypted);
   }
 
+  /// Decides, once, where the "new messages" line goes.
+  ///
+  /// **Once**, because the thread is marked read the instant it opens (see
+  /// `MessageThreadBloc._markRead`). A value recomputed on every state would
+  /// therefore be erased by the very act of looking at it, and a divider that
+  /// vanishes as you read is worse than none: it moves while your eye is on
+  /// it. Alpine snapshots for exactly this reason.
+  ///
+  /// **Conversations only.** The read cursor this reads is
+  /// `ConversationMemberDto.lastReadMessageId`, which the server sends on the
+  /// conversation itself. There is no equivalent for a guild channel anywhere
+  /// in this client: `GET /guilds/{id}/me` carries a `readState` array whose
+  /// counts were zeroed permanently by the inbox release (see
+  /// `GuildSelfPermissions`), and the inbox endpoints answer with per-channel
+  /// *counts* rather than a boundary id. A divider placed N rows from the top
+  /// off a count would be wrong the moment the count and the loaded page
+  /// disagreed, which is most of the time - so a channel gets no divider
+  /// rather than one that lies.
+  void _snapshotFirstUnread(ThreadState state) {
+    if (_firstUnreadSnapshotTaken || state.messages.isEmpty) return;
+    _firstUnreadSnapshotTaken = true;
+
+    final conversationId = context
+        .read<MessageThreadBloc>()
+        .repository
+        .conversationId;
+    if (conversationId == null) return;
+
+    final conversation = getIt<ConversationRepository>().cached
+        .where((c) => c.id == conversationId)
+        .firstOrNull;
+    final lastReadId = conversation?.members
+        .where((m) => m.userId == widget.myUserId)
+        .firstOrNull
+        ?.lastReadMessageId;
+    if (lastReadId == null) return;
+
+    // Optimistic rows have no place in this index maths: they are not what the
+    // read cursor was measured against, and one of them sitting between the
+    // cursor and the first real unread message would move the line by a row.
+    final confirmed = [
+      for (final m in state.messages)
+        if (!m.isPending && !m.isFailed && !m.isEphemeral) m,
+    ];
+    // Newest-first, so the message *after* the last-read one chronologically
+    // is the one *before* it here. Index 0 means the last thing read is also
+    // the newest thing there is - nothing unread, no line.
+    final readIndex = confirmed.indexWhere((m) => m.id == lastReadId);
+    if (readIndex <= 0) return;
+    _firstUnreadId = confirmed[readIndex - 1].id;
+  }
+
+  /// Scrolls the timeline to [messageId] and flashes it on arrival.
+  ///
+  /// Reached from all three of the places Alpine wires a jump from - the reply
+  /// quote, a search result and the pinned panel - and it has to handle the
+  /// case all three make likely: the target is not loaded. A pin or a search
+  /// hit can be arbitrarily far back, and Alpine simply does nothing at all
+  /// there, which is a dead tap with no explanation. This pages older history
+  /// in until the message turns up, [_maxJumpPages] at most, and says so
+  /// plainly if it never does.
+  Future<void> _jumpToMessage(String messageId) async {
+    if (_jumping) return;
+    _jumping = true;
+    try {
+      final bloc = context.read<MessageThreadBloc>();
+      var pagesLoaded = 0;
+      while (!bloc.state.messages.any((m) => m.id == messageId)) {
+        if (!bloc.state.hasMoreOlder || pagesLoaded >= _maxJumpPages) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('That message is too far back to open from here.'),
+            ),
+          );
+          return;
+        }
+        pagesLoaded++;
+        bloc.add(const ThreadLoadMoreRequested());
+        // The bloc flips `isLoadingMore` on and back off around the fetch, so
+        // the trailing edge is the page landing. The timeout is the failure
+        // case the flag cannot express: the request errored and the bloc went
+        // quiet, and without it this loop would wait forever.
+        await bloc.stream
+            .firstWhere((s) => !s.isLoadingMore)
+            .timeout(const Duration(seconds: 15), onTimeout: () => bloc.state);
+        if (!mounted) return;
+      }
+
+      await _scrollToMessage(messageId, bloc);
+      if (!mounted) return;
+      _highlightTimer?.cancel();
+      setState(() => _highlightedMessageId = messageId);
+      _highlightTimer = Timer(_highlightDuration, () {
+        if (mounted) setState(() => _highlightedMessageId = null);
+      });
+    } finally {
+      _jumping = false;
+    }
+  }
+
+  /// Walks the scroll position to wherever [messageId] is rendered.
+  ///
+  /// Two steps, because neither alone works on a lazily built list. Only rows
+  /// near the viewport exist as widgets at all, so `ensureVisible` has nothing
+  /// to aim at until the target is close - and the offset it would need cannot
+  /// be computed exactly, because the extents of the rows in between have
+  /// never been measured. So this estimates proportionally, lets a frame
+  /// build, and re-checks; the estimate improves each time as more real
+  /// extents replace the list's averages, and the last hop is handed to
+  /// `ensureVisible` to land precisely.
+  Future<void> _scrollToMessage(
+    String messageId,
+    MessageThreadBloc bloc,
+  ) async {
+    for (var attempt = 0; attempt < 12; attempt++) {
+      final anchorContext = _messageKeys[messageId]?.currentContext;
+      // `mounted` on the anchor rather than on this State: the key survives
+      // its row being recycled out of the viewport, so a stale context is a
+      // real possibility here and not a formality.
+      if (anchorContext != null && anchorContext.mounted) {
+        await Scrollable.ensureVisible(
+          anchorContext,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+        return;
+      }
+      if (!_scrollController.hasClients) return;
+      final index = bloc.state.messages.indexWhere((m) => m.id == messageId);
+      if (index < 0) return;
+
+      final position = _scrollController.position;
+      // `reverse: true` means offset grows *backwards* in time, so a higher
+      // index - an older message - is a larger offset. The + 0.5 aims at the
+      // middle of the row rather than its leading edge.
+      final target =
+          (position.maxScrollExtent *
+                  (index + 0.5) /
+                  bloc.state.messages.length)
+              .clamp(position.minScrollExtent, position.maxScrollExtent);
+      if ((target - position.pixels).abs() < 1) return;
+      await _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+    }
+  }
+
   @override
   void dispose() {
+    _highlightTimer?.cancel();
     _mlsSub?.cancel();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
@@ -359,6 +568,13 @@ class _ThreadViewState extends State<ThreadView> {
   /// message actions already established for other pickers in this composer
   /// (bottom sheet with a leading icon per row).
   Future<void> _showMessageActions(MessageDto message) async {
+    // Nothing on this sheet has anything to act on for an ephemeral reply:
+    // reply, edit, delete, pin, publish, preview suppression and report all
+    // name a message id the server never stored, so every one of them 404s.
+    // The long-press is already withheld in `_MessageBubble`; this is the
+    // second lock, because the sheet is what would do the damage and a future
+    // caller should not be able to reach it by accident.
+    if (message.isEphemeral) return;
     final isMine = message.authorId == widget.myUserId;
     // Dismissing a preview changes the message for everyone who can see it,
     // so it is gated exactly the way the server gates it - the author, or
@@ -473,7 +689,14 @@ class _ThreadViewState extends State<ThreadView> {
     final chronological = [
       for (final m in context.read<MessageThreadBloc>().state.messages.reversed)
         // Client-only synthetics were never on anybody's screen as messages.
-        if (!m.isBotCommandPlaceholder && !m.isPending)
+        //
+        // An ephemeral bot reply belongs in the same bucket and is the one that
+        // actually matters: it is a real, readable row on *this* screen, so
+        // without this line it would go to a moderator as evidence naming an id
+        // the server has no record of - a message they cannot look up, in a
+        // window that claims to be what the reporter saw. Alpine drops the same
+        // three flags before it builds its window.
+        if (!m.isEphemeral && !m.isBotCommandPlaceholder && !m.isPending)
           EvidenceMessage(
             id: m.id,
             authorId: m.authorId,
@@ -556,13 +779,22 @@ class _ThreadViewState extends State<ThreadView> {
     }
   }
 
-  void _openPinnedMessages() {
+  /// Opens the pinned panel and, if the user picks a row, jumps the timeline
+  /// to it.
+  ///
+  /// The screen is pushed rather than shown as a side panel the way Alpine
+  /// does it, so "tap a result" has to mean "pop back and scroll" - the result
+  /// travels back as the route's pop value, which keeps the panel ignorant of
+  /// the thread it came from.
+  Future<void> _openPinnedMessages() async {
     final repository = context.read<MessageThreadBloc>().repository;
-    Navigator.of(context).push(
+    final messageId = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (_) => PinnedMessagesScreen(repository: repository),
       ),
     );
+    if (messageId == null || !mounted) return;
+    await _jumpToMessage(messageId);
   }
 
   /// Cache-then-fetch lookup for a reply reference, same idea as
@@ -757,42 +989,125 @@ class _ThreadViewState extends State<ThreadView> {
     return names;
   }
 
-  void _onTextChanged() {
-    final text = _textController.text;
-    final commandMatch = RegExp(r'^/(\w*)$').firstMatch(text);
-    final commandQuery = commandMatch?.group(1);
+  /// Which overlay the text before the cursor is asking for, if any - the
+  /// mobile counterpart of desktop's `detectTrigger`/`overlayType`.
+  ///
+  /// Every branch is anchored at the cursor, which is what makes them mutually
+  /// exclusive without needing a precedence rule between the single-character
+  /// ones: a run that reaches the caret can only have started with one sigil.
+  /// The order below is desktop's, and `[[` is tested first for the reason
+  /// recorded there - a page title may contain any of the other triggers, so
+  /// `[[a:b` is a page query and not an emoji shortcode, and a two-character
+  /// opener cannot be reached by accident the way a bare colon can.
+  ({_SuggestionTrigger trigger, String query, int start})? _detectTrigger(
+    String text,
+    int cursor,
+  ) {
+    if (cursor <= 0 || cursor > text.length) return null;
+    final before = text.substring(0, cursor);
 
-    String? mentionQuery;
-    var mentionStart = -1;
-    var mentionTrigger = '@';
-    final cursor = _textController.selection.baseOffset;
-    if (cursor > 0) {
-      final before = text.substring(0, cursor);
-      final atIndex = before.lastIndexOf('@');
-      final hashIndex = before.lastIndexOf('#');
-      final triggerIndex = atIndex > hashIndex ? atIndex : hashIndex;
-      if (triggerIndex != -1) {
-        final afterTrigger = before.substring(triggerIndex + 1);
-        final precededOk =
-            triggerIndex == 0 ||
-            RegExp(r'\s').hasMatch(before[triggerIndex - 1]);
-        if (precededOk && RegExp(r'^\w*$').hasMatch(afterTrigger)) {
-          mentionQuery = afterTrigger;
-          mentionStart = triggerIndex;
-          mentionTrigger = before[triggerIndex];
-        }
+    final wiki = RegExp(r'\[\[([^\[\]\n]{0,64})$').firstMatch(before);
+    if (wiki != null) {
+      return (
+        trigger: _SuggestionTrigger.wiki,
+        query: wiki.group(1)!,
+        start: before.lastIndexOf('[['),
+      );
+    }
+
+    // `@` and `#` keep the whitespace-or-start rule they already had, so an
+    // email address and a C `#include` still do not open a menu.
+    for (final (sigil, trigger) in const [
+      ('@', _SuggestionTrigger.user),
+      ('#', _SuggestionTrigger.channel),
+    ]) {
+      final index = before.lastIndexOf(sigil);
+      if (index == -1) continue;
+      final after = before.substring(index + 1);
+      final precededOk =
+          index == 0 || RegExp(r'\s').hasMatch(before[index - 1]);
+      if (precededOk && RegExp(r'^\w*$').hasMatch(after)) {
+        return (trigger: trigger, query: after, start: index);
       }
     }
 
+    // At least one character after the colon and at most 32, matching desktop.
+    // A bare `:` opening the menu would put an overlay over the composer every
+    // time somebody typed a sentence with a colon in it.
+    final emoji = RegExp(r'(?:^|[^\w]):([\w-]{1,32})$').firstMatch(before);
+    if (emoji != null) {
+      return (
+        trigger: _SuggestionTrigger.emoji,
+        query: emoji.group(1)!,
+        start: before.lastIndexOf(':'),
+      );
+    }
+
+    return null;
+  }
+
+  void _onTextChanged() {
+    final text = _textController.text;
+    // Deliberately still the whole-text form rather than desktop's
+    // whitespace-anchored one: selecting a command here *replaces* the
+    // composer (it fires a bot invocation or opens the GIF sheet) rather than
+    // inserting a chip, so offering it mid-sentence would throw away what was
+    // already typed.
+    final commandMatch = RegExp(r'^/(\w*)$').firstMatch(text);
+    final commandQuery = commandMatch?.group(1);
+
+    final detected = _detectTrigger(text, _textController.selection.baseOffset);
+    final mentionQuery = detected?.query;
+    final mentionStart = detected?.start ?? -1;
+    final mentionTrigger = detected?.trigger ?? _SuggestionTrigger.user;
+
+    // The wiki page list is fetched here rather than on open, and only once a
+    // `[[` has actually been typed - see [_ensureWikiPages].
+    if (mentionTrigger == _SuggestionTrigger.wiki) _ensureWikiPages();
+
     if (commandQuery != _commandQuery ||
         mentionQuery != _mentionQuery ||
-        mentionStart != _mentionStart) {
+        mentionStart != _mentionStart ||
+        mentionTrigger != _mentionTrigger) {
       setState(() {
         _commandQuery = commandQuery;
         _mentionQuery = mentionQuery;
         _mentionStart = mentionStart;
         _mentionTrigger = mentionTrigger;
       });
+    }
+  }
+
+  /// Loads this guild's page listing, once, the first time somebody types `[[`
+  /// in it - mirroring desktop's `ensureWikiPages`.
+  ///
+  /// Not done when the thread opens: most messages contain no wiki link, and
+  /// fetching a page tree for every channel anybody taps through would be a
+  /// request per switch for a menu that never opens.
+  ///
+  /// [_wikiPagesGuildId] is the watermark that makes a guild switch safe. It
+  /// is set *before* the request goes out and re-checked when it lands, so a
+  /// second switch while one is in flight cannot file one guild's pages under
+  /// another guild's name - which would offer a page the reader has no access
+  /// to and produce a link that 404s for everyone in the room.
+  Future<void> _ensureWikiPages() async {
+    final guildId = widget.guildId;
+    if (guildId == null || _wikiPagesGuildId == guildId) return;
+    _wikiPagesGuildId = guildId;
+    _wikiPages = const [];
+
+    // A guild with the module off keeps the watermark and returns, so the menu
+    // simply never appears and nothing retries on every keystroke.
+    final guild = getIt<GuildRepository>().cachedById(guildId);
+    if (guild == null || !guild.hasFeature(GuildFeature.wiki)) return;
+
+    try {
+      final wiki = await getIt<WikiRepository>().getWiki(guildId);
+      if (!mounted || _wikiPagesGuildId != guildId) return;
+      setState(() => _wikiPages = wiki.pages);
+    } catch (_) {
+      // Same tolerance as the bot-command and member loads: autocomplete just
+      // won't offer pages.
     }
   }
 
@@ -811,29 +1126,83 @@ class _ThreadViewState extends State<ThreadView> {
     final query = _mentionQuery;
     if (query == null) return const [];
     final lower = query.toLowerCase();
-    if (_mentionTrigger == '#') {
-      final channelEntries = [
-        for (final entry in _channelCandidateNames.entries)
-          if (entry.key.toLowerCase().startsWith(lower))
-            _ChannelMentionEntry(name: entry.key, channelId: entry.value),
-      ]..sort((a, b) => a.name.compareTo(b.name));
-      return channelEntries.take(8).toList();
+    switch (_mentionTrigger) {
+      case _SuggestionTrigger.channel:
+        final channelEntries = [
+          for (final entry in _channelCandidateNames.entries)
+            if (entry.key.toLowerCase().startsWith(lower))
+              _ChannelMentionEntry(name: entry.key, channelId: entry.value),
+        ]..sort((a, b) => a.name.compareTo(b.name));
+        return channelEntries.take(8).toList();
+
+      case _SuggestionTrigger.emoji:
+        // Substring rather than prefix, matching desktop - `:joy` has to reach
+        // "face with tears of joy", which no prefix match ever would.
+        return [
+          for (final entry in emojiShortcodeIndex)
+            if (entry.shortcode.contains(lower))
+              _EmojiSuggestionEntry(
+                name: entry.shortcode,
+                emoji: entry.emoji,
+                description: entry.name,
+              ),
+        ].take(12).toList();
+
+      case _SuggestionTrigger.wiki:
+        // Title *or* tag, and pinned pages first so a bare `[[` offers the
+        // pages the guild has decided matter rather than whatever order the
+        // listing happened to return.
+        final matches =
+            [
+              for (final page in _wikiPages)
+                if (lower.isEmpty ||
+                    page.title.toLowerCase().contains(lower) ||
+                    page.tags.any((t) => t.toLowerCase().contains(lower)))
+                  page,
+            ]..sort((a, b) {
+              if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+              return a.title.compareTo(b.title);
+            });
+        return [
+          for (final page in matches.take(8))
+            _WikiPageSuggestionEntry(name: page.title, page: page),
+        ];
+
+      case _SuggestionTrigger.user:
+        final entries = [
+          for (final entry in _mentionCandidateNames.entries)
+            if (entry.key.toLowerCase().startsWith(lower))
+              _UserMentionEntry(name: entry.key, userId: entry.value),
+          for (final entry in _roleCandidateNames.entries)
+            if (entry.key.toLowerCase().startsWith(lower))
+              _RoleMentionEntry(name: entry.key, roleId: entry.value),
+        ]..sort((a, b) => a.name.compareTo(b.name));
+        return entries.take(8).toList();
     }
-    final entries = [
-      for (final entry in _mentionCandidateNames.entries)
-        if (entry.key.toLowerCase().startsWith(lower))
-          _UserMentionEntry(name: entry.key, userId: entry.value),
-      for (final entry in _roleCandidateNames.entries)
-        if (entry.key.toLowerCase().startsWith(lower))
-          _RoleMentionEntry(name: entry.key, roleId: entry.value),
-    ]..sort((a, b) => a.name.compareTo(b.name));
-    return entries.take(8).toList();
   }
 
-  void _selectMention(String name) {
+  /// Replaces the trigger run with whatever the tapped row stands for.
+  ///
+  /// The four cases differ in what actually lands in the text, which is the
+  /// whole point of keeping this in one place: a mention and a channel insert
+  /// the sigil back (they are re-scanned at send time by [_extractMentions]),
+  /// an emoji inserts the glyph and drops the colon entirely, and a wiki page
+  /// inserts a bare URL.
+  void _selectMention(_MentionSuggestionEntry entry) {
     final text = _textController.text;
-    final end = _mentionStart + 1 + (_mentionQuery?.length ?? 0);
-    final replacement = '$_mentionTrigger$name ';
+    final end =
+        _mentionStart +
+        _mentionTrigger.sigil.length +
+        (_mentionQuery?.length ?? 0);
+    final replacement = switch (entry) {
+      _EmojiSuggestionEntry(emoji: final emoji) => '$emoji ',
+      // Bare, never bracketed. The server recognises this shape in-process and
+      // answers with a `venta.wiki_page` embed, so wrapping it in the
+      // no-preview brackets would suppress the very card it exists to get.
+      _WikiPageSuggestionEntry(page: final page) =>
+        '${wikiShareLink(page.guildId, page.id)} ',
+      _ => '${_mentionTrigger.sigil}${entry.name} ',
+    };
     _textController.text = text.replaceRange(_mentionStart, end, replacement);
     _textController.selection = TextSelection.collapsed(
       offset: _mentionStart + replacement.length,
@@ -1086,7 +1455,7 @@ class _ThreadViewState extends State<ThreadView> {
     );
   }
 
-  void _openSearch() {
+  Future<void> _openSearch() async {
     final repository = context.read<MessageThreadBloc>().repository;
     // Guild channels can be encrypted too now, so this reads the live MLS state
     // rather than the conversation DTO - which is a cached list that says
@@ -1095,7 +1464,8 @@ class _ThreadViewState extends State<ThreadView> {
     // The server indexes only plaintext, so search in an encrypted context comes
     // back empty rather than erroring; showing an explicit "not available" beats
     // an empty-results screen the user reads as "nothing matched".
-    Navigator.of(context).push(
+    // Same pop-value handoff as `_openPinnedMessages`.
+    final messageId = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (_) => MessageSearchScreen(
           repository: repository,
@@ -1103,6 +1473,8 @@ class _ThreadViewState extends State<ThreadView> {
         ),
       ),
     );
+    if (messageId == null || !mounted) return;
+    await _jumpToMessage(messageId);
   }
 
   /// Guild channels reuse the existing full `GuildMembersScreen` outright
@@ -1365,6 +1737,14 @@ class _ThreadViewState extends State<ThreadView> {
                     ),
                   );
                 } else {
+                  // Taken here rather than in a listener because it has to be
+                  // settled *before* the first frame that shows the list -
+                  // computing it afterwards would draw the timeline once
+                  // without a divider and then move it, which reads as a
+                  // glitch on the one screen where position is the message.
+                  // It writes only a field nothing else has read yet, so it
+                  // does not need (and must not do) a `setState` from build.
+                  _snapshotFirstUnread(state);
                   child = NotificationListener<ScrollNotification>(
                     key: const ValueKey('loaded'),
                     onNotification: (notification) {
@@ -1386,15 +1766,42 @@ class _ThreadViewState extends State<ThreadView> {
                       itemCount: state.messages.length,
                       itemBuilder: (context, index) {
                         final message = state.messages[index];
+                        // The anchor a jump scrolls to. `putIfAbsent` because
+                        // the key has to survive the row being scrolled out
+                        // and rebuilt - a fresh key each build would make
+                        // `currentContext` null exactly when the jump needs it.
+                        final anchor = _messageKeys.putIfAbsent(
+                          message.id,
+                          GlobalKey.new,
+                        );
+                        // The divider sits at the *top* of the row it belongs
+                        // to. `reverse` flips the order rows are laid out in,
+                        // not the direction a row's own column runs, so this
+                        // still lands between the last message read and the
+                        // first one that was not.
+                        Widget withDivider(Widget row) =>
+                            message.id != _firstUnreadId
+                            ? row
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [const _UnreadDivider(), row],
+                              );
 
-                        if (message.type == MessageType.system ||
-                            message.type == MessageType.guildMemberJoin ||
-                            message.type == MessageType.guildMemberLeave ||
-                            message.type == MessageType.callEnded ||
-                            message.type == MessageType.callMissed) {
-                          return _SystemMessageRow(
-                            message: message,
-                            myUserId: widget.myUserId,
+                        // Deliberately the shared predicate rather than the
+                        // five-way check that used to be inlined here: a voice
+                        // invite is a server-written message too, and the only
+                        // thing keeping it out of this branch is the reasoning
+                        // recorded on `isSystemRow`. Spelling the list out
+                        // twice is how the two drift apart.
+                        if (message.isSystemRow) {
+                          return KeyedSubtree(
+                            key: anchor,
+                            child: withDivider(
+                              _SystemMessageRow(
+                                message: message,
+                                myUserId: widget.myUserId,
+                              ),
+                            ),
                           );
                         }
 
@@ -1409,52 +1816,72 @@ class _ThreadViewState extends State<ThreadView> {
                         final showHeader =
                             previous == null ||
                             previous.authorId != message.authorId ||
+                            // Never grouped, however many the bot sends in a
+                            // row: the header row is where "Only you can see
+                            // this" lives, and a grouped continuation would
+                            // drop the one line that says the rest of the
+                            // channel cannot read it.
+                            message.isEphemeral ||
                             (message.createdAt != null &&
                                 previous.createdAt != null &&
                                 message.createdAt!
                                         .difference(previous.createdAt!)
                                         .abs() >
                                     const Duration(minutes: 7));
-                        return _MessageBubble(
-                          message: message,
-                          showHeader: showHeader,
-                          isMe: isMe,
-                          failed: failed,
-                          myUserId: widget.myUserId,
-                          isEditing: _editingMessageId == message.id,
-                          editController: _editController,
-                          onSaveEdit: () => _saveEdit(message.id),
-                          onCancelEdit: _cancelEdit,
-                          replyToWidget: message.inReplyTo != null
-                              ? _ReplyQuoteRow(
-                                  replyTo: _resolveReply(message.inReplyTo!),
-                                )
-                              : null,
-                          resolveMentionName: _resolveMentionName,
-                          guildId: widget.guildId,
-                          onReactionToggle: (emoji, emojiId) =>
-                              context.read<MessageThreadBloc>().add(
-                                ReactionToggled(
-                                  messageId: message.id,
-                                  emoji: emoji,
-                                  emojiId: emojiId,
-                                ),
-                              ),
-                          onAddReaction: () async {
-                            final picked = await showReactionPickerSheet(
-                              context,
+                        return KeyedSubtree(
+                          key: anchor,
+                          child: withDivider(
+                            _MessageBubble(
+                              message: message,
+                              showHeader: showHeader,
+                              isMe: isMe,
+                              failed: failed,
+                              isHighlighted:
+                                  _highlightedMessageId == message.id,
+                              myUserId: widget.myUserId,
+                              isEditing: _editingMessageId == message.id,
+                              editController: _editController,
+                              onSaveEdit: () => _saveEdit(message.id),
+                              onCancelEdit: _cancelEdit,
+                              replyToWidget: message.inReplyTo != null
+                                  ? _ReplyQuoteRow(
+                                      replyTo: _resolveReply(
+                                        message.inReplyTo!,
+                                      ),
+                                      // A reply quote is one of the three places a
+                                      // jump starts from, and the only one that
+                                      // does not go through a screen first.
+                                      onTap: () =>
+                                          _jumpToMessage(message.inReplyTo!),
+                                    )
+                                  : null,
+                              resolveMentionName: _resolveMentionName,
                               guildId: widget.guildId,
-                            );
-                            if (picked == null || !context.mounted) return;
-                            context.read<MessageThreadBloc>().add(
-                              ReactionToggled(
-                                messageId: message.id,
-                                emoji: picked.emoji,
-                                emojiId: picked.emojiId,
-                              ),
-                            );
-                          },
-                          onLongPress: () => _showMessageActions(message),
+                              onReactionToggle: (emoji, emojiId) =>
+                                  context.read<MessageThreadBloc>().add(
+                                    ReactionToggled(
+                                      messageId: message.id,
+                                      emoji: emoji,
+                                      emojiId: emojiId,
+                                    ),
+                                  ),
+                              onAddReaction: () async {
+                                final picked = await showReactionPickerSheet(
+                                  context,
+                                  guildId: widget.guildId,
+                                );
+                                if (picked == null || !context.mounted) return;
+                                context.read<MessageThreadBloc>().add(
+                                  ReactionToggled(
+                                    messageId: message.id,
+                                    emoji: picked.emoji,
+                                    emojiId: picked.emojiId,
+                                  ),
+                                );
+                              },
+                              onLongPress: () => _showMessageActions(message),
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -1471,8 +1898,9 @@ class _ThreadViewState extends State<ThreadView> {
             buildWhen: (previous, current) =>
                 previous.typingUserIds != current.typingUserIds,
             builder: (context, state) {
-              if (state.typingUserIds.isEmpty)
+              if (state.typingUserIds.isEmpty) {
                 return const SizedBox(height: 20);
+              }
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
                 child: Align(
@@ -1495,7 +1923,7 @@ class _ThreadViewState extends State<ThreadView> {
           else if (_mentionSuggestions.isNotEmpty)
             _MentionSuggestionList(
               suggestions: _mentionSuggestions,
-              onSelect: (entry) => _selectMention(entry.name),
+              onSelect: _selectMention,
             ),
           SafeArea(
             top: false,
@@ -1697,6 +2125,23 @@ class _ThreadViewState extends State<ThreadView> {
   }
 }
 
+/// Which sigil opened the suggestion overlay - the mobile equivalent of
+/// desktop's `overlayType`, minus `command`, which is still its own state
+/// because selecting one replaces the composer rather than editing it.
+enum _SuggestionTrigger {
+  user('@'),
+  channel('#'),
+  emoji(':'),
+  wiki('[[');
+
+  const _SuggestionTrigger(this.sigil);
+
+  /// What the user typed to open the overlay. Its length is what
+  /// `_selectMention` replaces from, which is why `[[` cannot be assumed to be
+  /// one character.
+  final String sigil;
+}
+
 /// One row offered by the `@`-trigger autocomplete - either a real user
 /// (avatar leading) or a role (colored dot leading), merged into one list
 /// sorted by name.
@@ -1722,6 +2167,73 @@ class _ChannelMentionEntry extends _MentionSuggestionEntry {
     : super(name);
   final String channelId;
 }
+
+/// One `:shortcode:` candidate. [name] is the shortcode (no colons - they are
+/// added back for display only), [emoji] the glyph that is actually inserted.
+class _EmojiSuggestionEntry extends _MentionSuggestionEntry {
+  const _EmojiSuggestionEntry({
+    required String name,
+    required this.emoji,
+    required this.description,
+  }) : super(name);
+
+  final String emoji;
+
+  /// The dataset's human-readable name, shown trailing so two similar glyphs
+  /// under one shortcode stem are still tellable apart.
+  final String description;
+}
+
+/// One `[[page]]` candidate. [name] is the title shown; the URL that actually
+/// lands in the message is derived from the page in `_selectMention`.
+class _WikiPageSuggestionEntry extends _MentionSuggestionEntry {
+  const _WikiPageSuggestionEntry({required String name, required this.page})
+    : super(name);
+  final WikiPageSummaryDto page;
+}
+
+/// The link a `[[page]]` selection puts in the message.
+///
+/// **Bare, not bracketed.** The server recognises this shape by host and
+/// attaches a `venta.wiki_page` embed in-process, so the card comes from the
+/// embed rather than from anything scanning the body - which is also why
+/// nothing on the render side looks for it. Wrapping it in the sender's
+/// no-preview brackets would suppress the card it exists to produce.
+String wikiShareLink(String guildId, String pageId) =>
+    'https://venta.gg/wiki/$guildId/$pageId';
+
+/// One searchable emoji, keyed by a shortcode.
+typedef EmojiShortcode = ({String shortcode, String emoji, String name});
+
+/// Every emoji in the picker's dataset, indexed by a shortcode derived from
+/// its name.
+///
+/// Built off `emoji_picker_flutter`'s `defaultEmojiSet` - the same table the
+/// reaction picker and the composer's emoji button already use - rather than
+/// shipping a second one. That dataset has **no shortcode ids** the way
+/// desktop's emoji-mart data does, only display names, so the shortcode is
+/// derived: "Face With Tears of Joy" becomes `face_with_tears_of_joy`.
+///
+/// The practical consequence is that the two clients do not accept exactly the
+/// same shortcodes - desktop knows `:joy:`, this knows `:face_with_tears_of_joy:`
+/// - which is survivable only because the match is a substring one, so `:joy`
+/// still finds it here. It never affects what is sent: both insert the native
+/// glyph, and no shortcode ever reaches the wire.
+///
+/// Built once, on first use, and never rebuilt - the dataset is a compile-time
+/// constant.
+final List<EmojiShortcode> emojiShortcodeIndex = [
+  for (final category in defaultEmojiSet)
+    for (final emoji in category.emoji)
+      (
+        shortcode: emoji.name
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+            .replaceAll(RegExp(r'^_+|_+$'), ''),
+        emoji: emoji.emoji,
+        name: emoji.name,
+      ),
+];
 
 /// Extracted from the composer's final text at submit time - see
 /// `_ThreadViewState._extractMentions`.
@@ -1778,8 +2290,35 @@ class _MentionSuggestionList extends StatelessWidget {
                 size: 20,
               ),
               _ChannelMentionEntry() => const Icon(Icons.tag, size: 20),
+              _EmojiSuggestionEntry(emoji: final emoji) => Text(
+                emoji,
+                style: const TextStyle(fontSize: 20),
+              ),
+              _WikiPageSuggestionEntry() => const Icon(
+                Icons.menu_book_outlined,
+                size: 20,
+              ),
             },
-            title: Text(entry.name),
+            // The colons are put back for the emoji row only, so the shortcode
+            // reads the way it is typed - the glyph beside it already says
+            // what it resolves to.
+            title: Text(switch (entry) {
+              _EmojiSuggestionEntry() => ':${entry.name}:',
+              _ => entry.name,
+            }),
+            subtitle: switch (entry) {
+              _EmojiSuggestionEntry(description: final description) => Text(
+                description,
+              ),
+              _WikiPageSuggestionEntry(page: final page) =>
+                page.tags.isEmpty ? null : Text(page.tags.join(', ')),
+              _ => null,
+            },
+            trailing: switch (entry) {
+              _WikiPageSuggestionEntry(page: final page) when page.isPinned =>
+                const Icon(Icons.push_pin, size: 14),
+              _ => null,
+            },
             onTap: () => onSelect(entry),
           );
         },
@@ -1937,6 +2476,147 @@ class _PendingAttachmentChip extends StatelessWidget {
   }
 }
 
+/// A URL the sender wrapped in angle brackets to opt out of a link preview.
+///
+/// `<https://example.com>` is the convention the *server* reads when deciding
+/// whether to unfurl, so the brackets are load-bearing and have to survive on
+/// the wire. They are only ever taken off for display - showing them leaks the
+/// mechanic into the conversation as punctuation nobody typed on purpose.
+final _noPreviewBracketPattern = RegExp(r'<(https?://[^\s<>]+)>');
+
+/// [content] as it should be *shown*, with the sender's no-preview brackets
+/// taken off. Mirrors Alpine's `displayContent`.
+///
+/// **Display only.** `_ThreadViewState._startEdit` loads the raw body, so an
+/// edit round-trips the brackets instead of silently re-enabling a preview the
+/// sender had suppressed - which would be the client overriding a decision the
+/// sender made deliberately, without ever saying so.
+String stripNoPreviewBrackets(String content) =>
+    content.replaceAllMapped(_noPreviewBracketPattern, (m) => m[1]!);
+
+/// Regional-indicator code points, which pair up into flags.
+///
+/// Excluded from the jumbo treatment because a flag is two of these and the
+/// pair renders as one glyph - a "three emoji" message of flags is six code
+/// points, and blowing it up to 2.5x is a wall rather than an expression.
+bool _isRegionalIndicator(int codePoint) =>
+    codePoint >= 0x1F1E6 && codePoint <= 0x1F1FF;
+
+/// Matches a run made up only of emoji, variation selectors and ZWJs - the
+/// same pattern Alpine's `isOnlyEmoji` tests with, deliberately including its
+/// quirk that `\p{Emoji}` also covers ASCII digits and `#`/`*`. Divergence
+/// there would mean "1" renders large on one client and small on the other.
+final _onlyEmojiPattern = RegExp(
+  // `valid_regexps` parses this without `unicode: true` and so rejects
+  // `\p{...}`, which is only legal in unicode mode. The pattern is valid -
+  // `isOnlyEmojiMessage` is covered by tests - and the lint is what is wrong.
+  // ignore: valid_regexps
+  r'^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F?|\u200D)+$',
+  unicode: true,
+);
+
+/// Whether [content] is emoji and nothing else, and therefore renders large.
+///
+/// The cap is on UTF-16 code units rather than glyphs, matching Alpine - a
+/// long line of emoji is a wall at 2.5x however few "characters" it is, and
+/// counting graphemes here would only move the wall further out.
+///
+/// Only U+0020 is stripped before the test, again matching Alpine: a message
+/// with a newline in it is a *layout*, not a single expression, and stays at
+/// body size.
+bool isOnlyEmojiMessage(String content) {
+  final stripped = content.trim().replaceAll(' ', '');
+  if (stripped.isEmpty || stripped.length > 30) return false;
+  for (final codePoint in stripped.runes) {
+    if (_isRegionalIndicator(codePoint)) return false;
+  }
+  return _onlyEmojiPattern.hasMatch(stripped);
+}
+
+/// highlight.js' grammars, ported to Dart - the same ones Alpine's
+/// `markdown.pipe.ts` highlights with, which is what keeps a block that
+/// colours on desktop from arriving grey here.
+///
+/// Built once and lazily: the whole registry is a few hundred grammars, and a
+/// thread with no code in it should never pay to construct them. Registration
+/// carries each grammar's aliases too, so ```` ```js ```` resolves to
+/// javascript exactly as it does on desktop.
+final Highlight _highlighter = Highlight()
+  ..registerLanguages(builtinAllLanguages);
+
+/// Renders a fenced code block with syntax highlighting, falling back to plain
+/// monospace text for a language nothing recognises - the same two-branch
+/// shape as Alpine's `renderCodeBlock`, which highlights only when
+/// `hljs.getLanguage(lang)` answers and escapes the text otherwise.
+///
+/// Never guesses. `re_highlight` offers auto-detection and Alpine deliberately
+/// does not use it: a three-line snippet is ambiguous between half a dozen
+/// languages, and a wrong guess miscolours the text with total confidence.
+class MessageCodeBlockBuilder extends MarkdownElementBuilder {
+  MessageCodeBlockBuilder({required this.theme});
+
+  final ThemeData theme;
+
+  @override
+  bool isBlockElement() => true;
+
+  @override
+  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    // `markdown` nests the body one level down as `<pre><code class=
+    // "language-x">`, so both the text and the info string live on the child.
+    final code = element.children?.whereType<md.Element>().firstOrNull;
+    final source = (code ?? element).textContent;
+    final className = code?.attributes['class'] ?? '';
+    final language = className.startsWith('language-')
+        ? className.substring('language-'.length)
+        : null;
+
+    final baseStyle = (preferredStyle ?? theme.textTheme.bodySmall)?.copyWith(
+      fontFamily: 'monospace',
+      // The stylesheet's own code colour would fight the highlighter's, and
+      // the highlighter only styles the spans it recognises - so the
+      // unrecognised remainder has to come from the same palette or a block
+      // renders half in one scheme and half in the other.
+      color: _codeTheme['root']?.color ?? theme.colorScheme.onSurface,
+    );
+
+    TextSpan? highlighted;
+    if (language != null && _highlighter.getLanguage(language) != null) {
+      final renderer = TextSpanRenderer(baseStyle, _codeTheme);
+      _highlighter.highlight(code: source, language: language).render(renderer);
+      highlighted = renderer.span;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.s,
+        vertical: AppSpacing.xs,
+      ),
+      // Code does not wrap - a wrapped line is a different program to read.
+      // Alpine's `pre` scrolls horizontally for the same reason.
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Text.rich(
+          highlighted ?? TextSpan(text: source, style: baseStyle),
+        ),
+      ),
+    );
+  }
+
+  /// The highlighter's own palette rather than one assembled from
+  /// `colorScheme`.
+  ///
+  /// Token colours are not a theme decision this app gets to make: they are
+  /// keyed by highlight.js scope names (`keyword`, `string`, `comment`, …),
+  /// there are around forty of them, and inventing a mapping onto four or five
+  /// scheme roles would collapse most of them into the same colour and defeat
+  /// the point. This is a shipped highlight.js theme, which is the same source
+  /// Alpine's own palette was derived from.
+  Map<String, TextStyle> get _codeTheme => theme.brightness == Brightness.dark
+      ? atomOneDarkTheme
+      : atomOneLightTheme;
+}
+
 /// Formats a local time as e.g. "3:45 PM" without pulling in `intl` for one
 /// call site.
 String _formatMessageTime(DateTime dt) {
@@ -1946,6 +2626,48 @@ String _formatMessageTime(DateTime dt) {
   final minute = local.minute.toString().padLeft(2, '0');
   final period = hour24 < 12 ? 'AM' : 'PM';
   return '$hour12:$minute $period';
+}
+
+/// The "new messages" line, drawn above the first message that arrived after
+/// this account last read the conversation - see
+/// `_ThreadViewState._snapshotFirstUnread` for where the position comes from
+/// and why it is taken exactly once.
+///
+/// Uses the error role rather than a colour of its own: it is the scheme's
+/// "look here" register, which is what Alpine's rose line is too, and this
+/// screen has no other token that reads as a boundary.
+class _UnreadDivider extends StatelessWidget {
+  const _UnreadDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.error;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.s, bottom: AppSpacing.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Divider(height: 1, color: color.withValues(alpha: 0.35)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+            child: Text(
+              'NEW MESSAGES',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: color.withValues(alpha: 0.75),
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.7,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Divider(height: 1, color: color.withValues(alpha: 0.35)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Discord-style row: avatar + author name (bold, a step above body size)
@@ -1965,6 +2687,7 @@ class _MessageBubble extends StatelessWidget {
     required this.resolveMentionName,
     required this.guildId,
     this.isEditing = false,
+    this.isHighlighted = false,
     this.editController,
     this.onSaveEdit,
     this.onCancelEdit,
@@ -1975,6 +2698,10 @@ class _MessageBubble extends StatelessWidget {
   final bool showHeader;
   final bool isMe;
   final bool failed;
+
+  /// A jump just landed here. Flashes a tint that decays to nothing, which is
+  /// what tells the reader which of thirty near-identical rows they asked for.
+  final bool isHighlighted;
   final String myUserId;
   final void Function(String emoji, String? emojiId) onReactionToggle;
   final VoidCallback onAddReaction;
@@ -2001,7 +2728,7 @@ class _MessageBubble extends StatelessWidget {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (replyToWidget != null) replyToWidget!,
+        ?replyToWidget,
         if (showHeader)
           Row(
             children: [
@@ -2037,6 +2764,27 @@ class _MessageBubble extends StatelessWidget {
                       fontSize: 9,
                       letterSpacing: 0.4,
                     ),
+                  ),
+                ),
+              ],
+              // Said out loud rather than left to be inferred: an ephemeral
+              // reply looks exactly like a message the rest of the channel can
+              // read, and acting on that assumption is how someone answers a
+              // bot in public thinking they answered it privately. Beside the
+              // BOT badge, because the two facts belong together - this is a
+              // bot's answer, and it is only yours.
+              if (message.isEphemeral) ...[
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.visibility_off_outlined,
+                  size: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  'Only you can see this',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
                 ),
               ],
@@ -2103,31 +2851,60 @@ class _MessageBubble extends StatelessWidget {
       ],
     );
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => context.push(RoutePaths.userProfilePath(message.authorId)),
-      onLongPress: message.isPending || message.isBotCommandPlaceholder
-          ? null
-          : onLongPress,
-      child: Padding(
-        padding: EdgeInsets.only(top: showHeader ? 14 : 3),
-        child: showHeader
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  UserAvatar(
-                    userId: message.authorId,
-                    radius: AppRadii.avatarMedium,
-                    showStatus: true,
-                  ),
-                  const SizedBox(width: AppSpacing.s),
-                  Expanded(child: content),
-                ],
-              )
-            : Padding(
-                padding: const EdgeInsets.only(left: _leadingWidth),
-                child: content,
+    // A decay rather than a steady tint: the flash has to be noticeable on
+    // arrival and gone by the time the reader starts reading, or it becomes a
+    // permanent-looking selection nobody asked for. Alpine's `msg-flash`
+    // animation does the same thing over the same two seconds.
+    Widget flash(Widget child) => !isHighlighted
+        ? child
+        : TweenAnimationBuilder<double>(
+            key: ValueKey('flash-${message.id}'),
+            tween: Tween(begin: 1, end: 0),
+            duration: const Duration(seconds: 2),
+            curve: Curves.easeOut,
+            builder: (context, t, inner) => DecoratedBox(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.15 * t),
+                borderRadius: BorderRadius.circular(AppRadii.chip),
               ),
+              child: inner,
+            ),
+            child: child,
+          );
+
+    return flash(
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => context.push(RoutePaths.userProfilePath(message.authorId)),
+        onLongPress:
+            message.isPending ||
+                message.isBotCommandPlaceholder ||
+                // No server-side row, so every action on the sheet would 404 -
+                // see `_ThreadViewState._showMessageActions`, which refuses the
+                // same message again.
+                message.isEphemeral
+            ? null
+            : onLongPress,
+        child: Padding(
+          padding: EdgeInsets.only(top: showHeader ? 14 : 3),
+          child: showHeader
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UserAvatar(
+                      userId: message.authorId,
+                      radius: AppRadii.avatarMedium,
+                      showStatus: true,
+                    ),
+                    const SizedBox(width: AppSpacing.s),
+                    Expanded(child: content),
+                  ],
+                )
+              : Padding(
+                  padding: const EdgeInsets.only(left: _leadingWidth),
+                  child: content,
+                ),
+        ),
       ),
     );
   }
@@ -2159,6 +2936,11 @@ class _MessageBody extends StatelessWidget {
     // the timeline - the decryptor already decided this cannot be read, so say
     // that instead of showing the user the bytes.
     if (message.isUndecryptable) return const UndecryptableMessageBody();
+
+    // Display only. `_ThreadViewState._startEdit` deliberately loads the raw
+    // body instead, so an edit round-trips the sender's brackets rather than
+    // silently re-enabling the preview they suppressed.
+    final displayText = stripNoPreviewBrackets(text);
 
     // There was a `MessageType.invite` branch here that scanned the body for an
     // invite URL and drew its own card. It never once fired: the type exists in
@@ -2202,7 +2984,32 @@ class _MessageBody extends StatelessWidget {
               ),
             ),
           )
-        else if (text.isNotEmpty)
+        // A voice invite's whole readable content is its card, which
+        // `MessageEmbedsView` at the bottom of this column already draws.
+        // `content` is a plain-English sentence for a client that does not
+        // understand the type - rendering it here prints the card's own
+        // sentence directly above the card. See `MessageDtoX`.
+        else if (message.isVoiceChannelInvite)
+          const SizedBox.shrink()
+        // An emoji-only message renders at 2.5x, matching Alpine's
+        // `isOnlyEmoji` branch. Off the raw body rather than [displayText]:
+        // the bracket strip cannot change the answer, and Alpine reads the raw
+        // one for the same reason.
+        else if (isOnlyEmojiMessage(text))
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                // `leading-none` on Alpine's wrapper - a 2.5x glyph on the
+                // default 1.4-ish line height leaves a band of dead space
+                // above and below it that reads as a layout bug.
+                fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) * 2.5,
+                height: 1,
+              ),
+            ),
+          )
+        else if (displayText.isNotEmpty)
           Builder(
             builder: (context) {
               final userNames = <String, String>{};
@@ -2235,7 +3042,7 @@ class _MessageBody extends StatelessWidget {
                 }
               }
               return MarkdownBody(
-                data: text,
+                data: displayText,
                 softLineBreak: true,
                 shrinkWrap: true,
                 extensionSet:
@@ -2255,6 +3062,10 @@ class _MessageBody extends StatelessWidget {
                     guildId: guildId,
                     roleColors: roleColors,
                   ),
+                  // Registered on `pre` rather than `code`, which is also the
+                  // inline-code tag - a builder there would repaint every
+                  // `like this` run as a one-line program.
+                  'pre': MessageCodeBlockBuilder(theme: theme),
                 },
                 styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                   p: theme.textTheme.bodyMedium,
@@ -2483,9 +3294,15 @@ class _MessageEditField extends StatelessWidget {
 /// (author name + snippet). Shows an italic placeholder while the
 /// referenced message is still being resolved or if it's gone.
 class _ReplyQuoteRow extends StatelessWidget {
-  const _ReplyQuoteRow({required this.replyTo});
+  const _ReplyQuoteRow({required this.replyTo, this.onTap});
 
   final MessageDto? replyTo;
+
+  /// Jumps the timeline to the quoted message. Wired even while [replyTo] is
+  /// still resolving: the id is known from the moment the row is built, and
+  /// the jump only ever needed the id - refusing the tap until the preview
+  /// text arrives would make the row feel broken for the second it takes.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2494,49 +3311,55 @@ class _ReplyQuoteRow extends StatelessWidget {
       color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
     );
     final target = replyTo;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        children: [
-          Icon(
-            Icons.reply,
-            size: 12,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-          ),
-          const SizedBox(width: 4),
-          if (target == null)
-            Text(
-              'Original message',
-              style: mutedStyle?.copyWith(fontStyle: FontStyle.italic),
-            )
-          else
-            Flexible(
-              child: ProfileResolver(
-                userId: target.authorId,
-                builder: (context, profile) {
-                  final snippet = MessageContentCodec.decode(target.content);
-                  return Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: '${profile?.userName ?? '…'}  ',
-                          style: mutedStyle?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        TextSpan(
-                          text: snippet.isEmpty ? '(attachment)' : snippet,
-                          style: mutedStyle,
-                        ),
-                      ],
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  );
-                },
-              ),
+    return GestureDetector(
+      onTap: onTap,
+      // The row is mostly whitespace, and a hit test that only counted the
+      // glyphs would miss most taps aimed at it.
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Row(
+          children: [
+            Icon(
+              Icons.reply,
+              size: 12,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
             ),
-        ],
+            const SizedBox(width: 4),
+            if (target == null)
+              Text(
+                'Original message',
+                style: mutedStyle?.copyWith(fontStyle: FontStyle.italic),
+              )
+            else
+              Flexible(
+                child: ProfileResolver(
+                  userId: target.authorId,
+                  builder: (context, profile) {
+                    final snippet = MessageContentCodec.decode(target.content);
+                    return Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${profile?.userName ?? '…'}  ',
+                            style: mutedStyle?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          TextSpan(
+                            text: snippet.isEmpty ? '(attachment)' : snippet,
+                            style: mutedStyle,
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -2639,13 +3462,23 @@ class _SystemMessageRow extends StatelessWidget {
   /// Content is whole seconds as plain text. Anything else - an empty body, a
   /// value from a server that changed the format - renders as a bare "called"
   /// rather than as a broken duration.
+  ///
+  /// The largest two units only, matching Alpine's `formatDuration`: `45s`,
+  /// `3m 4s`, `1h 2m`. Without the hour branch a seventy-minute call read
+  /// "70m 14s", which is both wrong-looking and harder to take in than the
+  /// number it is trying to convey. Seconds are dropped rather than rounded
+  /// into the minutes once there are hours - on a call that long the second is
+  /// noise, and rounding would make two adjacent calls of the same length
+  /// print differently.
   String? _formatDuration(String raw) {
     final seconds = int.tryParse(raw.trim());
     if (seconds == null || seconds < 0) return null;
-    final minutes = seconds ~/ 60;
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
     final remainder = seconds % 60;
-    if (minutes == 0) return '${remainder}s';
-    return '${minutes}m ${remainder}s';
+    if (hours > 0) return '${hours}h ${minutes}m';
+    if (minutes > 0) return '${minutes}m ${remainder}s';
+    return '${remainder}s';
   }
 }
 

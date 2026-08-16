@@ -11,6 +11,8 @@ import '../../features/billing/data/degradation_log.dart';
 import '../../features/billing/data/entitlement_api.dart';
 import '../../features/billing/data/entitlement_reader.dart';
 import '../../features/billing/data/plan_repository.dart';
+import '../../features/bots/data/bot_modal_api.dart';
+import '../../features/bots/data/bot_modal_service.dart';
 import '../../features/conversations/data/conversation_api.dart';
 import '../../features/conversations/data/conversation_repository.dart';
 import '../../features/friends/data/relationship_api.dart';
@@ -29,6 +31,7 @@ import '../../features/household/data/household_api.dart';
 import '../../features/household/data/household_repository.dart';
 import '../../features/inbox/data/inbox_api.dart';
 import '../../features/inbox/data/inbox_repository.dart';
+import '../../features/messaging/data/attachment_download_service.dart';
 import '../../features/messaging/data/bot_command_api.dart';
 import '../../features/messaging/data/message_api.dart';
 import '../../features/mls/data/mls_api.dart';
@@ -232,6 +235,12 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
     ),
   );
   getIt.registerLazySingleton<MessageApi>(() => MessageApi(client: getIt()));
+  // Holds no state of its own - it is registered rather than constructed at the
+  // call site only so the three attachment views share one client (and one
+  // place to stub in a test), the way every other data service here is reached.
+  getIt.registerLazySingleton<AttachmentDownloadService>(
+    () => AttachmentDownloadService(client: getIt()),
+  );
   getIt.registerLazySingleton<MlsApi>(() => MlsApi(client: getIt()));
   getIt.registerLazySingleton<MlsStore>(() => MlsStore());
   getIt.registerLazySingleton<MlsService>(
@@ -381,6 +390,15 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   );
   getIt.registerLazySingleton<BotCommandApi>(
     () => BotCommandApi(client: getIt()),
+  );
+  getIt.registerLazySingleton<BotModalApi>(() => BotModalApi(client: getIt()));
+  // Subscribes to `guild.ModalOpen` the moment it is resolved, which
+  // `BotModalPresenter` does at launch. A singleton rather than something a
+  // screen owns because a bot answers a slash command whenever it likes: the
+  // push can land on any screen, or between two of them, and a subscription
+  // held by a widget would miss the ones that arrive while nothing is mounted.
+  getIt.registerLazySingleton<BotModalService>(
+    () => BotModalService(realtimeService: getIt()),
   );
   getIt.registerLazySingleton<GuildApi>(() => GuildApi(client: getIt()));
   getIt.registerLazySingleton<GuildRepository>(
@@ -565,6 +583,12 @@ void resetSessionScopedCaches() {
   // account would have this handset refusing the next person's file against a
   // number that was never theirs.
   getIt<EntitlementReader>().clear();
+  // A form a bot pushed at the *previous* account must not be left standing
+  // over the next one's first screen. It is addressed to a user id that is no
+  // longer signed in, and submitting it would send the new account's
+  // credentials against the old account's interaction - which the server would
+  // reject, after the user had filled the whole thing in.
+  getIt<BotModalService>().clear();
   // MLS is deliberately *not* reset here. It is per account too, and more
   // sharply so - an identity is credentialed to one user id - but this function
   // is synchronous and unloading group state is not, so doing it here would race

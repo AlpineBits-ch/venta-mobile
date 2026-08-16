@@ -59,7 +59,31 @@ enum VoiceRingReason {
   unknown,
 }
 
-/// Why sending a ring was refused.
+/// How hard to knock, sent as `delivery` on the send.
+///
+/// The server defaults to [both] for the sake of clients that predate the
+/// field. This client always says which it wants: a request that spells out
+/// what it means does not quietly change meaning if that default ever does.
+enum VoiceRingDelivery {
+  /// The invitation goes in the DM and nowhere else. Nothing rings, nothing
+  /// expires, and there is no ring id to accept, decline or cancel - the card
+  /// in the conversation is the whole of it.
+  message('Message'),
+
+  /// The ephemeral ring alone, leaving no record once it lapses.
+  ring('Ring'),
+
+  /// The ring now, and the card that outlives it.
+  both('Both');
+
+  const VoiceRingDelivery(this.wire);
+
+  /// Sent as-is. Not a [JsonValue] because this is only ever written, never
+  /// parsed - no response carries it back.
+  final String wire;
+}
+
+/// Why sending a ring or an invitation was refused.
 ///
 /// Note what is **not** here: there is no "blocked". A block in either direction
 /// comes back as [unavailable], deliberately indistinguishable from every other
@@ -86,6 +110,16 @@ enum VoiceRingRefusal {
   /// Not your fault and still your `429`.
   @JsonValue('TargetSaturated')
   targetSaturated,
+
+  /// **Only a [VoiceRingDelivery.message] invitation can meet this**, and it
+  /// meets it often: the recipient does not accept direct messages from this
+  /// sender, and the product default is friends-only while two people sharing a
+  /// server are frequently not friends.
+  ///
+  /// A ring never has this failure, because a ring does not need a conversation
+  /// - it is delivered to their devices, not into a DM.
+  @JsonValue('RecipientPolicy')
+  recipientPolicy,
   unknown,
 }
 
@@ -124,6 +158,22 @@ sealed class VoiceRingDto with _$VoiceRingDto {
 
   factory VoiceRingDto.fromJson(Map<String, dynamic> json) =>
       _$VoiceRingDtoFromJson(json);
+}
+
+/// The answer to a [VoiceRingDelivery.message] invitation.
+///
+/// **Deliberately not a [VoiceRingDto].** No ring is created, so there is no id
+/// to accept or cancel, no status to watch and no instant to count down to -
+/// there is nothing for the ring cubit to hold and nothing for its ticker to
+/// tick. What comes back is where the card landed, which may be a conversation
+/// that did not exist a moment ago.
+@freezed
+sealed class VoiceInviteSentDto with _$VoiceInviteSentDto {
+  const factory VoiceInviteSentDto({@Default('') String conversationId}) =
+      _VoiceInviteSentDto;
+
+  factory VoiceInviteSentDto.fromJson(Map<String, dynamic> json) =>
+      _$VoiceInviteSentDtoFromJson(json);
 }
 
 /// The one shape every refusal uses. `retryAfterSeconds` is zero for anything
@@ -254,6 +304,12 @@ extension VoiceRingRefusalX on VoiceRingRefusal {
       'You have sent a lot of invitations just now. Try again shortly.',
     VoiceRingRefusal.targetSaturated =>
       'They have had a lot of invitations just now.',
+
+    // Their setting rather than ours, and worth saying plainly: it is the one
+    // refusal the sender can do something about, by becoming a friend. Waiting
+    // will not fix it, so there is no "try again later" here.
+    VoiceRingRefusal.recipientPolicy => 'They do not accept messages from you.',
+
     VoiceRingRefusal.unknown => 'Could not send that invitation.',
   };
 }

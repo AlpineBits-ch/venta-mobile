@@ -32,6 +32,15 @@ enum EmbedType {
   @JsonValue('venta.wiki_page')
   ventaWikiPage,
 
+  /// "Come and join me in here" - the durable half of a voice ring, written by
+  /// the server into the 1:1 conversation between the two people. Everything
+  /// the card draws is in this embed's [EmbedDto.venta] block; the message's
+  /// own body is a plain-English fallback for a client that has never heard of
+  /// `MessageType.voiceChannelInvite`, and is suppressed by the timeline so it
+  /// is not shown twice.
+  @JsonValue('venta.voice_invite')
+  ventaVoiceInvite,
+
   /// A layout this build has never heard of. Falls back to the [link] card,
   /// which degrades to "whatever fields happen to be present" and so renders
   /// something sane for any future type.
@@ -43,13 +52,16 @@ enum EmbedType {
   unknown,
 }
 
-/// Which internal-link card a [EmbedType.ventaInvite] / [EmbedType.ventaWikiPage]
-/// embed is, without the `venta.` prefix, so there is one value to switch on.
+/// Which internal-link card a [EmbedType.ventaInvite] /
+/// [EmbedType.ventaWikiPage] / [EmbedType.ventaVoiceInvite] embed is, without
+/// the `venta.` prefix, so there is one value to switch on.
 enum EmbedVentaKind {
   @JsonValue('invite')
   invite,
   @JsonValue('wiki_page')
   wikiPage,
+  @JsonValue('voice_invite')
+  voiceInvite,
   unknown,
 }
 
@@ -179,18 +191,53 @@ sealed class EmbedVentaDto with _$EmbedVentaDto {
     /// survives a vanity rename.
     @JsonKey(name: 'invite_code') String? inviteCode,
 
-    /// The channel a joiner lands on, when the invite names one. Id only -
-    /// never a name.
+    /// Invite: the channel a joiner lands on, when the invite names one. Voice
+    /// invite: the channel being asked into. An id, never a name - except on a
+    /// voice invite, which also carries [channelName].
     @JsonKey(name: 'channel_id') String? channelId,
     @JsonKey(name: 'page_id') String? pageId,
 
-    /// Absent for an invite that never expires. Safe to freeze into the card:
-    /// an absolute instant does not go stale the way "expired" does.
+    /// Absent for an invite that never expires, and for a voice invitation that
+    /// was sent as a plain message rather than as a ring - see the standing
+    /// case in `_VentaVoiceInviteCard`, which is why "no expiry" must never be
+    /// read as "expired". On a ring it is always present and is about a minute
+    /// after the message was sent, which is what decides whether [ringId] still
+    /// means anything.
+    ///
+    /// Safe to freeze into the card: an absolute instant does not go stale the
+    /// way a stored "expired" boolean does.
     @JsonKey(name: 'expires_at') DateTime? expiresAt,
 
     /// Absent for unlimited. The running *use* count is deliberately not
     /// carried - re-resolve if you want to show it.
     @JsonKey(name: 'max_uses') int? maxUses,
+
+    /// Voice invite only: the ring this card was written for.
+    ///
+    /// Live only until [expiresAt]. Past that, treat it as absent rather than
+    /// as something to call - the ring no longer exists and accepting it
+    /// answers `409`. The honest affordance there is the ordinary join, which
+    /// accepts nothing.
+    @JsonKey(name: 'ring_id') String? ringId,
+
+    /// Voice invite only: who did the asking.
+    ///
+    /// The same person as the message's author today; carried so the card keeps
+    /// meaning what it says if it is ever quoted. It is also what tells the
+    /// *inviter* they are reading their own invitation, so the card can drop
+    /// the Join button for the channel they are already sitting in.
+    @JsonKey(name: 'inviter_id') String? inviterId,
+
+    /// Voice invite only: the channel's name when the invitation was sent.
+    ///
+    /// The one place a `venta.*` card carries a name rather than only an id.
+    /// The invite kind can leave it out because a client re-resolves it from
+    /// the code, and the wiki kind *must* leave it out because the audience for
+    /// a title is narrower than the audience for the message. Neither applies
+    /// here: the recipient was checked for `ViewChannel` before the ring was
+    /// allowed at all, and there is no later lookup that would let them fill it
+    /// in. Render it; do not go and fetch a fresher one.
+    @JsonKey(name: 'channel_name') String? channelName,
   }) = _EmbedVentaDto;
 
   factory EmbedVentaDto.fromJson(Map<String, dynamic> json) =>
@@ -310,7 +357,9 @@ extension EmbedDtoX on EmbedDto {
 
   /// An internal-link kind this build has a layout for.
   bool get isKnownVentaKind =>
-      type == EmbedType.ventaInvite || type == EmbedType.ventaWikiPage;
+      type == EmbedType.ventaInvite ||
+      type == EmbedType.ventaWikiPage ||
+      type == EmbedType.ventaVoiceInvite;
 
   /// An internal-link card this build may actually draw as one.
   ///

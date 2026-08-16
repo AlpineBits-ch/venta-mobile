@@ -22,6 +22,9 @@ import 'core/session/session_cubit.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_cubit.dart';
 import 'features/auth/data/auth_repository.dart';
+import 'features/bots/data/bot_modal_api.dart';
+import 'features/bots/data/bot_modal_service.dart';
+import 'features/bots/presentation/bot_modal_presenter.dart';
 import 'features/guild_voice/bloc/guild_voice_cubit.dart';
 import 'features/invites/presentation/widgets/invite_dialog.dart';
 import 'features/status/data/status_repository.dart';
@@ -59,6 +62,7 @@ class _AppState extends State<App> {
     // tree's: it is paused on background and stopped in `dispose`, per the
     // status spec's "do not poll on a timer that survives backgrounding".
     _startStatusPolling();
+    _startBotModals();
 
     // Decrypted message content is written behind a short debounce, and Android
     // kills backgrounded apps without warning. Losing that window is not a
@@ -127,6 +131,36 @@ class _AppState extends State<App> {
     }
   }
 
+  /// A bot can answer a slash command by asking for a form, and it does so on
+  /// its own schedule - so `guild.ModalOpen` can land on any screen, and the
+  /// dialog has to be able to appear over all of them.
+  ///
+  /// Started here rather than from a screen, and given the *router's* navigator
+  /// context, for exactly the reason `_showInviteDialog` below takes the same
+  /// one: that navigator is the root one, so the dialog sits above the shell,
+  /// above a pushed call screen, and above anything else that happens to be up.
+  /// The presenter owns the retry-until-there-is-a-navigator dance; see it.
+  ///
+  /// Guarded like the status poll above: a launch where dependency registration
+  /// failed is not a launch that should be made worse by a second exception out
+  /// of `initState`.
+  void _startBotModals() {
+    try {
+      _botModals = BotModalPresenter(
+        service: getIt<BotModalService>(),
+        api: getIt<BotModalApi>(),
+        navigatorContext: () =>
+            _router.routerDelegate.navigatorKey.currentContext,
+      )..start();
+    } catch (e) {
+      debugPrint('bot modals not started: $e');
+    }
+  }
+
+  /// Null only if dependency registration failed on this launch - same
+  /// null-aware treatment as [_statusRepository].
+  BotModalPresenter? _botModals;
+
   /// The launch URI, held only until the stream replays it.
   ///
   /// `app_links` delivers a cold start's link twice - once from
@@ -192,6 +226,10 @@ class _AppState extends State<App> {
     // this, the repository is an app-lifetime singleton holding a periodic
     // timer that nothing ever cancels.
     _statusRepository?.pause();
+    // The service is an app-lifetime singleton and keeps its subscription; what
+    // stops here is only this tree's ability to raise a dialog on a navigator
+    // that is going away with it.
+    _botModals?.stop();
     _lifecycle?.dispose();
     _linkSub?.cancel();
     _notificationTapSub?.cancel();

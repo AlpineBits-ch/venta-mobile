@@ -89,6 +89,14 @@ Json? _$JsonConverterToJson<Json, Value>(
   Json? Function(Value value) toJson,
 ) => value == null ? null : toJson(value);
 
+_VoiceInviteSentDto _$VoiceInviteSentDtoFromJson(Map<String, dynamic> json) =>
+    _VoiceInviteSentDto(
+      conversationId: json['conversationId'] as String? ?? '',
+    );
+
+Map<String, dynamic> _$VoiceInviteSentDtoToJson(_VoiceInviteSentDto instance) =>
+    <String, dynamic>{'conversationId': instance.conversationId};
+
 _VoiceRingRefusalDto _$VoiceRingRefusalDtoFromJson(Map<String, dynamic> json) =>
     _VoiceRingRefusalDto(
       reason:
@@ -115,6 +123,7 @@ const _$VoiceRingRefusalEnumMap = {
   VoiceRingRefusal.recentlyDeclined: 'RecentlyDeclined',
   VoiceRingRefusal.inviterFlooding: 'InviterFlooding',
   VoiceRingRefusal.targetSaturated: 'TargetSaturated',
+  VoiceRingRefusal.recipientPolicy: 'RecipientPolicy',
   VoiceRingRefusal.unknown: 'unknown',
 };
 

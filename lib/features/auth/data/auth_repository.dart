@@ -50,6 +50,19 @@ class AuthRepository {
     return _subClaimOf(token);
   }
 
+  /// The access token as it stands right now, without refreshing.
+  ///
+  /// For the one caller that cannot await: an image widget builds
+  /// synchronously and hands its headers to a loader outside dio, so
+  /// [ensureValidToken] - a `Future` - is unreachable from there. Everything
+  /// else must keep using [ensureValidToken], which refreshes and shares one
+  /// in-flight refresh between concurrent callers.
+  ///
+  /// A stale token here costs a broken image until the next rebuild, which the
+  /// dio interceptor's refresh will already have fixed by then. It never costs
+  /// a lost write.
+  String? get currentAccessToken => _accessToken;
+
   /// Loads any persisted session and, if a refresh token exists, validates
   /// it against the server immediately - there's no persisted expiry, so a
   /// forced refresh on cold start is the simplest reliable check.

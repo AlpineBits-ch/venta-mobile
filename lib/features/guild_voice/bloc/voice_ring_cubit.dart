@@ -13,7 +13,10 @@ import '../data/voice_ring_repository.dart';
 
 /// One invitation asking this account in, with its own countdown.
 class IncomingRing extends Equatable {
-  const IncomingRing({required this.invitation, required this.remainingSeconds});
+  const IncomingRing({
+    required this.invitation,
+    required this.remainingSeconds,
+  });
 
   final VoiceRingInvitationDto invitation;
 
@@ -56,7 +59,33 @@ class OutgoingRing extends Equatable {
   );
 
   @override
-  List<Object?> get props => [ringId, channelId, targetUserId, remainingSeconds];
+  List<Object?> get props => [
+    ringId,
+    channelId,
+    targetUserId,
+    remainingSeconds,
+  ];
+}
+
+/// What came back from a message invitation, for the one row that asked.
+///
+/// Deliberately not part of [VoiceRingState]. A message invitation creates no
+/// ring, so there is nothing global to hold and nothing for any other part of
+/// the interface to reflect - this is handed straight back to the caller and
+/// held there for as long as that view is open.
+class VoiceInviteOutcome {
+  /// The card is in their conversation, which may be one that did not exist a
+  /// moment ago - hence the id, for a caller that wants to open it.
+  const VoiceInviteOutcome.sent(this.conversationId) : refusalMessage = null;
+
+  /// Copy for that one person's row, already in the user's words.
+  const VoiceInviteOutcome.refused(String this.refusalMessage)
+    : conversationId = null;
+
+  final String? conversationId;
+  final String? refusalMessage;
+
+  bool get wasSent => refusalMessage == null;
 }
 
 class VoiceRingState extends Equatable {
@@ -102,10 +131,12 @@ class VoiceRingState extends Equatable {
     acceptedChannel: acceptedChannel,
   );
 
-  bool hasOutgoingTo({required String channelId, required String targetUserId}) =>
-      outgoing.any(
-        (r) => r.channelId == channelId && r.targetUserId == targetUserId,
-      );
+  bool hasOutgoingTo({
+    required String channelId,
+    required String targetUserId,
+  }) => outgoing.any(
+    (r) => r.channelId == channelId && r.targetUserId == targetUserId,
+  );
 
   @override
   List<Object?> get props => [
@@ -122,11 +153,14 @@ class VoiceRingState extends Equatable {
 /// session and no roster slot; there is nothing to connect, nothing to tear
 /// down, and nothing for CallKit to report. What it has instead is a stack of
 /// invitations with countdowns.
-class VoiceRingCubit extends Cubit<VoiceRingState> with SafeEmit<VoiceRingState> {
+class VoiceRingCubit extends Cubit<VoiceRingState>
+    with SafeEmit<VoiceRingState> {
   VoiceRingCubit({required this.repository, required this.deviceIdService})
     : super(const VoiceRingState()) {
     _sub = repository.events.listen(_handleEvent);
-    _connectionSub = repository.connectionStatus.listen(_handleConnectionStatus);
+    _connectionSub = repository.connectionStatus.listen(
+      _handleConnectionStatus,
+    );
   }
 
   final VoiceRingRepository repository;
@@ -175,9 +209,7 @@ class VoiceRingCubit extends Cubit<VoiceRingState> with SafeEmit<VoiceRingState>
                 ),
               )
               .toList()
-            ..sort(
-              (a, b) => b.remainingSeconds.compareTo(a.remainingSeconds),
-            );
+            ..sort((a, b) => b.remainingSeconds.compareTo(a.remainingSeconds));
 
       emitIfOpen(state.copyWith(incoming: rings));
       _syncTicker();
@@ -219,6 +251,46 @@ class VoiceRingCubit extends Cubit<VoiceRingState> with SafeEmit<VoiceRingState>
       // affordance should not have been offered - a bug here, not news for the
       // user.
       debugPrint('VoiceRingCubit.sendRing: $e');
+    }
+  }
+
+  /// The quiet invitation: a card in their DM, and nobody interrupted.
+  ///
+  /// **Returns its outcome instead of emitting one.** Everything else here goes
+  /// through [VoiceRingState] because a ring is global - it counts down, other
+  /// windows must stop offering to send it, and a resolution can arrive from
+  /// anywhere. A message invitation has none of that: no ring is created, so
+  /// nothing counts down, nothing can be taken back, and no other part of the
+  /// interface has a state to reflect. It is one request and it is finished, so
+  /// the one row that asked is told and nobody else is.
+  ///
+  /// That is also why the refusal comes back here rather than as
+  /// [VoiceRingState.notice]: the common one is
+  /// [VoiceRingRefusal.recipientPolicy], which is a fact about those two people
+  /// rather than about the channel, and putting it in the channel-wide notice
+  /// the ring refusals use would say it about everybody in the list.
+  Future<VoiceInviteOutcome> sendInvite({
+    required String guildId,
+    required String channelId,
+    required String targetUserId,
+  }) async {
+    try {
+      final sent = await repository.invite(
+        guildId: guildId,
+        channelId: channelId,
+        targetUserId: targetUserId,
+      );
+      return VoiceInviteOutcome.sent(sent.conversationId);
+    } on VoiceRingRefusedException catch (e) {
+      return VoiceInviteOutcome.refused(e.reason.message);
+    } catch (e) {
+      // Anything the server did not explain - a bare 403 the affordance should
+      // have prevented, or the network. Vague on purpose: the only refusal worth
+      // naming named itself above.
+      debugPrint('VoiceRingCubit.sendInvite: $e');
+      return const VoiceInviteOutcome.refused(
+        'That invitation could not be sent.',
+      );
     }
   }
 
@@ -363,8 +435,7 @@ class VoiceRingCubit extends Cubit<VoiceRingState> with SafeEmit<VoiceRingState>
     // This device answered it. It already re-rendered when it did, and doing so
     // again would replace a "connecting" state with a resolution notice.
     final mine = _myDeviceId;
-    final answeredHere =
-        mine != null && resolution.resolvedByDeviceId == mine;
+    final answeredHere = mine != null && resolution.resolvedByDeviceId == mine;
 
     final notice = answeredHere ? null : _noticeFor(resolution);
 
@@ -389,7 +460,9 @@ class VoiceRingCubit extends Cubit<VoiceRingState> with SafeEmit<VoiceRingState>
   /// endings that are a statement about the world rather than about a button
   /// somebody pressed.
   String? _noticeFor(VoiceRingResolvedDto resolution) {
-    final wasMineToSend = state.outgoing.any((r) => r.ringId == resolution.ringId);
+    final wasMineToSend = state.outgoing.any(
+      (r) => r.ringId == resolution.ringId,
+    );
 
     if (wasMineToSend) {
       return switch (resolution.status) {
@@ -434,9 +507,7 @@ class VoiceRingCubit extends Cubit<VoiceRingState> with SafeEmit<VoiceRingState>
           ring.copyWith(remainingSeconds: ring.remainingSeconds - 1),
     ];
 
-    emitIfOpen(
-      VoiceRingState(incoming: incoming, outgoing: outgoing),
-    );
+    emitIfOpen(VoiceRingState(incoming: incoming, outgoing: outgoing));
     _syncTicker();
   }
 

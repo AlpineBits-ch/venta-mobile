@@ -82,6 +82,7 @@ const _$EmbedTypeEnumMap = {
   EmbedType.gifv: 'gifv',
   EmbedType.ventaInvite: 'venta.invite',
   EmbedType.ventaWikiPage: 'venta.wiki_page',
+  EmbedType.ventaVoiceInvite: 'venta.voice_invite',
   EmbedType.unknown: 'unknown',
 };
 
@@ -136,6 +137,9 @@ _EmbedVentaDto _$EmbedVentaDtoFromJson(Map<String, dynamic> json) =>
         const ApiDateTimeConverter().fromJson,
       ),
       maxUses: (json['max_uses'] as num?)?.toInt(),
+      ringId: json['ring_id'] as String?,
+      inviterId: json['inviter_id'] as String?,
+      channelName: json['channel_name'] as String?,
     );
 
 Map<String, dynamic> _$EmbedVentaDtoToJson(_EmbedVentaDto instance) =>
@@ -151,11 +155,15 @@ Map<String, dynamic> _$EmbedVentaDtoToJson(_EmbedVentaDto instance) =>
         const ApiDateTimeConverter().toJson,
       ),
       'max_uses': instance.maxUses,
+      'ring_id': instance.ringId,
+      'inviter_id': instance.inviterId,
+      'channel_name': instance.channelName,
     };
 
 const _$EmbedVentaKindEnumMap = {
   EmbedVentaKind.invite: 'invite',
   EmbedVentaKind.wikiPage: 'wiki_page',
+  EmbedVentaKind.voiceInvite: 'voice_invite',
   EmbedVentaKind.unknown: 'unknown',
 };
 

@@ -40,6 +40,24 @@ enum MessageType {
   @JsonValue('CallMissed')
   callMissed,
 
+  /// Somebody asked you into a voice channel - the durable half of a voice
+  /// ring, written by the server into the 1:1 conversation between the two.
+  ///
+  /// **Not a system row, deliberately.** Unlike a join notice or a call entry,
+  /// this is addressed by one person to another and carries a card you can act
+  /// on, so it renders as an ordinary message from the inviter rather than as
+  /// centred grey copy - which also means the reply they send a moment later
+  /// groups under it, exactly as it should. See [MessageTypeX.isSystemRow],
+  /// which leaves this out on purpose.
+  ///
+  /// Everything renderable is in the message's single `venta.voice_invite`
+  /// embed ([EmbedType.ventaVoiceInvite]). [MessageDto.content] is a
+  /// plain-English fallback for consumers that do not understand this type, and
+  /// the timeline suppresses it so it is not shown twice - see
+  /// [MessageDtoX.isVoiceChannelInvite].
+  @JsonValue('VoiceChannelInvite')
+  voiceChannelInvite,
+
   /// A type this build has never heard of.
   ///
   /// Not decoration: without it, one unrecognised value throws out of
@@ -146,6 +164,23 @@ sealed class MessageDto with _$MessageDto {
     @Default(false)
     bool isBotCommandPlaceholder,
 
+    /// Client-only: a bot reply only this user was sent, which the server never
+    /// stored (`guild.EphemeralMessageCreated`).
+    ///
+    /// It lives in the open thread's in-memory list and nowhere else - a reload
+    /// loses it, which is the whole point, and it is deliberately not counted
+    /// towards the pagination offset either, since that offset is a cursor into
+    /// server-side history and shifting it by a message history does not
+    /// contain would make the next page skip a real one.
+    ///
+    /// **Nothing may offer edit, delete, pin or reply on it**: there is no
+    /// server-side row for any of those to act on, and every one of them would
+    /// 404. It is also not a candidate for the read marker, for the same
+    /// reason - `MessageThreadBloc` skips it there.
+    @JsonKey(includeFromJson: false, includeToJson: false)
+    @Default(false)
+    bool isEphemeral,
+
     /// Client-only: this message is ciphertext we hold no keys for.
     ///
     /// MLS ratchets forward and never backward, so a message can be decrypted
@@ -176,9 +211,42 @@ sealed class MessageDto with _$MessageDto {
       _$MessageDtoFromJson(json);
 }
 
+extension MessageTypeX on MessageType {
+  /// Whether a message of this type renders as centred grey copy rather than as
+  /// an authored message.
+  ///
+  /// Also what stops the next real message being grouped under it: grouping
+  /// keys on the author, and a call entry is authored by whoever placed the
+  /// call - so without this the caller's next message would fold into the call
+  /// notice and lose its avatar and timestamp.
+  ///
+  /// **[MessageType.voiceChannelInvite] is deliberately absent.** It is a
+  /// server-written message like the others, but it is not one to *read* like
+  /// them: the rest are a record of something that already happened, whereas
+  /// this is one person asking another something, with a card they can answer.
+  bool get isSystemRow =>
+      this == MessageType.system ||
+      this == MessageType.guildMemberJoin ||
+      this == MessageType.guildMemberLeave ||
+      this == MessageType.callEnded ||
+      this == MessageType.callMissed;
+}
+
 extension MessageDtoX on MessageDto {
   /// Memoised - safe to call from `build`.
   List<EmbedDto> get embeds => parseEmbedsJson(embedsJson);
+
+  /// See [MessageTypeX.isSystemRow].
+  bool get isSystemRow => type.isSystemRow;
+
+  /// An invitation into a voice channel, whose whole readable content is its
+  /// `venta.voice_invite` card.
+  ///
+  /// The timeline draws this as an ordinary message from the inviter - avatar,
+  /// name, timestamp, groupable - and **suppresses [MessageDto.content]**,
+  /// which is only a plain-English fallback for a client that does not know the
+  /// type and would otherwise be shown above the card saying the same thing.
+  bool get isVoiceChannelInvite => type == MessageType.voiceChannelInvite;
 
   /// Somebody dismissed this message's previews, for everybody. Distinct from
   /// "there never were any", which is what tells the action sheet whether to

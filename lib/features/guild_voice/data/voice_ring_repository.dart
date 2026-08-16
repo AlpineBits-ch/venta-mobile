@@ -96,6 +96,19 @@ class VoiceRingRepository {
     targetUserId: targetUserId,
   );
 
+  /// The quiet form. No ring, so nothing here can ever come back through
+  /// [events] - a message invitation raises no `guild.VoiceRing*` at all, and
+  /// the response is the only thing that ever reports it.
+  Future<VoiceInviteSentDto> invite({
+    required String guildId,
+    required String channelId,
+    required String targetUserId,
+  }) => api.invite(
+    guildId: guildId,
+    channelId: channelId,
+    targetUserId: targetUserId,
+  );
+
   Future<VoiceRingDto> accept(String ringId) => api.accept(ringId);
 
   Future<VoiceRingDto> decline(String ringId) => api.decline(ringId);

@@ -321,6 +321,263 @@ as String?,
 
 
 /// @nodoc
+mixin _$VoiceInviteSentDto {
+
+ String get conversationId;
+/// Create a copy of VoiceInviteSentDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$VoiceInviteSentDtoCopyWith<VoiceInviteSentDto> get copyWith => _$VoiceInviteSentDtoCopyWithImpl<VoiceInviteSentDto>(this as VoiceInviteSentDto, _$identity);
+
+  /// Serializes this VoiceInviteSentDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VoiceInviteSentDto&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,conversationId);
+
+@override
+String toString() {
+  return 'VoiceInviteSentDto(conversationId: $conversationId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $VoiceInviteSentDtoCopyWith<$Res>  {
+  factory $VoiceInviteSentDtoCopyWith(VoiceInviteSentDto value, $Res Function(VoiceInviteSentDto) _then) = _$VoiceInviteSentDtoCopyWithImpl;
+@useResult
+$Res call({
+ String conversationId
+});
+
+
+
+
+}
+/// @nodoc
+class _$VoiceInviteSentDtoCopyWithImpl<$Res>
+    implements $VoiceInviteSentDtoCopyWith<$Res> {
+  _$VoiceInviteSentDtoCopyWithImpl(this._self, this._then);
+
+  final VoiceInviteSentDto _self;
+  final $Res Function(VoiceInviteSentDto) _then;
+
+/// Create a copy of VoiceInviteSentDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? conversationId = null,}) {
+  return _then(_self.copyWith(
+conversationId: null == conversationId ? _self.conversationId : conversationId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [VoiceInviteSentDto].
+extension VoiceInviteSentDtoPatterns on VoiceInviteSentDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _VoiceInviteSentDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _VoiceInviteSentDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _VoiceInviteSentDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _VoiceInviteSentDto():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _VoiceInviteSentDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _VoiceInviteSentDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String conversationId)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _VoiceInviteSentDto() when $default != null:
+return $default(_that.conversationId);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String conversationId)  $default,) {final _that = this;
+switch (_that) {
+case _VoiceInviteSentDto():
+return $default(_that.conversationId);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String conversationId)?  $default,) {final _that = this;
+switch (_that) {
+case _VoiceInviteSentDto() when $default != null:
+return $default(_that.conversationId);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _VoiceInviteSentDto implements VoiceInviteSentDto {
+  const _VoiceInviteSentDto({this.conversationId = ''});
+  factory _VoiceInviteSentDto.fromJson(Map<String, dynamic> json) => _$VoiceInviteSentDtoFromJson(json);
+
+@override@JsonKey() final  String conversationId;
+
+/// Create a copy of VoiceInviteSentDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$VoiceInviteSentDtoCopyWith<_VoiceInviteSentDto> get copyWith => __$VoiceInviteSentDtoCopyWithImpl<_VoiceInviteSentDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$VoiceInviteSentDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VoiceInviteSentDto&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,conversationId);
+
+@override
+String toString() {
+  return 'VoiceInviteSentDto(conversationId: $conversationId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$VoiceInviteSentDtoCopyWith<$Res> implements $VoiceInviteSentDtoCopyWith<$Res> {
+  factory _$VoiceInviteSentDtoCopyWith(_VoiceInviteSentDto value, $Res Function(_VoiceInviteSentDto) _then) = __$VoiceInviteSentDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String conversationId
+});
+
+
+
+
+}
+/// @nodoc
+class __$VoiceInviteSentDtoCopyWithImpl<$Res>
+    implements _$VoiceInviteSentDtoCopyWith<$Res> {
+  __$VoiceInviteSentDtoCopyWithImpl(this._self, this._then);
+
+  final _VoiceInviteSentDto _self;
+  final $Res Function(_VoiceInviteSentDto) _then;
+
+/// Create a copy of VoiceInviteSentDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? conversationId = null,}) {
+  return _then(_VoiceInviteSentDto(
+conversationId: null == conversationId ? _self.conversationId : conversationId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
 mixin _$VoiceRingRefusalDto {
 
 @JsonKey(unknownEnumValue: VoiceRingRefusal.unknown) VoiceRingRefusal get reason; int get retryAfterSeconds;

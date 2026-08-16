@@ -1,10 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/bloc/safe_emit.dart';
+import '../../../core/di/injector.dart';
+import '../../../core/format/api_date_time.dart';
 import '../../../core/network/privacy_refusal.dart';
+import '../../../core/realtime/realtime_event.dart';
+import '../../../core/realtime/realtime_service.dart';
 import '../../../core/sound/sound_service.dart';
 import '../../privacy/data/privacy_repository.dart';
 import '../data/message_api.dart';
@@ -171,6 +176,20 @@ class _BotPlaceholderTimedOut extends ThreadEvent {
 
 class _MessageReceived extends ThreadEvent {
   const _MessageReceived(this.message);
+  final MessageDto message;
+
+  @override
+  List<Object?> get props => [message];
+}
+
+/// A bot reply only this user was sent, which the server never stored.
+///
+/// Carried as its own event rather than folded into [_MessageReceived] because
+/// the two end differently: this one is never marked read (there is no row to
+/// mark) and lands already flagged, so nothing downstream offers edit, delete,
+/// pin or reply on it.
+class _EphemeralMessageReceived extends ThreadEvent {
+  const _EphemeralMessageReceived(this.message);
   final MessageDto message;
 
   @override
@@ -355,6 +374,12 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     required this.myUserId,
     required this.soundService,
     required this.privacy,
+
+    /// The hub, for the one message event that does not come through
+    /// [repository]. Optional so the screens that build this bloc - and the
+    /// tests that build it with no injector configured at all - need no
+    /// change; see [_resolveRealtimeService].
+    RealtimeService? realtimeService,
   }) : super(const ThreadState()) {
     on<ThreadOpened>(_onOpened);
     on<ThreadLoadMoreRequested>(_onLoadMoreRequested);
@@ -369,6 +394,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<ThreadBotPlaceholderFailed>(_onBotPlaceholderFailed);
     on<_BotPlaceholderTimedOut>(_onBotPlaceholderTimedOut);
     on<_MessageReceived>(_onMessageReceived);
+    on<_EphemeralMessageReceived>(_onEphemeralMessageReceived);
     on<_MessageUpdatedRemote>(_onMessageUpdatedRemote);
     on<_MessageDeletedRemote>(_onMessageDeletedRemote);
     on<_UserTypingRemote>(_onUserTypingRemote);
@@ -430,7 +456,84 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       }
     });
 
+    // `guild.EphemeralMessageCreated` is read straight off the hub rather than
+    // through [MessageRepository] like every other message event, because it is
+    // not a message that repository could ever fetch, decrypt, edit or write
+    // back: there is no row behind it. It exists in this thread's list for as
+    // long as the thread is open, and nowhere else.
+    _ephemeralSub = (realtimeService ?? _resolveRealtimeService())?.events
+        .where((e) => e.name == 'guild.EphemeralMessageCreated')
+        .listen(_handleEphemeralEvent);
+
     add(const ThreadOpened());
+  }
+
+  /// The hub, when this build has one.
+  ///
+  /// Resolved from the injector rather than taken as a required argument so the
+  /// two screens that construct this bloc keep working unchanged - and so a
+  /// test that constructs it with no DI configured gets null instead of an
+  /// exception. Null simply means this thread never sees an ephemeral reply,
+  /// which is the same outcome as a channel no bot ever answers in.
+  static RealtimeService? _resolveRealtimeService() =>
+      getIt.isRegistered<RealtimeService>() ? getIt<RealtimeService>() : null;
+
+  /// Turns the hub payload into something the thread can render.
+  ///
+  /// Guild-only by construction: the event carries a `channelId` and nothing
+  /// else to match on, so a DM thread (whose [MessageRepository.channelId] is
+  /// null) never accepts one.
+  void _handleEphemeralEvent(RealtimeEvent event) {
+    final channelId = event.stringField('channelId');
+    if (channelId == null || channelId != repository.channelId) return;
+
+    final id = event.stringField('id');
+    final authorId = event.stringField('authorId');
+    if (id == null || authorId == null) return;
+
+    final embeds = event.field('embeds');
+
+    add(
+      _EphemeralMessageReceived(
+        MessageDto(
+          id: id,
+          // **Re-encoded, not passed through.** This is the one message event
+          // whose `content` is already text - every other body on this socket
+          // is base64(utf8(...)) - while the bubble decodes unconditionally. A
+          // plain sentence that happens to be valid base64 ("test" is) would
+          // render as mojibake, and one that is not would survive only on
+          // `MessageContentCodec.decode`'s tolerant fallback. Encoding here
+          // puts it on the same footing as every other body in the list.
+          content: MessageContentCodec.encode(
+            event.stringField('content') ?? '',
+          ),
+          channelId: channelId,
+          authorId: authorId,
+          createdAt:
+              tryParseApiDateTime(event.field('createdAt')) ?? DateTime.now(),
+          // A bot reply by definition, which is what earns the BOT badge - the
+          // author is an app, not a member anybody could look up.
+          authorIdType: MessageAuthorType.bot,
+          // Never ciphertext: it was never stored, so there is no generation or
+          // epoch it could have been sealed under.
+          encryptionState: MessageEncryptionState.plain,
+          // Cards the bot wrote, arriving inline rather than as a later update -
+          // there is no row for an unfurl to attach to afterwards. Stored as the
+          // same JSON *string* the wire uses everywhere else, so `embeds` reads
+          // identically here to a persisted message's.
+          embedsJson: (embeds is List && embeds.isNotEmpty)
+              ? jsonEncode(embeds)
+              : null,
+          // Server-chosen cleartext in a context this device holds a live MLS
+          // group for is exactly what this flag describes, so it is set for what
+          // it is rather than exempted for being a bot's. In a plaintext channel
+          // it stays false, which is every ephemeral reply outside an encrypted
+          // one - so this adds no chrome to the ordinary case.
+          isUnverifiedPlaintext: repository.isEncrypted,
+          isEphemeral: true,
+        ),
+      ),
+    );
   }
 
   final MessageRepository repository;
@@ -443,6 +546,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   /// point the socket next reconnects.
   final PrivacyRepository privacy;
   late final StreamSubscription<MessageRepositoryEvent> _repoSub;
+  StreamSubscription<RealtimeEvent>? _ephemeralSub;
   final Map<String, Timer> _typingTimers = {};
   int _tempIdCounter = 0;
 
@@ -969,10 +1073,8 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     // _onMessageSubmitted - the hub echo just needs to be ignored.
     if (state.messages.any((m) => m.id == event.message.id)) return;
 
-    final botQueue = _pendingBotTempIdsByBot[event.message.authorId];
-    if (botQueue != null && botQueue.isNotEmpty) {
-      final tempId = botQueue.removeAt(0);
-      _botTimeoutTimers.remove(tempId)?.cancel();
+    final tempId = _takeBotPlaceholder(event.message.authorId);
+    if (tempId != null) {
       emit.ifOpen(
         state.copyWith(
           messages: [
@@ -991,6 +1093,53 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       unawaited(soundService.playNewMessage());
       unawaited(_markRead());
     }
+  }
+
+  /// A bot reply only this user was sent, which the server never stored.
+  ///
+  /// Inserted like any other message so the thread renders it in place, and
+  /// flagged so nothing offers to edit, delete, pin or reply to something with
+  /// no server-side row to act on. Deliberately **not** marked read and not
+  /// counted towards the pagination offset: that offset is a cursor into
+  /// server-side history, and shifting it by a message history does not contain
+  /// would make the next page skip a real one.
+  void _onEphemeralMessageReceived(
+    _EphemeralMessageReceived event,
+    Emitter<ThreadState> emit,
+  ) {
+    if (state.messages.any((m) => m.id == event.message.id)) return;
+
+    // A slash command answered ephemerally is the ordinary case, not an exotic
+    // one - so it resolves its placeholder exactly as a stored reply would.
+    // Without this the placeholder sits spinning for its full timeout and then
+    // marks itself failed, directly beside the reply that did arrive.
+    final tempId = _takeBotPlaceholder(event.message.authorId);
+
+    emit.ifOpen(
+      state.copyWith(
+        messages: [
+          event.message,
+          for (final m in state.messages)
+            if (m.id != tempId) m,
+        ],
+        pendingSendIds: tempId == null
+            ? null
+            : ({...state.pendingSendIds}..remove(tempId)),
+      ),
+    );
+    // No sound and no read marker: this is the answer to something this user
+    // just did, and there is no row on the server for a read cursor to point at.
+  }
+
+  /// Claims the oldest still-pending placeholder for [botUserId], if there is
+  /// one, and stops its timeout. Returns the temp id whose row the arriving
+  /// reply replaces, or null when this bot has nothing outstanding.
+  String? _takeBotPlaceholder(String botUserId) {
+    final queue = _pendingBotTempIdsByBot[botUserId];
+    if (queue == null || queue.isEmpty) return null;
+    final tempId = queue.removeAt(0);
+    _botTimeoutTimers.remove(tempId)?.cancel();
+    return tempId;
   }
 
   void _onMessageUpdatedRemote(
@@ -1114,9 +1263,18 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     );
   }
 
+  /// Moves the read cursor to the newest message the server actually has.
+  ///
+  /// The head of the list is not always that: an ephemeral bot reply sits in
+  /// this list and in no table, so pointing the cursor at its id would name a
+  /// row that does not exist - and a read state the next launch cannot resolve
+  /// is worse than one that is a message behind.
   Future<void> _markRead() async {
-    if (state.messages.isEmpty) return;
-    await repository.updateLastRead(state.messages.first.id);
+    final newest = state.messages
+        .where((m) => !m.isEphemeral && !m.isBotCommandPlaceholder)
+        .firstOrNull;
+    if (newest == null) return;
+    await repository.updateLastRead(newest.id);
   }
 
   List<MessageDto> _sortNewestFirst(List<MessageDto> messages) {
@@ -1131,6 +1289,7 @@ class MessageThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   @override
   Future<void> close() {
     unawaited(_repoSub.cancel());
+    unawaited(_ephemeralSub?.cancel());
     for (final timer in _typingTimers.values) {
       timer.cancel();
     }

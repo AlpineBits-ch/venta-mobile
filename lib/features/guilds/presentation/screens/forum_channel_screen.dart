@@ -8,6 +8,7 @@ import 'package:hydrated_bloc/hydrated_bloc.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/format/date_time_format.dart';
+import '../../../../core/network/authed_image_headers.dart';
 import '../../../../core/realtime/realtime_event.dart';
 import '../../../../core/realtime/realtime_service.dart';
 import '../../../../core/routing/route_paths.dart';
@@ -1043,6 +1044,10 @@ class _PostRow extends StatelessWidget {
                               ),
                               child: CachedNetworkImage(
                                 imageUrl: preview!.imageUrl!,
+                                // Attachment routes are authorized and refuse
+                                // with 404, so an anonymous load looks exactly
+                                // like a deleted attachment.
+                                httpHeaders: authedImageHeaders(),
                                 width: 44,
                                 height: 44,
                                 fit: BoxFit.cover,
@@ -1175,6 +1180,7 @@ class _PostCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(AppRadii.chip),
                           child: CachedNetworkImage(
                             imageUrl: preview!.imageUrl!,
+                            httpHeaders: authedImageHeaders(),
                             width: double.infinity,
                             fit: BoxFit.cover,
                             errorWidget: (_, _, _) => Text(

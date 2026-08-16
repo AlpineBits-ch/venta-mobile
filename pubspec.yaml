@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+99
+version: 1.0.0+100
 environment:
   sdk: ^3.12.2
 
@@ -68,6 +68,16 @@ dependencies:
   emoji_picker_flutter: ^4.5.3
   flutter_markdown_plus: ^1.0.12
   markdown: ^7.3.1
+  # Syntax highlighting for fenced code blocks, to match Alpine's
+  # `markdown.pipe.ts` (which runs them through highlight.js).
+  #
+  # Specifically NOT `flutter_highlight`/`highlight`, which are the obvious
+  # choice and cannot be used: both are pinned to `sdk: ">=2.12.0 <3.0.0"` and
+  # were last published in March 2021, so they do not resolve against this
+  # project's `sdk: ^3.12.2` at all. `re_highlight` is a maintained Dart port of
+  # highlight.js itself - the same grammars Alpine highlights with, which is
+  # what keeps the two clients rendering the same block the same way.
+  re_highlight: ^0.0.3
   audioplayers: ^6.8.1
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.4.0
