@@ -11,6 +11,7 @@ import '../../../../core/widgets/call_action_button.dart';
 import '../../../../core/widgets/call_participant_tile.dart';
 import '../../../../core/widgets/countdown_label.dart';
 import '../../../../core/widgets/elapsed_time_label.dart';
+import '../../../../core/widgets/local_camera_tile.dart';
 import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/screen_share_view.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -197,6 +198,31 @@ void _openFullscreen(
   );
 }
 
+/// Opens this device's own camera full-screen.
+///
+/// Short next to `_openFullscreen` because almost everything that one arranges
+/// is about an incoming stream: there is no pin to claim and no tile size to
+/// report, since nobody subscribes to their own picture. What is left is the
+/// picture itself - drawn at whatever the camera was opened at, mirrored to
+/// match the side it is pointing - and the flip control, which belongs here
+/// because this is where you are actually looking at yourself.
+void _openLocalFullscreen(BuildContext context, CallCubit cubit) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => VoiceFullscreenView(
+        title: 'Your camera',
+        updates: cubit.stream,
+        track: () => cubit.localVideoTrack,
+        isMirrored: () => cubit.isFrontCamera,
+        // Closes itself if the camera goes off - from the action row below this
+        // route, or because the call ended underneath it.
+        isLive: () => cubit.isCameraOn,
+        onSwitchCamera: cubit.switchCamera,
+      ),
+    ),
+  );
+}
+
 class _ActiveCallView extends StatelessWidget {
   const _ActiveCallView({required this.state, required this.myUserId});
   final CallState state;
@@ -306,9 +332,11 @@ class _ActiveCallView extends StatelessWidget {
                 alignment: WrapAlignment.center,
                 children: [
                   if (cubit.isCameraOn)
-                    VideoParticipantTile(
+                    LocalCameraTile(
                       track: cubit.localVideoTrack,
-                      mirror: true,
+                      isFrontCamera: cubit.isFrontCamera,
+                      onSwitchCamera: cubit.switchCamera,
+                      onTap: () => _openLocalFullscreen(context, cubit),
                     ),
                   if (others.isEmpty)
                     Text(

@@ -7,16 +7,27 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../diagnostics/video_diagnostics_prefs.dart';
 import '../orientation/viewer_orientation.dart';
 import '../theme/app_colors.dart';
+import 'adaptive_progress_indicator.dart';
+import 'camera_switch_button.dart';
 import 'profile_resolver.dart';
 import 'tilt_rotation.dart';
 import 'video_participant_tile.dart';
 
-/// One incoming camera or screen share, filling the screen.
+/// One camera or screen share, filling the screen - somebody else's, or this
+/// device's own.
 ///
 /// Pushed as an ordinary route by whichever voice screen owns the tile that was
 /// tapped, so the back button and the back gesture close it for free and the
 /// grid underneath stays mounted - which matters, because that grid is still
 /// reporting its own tile sizes and still holding its subscriptions.
+///
+/// **The local case is the same screen with less to arrange.** Nobody
+/// subscribes to their own picture, so there is no pin to claim and no size to
+/// report - the two paragraphs below are about an incoming stream and simply do
+/// not apply, which is why [onEnter], [onExit] and [onHeightChanged] are all
+/// optional. What the local case adds is [onSwitchCamera]: full screen is where
+/// you are actually looking at your own camera, so it is where flipping it
+/// belongs.
 ///
 /// **Two things have to be told to the server for this to look like fullscreen
 /// rather than an upscaled thumbnail**, and both are the caller's to arrange
@@ -42,23 +53,41 @@ import 'video_participant_tile.dart';
 /// see [TiltRotation] for why that is the only version that works for everyone
 /// - and the window is pinned to a single portrait orientation while it is open
 /// so the tilt reading and the window agree on which way is up.
+///
+/// **Nothing is laid out beside the picture.** The title and the controls float
+/// over it on a scrim and then withdraw, taking the device's own bars with
+/// them, so what is left is the frame and the black around it. Any tap brings
+/// them back. A bar that stayed in the layout would be a permanent strip of the
+/// screen this route exists to hand over - and on a 16:9 picture in a portrait
+/// window, the strip it takes is the picture itself, not the letterbox.
 class VoiceFullscreenView extends StatefulWidget {
   const VoiceFullscreenView({
     super.key,
-    required this.userId,
     required this.updates,
     required this.track,
     required this.isLive,
-    required this.onEnter,
-    required this.onExit,
+    this.userId,
+    this.title,
+    this.onEnter,
+    this.onExit,
     this.isShare = false,
+    this.isMirrored,
+    this.onSwitchCamera,
     this.onHeightChanged,
     this.onHidden,
-  });
+  }) : assert(
+         userId != null || title != null,
+         'a full-screen picture has to say whose it is',
+       );
 
   /// Whose picture this is. Named rather than labelled so the title resolves
   /// through the same profile cache every other name on the screen does.
-  final String userId;
+  /// Unused when [title] is given, which is the local case: resolving your own
+  /// name to put it above your own camera is a lookup to say "you".
+  final String? userId;
+
+  /// A fixed title, in place of resolving [userId].
+  final String? title;
 
   /// Whether this is a screen share rather than a camera, which is the only
   /// thing the title says differently.
@@ -86,11 +115,24 @@ class VoiceFullscreenView extends StatefulWidget {
   /// from the roster is a fact; absent from the wire for a moment is not.
   final bool Function() isLive;
 
-  /// Claims the pin and any share audio. Called once, on open.
-  final Future<void> Function() onEnter;
+  /// Whether to mirror the picture, re-read on every emission the same way
+  /// [track] is - a camera flip changes the answer while this route is open,
+  /// and this route is where the flip is most likely to be pressed.
+  ///
+  /// Null - never mirrored - for anything arriving from somebody else: a remote
+  /// camera has already been mirrored, or not, by whoever is holding it.
+  final bool Function()? isMirrored;
+
+  /// Flips the camera this device is publishing from. Null for a picture that
+  /// is not ours, which is every remote one.
+  final Future<void> Function()? onSwitchCamera;
+
+  /// Claims the pin and any share audio. Called once, on open. Null for a local
+  /// picture, which is subscribed to by nobody.
+  final Future<void> Function()? onEnter;
 
   /// Releases both. Called once, on close, including a close by gesture.
-  final Future<void> Function() onExit;
+  final Future<void> Function()? onExit;
 
   /// See `VideoParticipantTile.onHeightChanged`. Reported under an id of the
   /// caller's choosing, which must not be the grid tile's.
@@ -103,6 +145,9 @@ class VoiceFullscreenView extends StatefulWidget {
   State<VoiceFullscreenView> createState() => _VoiceFullscreenViewState();
 }
 
+/// How long the controls stay up before getting out of the way of the picture.
+const _chromeLinger = Duration(seconds: 3);
+
 class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
   late ViewerOrientationMode _mode = ViewerOrientationPrefs.mode;
 
@@ -114,10 +159,25 @@ class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
   /// error. This listens for the same change and acts on it outside the frame.
   StreamSubscription<Object?>? _liveness;
 
+  /// Whether the title and the controls are up.
+  ///
+  /// They start up - a screen that opens bare is a screen with no way out that
+  /// anybody can see - and then withdraw, because the point of this route is
+  /// the picture and everything else is in front of it. Any tap brings them
+  /// back, which is the one gesture every full-screen viewer has taught.
+  bool _chromeVisible = true;
+  Timer? _chromeTimer;
+
+  /// True while the camera is being flipped, which stops the picture for as
+  /// long as the platform takes to open the other one. Held here rather than
+  /// inside the button so the *picture* can say what is happening; a preview
+  /// that simply freezes reads as a hang.
+  bool _switchingCamera = false;
+
   @override
   void initState() {
     super.initState();
-    unawaited(widget.onEnter());
+    unawaited(widget.onEnter?.call());
     _liveness = widget.updates.listen((_) {
       if (!mounted || widget.isLive()) return;
       _dismiss();
@@ -130,6 +190,47 @@ class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
     unawaited(
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
     );
+    _keepChromeUp();
+  }
+
+  /// Shows the controls (if they were down) and restarts their countdown.
+  /// Called for a tap on the picture and after anything that was pressed, so
+  /// the bar never withdraws out from under a thumb that is still using it.
+  void _keepChromeUp() {
+    _chromeTimer?.cancel();
+    if (!_chromeVisible) setState(() => _chromeVisible = true);
+    _syncSystemBars();
+    _chromeTimer = Timer(_chromeLinger, () {
+      if (mounted) _hideChrome();
+    });
+  }
+
+  void _hideChrome() {
+    _chromeTimer?.cancel();
+    if (!_chromeVisible) return;
+    setState(() => _chromeVisible = false);
+    _syncSystemBars();
+  }
+
+  /// The device's own bars follow the app's, so "out of the way" means all of
+  /// it. Restored by [dispose] - hiding the status bar for one route and
+  /// leaving it hidden for the app is the kind of thing nobody notices until
+  /// they cannot find the clock.
+  void _syncSystemBars() {
+    unawaited(
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: _chromeVisible ? SystemUiOverlay.values : const [],
+      ),
+    );
+  }
+
+  void _toggleChrome() {
+    if (_chromeVisible) {
+      _hideChrome();
+    } else {
+      _keepChromeUp();
+    }
   }
 
   /// Close this route because what it was showing no longer exists.
@@ -148,11 +249,18 @@ class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
 
   @override
   void dispose() {
+    _chromeTimer?.cancel();
     unawaited(_liveness?.cancel());
     // Not awaited and deliberately not gated on `mounted`: the screen is going
     // away either way, and a pin left claimed keeps a subscription this viewer
     // no longer has anywhere to draw.
-    unawaited(widget.onExit());
+    unawaited(widget.onExit?.call());
+    unawaited(
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: SystemUiOverlay.values,
+      ),
+    );
     unawaited(
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
@@ -165,6 +273,7 @@ class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
   void _setMode(ViewerOrientationMode mode) {
     setState(() => _mode = mode);
     ViewerOrientationPrefs.mode = mode;
+    _keepChromeUp();
   }
 
   @override
@@ -180,59 +289,159 @@ class _VoiceFullscreenViewState extends State<VoiceFullscreenView> {
           mode: _mode,
           child: Scaffold(
             backgroundColor: Colors.black,
-            appBar: AppBar(
-              backgroundColor: Colors.black,
-              foregroundColor: AppColors.darkTextPrimary,
-              // See `AppTheme` - built title, kept leading-aligned on both
-              // platforms.
-              centerTitle: false,
-              title: ProfileResolver(
-                userId: widget.userId,
-                builder: (context, profile) {
-                  final name = profile?.userName ?? '…';
-                  return Text(
-                    widget.isShare ? '$name is sharing' : name,
-                    overflow: TextOverflow.ellipsis,
-                  );
-                },
-              ),
-              actions: [
-                // The diagnostics switch lives here rather than in settings
-                // because this is the screen where the question gets asked -
-                // you are looking at a picture and wondering what you are
-                // actually being sent. The pref is global, so flipping it here
-                // also lights up the grid tiles underneath.
-                ValueListenableBuilder<bool>(
-                  valueListenable: VideoDiagnosticsPrefs.enabled,
-                  builder: (context, showing, _) => IconButton(
-                    onPressed: VideoDiagnosticsPrefs.toggle,
-                    tooltip: showing
-                        ? 'Hide received resolution'
-                        : 'Show received resolution',
-                    icon: Icon(
-                      showing
-                          ? Icons.analytics
-                          : Icons.analytics_outlined,
+            // No `appBar`: a bar in the layout takes its height out of the
+            // picture, and this route exists to give the picture everything.
+            // The controls float over it instead, on a scrim of their own.
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                GestureDetector(
+                  // Opaque so the whole black field answers, not only the part
+                  // a letterboxed picture happens to cover.
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _toggleChrome,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => StreamBuilder<Object?>(
+                      stream: widget.updates,
+                      builder: (context, _) => Center(
+                        child: VideoParticipantTile(
+                          track: widget.track(),
+                          mirror: widget.isMirrored?.call() ?? false,
+                          width: constraints.maxWidth,
+                          height: constraints.maxHeight,
+                          objectFit:
+                              RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                          borderRadius: 0,
+                          onHeightChanged: widget.onHeightChanged,
+                          onHidden: widget.onHidden,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-                ViewerOrientationButton(mode: _mode, onChanged: _setMode),
+                // Over the picture rather than replacing it: the frozen last
+                // frame underneath is the honest thing to show while the other
+                // camera opens, and dimming it is what makes the freeze read as
+                // deliberate.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: _switchingCamera ? 1 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: const ColoredBox(
+                        color: Colors.black45,
+                        child: Center(
+                          child: AdaptiveProgressIndicator(
+                            size: 28,
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(top: 0, left: 0, right: 0, child: _buildChrome()),
               ],
             ),
-            body: LayoutBuilder(
-              builder: (context, constraints) => StreamBuilder<Object?>(
-                stream: widget.updates,
-                builder: (context, _) => Center(
-                  child: VideoParticipantTile(
-                    track: widget.track(),
-                    width: constraints.maxWidth,
-                    height: constraints.maxHeight,
-                    objectFit:
-                        RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
-                    borderRadius: 0,
-                    onHeightChanged: widget.onHeightChanged,
-                    onHidden: widget.onHidden,
-                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The title and controls, floating over the top of the picture.
+  ///
+  /// Only the buttons take taps. The scrim and the title deliberately let them
+  /// through to the picture underneath, so the whole screen answers the
+  /// show/hide gesture except the few places where something else is meant.
+  Widget _buildChrome() {
+    return IgnorePointer(
+      ignoring: !_chromeVisible,
+      child: AnimatedSlide(
+        offset: _chromeVisible ? Offset.zero : const Offset(0, -0.35),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        child: AnimatedOpacity(
+          opacity: _chromeVisible ? 1 : 0,
+          duration: const Duration(milliseconds: 180),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.black87, Colors.transparent],
+              ),
+            ),
+            child: IconTheme(
+              data: const IconThemeData(color: AppColors.darkTextPrimary),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 4, 4, 24),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      tooltip: 'Back',
+                      icon: const BackButtonIcon(),
+                    ),
+                    Expanded(
+                      child: DefaultTextStyle.merge(
+                        style: const TextStyle(
+                          color: AppColors.darkTextPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        child: widget.title != null
+                            ? Text(
+                                widget.title!,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : ProfileResolver(
+                                userId: widget.userId!,
+                                builder: (context, profile) {
+                                  final name = profile?.userName ?? '…';
+                                  return Text(
+                                    widget.isShare ? '$name is sharing' : name,
+                                    overflow: TextOverflow.ellipsis,
+                                  );
+                                },
+                              ),
+                      ),
+                    ),
+                    // First of the controls, because on the one screen where it
+                    // is offered it is the thing being reached for - the other
+                    // two are about how the picture is presented, this one is
+                    // about what the picture is of.
+                    if (widget.onSwitchCamera != null)
+                      CameraSwitchButton(
+                        onSwitch: widget.onSwitchCamera!,
+                        onBusyChanged: (busy) {
+                          setState(() => _switchingCamera = busy);
+                          _keepChromeUp();
+                        },
+                      ),
+                    // The diagnostics switch lives here rather than in settings
+                    // because this is the screen where the question gets asked
+                    // - you are looking at a picture and wondering what you are
+                    // actually being sent. The pref is global, so flipping it
+                    // here also lights up the grid tiles underneath.
+                    ValueListenableBuilder<bool>(
+                      valueListenable: VideoDiagnosticsPrefs.enabled,
+                      builder: (context, showing, _) => IconButton(
+                        onPressed: () {
+                          VideoDiagnosticsPrefs.toggle();
+                          _keepChromeUp();
+                        },
+                        tooltip: showing
+                            ? 'Hide received resolution'
+                            : 'Show received resolution',
+                        icon: Icon(
+                          showing ? Icons.analytics : Icons.analytics_outlined,
+                        ),
+                      ),
+                    ),
+                    ViewerOrientationButton(mode: _mode, onChanged: _setMode),
+                  ],
                 ),
               ),
             ),

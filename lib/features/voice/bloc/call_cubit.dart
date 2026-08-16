@@ -849,6 +849,21 @@ class CallCubit extends Cubit<CallState> with SafeEmit<CallState> {
     await repository.invokeCameraChanged(callId: callId, isCameraOn: turningOn);
   }
 
+  /// Which way the local camera points, for the self-preview's mirroring and
+  /// the flip control's icon. Front while nothing is publishing, which is the
+  /// side the next publish will open.
+  bool get isFrontCamera => _webRtc?.isFrontCamera ?? true;
+
+  /// Flips the local camera. Nothing is published or declared again, so the
+  /// roster does not move and no event goes out - see
+  /// `VoiceWebRtcService.switchCamera`. The service bumps the video revision
+  /// through `onTracksChanged`, which is what re-attaches the renderers.
+  /// Awaited rather than forwarded, so the control that called this stays busy
+  /// until the other camera is actually live.
+  Future<void> switchCamera() async {
+    await _webRtc?.switchCamera();
+  }
+
   /// What to open the camera at here: this call's granted rung, resolved
   /// against the ladder the server publishes.
   ///

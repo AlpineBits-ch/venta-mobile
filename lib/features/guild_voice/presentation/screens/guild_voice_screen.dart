@@ -9,6 +9,7 @@ import '../../../../core/theme/widget_styles.dart';
 import '../../../../core/widgets/call_action_button.dart';
 import '../../../../core/widgets/call_participant_tile.dart';
 import '../../../../core/widgets/elapsed_time_label.dart';
+import '../../../../core/widgets/local_camera_tile.dart';
 import '../../../../core/widgets/screen_share_view.dart';
 import '../../../../core/widgets/video_participant_tile.dart';
 import '../../../../core/widgets/voice_fullscreen_view.dart';
@@ -95,6 +96,32 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
             devicePixels: devicePixels,
           ),
           onHidden: () => cubit.forgetTile(fullscreenTileId),
+        ),
+      ),
+    );
+  }
+
+  /// Opens this device's own camera full-screen.
+  ///
+  /// Short next to [_openFullscreen] because almost everything that one
+  /// arranges is about an incoming stream: there is no pin to claim and no tile
+  /// size to report, since nobody subscribes to their own picture. What is left
+  /// is the picture itself - drawn at whatever the camera was opened at,
+  /// mirrored to match the side it is pointing - and the flip control, which
+  /// belongs here because this is where you are actually looking at yourself.
+  void _openLocalFullscreen() {
+    final cubit = getIt<GuildVoiceCubit>();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VoiceFullscreenView(
+          title: 'Your camera',
+          updates: cubit.stream,
+          track: () => cubit.localVideoTrack,
+          isMirrored: () => cubit.isFrontCamera,
+          // Closes itself if the camera goes off - from the action row below
+          // this route, or because the channel was left underneath it.
+          isLive: () => cubit.isCameraOn,
+          onSwitchCamera: cubit.switchCamera,
         ),
       ),
     );
@@ -213,10 +240,14 @@ class _GuildVoiceScreenState extends State<GuildVoiceScreen> {
                                 for (final participant in participants)
                                   if (participant.userId == myUserId &&
                                       participant.hasCamera)
-                                    VideoParticipantTile(
+                                    LocalCameraTile(
                                       track: getIt<GuildVoiceCubit>()
                                           .localVideoTrack,
-                                      mirror: true,
+                                      isFrontCamera: getIt<GuildVoiceCubit>()
+                                          .isFrontCamera,
+                                      onSwitchCamera: getIt<GuildVoiceCubit>()
+                                          .switchCamera,
+                                      onTap: _openLocalFullscreen,
                                     )
                                   else if (participant.hasCamera)
                                     GestureDetector(

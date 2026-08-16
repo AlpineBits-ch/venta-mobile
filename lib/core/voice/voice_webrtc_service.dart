@@ -90,6 +90,24 @@ class VoiceWebRtcService {
   LocalVideoTrack? _localScreenTrack;
   String? _activeShareId;
 
+  /// Which way the camera this device publishes from is pointing.
+  ///
+  /// Held here rather than read back off the track: `getSettings()` does not
+  /// report a facing mode on either platform, and the SDK's own copy lives on
+  /// `currentOptions`, which is replaced wholesale on every restart. It is also
+  /// the answer to a question the UI asks constantly - a front camera is
+  /// mirrored in the self-preview and a back one must not be.
+  ///
+  /// Survives the camera being turned off and on again within a room, so the
+  /// side you chose is still the side you get; reset by [disconnect], because
+  /// carrying a back camera into the next call is not a choice anybody made.
+  CameraPosition _cameraPosition = CameraPosition.front;
+
+  /// Guards [switchCamera] against re-entry. The flip stops the capture and
+  /// opens the other camera, and two of those overlapping is how a device ends
+  /// up with the picture from one camera and the mirroring of the other.
+  bool _switchingCamera = false;
+
   /// The publications behind the tracks above.
   ///
   /// Held separately because unpublishing is addressed by publication sid, and
@@ -309,6 +327,8 @@ class VoiceWebRtcService {
     _localScreenPub = null;
     _localScreenAudioPub = null;
     _activeShareId = null;
+    _cameraPosition = CameraPosition.front;
+    _switchingCamera = false;
     _pinnedUserId = null;
     _audibleShareId = null;
     // Reset with the rest: a rebuilt transport reports its own visibility from
@@ -388,6 +408,9 @@ class VoiceWebRtcService {
     final asked = target ?? VideoPublishIntent.conservative;
     final track = await LocalVideoTrack.createCameraTrack(
       CameraCaptureOptions(
+        // Whichever side was last chosen, so turning the camera off and on
+        // again does not silently walk it back to the front one.
+        cameraPosition: _cameraPosition,
         params: VideoParameters(
           dimensions: VideoDimensions(
             VideoLayers.widthFor(asked.height),
@@ -425,6 +448,46 @@ class VoiceWebRtcService {
       await track.dispose();
       rethrow;
     }
+  }
+
+  /// Whether the local camera is currently the front-facing one - the only
+  /// thing about it the UI needs, and deliberately not the SDK's enum: the
+  /// surface of this class stays backend-neutral so the screens above it never
+  /// import a media SDK to render a button.
+  bool get isFrontCamera => _cameraPosition == CameraPosition.front;
+
+  /// Flips the local camera between front and back, keeping the publication.
+  ///
+  /// The capture is restarted and the new track swapped into the existing
+  /// sender, so the publication, its name, its declared size and its simulcast
+  /// ladder all survive: nothing is unpublished, nothing is re-declared, and
+  /// the roster has nothing to notice. Peers keep receiving the same track and
+  /// simply see a different picture on it.
+  ///
+  /// The underlying `MediaStreamTrack` *is* replaced, though, which is why
+  /// [onTracksChanged] fires either way - every renderer in the UI is holding
+  /// the old one, and a self-preview attached to a stopped track is a frozen
+  /// frame rather than an error anybody would see.
+  ///
+  /// **The stored side only moves if the flip actually happened.** A device
+  /// with one camera, or a restart the platform refuses, leaves the original
+  /// capture running; recording the other side anyway would mirror a back
+  /// camera - the failure would look like the button working and the picture
+  /// being wrong.
+  Future<void> switchCamera() async {
+    final track = _localVideoTrack;
+    if (track == null || _switchingCamera) return;
+    _switchingCamera = true;
+    try {
+      final next = _cameraPosition.switched();
+      await track.setCameraPosition(next);
+      _cameraPosition = next;
+    } catch (e) {
+      debugPrint('[Voice] camera switch failed: $e');
+    } finally {
+      _switchingCamera = false;
+    }
+    onTracksChanged?.call();
   }
 
   Future<void> stopLocalVideo() async {
