@@ -5,9 +5,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injector.dart';
 import '../../../../core/mls/mls_service.dart';
+import '../../../../core/theme/widget_styles.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../conversations/data/conversation_repository.dart';
 import '../../../conversations/data/models/conversation_dto.dart';
+import '../../../conversations/presentation/widgets/conversation_icon.dart';
+import '../../../conversations/presentation/widgets/group_settings_sheet.dart';
 import '../../../mls/presentation/screens/conversation_encryption_screen.dart';
 import '../../../voice/bloc/call_cubit.dart';
 import '../../bloc/message_thread_bloc.dart';
@@ -67,10 +70,26 @@ class _ConversationScreenState extends State<ConversationScreen> {
     super.dispose();
   }
 
+  ConversationDto? get _conversation => getIt<ConversationRepository>().cached
+      .where((c) => c.id == widget.conversationId)
+      .firstOrNull;
+
+  /// Counted off the roster rather than off "everyone but me", so it still
+  /// holds in the moment before the caller's own id is known.
+  bool get _isGroup => (_conversation?.members.length ?? 0) > 2;
+
+  Future<void> _openGroupSettings() async {
+    final left = await showGroupSettingsSheet(
+      context: context,
+      conversationId: widget.conversationId,
+    );
+    // Nothing to come back to: the conversation is gone from the list, and the
+    // thread behind this sheet is a room this account has left.
+    if (left && mounted) Navigator.of(context).pop();
+  }
+
   String _title(String myUserId) {
-    final conversation = getIt<ConversationRepository>().cached
-        .where((c) => c.id == widget.conversationId)
-        .firstOrNull;
+    final conversation = _conversation;
     if (conversation == null) return 'Conversation';
     if (conversation.name != null) return conversation.name!;
     final others = conversation.members
@@ -84,18 +103,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
   /// to say there, and an entry point that leads to an empty page is worse than
   /// no entry point.
   bool get _encrypted {
-    final conversation = getIt<ConversationRepository>().cached
-        .where((c) => c.id == widget.conversationId)
-        .firstOrNull;
-    return conversation?.encryptionState == ConversationEncryption.encrypted ||
+    return _conversation?.encryptionState == ConversationEncryption.encrypted ||
         getIt<MlsService>().hasEverHeldGroup(widget.conversationId);
   }
 
   List<String> _otherMemberIds(String myUserId) {
-    final conversation = getIt<ConversationRepository>().cached
-        .where((c) => c.id == widget.conversationId)
-        .firstOrNull;
-    return conversation?.members
+    return _conversation?.members
             .where((m) => m.userId != myUserId)
             .map((m) => m.userId)
             .toList() ??
@@ -106,6 +119,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Widget build(BuildContext context) {
     final myUserId = getIt<AuthRepository>().currentUserId ?? '';
     final otherMemberIds = _otherMemberIds(myUserId);
+    final conversation = _conversation;
     return BlocProvider(
       create: (_) => MessageThreadBloc(
         repository: MessageRepository(
@@ -123,6 +137,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
         title: _title(myUserId),
         myUserId: myUserId,
         mentionableUserIds: otherMemberIds,
+        titleAvatar: conversation == null
+            ? null
+            : ConversationIcon(
+                conversation: conversation,
+                myUserId: myUserId,
+                radius: AppRadii.avatarSmall,
+              ),
+        // Only a group: a 1:1 has no name or icon of its own to change, and
+        // the server refuses both on one.
+        onTitleTap: _isGroup ? _openGroupSettings : null,
         actions: [
           if (_encrypted)
             IconButton(

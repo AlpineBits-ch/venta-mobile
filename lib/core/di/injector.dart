@@ -44,6 +44,7 @@ import '../../features/profile/data/profile_repository.dart';
 import '../../features/status/data/status_api.dart';
 import '../../features/status/data/status_repository.dart';
 import '../../features/voice/bloc/call_cubit.dart';
+import '../../features/voice/bloc/voice_resume_cubit.dart';
 import '../../features/voice/data/voice_api.dart';
 import '../../features/voice/data/voice_repository.dart';
 import '../../features/voice/webrtc/call_webrtc_service.dart';
@@ -510,6 +511,16 @@ Future<void> configureDependencies({String appVersion = 'unknown'}) async {
   getIt.registerLazySingleton<VoiceRingCubit>(
     () => VoiceRingCubit(repository: getIt(), deviceIdService: getIt()),
   );
+  getIt.registerLazySingleton<VoiceResumeCubit>(
+    () => VoiceResumeCubit(
+      guildVoiceRepository: getIt(),
+      voiceRepository: getIt(),
+      guildRepository: getIt(),
+      guildVoiceCubit: getIt(),
+      callCubit: getIt(),
+      deviceIdService: getIt(),
+    ),
+  );
   getIt.registerLazySingleton<WikiApi>(() => WikiApi(client: getIt()));
   getIt.registerLazySingleton<WikiRepository>(
     () => WikiRepository(api: getIt(), realtimeService: getIt()),
@@ -571,6 +582,10 @@ void resetSessionScopedCaches() {
   // Same reason, one level finer: the per-channel sidebar rosters, and the
   // channel→guild index a reconnect re-reads them from.
   getIt<GuildVoiceCubit>().clearRosters();
+  // The resume offer is asked once per launch *per account*: a seat held by the
+  // previous user is not this one's to be offered back into, and the "already
+  // asked" latch would otherwise outlive the session that set it.
+  getIt<VoiceResumeCubit>().reset();
   // Device registration is per account, not per install: the id this handset
   // registered for the previous user means nothing to the next one, and every
   // call/voice action would be rejected until it registers again.
@@ -656,6 +671,11 @@ Future<void> startAuthenticatedServices({String? password}) async {
   // every reconnect; this covers the launch, where the socket connected before
   // the cubit existed to hear it.
   unawaited(getIt<VoiceRingCubit>().catchUp());
+  // "You were connected to a channel when this app last went away." Detached
+  // like the reads above, and deliberately *after* `ensureRegistered`: the
+  // rejoin and the ghost-seat release are both `X-Device-Id` decisions, and the
+  // header only means anything to the server once the device row exists.
+  unawaited(getIt<VoiceResumeCubit>().check());
   getIt<MlsRealtimeBridge>().start();
   // Detached, and after registration: publishing a certificate needs the device
   // row to exist, and none of it is worth holding a launch on. Failure here is

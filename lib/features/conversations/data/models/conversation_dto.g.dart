@@ -37,6 +37,10 @@ _ConversationDto _$ConversationDtoFromJson(Map<String, dynamic> json) =>
         _$ConversationEncryptionEnumMap,
         json['encryptionState'],
       ),
+      iconUpdatedAt: _$JsonConverterFromJson<String, DateTime>(
+        json['iconUpdatedAt'],
+        const ApiDateTimeConverter().fromJson,
+      ),
     );
 
 Map<String, dynamic> _$ConversationDtoToJson(
@@ -46,9 +50,23 @@ Map<String, dynamic> _$ConversationDtoToJson(
   'name': instance.name,
   'members': instance.members,
   'encryptionState': _$ConversationEncryptionEnumMap[instance.encryptionState]!,
+  'iconUpdatedAt': _$JsonConverterToJson<String, DateTime>(
+    instance.iconUpdatedAt,
+    const ApiDateTimeConverter().toJson,
+  ),
 };
 
 const _$ConversationEncryptionEnumMap = {
   ConversationEncryption.plain: 'Plain',
   ConversationEncryption.encrypted: 'Encrypted',
 };
+
+Value? _$JsonConverterFromJson<Json, Value>(
+  Object? json,
+  Value? Function(Json json) fromJson,
+) => json == null ? null : fromJson(json as Json);
+
+Json? _$JsonConverterToJson<Json, Value>(
+  Value? value,
+  Json? Function(Value value) toJson,
+) => value == null ? null : toJson(value);

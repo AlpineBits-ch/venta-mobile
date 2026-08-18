@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
 import 'models/conversation_dto.dart';
 
@@ -91,5 +93,66 @@ class ConversationApi {
     await client.dio.delete<void>(
       client.url('/api/v1/messaging/conversations/$id'),
     );
+  }
+
+  // -- Group identity ---------------------------------------------------------
+
+  /// Renames a group conversation. A blank [name] clears it, which puts the
+  /// joined member list back in the title.
+  ///
+  /// Refused server-side on a two-person DM, the same way [addMember] is: a
+  /// 1:1 has no name of its own to set.
+  Future<ConversationDto> update(String id, {required String? name}) =>
+      _writeAndRead(
+        id,
+        () => client.dio.patch<dynamic>(
+          client.url('/api/v1/messaging/conversations/$id'),
+          data: {'name': name},
+        ),
+      );
+
+  /// Replaces the group icon. [bytes] is the encoded image, not raw pixels.
+  Future<ConversationDto> uploadIcon(
+    String id, {
+    required List<int> bytes,
+    required String fileName,
+  }) => _writeAndRead(
+    id,
+    () => client.dio.post<dynamic>(
+      iconUrl(id),
+      data: FormData.fromMap({
+        'file': MultipartFile.fromBytes(bytes, filename: fileName),
+      }),
+    ),
+  );
+
+  Future<ConversationDto> removeIcon(String id) =>
+      _writeAndRead(id, () => client.dio.delete<dynamic>(iconUrl(id)));
+
+  /// Where the group icon lives. Member-only and served as bytes, so a request
+  /// for it needs the bearer - see `authedImageHeaders`. Without one the route
+  /// answers `404` rather than `401` (its `[Authorize]` is class-level), which
+  /// looks exactly like an icon that was never uploaded.
+  String iconUrl(String id) =>
+      client.url('/api/v1/messaging/conversations/$id/icon');
+
+  /// Runs a write and answers with the conversation as it now stands.
+  ///
+  /// Three of these endpoints are documented as echoing the updated
+  /// conversation, but a write that answers `204` with no body is the house
+  /// convention elsewhere in this API and a typed `Map` request against an
+  /// empty body is a cast error rather than a null. So the body is taken when
+  /// there is one and fetched when there is not - correct under either, and
+  /// one round trip in the common case.
+  Future<ConversationDto> _writeAndRead(
+    String id,
+    Future<Response<dynamic>> Function() write,
+  ) async {
+    final response = await write();
+    final data = response.data;
+    if (data is Map<String, dynamic> && data.isNotEmpty) {
+      return ConversationDto.fromJson(data);
+    }
+    return getById(id);
   }
 }

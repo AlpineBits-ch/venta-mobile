@@ -6,8 +6,9 @@ import '../../../../core/widgets/profile_resolver.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../data/conversation_prefs.dart';
 import '../../data/models/conversation_dto.dart';
+import 'conversation_icon.dart';
 
-enum ConversationAction { profile, closeDm, pin, markRead, mute }
+enum ConversationAction { profile, groupSettings, closeDm, pin, markRead, mute }
 
 /// Long-press actions for one DM row, headed by whose DM it is.
 ///
@@ -49,6 +50,9 @@ class _ConversationActionsSheet extends StatelessWidget {
     // A group DM has no single profile behind it, so the header falls back to
     // the joined member names and the Profile row drops out below.
     final otherUserId = others.length == 1 ? others.single.userId : null;
+    // Counted off the roster rather than off `others`, so it holds even before
+    // the caller's own id is known.
+    final isGroup = conversation.members.length > 2;
     final title =
         conversation.name ??
         (others.isEmpty
@@ -65,6 +69,8 @@ class _ConversationActionsSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Header(
+              conversation: conversation,
+              myUserId: myUserId,
               otherUserId: otherUserId,
               title: title,
               memberCount: conversation.members.length,
@@ -77,9 +83,18 @@ class _ConversationActionsSheet extends StatelessWidget {
                   label: 'Profile',
                   value: ConversationAction.profile,
                 ),
-              const _Action(
+              // A group has no single profile behind it, so this row takes the
+              // place of the one above: name, icon, roster and leaving all
+              // live behind it.
+              if (isGroup)
+                const _Action(
+                  icon: Icons.tune,
+                  label: 'Group Settings',
+                  value: ConversationAction.groupSettings,
+                ),
+              _Action(
                 icon: Icons.close_rounded,
-                label: 'Close DM',
+                label: isGroup ? 'Close Group' : 'Close DM',
                 value: ConversationAction.closeDm,
                 destructive: true,
               ),
@@ -116,18 +131,21 @@ class _ConversationActionsSheet extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   const _Header({
+    required this.conversation,
+    required this.myUserId,
     required this.otherUserId,
     required this.title,
     required this.memberCount,
   });
 
+  final ConversationDto conversation;
+  final String myUserId;
   final String? otherUserId;
   final String title;
   final int memberCount;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final userId = otherUserId;
     return Row(
       children: [
@@ -142,13 +160,10 @@ class _Header extends StatelessWidget {
             onTap: () => Navigator.pop(context, ConversationAction.profile),
           )
         else
-          CircleAvatar(
+          ConversationIcon(
+            conversation: conversation,
+            myUserId: myUserId,
             radius: AppRadii.avatarMedium,
-            backgroundColor: context.statusColors.hover,
-            child: Icon(
-              Icons.group_outlined,
-              color: theme.colorScheme.onSurface,
-            ),
           ),
         const SizedBox(width: AppSpacing.m),
         Expanded(

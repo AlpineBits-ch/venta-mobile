@@ -42,6 +42,10 @@ class RealtimeService {
     'conversation.MessageDeleted',
     'conversation.ConversationCreated',
     'conversation.ConversationDeleted',
+    // A group was renamed or had its icon replaced. Carries the new
+    // `name` and `iconUpdatedAt` outright, so the cache is patched from
+    // the push rather than answered with a refetch.
+    'conversation.ConversationUpdated',
     'conversation.MemberLeft',
     'conversation.UserTyping',
     'conversation.ReactionCreated',
@@ -71,6 +75,14 @@ class RealtimeService {
     // the group permanently, so the ordered GET is the only path that
     // mutates group state.
     'conversation.MlsCommit',
+    // A membership change that is not an ordinary commit push. Both are
+    // nudges of the same shape as `MlsCommit` and are answered the same
+    // way - see `MlsRealtimeBridge`, which has always handled them and
+    // could not, because a name absent from this list is never delivered.
+    'conversation.MlsDeviceAdmitted',
+    'conversation.MlsDeviceRemoved',
+    // Somebody is asking to be let into an encrypted context.
+    'conversation.MlsJoinRequest',
     'conversation.MlsStateChanged',
     'presence.UserOnline',
     'presence.UserOffline',
@@ -174,6 +186,11 @@ class RealtimeService {
     // incident - receives neither of these.
     'status.SummaryChanged',
     'status.IncidentUpdated',
+    // Conversation-scoped rather than room-scoped: it reaches every member
+    // of the conversation, including people the ring never addressed. It is
+    // what turns the thread header's call button into a Join button while a
+    // call is running, and what takes it away again when the call ends.
+    'conversation.CallStateChanged',
     'call.IncomingCall',
     // The recovery channel, and it has to be registered to exist: the transport
     // only delivers methods named here, so a handler for an unregistered event

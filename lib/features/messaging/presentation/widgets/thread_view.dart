@@ -15,6 +15,7 @@ import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 
+import '../../../../core/format/day_heading.dart';
 import '../../../../core/routing/route_paths.dart';
 import '../../../../core/widgets/adaptive_progress_indicator.dart';
 import '../../../../core/widgets/app_back_button.dart';
@@ -144,6 +145,8 @@ class ThreadView extends StatefulWidget {
     this.guildId,
     this.mentionableUserIds = const [],
     this.banner,
+    this.titleAvatar,
+    this.onTitleTap,
   });
 
   final String title;
@@ -165,6 +168,18 @@ class ThreadView extends StatefulWidget {
   /// `_loadGuildMembers`).
   final List<String> mentionableUserIds;
 
+  /// Drawn ahead of the title instead of the default DM avatar.
+  ///
+  /// A group has no single face to lead with, so the caller that knows what
+  /// kind of conversation this is supplies the picture rather than this widget
+  /// guessing from the first mentionable id - which for a group is whoever the
+  /// roster happened to list first.
+  final Widget? titleAvatar;
+
+  /// Makes the title row a control. Set for a group DM, where the title is the
+  /// only place a handset has to hang "change this group" off.
+  final VoidCallback? onTitleTap;
+
   @override
   State<ThreadView> createState() => _ThreadViewState();
 }
@@ -172,6 +187,16 @@ class ThreadView extends StatefulWidget {
 class _ThreadViewState extends State<ThreadView> {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
+
+  /// Whether the reader has scrolled far enough back that the newest message
+  /// is no longer what they are looking at - which is what raises the
+  /// jump-to-present pill.
+  ///
+  /// A [ValueNotifier] rather than `setState`: this changes on every scroll
+  /// frame, and rebuilding the whole thread - composer, suggestion overlays and
+  /// a list of decrypted bubbles - to fade one pill in would be the most
+  /// expensive thing on the screen.
+  final _viewingOlder = ValueNotifier(false);
   final _imagePicker = ImagePicker();
   final List<_PendingAttachment> _pendingAttachments = [];
   List<BotCommandDto> _botCommands = const [];
@@ -276,6 +301,7 @@ class _ThreadViewState extends State<ThreadView> {
     super.initState();
     _canPinMessages = widget.guildId == null;
     _textController.addListener(_onTextChanged);
+    _scrollController.addListener(_onScroll);
     _loadBotCommands();
     _loadGuildMembers();
     _loadChannelPermissions();
@@ -498,6 +524,43 @@ class _ThreadViewState extends State<ThreadView> {
     }
   }
 
+  /// How far back the reader has to be before the pill appears.
+  ///
+  /// Deliberately much further than the distance at which a list still counts
+  /// as "at the bottom". A pill that springs up because a fat thumb nudged the
+  /// list forty pixels is noise, and it would appear over the very message the
+  /// reader was looking at.
+  static const _viewingOlderThreshold = 400.0;
+
+  /// Above this, the jump hard-cuts to [_smoothJumpDistance] first, so the
+  /// animated part is the same length whether the reader is a screen back or
+  /// two thousand messages back. Animating the whole way from deep history is
+  /// a smear of unreadable rows and a lot of pointless layout.
+  static const _smoothJumpDistance = 600.0;
+
+  /// `reverse: true` puts the newest message at offset zero, so distance from
+  /// the present *is* [ScrollPosition.pixels] - no arithmetic against
+  /// `maxScrollExtent`, which grows as older pages load and would make the
+  /// threshold mean something different on every page.
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    _viewingOlder.value =
+        _scrollController.position.pixels > _viewingOlderThreshold;
+  }
+
+  Future<void> _jumpToPresent() async {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels > _smoothJumpDistance) {
+      _scrollController.jumpTo(_smoothJumpDistance);
+    }
+    await _scrollController.animateTo(
+      position.minScrollExtent,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
   @override
   void dispose() {
     _highlightTimer?.cancel();
@@ -505,7 +568,9 @@ class _ThreadViewState extends State<ThreadView> {
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _editController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _viewingOlder.dispose();
     super.dispose();
   }
 
@@ -1628,6 +1693,63 @@ class _ThreadViewState extends State<ThreadView> {
     }
   }
 
+  /// The app bar's title, and - for a group - the way into its settings.
+  ///
+  /// The pencil is drawn rather than left implicit: a title that silently
+  /// happens to be tappable is a control nobody finds, and this is the only
+  /// route to renaming a group on a handset.
+  Widget _titleRow() {
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Guild channels are titled "#channel-name", which already carries its
+        // own identity - only DMs get a leading avatar, matching Discord's
+        // conversation header.
+        if (widget.titleAvatar != null) ...[
+          widget.titleAvatar!,
+          const SizedBox(width: AppSpacing.s),
+        ] else if (widget.guildId == null &&
+            widget.mentionableUserIds.isNotEmpty) ...[
+          UserAvatar(
+            userId: widget.mentionableUserIds.first,
+            radius: AppRadii.avatarSmall,
+            showStatus: true,
+          ),
+          const SizedBox(width: AppSpacing.s),
+        ],
+        Flexible(child: Text(widget.title, overflow: TextOverflow.ellipsis)),
+        if (widget.onTitleTap != null) ...[
+          const SizedBox(width: AppSpacing.xs),
+          Icon(
+            Icons.edit_outlined,
+            size: 14,
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+        ],
+        if (_isEncrypted) ...[
+          const SizedBox(width: AppSpacing.s),
+          const EncryptedBadge(showLabel: true, size: 14),
+        ],
+      ],
+    );
+
+    final onTap = widget.onTitleTap;
+    if (onTap == null) return row;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadii.chip),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs,
+          vertical: AppSpacing.xs,
+        ),
+        child: row,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1641,29 +1763,7 @@ class _ThreadViewState extends State<ThreadView> {
         // See `AppTheme` - custom `Row` title, not a candidate for the iOS
         // centred nav title.
         centerTitle: false,
-        title: Row(
-          children: [
-            // Guild channels are titled "#channel-name", which already
-            // carries its own identity - only DMs get a leading avatar,
-            // matching Discord's conversation header.
-            if (widget.guildId == null &&
-                widget.mentionableUserIds.isNotEmpty) ...[
-              UserAvatar(
-                userId: widget.mentionableUserIds.first,
-                radius: AppRadii.avatarSmall,
-                showStatus: true,
-              ),
-              const SizedBox(width: AppSpacing.s),
-            ],
-            Flexible(
-              child: Text(widget.title, overflow: TextOverflow.ellipsis),
-            ),
-            if (_isEncrypted) ...[
-              const SizedBox(width: AppSpacing.s),
-              const EncryptedBadge(showLabel: true, size: 14),
-            ],
-          ],
-        ),
+        title: _titleRow(),
         actions: [
           if (_isAnnouncementChannel)
             IconButton(
@@ -1716,182 +1816,251 @@ class _ThreadViewState extends State<ThreadView> {
               isChannel: widget.guildId != null,
             ),
           Expanded(
-            child: BlocBuilder<MessageThreadBloc, ThreadState>(
-              builder: (context, state) {
-                final Widget child;
-                if (state.isLoadingInitial) {
-                  child = const Center(
-                    key: ValueKey('loading'),
-                    child: CircularProgressIndicator.adaptive(),
-                  );
-                } else if (state.messages.isEmpty) {
-                  child = Center(
-                    key: const ValueKey('empty'),
-                    child: Text(
-                      'No messages yet - say hi!',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.5,
-                        ),
-                      ),
-                    ),
-                  );
-                } else {
-                  // Taken here rather than in a listener because it has to be
-                  // settled *before* the first frame that shows the list -
-                  // computing it afterwards would draw the timeline once
-                  // without a divider and then move it, which reads as a
-                  // glitch on the one screen where position is the message.
-                  // It writes only a field nothing else has read yet, so it
-                  // does not need (and must not do) a `setState` from build.
-                  _snapshotFirstUnread(state);
-                  child = NotificationListener<ScrollNotification>(
-                    key: const ValueKey('loaded'),
-                    onNotification: (notification) {
-                      if (notification.metrics.pixels >=
-                          notification.metrics.maxScrollExtent - 200) {
-                        context.read<MessageThreadBloc>().add(
-                          const ThreadLoadMoreRequested(),
-                        );
-                      }
-                      return false;
-                    },
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      reverse: true,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.m,
-                        vertical: AppSpacing.s,
-                      ),
-                      itemCount: state.messages.length,
-                      itemBuilder: (context, index) {
-                        final message = state.messages[index];
-                        // The anchor a jump scrolls to. `putIfAbsent` because
-                        // the key has to survive the row being scrolled out
-                        // and rebuilt - a fresh key each build would make
-                        // `currentContext` null exactly when the jump needs it.
-                        final anchor = _messageKeys.putIfAbsent(
-                          message.id,
-                          GlobalKey.new,
-                        );
-                        // The divider sits at the *top* of the row it belongs
-                        // to. `reverse` flips the order rows are laid out in,
-                        // not the direction a row's own column runs, so this
-                        // still lands between the last message read and the
-                        // first one that was not.
-                        Widget withDivider(Widget row) =>
-                            message.id != _firstUnreadId
-                            ? row
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [const _UnreadDivider(), row],
-                              );
-
-                        // Deliberately the shared predicate rather than the
-                        // five-way check that used to be inlined here: a voice
-                        // invite is a server-written message too, and the only
-                        // thing keeping it out of this branch is the reasoning
-                        // recorded on `isSystemRow`. Spelling the list out
-                        // twice is how the two drift apart.
-                        if (message.isSystemRow) {
-                          return KeyedSubtree(
-                            key: anchor,
-                            child: withDivider(
-                              _SystemMessageRow(
-                                message: message,
-                                myUserId: widget.myUserId,
-                              ),
-                            ),
-                          );
-                        }
-
-                        final isMe = message.authorId == widget.myUserId;
-                        final failed = state.failedSendIds.contains(message.id);
-                        // Reversed list: the visually-previous message (same
-                        // author check, for Discord-style grouping) is the
-                        // *next* index, not the previous one.
-                        final previous = index + 1 < state.messages.length
-                            ? state.messages[index + 1]
-                            : null;
-                        final showHeader =
-                            previous == null ||
-                            previous.authorId != message.authorId ||
-                            // Never grouped, however many the bot sends in a
-                            // row: the header row is where "Only you can see
-                            // this" lives, and a grouped continuation would
-                            // drop the one line that says the rest of the
-                            // channel cannot read it.
-                            message.isEphemeral ||
-                            (message.createdAt != null &&
-                                previous.createdAt != null &&
-                                message.createdAt!
-                                        .difference(previous.createdAt!)
-                                        .abs() >
-                                    const Duration(minutes: 7));
-                        return KeyedSubtree(
-                          key: anchor,
-                          child: withDivider(
-                            _MessageBubble(
-                              message: message,
-                              showHeader: showHeader,
-                              isMe: isMe,
-                              failed: failed,
-                              isHighlighted:
-                                  _highlightedMessageId == message.id,
-                              myUserId: widget.myUserId,
-                              isEditing: _editingMessageId == message.id,
-                              editController: _editController,
-                              onSaveEdit: () => _saveEdit(message.id),
-                              onCancelEdit: _cancelEdit,
-                              replyToWidget: message.inReplyTo != null
-                                  ? _ReplyQuoteRow(
-                                      replyTo: _resolveReply(
-                                        message.inReplyTo!,
-                                      ),
-                                      // A reply quote is one of the three places a
-                                      // jump starts from, and the only one that
-                                      // does not go through a screen first.
-                                      onTap: () =>
-                                          _jumpToMessage(message.inReplyTo!),
-                                    )
-                                  : null,
-                              resolveMentionName: _resolveMentionName,
-                              guildId: widget.guildId,
-                              onReactionToggle: (emoji, emojiId) =>
-                                  context.read<MessageThreadBloc>().add(
-                                    ReactionToggled(
-                                      messageId: message.id,
-                                      emoji: emoji,
-                                      emojiId: emojiId,
-                                    ),
-                                  ),
-                              onAddReaction: () async {
-                                final picked = await showReactionPickerSheet(
-                                  context,
-                                  guildId: widget.guildId,
-                                );
-                                if (picked == null || !context.mounted) return;
-                                context.read<MessageThreadBloc>().add(
-                                  ReactionToggled(
-                                    messageId: message.id,
-                                    emoji: picked.emoji,
-                                    emojiId: picked.emojiId,
-                                  ),
-                                );
-                              },
-                              onLongPress: () => _showMessageActions(message),
+            // The pill is an overlay rather than a `Column` child: as a sibling
+            // it would take vertical space and shove the list up by its own
+            // height every time it appeared, which is exactly the jolt it
+            // exists to spare the reader. Scoped to this `Expanded` so it
+            // floats over the list and not over the composer.
+            child: Stack(
+              children: [
+                BlocBuilder<MessageThreadBloc, ThreadState>(
+                  builder: (context, state) {
+                    final Widget child;
+                    if (state.isLoadingInitial) {
+                      child = const Center(
+                        key: ValueKey('loading'),
+                        child: CircularProgressIndicator.adaptive(),
+                      );
+                    } else if (state.messages.isEmpty) {
+                      child = Center(
+                        key: const ValueKey('empty'),
+                        child: Text(
+                          'No messages yet - say hi!',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      );
+                    } else {
+                      // Taken here rather than in a listener because it has to be
+                      // settled *before* the first frame that shows the list -
+                      // computing it afterwards would draw the timeline once
+                      // without a divider and then move it, which reads as a
+                      // glitch on the one screen where position is the message.
+                      // It writes only a field nothing else has read yet, so it
+                      // does not need (and must not do) a `setState` from build.
+                      _snapshotFirstUnread(state);
+                      child = NotificationListener<ScrollNotification>(
+                        key: const ValueKey('loaded'),
+                        onNotification: (notification) {
+                          if (notification.metrics.pixels >=
+                              notification.metrics.maxScrollExtent - 200) {
+                            context.read<MessageThreadBloc>().add(
+                              const ThreadLoadMoreRequested(),
+                            );
+                          }
+                          return false;
+                        },
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          reverse: true,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.m,
+                            vertical: AppSpacing.s,
+                          ),
+                          itemCount: state.messages.length,
+                          itemBuilder: (context, index) {
+                            final message = state.messages[index];
+                            // The anchor a jump scrolls to. `putIfAbsent` because
+                            // the key has to survive the row being scrolled out
+                            // and rebuilt - a fresh key each build would make
+                            // `currentContext` null exactly when the jump needs it.
+                            final anchor = _messageKeys.putIfAbsent(
+                              message.id,
+                              GlobalKey.new,
+                            );
+                            // Reversed list: the visually-previous message - the
+                            // older one - is the *next* index, not the previous
+                            // one. Hoisted above the system-row branch because
+                            // both the day boundary and the grouping check below
+                            // need it, and a system row heads a new day just like
+                            // any other.
+                            final previous = index + 1 < state.messages.length
+                                ? state.messages[index + 1]
+                                : null;
+                            // First row of a local calendar day, which includes
+                            // the oldest row of the loaded window: a window that
+                            // opens mid-conversation still says which day it
+                            // opens on. A message whose stamp is missing heads
+                            // nothing - there is no date to head it with.
+                            final startsDay = startsNewDay(
+                              previous?.createdAt,
+                              message.createdAt,
+                            );
+
+                            // Both dividers sit at the *top* of the row they
+                            // belong to. `reverse` flips the order rows are laid
+                            // out in, not the direction a row's own column runs,
+                            // so this still lands between the last message read
+                            // and the first one that was not.
+                            //
+                            // Date first, then unread: crossing midnight and
+                            // crossing the read mark are two different statements,
+                            // and the day the unread run starts on belongs above
+                            // the line that says it is unread.
+                            Widget withDivider(Widget row) {
+                              final isUnreadMark = message.id == _firstUnreadId;
+                              if (!startsDay && !isUnreadMark) return row;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (startsDay)
+                                    _DateDivider(date: message.createdAt!),
+                                  if (isUnreadMark) const _UnreadDivider(),
+                                  row,
+                                ],
+                              );
+                            }
+
+                            // Deliberately the shared predicate rather than the
+                            // five-way check that used to be inlined here: a voice
+                            // invite is a server-written message too, and the only
+                            // thing keeping it out of this branch is the reasoning
+                            // recorded on `isSystemRow`. Spelling the list out
+                            // twice is how the two drift apart.
+                            if (message.isSystemRow) {
+                              return KeyedSubtree(
+                                key: anchor,
+                                child: withDivider(
+                                  _SystemMessageRow(
+                                    message: message,
+                                    myUserId: widget.myUserId,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final isMe = message.authorId == widget.myUserId;
+                            final failed = state.failedSendIds.contains(
+                              message.id,
+                            );
+                            final showHeader =
+                                previous == null ||
+                                previous.authorId != message.authorId ||
+                                // A date divider between two messages means they
+                                // are not one group, however close the stamps: a
+                                // grouped continuation hanging under a day
+                                // boundary reads as a message from the wrong day.
+                                startsDay ||
+                                // Never grouped, however many the bot sends in a
+                                // row: the header row is where "Only you can see
+                                // this" lives, and a grouped continuation would
+                                // drop the one line that says the rest of the
+                                // channel cannot read it.
+                                message.isEphemeral ||
+                                (message.createdAt != null &&
+                                    previous.createdAt != null &&
+                                    message.createdAt!
+                                            .difference(previous.createdAt!)
+                                            .abs() >
+                                        const Duration(minutes: 7));
+                            return KeyedSubtree(
+                              key: anchor,
+                              child: withDivider(
+                                _MessageBubble(
+                                  message: message,
+                                  showHeader: showHeader,
+                                  isMe: isMe,
+                                  failed: failed,
+                                  isHighlighted:
+                                      _highlightedMessageId == message.id,
+                                  myUserId: widget.myUserId,
+                                  isEditing: _editingMessageId == message.id,
+                                  editController: _editController,
+                                  onSaveEdit: () => _saveEdit(message.id),
+                                  onCancelEdit: _cancelEdit,
+                                  replyToWidget: message.inReplyTo != null
+                                      ? _ReplyQuoteRow(
+                                          replyTo: _resolveReply(
+                                            message.inReplyTo!,
+                                          ),
+                                          // A reply quote is one of the three places a
+                                          // jump starts from, and the only one that
+                                          // does not go through a screen first.
+                                          onTap: () => _jumpToMessage(
+                                            message.inReplyTo!,
+                                          ),
+                                        )
+                                      : null,
+                                  resolveMentionName: _resolveMentionName,
+                                  guildId: widget.guildId,
+                                  onReactionToggle: (emoji, emojiId) =>
+                                      context.read<MessageThreadBloc>().add(
+                                        ReactionToggled(
+                                          messageId: message.id,
+                                          emoji: emoji,
+                                          emojiId: emojiId,
+                                        ),
+                                      ),
+                                  onAddReaction: () async {
+                                    final picked =
+                                        await showReactionPickerSheet(
+                                          context,
+                                          guildId: widget.guildId,
+                                        );
+                                    if (picked == null || !context.mounted) {
+                                      return;
+                                    }
+                                    context.read<MessageThreadBloc>().add(
+                                      ReactionToggled(
+                                        messageId: message.id,
+                                        emoji: picked.emoji,
+                                        emojiId: picked.emojiId,
+                                      ),
+                                    );
+                                  },
+                                  onLongPress: () =>
+                                      _showMessageActions(message),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }
+                    return AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: child,
+                    );
+                  },
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: AppSpacing.s,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: _viewingOlder,
+                    builder: (context, viewingOlder, child) => IgnorePointer(
+                      // Faded rather than removed, so the pill does not take
+                      // taps in the moment it is invisible - and so a reader
+                      // who overshoots and comes straight back does not see it
+                      // flash.
+                      ignoring: !viewingOlder,
+                      child: AnimatedOpacity(
+                        opacity: viewingOlder ? 1 : 0,
+                        duration: const Duration(milliseconds: 160),
+                        curve: Curves.easeOut,
+                        child: child,
+                      ),
                     ),
-                  );
-                }
-                return AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: child,
-                );
-              },
+                    child: Center(
+                      child: _JumpToPresentPill(onTap: _jumpToPresent),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           BlocBuilder<MessageThreadBloc, ThreadState>(
@@ -2626,6 +2795,96 @@ String _formatMessageTime(DateTime dt) {
   final minute = local.minute.toString().padLeft(2, '0');
   final period = hour24 < 12 ? 'AM' : 'PM';
   return '$hour12:$minute $period';
+}
+
+/// The floating "jump to present" control, raised while the reader is looking
+/// at older messages.
+///
+/// One tappable pill rather than Alpine's label-plus-button pair. That split
+/// works on a desktop header where there is room to say "Viewing older
+/// messages" beside it; on a handset the pill is sitting on top of the very
+/// messages it is describing, so it earns its space by being the smallest
+/// thing that is unambiguously a button.
+class _JumpToPresentPill extends StatelessWidget {
+  const _JumpToPresentPill({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest,
+      elevation: 3,
+      shadowColor: Colors.black.withValues(alpha: 0.4),
+      borderRadius: BorderRadius.circular(AppRadii.composerPill),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.m,
+            vertical: AppSpacing.s,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.arrow_downward_rounded,
+                size: 16,
+                color: theme.colorScheme.onSurface,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                'Jump to present',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The day heading drawn above the first message of each local calendar day.
+///
+/// Deliberately quieter than [_UnreadDivider]: that one is the scheme's "look
+/// here" register and there must be no doubt which of the two a reader is
+/// looking at when both land on the same row. This is a hairline and a muted
+/// label - structure rather than an alert.
+class _DateDivider extends StatelessWidget {
+  const _DateDivider({required this.date});
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final line = theme.colorScheme.onSurface.withValues(alpha: 0.12);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+      child: Row(
+        children: [
+          Expanded(child: Divider(height: 1, color: line)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+            child: Text(
+              formatDayHeading(date, DateTime.now()),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(height: 1, color: line)),
+        ],
+      ),
+    );
+  }
 }
 
 /// The "new messages" line, drawn above the first message that arrived after

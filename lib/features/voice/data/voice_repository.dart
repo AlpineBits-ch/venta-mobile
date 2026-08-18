@@ -113,7 +113,6 @@ class CallParticipantJoined extends VoiceRepositoryEvent {
   final String audioTrackName;
 }
 
-
 class CallMuteChanged extends VoiceRepositoryEvent {
   const CallMuteChanged({
     required this.userId,
@@ -542,6 +541,10 @@ class VoiceRepository {
   /// See [VoiceApi.getPendingCall] - the catch-up read for a ring this client
   /// was never told about.
   Future<CallDto?> getPendingCall() => api.getPendingCall();
+
+  /// See [VoiceApi.getActiveCall] - the launch read for a call this client was
+  /// already in when it went away, as opposed to one ringing at it.
+  Future<OngoingCallDto?> getActiveCall() => api.getActiveCall();
 
   /// The call already happening in this conversation, or null. See
   /// [VoiceApi.getConversationCall].

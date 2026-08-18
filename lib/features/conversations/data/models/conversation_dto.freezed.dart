@@ -284,7 +284,13 @@ as int,
 /// @nodoc
 mixin _$ConversationDto {
 
- String get id; String? get name; List<ConversationMemberDto> get members; ConversationEncryption get encryptionState;
+ String get id; String? get name; List<ConversationMemberDto> get members; ConversationEncryption get encryptionState;/// When the group icon was last written, or null when there is none.
+///
+/// Doubles as the icon URL's cache key. The address is derived from the
+/// conversation id and so says nothing about the image behind it - without
+/// a stamp on the query string, a replaced icon would keep serving the old
+/// bytes out of the image cache for as long as the app lives.
+ DateTime? get iconUpdatedAt;
 /// Create a copy of ConversationDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -297,16 +303,16 @@ $ConversationDtoCopyWith<ConversationDto> get copyWith => _$ConversationDtoCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ConversationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other.members, members)&&(identical(other.encryptionState, encryptionState) || other.encryptionState == encryptionState));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ConversationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other.members, members)&&(identical(other.encryptionState, encryptionState) || other.encryptionState == encryptionState)&&(identical(other.iconUpdatedAt, iconUpdatedAt) || other.iconUpdatedAt == iconUpdatedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,const DeepCollectionEquality().hash(members),encryptionState);
+int get hashCode => Object.hash(runtimeType,id,name,const DeepCollectionEquality().hash(members),encryptionState,iconUpdatedAt);
 
 @override
 String toString() {
-  return 'ConversationDto(id: $id, name: $name, members: $members, encryptionState: $encryptionState)';
+  return 'ConversationDto(id: $id, name: $name, members: $members, encryptionState: $encryptionState, iconUpdatedAt: $iconUpdatedAt)';
 }
 
 
@@ -317,7 +323,7 @@ abstract mixin class $ConversationDtoCopyWith<$Res>  {
   factory $ConversationDtoCopyWith(ConversationDto value, $Res Function(ConversationDto) _then) = _$ConversationDtoCopyWithImpl;
 @useResult
 $Res call({
- String id, String? name, List<ConversationMemberDto> members, ConversationEncryption encryptionState
+ String id, String? name, List<ConversationMemberDto> members, ConversationEncryption encryptionState, DateTime? iconUpdatedAt
 });
 
 
@@ -334,13 +340,14 @@ class _$ConversationDtoCopyWithImpl<$Res>
 
 /// Create a copy of ConversationDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = freezed,Object? members = null,Object? encryptionState = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = freezed,Object? members = null,Object? encryptionState = null,Object? iconUpdatedAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: freezed == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String?,members: null == members ? _self.members : members // ignore: cast_nullable_to_non_nullable
 as List<ConversationMemberDto>,encryptionState: null == encryptionState ? _self.encryptionState : encryptionState // ignore: cast_nullable_to_non_nullable
-as ConversationEncryption,
+as ConversationEncryption,iconUpdatedAt: freezed == iconUpdatedAt ? _self.iconUpdatedAt : iconUpdatedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 
@@ -422,10 +429,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? name,  List<ConversationMemberDto> members,  ConversationEncryption encryptionState)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? name,  List<ConversationMemberDto> members,  ConversationEncryption encryptionState,  DateTime? iconUpdatedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ConversationDto() when $default != null:
-return $default(_that.id,_that.name,_that.members,_that.encryptionState);case _:
+return $default(_that.id,_that.name,_that.members,_that.encryptionState,_that.iconUpdatedAt);case _:
   return orElse();
 
 }
@@ -443,10 +450,10 @@ return $default(_that.id,_that.name,_that.members,_that.encryptionState);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? name,  List<ConversationMemberDto> members,  ConversationEncryption encryptionState)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? name,  List<ConversationMemberDto> members,  ConversationEncryption encryptionState,  DateTime? iconUpdatedAt)  $default,) {final _that = this;
 switch (_that) {
 case _ConversationDto():
-return $default(_that.id,_that.name,_that.members,_that.encryptionState);}
+return $default(_that.id,_that.name,_that.members,_that.encryptionState,_that.iconUpdatedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -460,10 +467,10 @@ return $default(_that.id,_that.name,_that.members,_that.encryptionState);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? name,  List<ConversationMemberDto> members,  ConversationEncryption encryptionState)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? name,  List<ConversationMemberDto> members,  ConversationEncryption encryptionState,  DateTime? iconUpdatedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _ConversationDto() when $default != null:
-return $default(_that.id,_that.name,_that.members,_that.encryptionState);case _:
+return $default(_that.id,_that.name,_that.members,_that.encryptionState,_that.iconUpdatedAt);case _:
   return null;
 
 }
@@ -473,9 +480,9 @@ return $default(_that.id,_that.name,_that.members,_that.encryptionState);case _:
 
 /// @nodoc
 @JsonSerializable()
-
+@ApiDateTimeConverter()
 class _ConversationDto implements ConversationDto {
-  const _ConversationDto({required this.id, this.name, required final  List<ConversationMemberDto> members, required this.encryptionState}): _members = members;
+  const _ConversationDto({required this.id, this.name, required final  List<ConversationMemberDto> members, required this.encryptionState, this.iconUpdatedAt}): _members = members;
   factory _ConversationDto.fromJson(Map<String, dynamic> json) => _$ConversationDtoFromJson(json);
 
 @override final  String id;
@@ -488,6 +495,13 @@ class _ConversationDto implements ConversationDto {
 }
 
 @override final  ConversationEncryption encryptionState;
+/// When the group icon was last written, or null when there is none.
+///
+/// Doubles as the icon URL's cache key. The address is derived from the
+/// conversation id and so says nothing about the image behind it - without
+/// a stamp on the query string, a replaced icon would keep serving the old
+/// bytes out of the image cache for as long as the app lives.
+@override final  DateTime? iconUpdatedAt;
 
 /// Create a copy of ConversationDto
 /// with the given fields replaced by the non-null parameter values.
@@ -502,16 +516,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ConversationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other._members, _members)&&(identical(other.encryptionState, encryptionState) || other.encryptionState == encryptionState));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ConversationDto&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other._members, _members)&&(identical(other.encryptionState, encryptionState) || other.encryptionState == encryptionState)&&(identical(other.iconUpdatedAt, iconUpdatedAt) || other.iconUpdatedAt == iconUpdatedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,const DeepCollectionEquality().hash(_members),encryptionState);
+int get hashCode => Object.hash(runtimeType,id,name,const DeepCollectionEquality().hash(_members),encryptionState,iconUpdatedAt);
 
 @override
 String toString() {
-  return 'ConversationDto(id: $id, name: $name, members: $members, encryptionState: $encryptionState)';
+  return 'ConversationDto(id: $id, name: $name, members: $members, encryptionState: $encryptionState, iconUpdatedAt: $iconUpdatedAt)';
 }
 
 
@@ -522,7 +536,7 @@ abstract mixin class _$ConversationDtoCopyWith<$Res> implements $ConversationDto
   factory _$ConversationDtoCopyWith(_ConversationDto value, $Res Function(_ConversationDto) _then) = __$ConversationDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String? name, List<ConversationMemberDto> members, ConversationEncryption encryptionState
+ String id, String? name, List<ConversationMemberDto> members, ConversationEncryption encryptionState, DateTime? iconUpdatedAt
 });
 
 
@@ -539,13 +553,14 @@ class __$ConversationDtoCopyWithImpl<$Res>
 
 /// Create a copy of ConversationDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = freezed,Object? members = null,Object? encryptionState = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = freezed,Object? members = null,Object? encryptionState = null,Object? iconUpdatedAt = freezed,}) {
   return _then(_ConversationDto(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: freezed == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String?,members: null == members ? _self._members : members // ignore: cast_nullable_to_non_nullable
 as List<ConversationMemberDto>,encryptionState: null == encryptionState ? _self.encryptionState : encryptionState // ignore: cast_nullable_to_non_nullable
-as ConversationEncryption,
+as ConversationEncryption,iconUpdatedAt: freezed == iconUpdatedAt ? _self.iconUpdatedAt : iconUpdatedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 

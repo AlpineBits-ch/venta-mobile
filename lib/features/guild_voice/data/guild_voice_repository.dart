@@ -8,6 +8,7 @@ import '../../../core/voice/voice_liveness.dart';
 import '../../../core/voice/voice_room_gate.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
 import 'guild_voice_api.dart';
+import 'models/voice_state_dto.dart';
 import 'models/guild_voice_activity_dto.dart';
 
 sealed class GuildVoiceEvent {
@@ -502,6 +503,11 @@ class GuildVoiceRepository {
 
   Future<VoiceRoomSnapshotDto> join(String guildId, String channelId) =>
       api.join(guildId, channelId);
+
+  /// See [GuildVoiceApi.getVoiceState] - the launch read behind the reconnect
+  /// banner, and the only thing that reports a seat this client no longer
+  /// knows it holds.
+  Future<VoiceStateDto?> getVoiceState() => api.getVoiceState();
 
   Future<void> leave(String guildId, String channelId) =>
       api.leave(guildId, channelId);

@@ -15,6 +15,8 @@ import '../../data/conversation_prefs.dart';
 import '../../data/conversation_repository.dart';
 import '../../data/models/conversation_dto.dart';
 import '../widgets/conversation_actions_sheet.dart';
+import '../widgets/conversation_icon.dart';
+import '../widgets/group_settings_sheet.dart';
 import '../widgets/new_conversation_dialog.dart';
 
 /// The default landing surface (Discord mobile's "Home" tab) - rendered as
@@ -186,10 +188,11 @@ class _ConversationTile extends StatelessWidget {
               onTap: () =>
                   context.push(RoutePaths.conversationPath(conversation.id)),
             )
-          : CircleAvatar(
-              backgroundColor: context.statusColors.hover,
-              child: Text(title.isNotEmpty ? title[0].toUpperCase() : '?'),
-            ),
+          // A group used to be a grey disc with one arbitrary member's initial
+          // on it, which made a list of several of them unreadable. This is
+          // the group's own icon when it has one and two member faces when it
+          // does not.
+          : ConversationIcon(conversation: conversation, myUserId: myUserId),
       title: Text(
         title,
         // Muted rows recede the way Discord's do, so the list reads at a
@@ -259,6 +262,14 @@ class _ConversationTile extends StatelessWidget {
         if (other != null) {
           context.push(RoutePaths.userProfilePath(other.userId));
         }
+      case ConversationAction.groupSettings:
+        final left = await showGroupSettingsSheet(
+          context: context,
+          conversationId: conversation.id,
+        );
+        // Nothing to do on this screen: leaving drops the row through the
+        // repository stream the list is already built from.
+        if (left) return;
       case ConversationAction.closeDm:
         await _closeDm(context);
       case ConversationAction.pin:

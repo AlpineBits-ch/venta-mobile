@@ -15,6 +15,7 @@ import '../../features/guild_voice/bloc/guild_voice_cubit.dart';
 import '../../features/guild_voice/bloc/voice_ring_cubit.dart';
 import '../../features/guild_voice/presentation/widgets/voice_ring_cards.dart';
 import '../../features/guild_voice/presentation/widgets/voice_status_bar.dart';
+import '../../features/voice/presentation/widgets/voice_resume_banner.dart';
 import '../../features/mls/presentation/widgets/recovery_code_banner.dart';
 import '../../features/voice/bloc/call_cubit.dart';
 import '../../features/voice/presentation/screens/call_screen.dart';
@@ -381,6 +382,7 @@ class _AppShellState extends State<AppShell> {
           const ConnectionStatusBanner(),
           const SessionNotPersistedBanner(),
           const RecoveryCodeBanner(),
+          const VoiceResumeBanner(),
           Expanded(
             child: Stack(
               children: [

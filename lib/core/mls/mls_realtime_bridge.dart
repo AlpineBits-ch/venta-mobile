@@ -65,6 +65,10 @@ class MlsRealtimeBridge {
     // committed out of every group it holds a leaf in - and when it is *this*
     // device, it has to stop asking to be let back in.
     'conversation.MlsDeviceRemoved',
+    // Somebody's device was let into a group we are in. A prompt
+    // only - the membership change itself arrives as a commit through the
+    // ordered fetch, which is why it is answered exactly like `MlsCommit`.
+    'conversation.MlsDeviceAdmitted',
   };
 
   void _handle(RealtimeEvent event) {
@@ -91,7 +95,7 @@ class MlsRealtimeBridge {
 
       // A commit landed. Group state advances by fetching commits above our own
       // epoch and applying them in order, never in push-arrival order.
-      case 'conversation.MlsCommit':
+      case 'conversation.MlsCommit' || 'conversation.MlsDeviceAdmitted':
         final payload = event.objectPayload;
         final contextId = payload['contextId'] as String?;
         if (contextId == null) return;

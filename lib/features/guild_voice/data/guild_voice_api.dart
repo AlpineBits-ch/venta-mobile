@@ -7,6 +7,7 @@ import '../../../core/voice/voice_media_api.dart';
 import '../../../core/voice/voice_media_dto.dart';
 import '../../../core/voice/voice_snapshot_dto.dart';
 import '../../../core/voice/voice_subscription_set.dart';
+import 'models/voice_state_dto.dart';
 import 'models/guild_voice_activity_dto.dart';
 
 /// REST surface for guild voice channels.
@@ -94,6 +95,26 @@ class GuildVoiceApi {
       '${_base(guildId, channelId)}/snapshot',
     );
     return VoiceRoomSnapshotDto.fromJson(response.data!);
+  }
+
+  /// Where the server places this account in guild voice, or null when it
+  /// places it nowhere. See [VoiceStateDto].
+  ///
+  /// Account-scoped rather than channel-scoped, so it does not go through
+  /// [_base]. The `204` answer is the common one and arrives with no body, so
+  /// this is requested as `dynamic` - a typed `Map` request against an empty
+  /// body is a cast error rather than a null.
+  ///
+  /// No `X-Device-Id` on purpose: the question is "where is this *account*",
+  /// and the answer names the device holding the seat rather than being
+  /// filtered by it.
+  Future<VoiceStateDto?> getVoiceState() async {
+    final response = await client.dio.get<dynamic>(
+      client.url('/api/v1/guild/voice/state'),
+    );
+    final data = response.data;
+    if (data is! Map<String, dynamic> || data.isEmpty) return null;
+    return VoiceStateDto.fromJson(data);
   }
 
   /// "Which of my servers has anyone in voice right now" - the snapshot behind

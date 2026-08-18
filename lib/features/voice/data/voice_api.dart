@@ -91,6 +91,27 @@ class VoiceApi {
     return OngoingCallDto.fromJson(data);
   }
 
+  /// The call this account is still placed in, or null - the launch read
+  /// behind the reconnect banner.
+  ///
+  /// Unlike [getPendingCall] this is not about being rung: it answers for a
+  /// call this client had already joined and then vanished from. A call is
+  /// hung up as its socket drops, so unlike a guild-voice seat there is no
+  /// stale roster entry here - only, sometimes, a call that carried on without
+  /// us. It is therefore an offer to put to the user rather than state to
+  /// paint, and `204` is by far the commonest answer: a call that has since
+  /// ended, one answered on another device, and one nobody is left in all read
+  /// as "you are in nothing".
+  Future<OngoingCallDto?> getActiveCall() async {
+    final response = await client.dio.get<dynamic>(
+      client.url('$_base/call/active'),
+      options: _deviceOptions,
+    );
+    final data = response.data;
+    if (data is! Map<String, dynamic> || data.isEmpty) return null;
+    return OngoingCallDto.fromJson(data);
+  }
+
   Future<CallDto> createCall({
     required String conversationId,
     required List<String> participantUserIds,
